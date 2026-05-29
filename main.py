@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from app.routes.governance import router as governance_router
+from app.services.account_engine import AccountEngine
 
 app = FastAPI(title="GreyLine Backend")
 
 app.include_router(governance_router)
-
 
 @app.get("/")
 def root():
@@ -13,3 +13,6 @@ def root():
         "status": "ONLINE"
     }
 
+@app.get("/account")
+def account():
+    return AccountEngine().get_account_status()

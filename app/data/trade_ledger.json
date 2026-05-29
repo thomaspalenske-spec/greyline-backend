@@ -1,0 +1,14 @@
+{
+    "trades": [
+        {
+            "trade_id": "GL-TEST-0001",
+            "symbol": "TEST",
+            "state": "ACTIVE",
+            "origin": "ACTIVE_OPERATIONAL_SIMULATION",
+            "entry_price": 100.0,
+            "quantity": 1,
+            "realized_pnl": 0.0,
+            "confidence": "TEST_RECORD"
+        }
+    ]
+}
