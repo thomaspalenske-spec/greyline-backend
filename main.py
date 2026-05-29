@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.routes.governance import router as governance_router
 from app.services.account_engine import AccountEngine
+from app.services.reconciliation_engine import ReconciliationEngine
 from app.services.ledger_engine import LedgerEngine
 
 app = FastAPI(title="GreyLine Backend")
@@ -20,3 +21,7 @@ def account():
 @app.get("/ledger")
 def ledger():
     return LedgerEngine().load()
+
+@app.get("/reconcile")
+def reconcile():
+    return ReconciliationEngine().reconcile()
