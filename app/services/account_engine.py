@@ -37,7 +37,11 @@ class AccountEngine:
             "initial_balance": self.initial_balance,
             "cash_balance": cash_balance,
             "realized_pnl": realized_pnl,
-            "open_positions_count": len(open_positions),
+            "open_positions_count": len(open_positions)
+            ,"closed_positions_count": len([
+    trade for trade in trades
+    if trade.get("state") == "CLOSED"
+]),
             "total_trades": len(trades),
             "confidence": "LEDGER_BASED_SIMULATION"
         }
