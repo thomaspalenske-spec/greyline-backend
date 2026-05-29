@@ -1,0 +1,36 @@
+from fastapi import APIRouter
+
+from app.services.governance_engine import GovernanceEngine
+from app.services.risk_engine import RiskEngine
+
+router = APIRouter()
+
+governance_engine = GovernanceEngine()
+risk_engine = RiskEngine()
+
+
+@router.get("/governance/status")
+def governance_status():
+
+    risk_state = risk_engine.evaluate_risk_state()
+    governance_state = governance_engine.evaluate_system_state()
+
+    governance_state["risk_engine_state"] = risk_state
+
+    return governance_state
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/governance/status")
+def governance_status():
+    return {
+        "system": "GreyLine",
+        "status": "ACTIVE",
+        "risk_state": "NORMAL",
+        "survivability_status": "STRONG",
+        "deployment_bias": "SELECTIVE_AGGRESSION",
+        "confidence": "SIMULATED"
+    }
+

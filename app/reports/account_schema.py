@@ -1,0 +1,17 @@
+ACCOUNT_REPORT_SCHEMA = [
+    "Starting Capital",
+    "Estimated Current Equity",
+    "Estimated Realized Gains",
+    "Estimated Unrealized Gains",
+    "Estimated Cash Position",
+    "Risk State",
+    "Survivability Status",
+    "Deployment Bias",
+    "Portfolio Heat",
+    "Liquidity State",
+    "Opportunity Flow",
+    "Correlation Exposure",
+    "DPPL Compression State",
+    "Execute Thresholds",
+    "Confidence Classification",
+]
