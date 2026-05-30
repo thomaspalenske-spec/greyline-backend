@@ -247,3 +247,10 @@ from app.services.backend_capability_registry_engine import BackendCapabilityReg
 def capabilities():
     engine = BackendCapabilityRegistryEngine()
     return engine.list_capabilities()
+from app.services.backend_ucf_registry_engine import BackendUcfRegistryEngine
+
+
+@app.get("/ucfs")
+def ucfs():
+    engine = BackendUcfRegistryEngine()
+    return engine.list_ucfs()
