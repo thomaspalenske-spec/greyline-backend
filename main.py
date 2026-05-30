@@ -319,3 +319,24 @@ def broker_kill_switch():
         broker_connected=False,
         autonomous_execution_enabled=False
     )
+from app.services.broker_safety_summary_engine import BrokerSafetySummaryEngine
+
+
+@app.get("/broker-safety-summary")
+def broker_safety_summary():
+    engine = BrokerSafetySummaryEngine()
+
+    return engine.summarize_safety(
+        safe_for_broker_prep=True,
+        authority_approved=True,
+        execution_blocked=False,
+        kill_switch_status="STANDBY",
+        trading_allowed=False
+    )
+from app.services.broker_integration_blocker_engine import BrokerIntegrationBlockerEngine
+
+
+@app.get("/broker-blockers")
+def broker_blockers():
+    engine = BrokerIntegrationBlockerEngine()
+    return engine.evaluate_blockers()
