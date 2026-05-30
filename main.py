@@ -473,3 +473,16 @@ from app.services.paper_trading_control_center_engine import PaperTradingControl
 def paper_trading_control_center():
     engine = PaperTradingControlCenterEngine()
     return engine.get_control_center()
+from app.services.paper_trading_transition_summary_engine import PaperTradingTransitionSummaryEngine
+
+
+@app.get("/paper-trading-transition-summary")
+def paper_trading_transition_summary():
+    engine = PaperTradingTransitionSummaryEngine()
+
+    return engine.summarize_transition(
+        paper_trading_ready=False,
+        approval_passed=False,
+        broker_connected=False,
+        api_credentials_configured=False
+    )
