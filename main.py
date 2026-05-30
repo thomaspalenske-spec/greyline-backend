@@ -448,3 +448,10 @@ def paper_trading_prep_gate():
         authority_gate_ready=True,
         kill_switch_ready=True
     )
+from app.services.paper_trading_blocker_engine import PaperTradingBlockerEngine
+
+
+@app.get("/paper-trading-blockers")
+def paper_trading_blockers():
+    engine = PaperTradingBlockerEngine()
+    return engine.evaluate_blockers()
