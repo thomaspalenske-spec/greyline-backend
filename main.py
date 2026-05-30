@@ -466,3 +466,10 @@ def paper_trading_approval_gate():
         paper_trading_ready=False,
         manual_approval_granted=False
     )
+from app.services.paper_trading_control_center_engine import PaperTradingControlCenterEngine
+
+
+@app.get("/paper-trading-control-center")
+def paper_trading_control_center():
+    engine = PaperTradingControlCenterEngine()
+    return engine.get_control_center()
