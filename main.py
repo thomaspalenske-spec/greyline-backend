@@ -254,3 +254,10 @@ from app.services.backend_ucf_registry_engine import BackendUcfRegistryEngine
 def ucfs():
     engine = BackendUcfRegistryEngine()
     return engine.list_ucfs()
+from app.services.backend_control_center_engine import BackendControlCenterEngine
+
+
+@app.get("/control-center")
+def control_center():
+    engine = BackendControlCenterEngine()
+    return engine.get_control_center()
