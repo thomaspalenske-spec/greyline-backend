@@ -122,3 +122,25 @@ def snapshots():
     return {
         "snapshots": engine.list_snapshots()
     }
+
+
+from app.services.reconciliation_validator_engine import ReconciliationValidatorEngine
+
+
+@app.get("/reconciliation-validator-test")
+def reconciliation_validator_test():
+    engine = ReconciliationValidatorEngine()
+
+    ledger_positions = [
+        {"symbol": "NVDA"},
+        {"symbol": "MSFT"},
+        {"symbol": "AVGO"}
+    ]
+
+    active_positions = [
+        {"symbol": "NVDA"},
+        {"symbol": "MSFT"},
+        {"symbol": "AVGO"}
+    ]
+
+    return engine.validate(ledger_positions, active_positions)
