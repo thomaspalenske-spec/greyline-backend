@@ -233,3 +233,10 @@ from app.services.milestone_registry_engine import MilestoneRegistryEngine
 def milestones():
     engine = MilestoneRegistryEngine()
     return engine.list_milestones()
+from app.services.backend_manifest_engine import BackendManifestEngine
+
+
+@app.get("/manifest")
+def manifest():
+    engine = BackendManifestEngine()
+    return engine.get_manifest()
