@@ -493,3 +493,16 @@ from app.services.paper_trading_launch_checklist_engine import PaperTradingLaunc
 def paper_trading_launch_checklist():
     engine = PaperTradingLaunchChecklistEngine()
     return engine.get_checklist()
+from app.services.paper_trading_final_gate_engine import PaperTradingFinalGateEngine
+
+
+@app.get("/paper-trading-final-gate")
+def paper_trading_final_gate():
+    engine = PaperTradingFinalGateEngine()
+
+    return engine.evaluate_final_gate(
+        paper_trading_ready=False,
+        approval_passed=False,
+        blockers_cleared=False,
+        launch_checklist_complete=False
+    )
