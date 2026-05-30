@@ -424,3 +424,13 @@ def runtime_safety():
         kill_switch_status="STANDBY",
         credential_safety_approved=True
     )
+from app.services.deployment_mode_gate_engine import DeploymentModeGateEngine
+
+
+@app.get("/deployment-mode-gate")
+def deployment_mode_gate():
+    engine = DeploymentModeGateEngine()
+
+    return engine.evaluate_mode(
+        requested_mode="PAPER_TRADING_PREP"
+    )
