@@ -70,3 +70,19 @@ def trade_id_test():
     return {
         "trade_id": engine.generate_trade_id(existing_trades)
     }
+
+from app.services.audit_log_engine import AuditLogEngine
+
+
+@app.get("/audit-test")
+def audit_test():
+    engine = AuditLogEngine()
+
+    return engine.create_log(
+        action="MILESTONE_TEST",
+        status="PASS",
+        details={
+            "milestone": "Audit Log Engine",
+            "system": "GreyLine"
+        }
+    )
