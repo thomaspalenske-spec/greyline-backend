@@ -374,3 +374,10 @@ def credential_safety():
         gitignore_protects_env=True,
         credential_rotation_required=False
     )
+from app.services.environment_file_guard_engine import EnvironmentFileGuardEngine
+
+
+@app.get("/environment-guard")
+def environment_guard():
+    engine = EnvironmentFileGuardEngine()
+    return engine.evaluate_environment_guard()
