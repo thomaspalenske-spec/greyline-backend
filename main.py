@@ -261,3 +261,17 @@ from app.services.backend_control_center_engine import BackendControlCenterEngin
 def control_center():
     engine = BackendControlCenterEngine()
     return engine.get_control_center()
+from app.services.backend_phase_gate_engine import BackendPhaseGateEngine
+
+
+@app.get("/phase-gate")
+def phase_gate():
+    engine = BackendPhaseGateEngine()
+
+    return engine.evaluate_phase_gate(
+        backend_ready=True,
+        control_center_online=True,
+        ucf_registry_active=True,
+        capability_registry_active=True,
+        milestone_registry_active=True
+    )
