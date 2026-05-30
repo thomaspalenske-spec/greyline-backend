@@ -240,3 +240,10 @@ from app.services.backend_manifest_engine import BackendManifestEngine
 def manifest():
     engine = BackendManifestEngine()
     return engine.get_manifest()
+from app.services.backend_capability_registry_engine import BackendCapabilityRegistryEngine
+
+
+@app.get("/capabilities")
+def capabilities():
+    engine = BackendCapabilityRegistryEngine()
+    return engine.list_capabilities()
