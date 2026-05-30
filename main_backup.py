@@ -53,20 +53,3 @@ def validate_test():
     }
 
     return validator.validate_trade(test_trade)
-from app.services.trade_id_engine import TradeIdEngine
-
-
-@app.get("/trade-id-test")
-def trade_id_test():
-
-    engine = TradeIdEngine()
-
-    existing_trades = [
-        {"symbol": "NVDA"},
-        {"symbol": "MSFT"},
-        {"symbol": "AVGO"}
-    ]
-
-    return {
-        "trade_id": engine.generate_trade_id(existing_trades)
-    }
