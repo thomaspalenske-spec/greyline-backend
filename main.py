@@ -455,3 +455,14 @@ from app.services.paper_trading_blocker_engine import PaperTradingBlockerEngine
 def paper_trading_blockers():
     engine = PaperTradingBlockerEngine()
     return engine.evaluate_blockers()
+from app.services.paper_trading_approval_gate_engine import PaperTradingApprovalGateEngine
+
+
+@app.get("/paper-trading-approval-gate")
+def paper_trading_approval_gate():
+    engine = PaperTradingApprovalGateEngine()
+
+    return engine.evaluate_approval(
+        paper_trading_ready=False,
+        manual_approval_granted=False
+    )
