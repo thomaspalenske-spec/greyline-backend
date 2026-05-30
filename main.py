@@ -307,3 +307,15 @@ def broker_authority_gate():
     return engine.evaluate_authority(
         requested_authority_level="OBSERVE_RECOMMEND_ONLY"
     )
+from app.services.broker_kill_switch_engine import BrokerKillSwitchEngine
+
+
+@app.get("/broker-kill-switch")
+def broker_kill_switch():
+    engine = BrokerKillSwitchEngine()
+
+    return engine.evaluate_kill_switch(
+        emergency_stop_active=False,
+        broker_connected=False,
+        autonomous_execution_enabled=False
+    )
