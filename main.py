@@ -513,3 +513,10 @@ from app.services.paper_trading_command_center_engine import PaperTradingCommand
 def paper_trading_command_center():
     engine = PaperTradingCommandCenterEngine()
     return engine.get_command_center()
+from app.services.paper_trading_phase_summary_engine import PaperTradingPhaseSummaryEngine
+
+
+@app.get("/paper-trading-phase-summary")
+def paper_trading_phase_summary():
+    engine = PaperTradingPhaseSummaryEngine()
+    return engine.get_phase_summary()
