@@ -205,3 +205,10 @@ def account_health_test():
         drift_detected=False,
         snapshot_valid=True
     )
+from app.services.system_status_engine import SystemStatusEngine
+
+
+@app.get("/system-status")
+def system_status():
+    engine = SystemStatusEngine()
+    return engine.get_status()
