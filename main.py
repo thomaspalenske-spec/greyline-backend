@@ -290,3 +290,10 @@ def broker_readiness():
         drift_detection_active=True,
         autonomous_execution_enabled=False
     )
+from app.services.tradestation_readiness_checklist_engine import TradeStationReadinessChecklistEngine
+
+
+@app.get("/tradestation-readiness")
+def tradestation_readiness():
+    engine = TradeStationReadinessChecklistEngine()
+    return engine.evaluate_checklist()
