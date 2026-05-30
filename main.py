@@ -506,3 +506,10 @@ def paper_trading_final_gate():
         blockers_cleared=False,
         launch_checklist_complete=False
     )
+from app.services.paper_trading_command_center_engine import PaperTradingCommandCenterEngine
+
+
+@app.get("/paper-trading-command-center")
+def paper_trading_command_center():
+    engine = PaperTradingCommandCenterEngine()
+    return engine.get_command_center()
