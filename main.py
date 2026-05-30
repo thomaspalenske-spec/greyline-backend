@@ -226,3 +226,10 @@ def backend_readiness():
         reconciliation_online=True,
         account_health="HEALTHY"
     )
+from app.services.milestone_registry_engine import MilestoneRegistryEngine
+
+
+@app.get("/milestones")
+def milestones():
+    engine = MilestoneRegistryEngine()
+    return engine.list_milestones()
