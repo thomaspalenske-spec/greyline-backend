@@ -434,3 +434,17 @@ def deployment_mode_gate():
     return engine.evaluate_mode(
         requested_mode="PAPER_TRADING_PREP"
     )
+from app.services.paper_trading_prep_gate_engine import PaperTradingPrepGateEngine
+
+
+@app.get("/paper-trading-prep-gate")
+def paper_trading_prep_gate():
+    engine = PaperTradingPrepGateEngine()
+
+    return engine.evaluate_prep_gate(
+        backend_ready=True,
+        broker_safety_ready=True,
+        credential_safety_ready=True,
+        authority_gate_ready=True,
+        kill_switch_ready=True
+    )
