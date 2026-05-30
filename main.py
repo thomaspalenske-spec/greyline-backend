@@ -410,3 +410,17 @@ from app.services.runtime_configuration_engine import RuntimeConfigurationEngine
 def runtime_configuration():
     engine = RuntimeConfigurationEngine()
     return engine.get_runtime_configuration()
+from app.services.runtime_safety_summary_engine import RuntimeSafetySummaryEngine
+
+
+@app.get("/runtime-safety")
+def runtime_safety():
+    engine = RuntimeSafetySummaryEngine()
+
+    return engine.summarize_runtime_safety(
+        broker_connected=False,
+        autonomous_execution_enabled=False,
+        authority_level="OBSERVE_RECOMMEND_ONLY",
+        kill_switch_status="STANDBY",
+        credential_safety_approved=True
+    )
