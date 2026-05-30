@@ -86,3 +86,15 @@ def audit_test():
             "system": "GreyLine"
         }
     )
+
+
+from app.services.snapshot_integrity_engine import SnapshotIntegrityEngine
+
+
+@app.get("/snapshot-integrity-test")
+def snapshot_integrity_test():
+    engine = SnapshotIntegrityEngine()
+
+    return engine.validate_snapshot(
+        "app/snapshots/snapshot_20260530_131732.json"
+    )
