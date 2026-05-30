@@ -340,3 +340,10 @@ from app.services.broker_integration_blocker_engine import BrokerIntegrationBloc
 def broker_blockers():
     engine = BrokerIntegrationBlockerEngine()
     return engine.evaluate_blockers()
+from app.services.broker_prep_roadmap_engine import BrokerPrepRoadmapEngine
+
+
+@app.get("/broker-roadmap")
+def broker_roadmap():
+    engine = BrokerPrepRoadmapEngine()
+    return engine.get_roadmap()
