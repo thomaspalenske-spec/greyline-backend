@@ -23,4 +23,7 @@ class SnapshotEngine:
         with open(filename, "w") as f:
             json.dump(data, f, indent=4)
 
-        return str(filename)
+        return {
+               "status": "snapshot_saved",
+               "file": str(filename)
+}

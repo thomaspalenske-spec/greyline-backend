@@ -9,6 +9,25 @@
             "quantity": 1,
             "realized_pnl": 0.0,
             "confidence": "TEST_RECORD"
+        },
+        {
+            "symbol": "NVDA",
+            "quantity": 1,
+            "entry_price": 215.33,
+            "state": "ACTIVE"
+        },
+        {
+            "symbol": "NVDA",
+            "quantity": 1,
+            "entry_price": 215.33,
+            "state": "ACTIVE"
+        },
+        {
+            "symbol": "NVDA",
+            "quantity": 1,
+            "entry_price": 215.33,
+            "state": "ACTIVE",
+            "created_at": "2026-05-30T12:48:58.583314"
         }
     ]
 }
