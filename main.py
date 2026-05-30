@@ -354,3 +354,10 @@ from app.services.paper_trading_readiness_engine import PaperTradingReadinessEng
 def paper_trading_readiness():
     engine = PaperTradingReadinessEngine()
     return engine.evaluate_readiness()
+from app.services.api_credential_readiness_engine import ApiCredentialReadinessEngine
+
+
+@app.get("/api-credential-readiness")
+def api_credential_readiness():
+    engine = ApiCredentialReadinessEngine()
+    return engine.evaluate_credentials()
