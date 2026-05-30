@@ -193,3 +193,15 @@ def account_drift_test():
         ledger_equity=10000,
         reported_equity=10000
     )
+from app.services.account_health_engine import AccountHealthEngine
+
+
+@app.get("/account-health-test")
+def account_health_test():
+    engine = AccountHealthEngine()
+
+    return engine.evaluate_health(
+        reconciliation_status="PASS",
+        drift_detected=False,
+        snapshot_valid=True
+    )
