@@ -212,3 +212,17 @@ from app.services.system_status_engine import SystemStatusEngine
 def system_status():
     engine = SystemStatusEngine()
     return engine.get_status()
+from app.services.backend_readiness_engine import BackendReadinessEngine
+
+
+@app.get("/backend-readiness")
+def backend_readiness():
+    engine = BackendReadinessEngine()
+
+    return engine.evaluate_readiness(
+        api_online=True,
+        ledger_online=True,
+        snapshot_online=True,
+        reconciliation_online=True,
+        account_health="HEALTHY"
+    )
