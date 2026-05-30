@@ -381,3 +381,10 @@ from app.services.environment_file_guard_engine import EnvironmentFileGuardEngin
 def environment_guard():
     engine = EnvironmentFileGuardEngine()
     return engine.evaluate_environment_guard()
+from app.services.credential_storage_policy_engine import CredentialStoragePolicyEngine
+
+
+@app.get("/credential-storage-policy")
+def credential_storage_policy():
+    engine = CredentialStoragePolicyEngine()
+    return engine.get_policy()
