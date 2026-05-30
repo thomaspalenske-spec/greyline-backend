@@ -110,3 +110,15 @@ def restore_test():
     return engine.restore_snapshot(
         "app/snapshots/snapshot_20260530_131732.json"
     )
+
+
+from app.services.snapshot_registry_engine import SnapshotRegistryEngine
+
+
+@app.get("/snapshots")
+def snapshots():
+    engine = SnapshotRegistryEngine()
+
+    return {
+        "snapshots": engine.list_snapshots()
+    }
