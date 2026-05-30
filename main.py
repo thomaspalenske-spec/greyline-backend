@@ -169,3 +169,27 @@ def reconciliation_report_test():
         ledger_positions,
         active_positions
     )
+from app.services.account_drift_detector_engine import AccountDriftDetectorEngine
+
+
+@app.get("/account-drift-test")
+def account_drift_test():
+    engine = AccountDriftDetectorEngine()
+
+    return engine.detect_drift(
+        ledger_equity=10000,
+        reported_equity=10000
+    )
+
+
+from app.services.account_drift_detector_engine import AccountDriftDetectorEngine
+
+
+@app.get("/account-drift-test")
+def account_drift_test():
+    engine = AccountDriftDetectorEngine()
+
+    return engine.detect_drift(
+        ledger_equity=10000,
+        reported_equity=10000
+    )
