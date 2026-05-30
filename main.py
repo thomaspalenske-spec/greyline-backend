@@ -98,3 +98,15 @@ def snapshot_integrity_test():
     return engine.validate_snapshot(
         "app/snapshots/snapshot_20260530_131732.json"
     )
+
+
+from app.services.restore_engine import RestoreEngine
+
+
+@app.get("/restore-test")
+def restore_test():
+    engine = RestoreEngine()
+
+    return engine.restore_snapshot(
+        "app/snapshots/snapshot_20260530_131732.json"
+    )
