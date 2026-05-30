@@ -347,3 +347,10 @@ from app.services.broker_prep_roadmap_engine import BrokerPrepRoadmapEngine
 def broker_roadmap():
     engine = BrokerPrepRoadmapEngine()
     return engine.get_roadmap()
+from app.services.paper_trading_readiness_engine import PaperTradingReadinessEngine
+
+
+@app.get("/paper-trading-readiness")
+def paper_trading_readiness():
+    engine = PaperTradingReadinessEngine()
+    return engine.evaluate_readiness()
