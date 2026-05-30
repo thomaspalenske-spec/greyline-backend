@@ -144,3 +144,28 @@ def reconciliation_validator_test():
     ]
 
     return engine.validate(ledger_positions, active_positions)
+
+
+from app.services.reconciliation_report_engine import ReconciliationReportEngine
+
+
+@app.get("/reconciliation-report-test")
+def reconciliation_report_test():
+    engine = ReconciliationReportEngine()
+
+    ledger_positions = [
+        {"symbol": "NVDA"},
+        {"symbol": "MSFT"},
+        {"symbol": "AVGO"}
+    ]
+
+    active_positions = [
+        {"symbol": "NVDA"},
+        {"symbol": "MSFT"},
+        {"symbol": "AVGO"}
+    ]
+
+    return engine.generate_report(
+        ledger_positions,
+        active_positions
+    )
