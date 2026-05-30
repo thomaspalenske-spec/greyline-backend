@@ -275,3 +275,18 @@ def phase_gate():
         capability_registry_active=True,
         milestone_registry_active=True
     )
+from app.services.broker_integration_readiness_engine import BrokerIntegrationReadinessEngine
+
+
+@app.get("/broker-readiness")
+def broker_readiness():
+    engine = BrokerIntegrationReadinessEngine()
+
+    return engine.evaluate_readiness(
+        ledger_supremacy_active=True,
+        audit_log_active=True,
+        snapshot_restore_active=True,
+        reconciliation_active=True,
+        drift_detection_active=True,
+        autonomous_execution_enabled=False
+    )
