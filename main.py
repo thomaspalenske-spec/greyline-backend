@@ -388,3 +388,25 @@ from app.services.credential_storage_policy_engine import CredentialStoragePolic
 def credential_storage_policy():
     engine = CredentialStoragePolicyEngine()
     return engine.get_policy()
+from app.services.configuration_validation_engine import ConfigurationValidationEngine
+
+
+@app.get("/configuration-validation")
+def configuration_validation():
+    engine = ConfigurationValidationEngine()
+
+    return engine.validate_configuration(
+        {
+            "GREYLINE_MODE": "LOCAL_DEVELOPMENT",
+            "GREYLINE_ENVIRONMENT": "MacBook",
+            "BROKER_CONNECTION_ENABLED": False,
+            "AUTONOMOUS_EXECUTION_ENABLED": False
+        }
+    )
+from app.services.runtime_configuration_engine import RuntimeConfigurationEngine
+
+
+@app.get("/runtime-configuration")
+def runtime_configuration():
+    engine = RuntimeConfigurationEngine()
+    return engine.get_runtime_configuration()
