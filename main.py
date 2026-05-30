@@ -361,3 +361,16 @@ from app.services.api_credential_readiness_engine import ApiCredentialReadinessE
 def api_credential_readiness():
     engine = ApiCredentialReadinessEngine()
     return engine.evaluate_credentials()
+from app.services.credential_safety_gate_engine import CredentialSafetyGateEngine
+
+
+@app.get("/credential-safety")
+def credential_safety():
+    engine = CredentialSafetyGateEngine()
+
+    return engine.evaluate_credential_safety(
+        credentials_in_plaintext=False,
+        env_file_present=True,
+        gitignore_protects_env=True,
+        credential_rotation_required=False
+    )
