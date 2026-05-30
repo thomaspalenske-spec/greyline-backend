@@ -520,3 +520,10 @@ from app.services.paper_trading_phase_summary_engine import PaperTradingPhaseSum
 def paper_trading_phase_summary():
     engine = PaperTradingPhaseSummaryEngine()
     return engine.get_phase_summary()
+from app.services.broker_sandbox_connection_plan_engine import BrokerSandboxConnectionPlanEngine
+
+
+@app.get("/broker-sandbox-plan")
+def broker_sandbox_plan():
+    engine = BrokerSandboxConnectionPlanEngine()
+    return engine.get_plan()
