@@ -486,3 +486,10 @@ def paper_trading_transition_summary():
         broker_connected=False,
         api_credentials_configured=False
     )
+from app.services.paper_trading_launch_checklist_engine import PaperTradingLaunchChecklistEngine
+
+
+@app.get("/paper-trading-launch-checklist")
+def paper_trading_launch_checklist():
+    engine = PaperTradingLaunchChecklistEngine()
+    return engine.get_checklist()
