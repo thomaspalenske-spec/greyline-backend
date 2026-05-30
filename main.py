@@ -297,3 +297,13 @@ from app.services.tradestation_readiness_checklist_engine import TradeStationRea
 def tradestation_readiness():
     engine = TradeStationReadinessChecklistEngine()
     return engine.evaluate_checklist()
+from app.services.broker_authority_gate_engine import BrokerAuthorityGateEngine
+
+
+@app.get("/broker-authority-gate")
+def broker_authority_gate():
+    engine = BrokerAuthorityGateEngine()
+
+    return engine.evaluate_authority(
+        requested_authority_level="OBSERVE_RECOMMEND_ONLY"
+    )
