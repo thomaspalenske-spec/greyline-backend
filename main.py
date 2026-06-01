@@ -21,3 +21,12 @@ def readiness():
         "credential_validation_engine": "AVAILABLE",
         "version": "0.0.1"
     }
+
+
+from app.services.paper_trading_command_center_engine import PaperTradingCommandCenterEngine
+
+
+@app.get("/paper-trading-command-center")
+def paper_trading_command_center():
+    engine = PaperTradingCommandCenterEngine()
+    return engine.get_command_center()

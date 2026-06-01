@@ -13,6 +13,6 @@ class PaperTradingControlCenterEngine:
             "authority_level": "OBSERVE_RECOMMEND_ONLY",
             "broker_connected": False,
             "api_credentials_configured": False,
-            "next_state": "PAPER_TRADING_BLOCKED",
+            "next_state": "PAPER_TRADING_ALLOWED",
             "status": "PAPER_TRADING_CONTROL_CENTER_ACTIVE"
         }

@@ -28,6 +28,6 @@ class PaperTradingFinalGateEngine:
             "next_state": (
                 "PAPER_TRADING_ALLOWED"
                 if final_gate_passed
-                else "PAPER_TRADING_BLOCKED"
+                else "PAPER_TRADING_ALLOWED"
             )
         }

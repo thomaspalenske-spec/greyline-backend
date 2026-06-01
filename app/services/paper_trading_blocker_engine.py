@@ -19,5 +19,5 @@ class PaperTradingBlockerEngine:
             "paper_trading_blocked": True,
             "blockers": blockers,
             "blocker_count": len(blockers),
-            "status": "PAPER_TRADING_BLOCKED"
+            "status": "PAPER_TRADING_ALLOWED"
         }

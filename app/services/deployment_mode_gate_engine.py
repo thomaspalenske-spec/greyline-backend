@@ -27,5 +27,5 @@ class DeploymentModeGateEngine:
             "blocked_modes": self.BLOCKED_MODES,
             "mode_exists": allowed_mode,
             "transition_allowed": allowed_mode and not blocked_mode,
-            "status": "MODE_ALLOWED" if allowed_mode and not blocked_mode else "MODE_BLOCKED"
+            "status": "MODE_ALLOWED" if allowed_mode and not blocked_mode else "MODE_BLOCKED",
         }
