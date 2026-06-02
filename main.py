@@ -235,3 +235,46 @@ def broker_safety_summary():
 @app.get("/broker-sandbox-plan")
 def broker_sandbox_plan():
     return BrokerSandboxConnectionPlanEngine().get_plan()
+
+
+from app.services.tradestation_readiness_checklist_engine import TradeStationReadinessChecklistEngine
+from app.services.tradestation_sandbox_readiness_engine import TradeStationSandboxReadinessEngine
+from app.services.tradestation_credential_validation_engine import TradeStationCredentialValidationEngine
+from app.services.api_credential_readiness_engine import APICredentialReadinessEngine
+from app.services.broker_integration_readiness_engine import BrokerIntegrationReadinessEngine
+from app.services.broker_integration_blocker_engine import BrokerIntegrationBlockerEngine
+
+
+@app.get("/tradestation-readiness")
+def tradestation_readiness():
+    return TradeStationReadinessChecklistEngine().get_checklist()
+
+
+@app.get("/tradestation-sandbox-readiness")
+def tradestation_sandbox_readiness():
+    return TradeStationSandboxReadinessEngine().evaluate_readiness()
+
+
+@app.get("/tradestation-credential-validation")
+def tradestation_credential_validation():
+    return TradeStationCredentialValidationEngine().validate_credentials(
+        credentials_present=False
+    )
+
+
+@app.get("/api-credential-readiness")
+def api_credential_readiness():
+    return APICredentialReadinessEngine().evaluate_readiness()
+
+
+@app.get("/broker-integration-readiness")
+def broker_integration_readiness():
+    return BrokerIntegrationReadinessEngine().evaluate_readiness(
+        api_credentials_valid=False,
+        broker_connected=False
+    )
+
+
+@app.get("/broker-integration-blockers")
+def broker_integration_blockers():
+    return BrokerIntegrationBlockerEngine().evaluate_blockers()
