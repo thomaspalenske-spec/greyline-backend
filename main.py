@@ -192,3 +192,46 @@ def paper_trading_final_gate():
 @app.get("/paper-trading-phase-summary")
 def paper_trading_phase_summary():
     return PaperTradingPhaseSummaryEngine().get_phase_summary()
+
+
+from app.services.credential_safety_gate_engine import CredentialSafetyGateEngine
+from app.services.credential_storage_policy_engine import CredentialStoragePolicyEngine
+from app.services.environment_file_guard_engine import EnvironmentFileGuardEngine
+from app.services.broker_safety_summary_engine import BrokerSafetySummaryEngine
+from app.services.broker_sandbox_connection_plan_engine import BrokerSandboxConnectionPlanEngine
+
+
+@app.get("/credential-safety-gate")
+def credential_safety_gate():
+    return CredentialSafetyGateEngine().evaluate_gate(
+        credential_storage_approved=True,
+        secrets_redacted=True,
+        environment_file_protected=True
+    )
+
+
+@app.get("/credential-storage-policy")
+def credential_storage_policy():
+    return CredentialStoragePolicyEngine().get_policy()
+
+
+@app.get("/environment-file-guard")
+def environment_file_guard():
+    return EnvironmentFileGuardEngine().evaluate_environment_file(
+        gitignore_protected=True,
+        source_control_safe=True
+    )
+
+
+@app.get("/broker-safety-summary")
+def broker_safety_summary():
+    return BrokerSafetySummaryEngine().summarize_safety(
+        broker_connected=False,
+        execution_enabled=False,
+        authority_level="OBSERVE_RECOMMEND_ONLY"
+    )
+
+
+@app.get("/broker-sandbox-plan")
+def broker_sandbox_plan():
+    return BrokerSandboxConnectionPlanEngine().get_plan()
