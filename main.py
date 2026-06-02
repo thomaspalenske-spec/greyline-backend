@@ -80,3 +80,115 @@ def backend_readiness():
 @app.get("/manifest")
 def manifest():
     return BackendManifestEngine().get_manifest()
+
+
+from app.services.runtime_configuration_engine import RuntimeConfigurationEngine
+from app.services.runtime_safety_summary_engine import RuntimeSafetySummaryEngine
+from app.services.deployment_mode_gate_engine import DeploymentModeGateEngine
+from app.services.configuration_validation_engine import ConfigurationValidationEngine
+
+
+@app.get("/runtime-configuration")
+def runtime_configuration():
+    return RuntimeConfigurationEngine().get_runtime_configuration()
+
+
+@app.get("/runtime-safety")
+def runtime_safety():
+    return RuntimeSafetySummaryEngine().summarize_runtime_safety(
+        broker_connected=False,
+        autonomous_execution_enabled=False,
+        authority_level="OBSERVE_RECOMMEND_ONLY",
+        kill_switch_status="STANDBY",
+        credential_safety_approved=True
+    )
+
+
+@app.get("/deployment-mode-gate")
+def deployment_mode_gate():
+    return DeploymentModeGateEngine().evaluate_mode(
+        requested_mode="PAPER_TRADING_PREP"
+    )
+
+
+@app.get("/configuration-validation")
+def configuration_validation():
+    return ConfigurationValidationEngine().validate_configuration(
+        {
+            "GREYLINE_MODE": "LOCAL_DEVELOPMENT",
+            "GREYLINE_ENVIRONMENT": "MacBook",
+            "BROKER_CONNECTION_ENABLED": False,
+            "AUTONOMOUS_EXECUTION_ENABLED": False
+        }
+    )
+
+
+from app.services.paper_trading_prep_gate_engine import PaperTradingPrepGateEngine
+from app.services.paper_trading_blocker_engine import PaperTradingBlockerEngine
+from app.services.paper_trading_approval_gate_engine import PaperTradingApprovalGateEngine
+from app.services.paper_trading_control_center_engine import PaperTradingControlCenterEngine
+
+
+@app.get("/paper-trading-prep-gate")
+def paper_trading_prep_gate():
+    return PaperTradingPrepGateEngine().evaluate_prep_gate(
+        backend_ready=True,
+        broker_safety_ready=True,
+        credential_safety_ready=True,
+        authority_gate_ready=True,
+        kill_switch_ready=True
+    )
+
+
+@app.get("/paper-trading-blockers")
+def paper_trading_blockers():
+    return PaperTradingBlockerEngine().evaluate_blockers()
+
+
+@app.get("/paper-trading-approval-gate")
+def paper_trading_approval_gate():
+    return PaperTradingApprovalGateEngine().evaluate_approval(
+        paper_trading_ready=False,
+        manual_approval_granted=False
+    )
+
+
+@app.get("/paper-trading-control-center")
+def paper_trading_control_center():
+    return PaperTradingControlCenterEngine().get_control_center()
+
+
+from app.services.paper_trading_transition_summary_engine import PaperTradingTransitionSummaryEngine
+from app.services.paper_trading_launch_checklist_engine import PaperTradingLaunchChecklistEngine
+from app.services.paper_trading_final_gate_engine import PaperTradingFinalGateEngine
+from app.services.paper_trading_phase_summary_engine import PaperTradingPhaseSummaryEngine
+
+
+@app.get("/paper-trading-transition-summary")
+def paper_trading_transition_summary():
+    return PaperTradingTransitionSummaryEngine().summarize_transition(
+        paper_trading_ready=False,
+        approval_passed=False,
+        broker_connected=False,
+        api_credentials_configured=False
+    )
+
+
+@app.get("/paper-trading-launch-checklist")
+def paper_trading_launch_checklist():
+    return PaperTradingLaunchChecklistEngine().get_checklist()
+
+
+@app.get("/paper-trading-final-gate")
+def paper_trading_final_gate():
+    return PaperTradingFinalGateEngine().evaluate_final_gate(
+        paper_trading_ready=False,
+        approval_passed=False,
+        blockers_cleared=False,
+        launch_checklist_complete=False
+    )
+
+
+@app.get("/paper-trading-phase-summary")
+def paper_trading_phase_summary():
+    return PaperTradingPhaseSummaryEngine().get_phase_summary()
