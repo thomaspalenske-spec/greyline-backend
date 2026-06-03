@@ -497,3 +497,19 @@ from app.services.tradestation_token_exchange_readiness_engine import TradeStati
 def tradestation_token_exchange_readiness():
     return TradeStationTokenExchangeReadinessEngine().evaluate()
 
+
+from app.services.tradestation_token_exchange_engine import TradeStationTokenExchangeEngine
+
+
+@app.get("/tradestation-token-exchange")
+def tradestation_token_exchange():
+    return TradeStationTokenExchangeEngine().exchange_code()
+
+
+from app.services.tradestation_token_exchange_engine import TradeStationTokenExchangeEngine
+
+
+@app.get("/tradestation-token-exchange")
+def tradestation_token_exchange():
+    return TradeStationTokenExchangeEngine().exchange_code()
+
