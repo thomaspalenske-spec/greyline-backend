@@ -689,3 +689,11 @@ from app.services.watchlist_engine import WatchlistEngine
 def watchlist():
     return WatchlistEngine().get_watchlist()
 
+
+from app.services.watchlist_reader import WatchlistReader
+
+
+@app.get("/watchlist-reader")
+def watchlist_reader():
+    return WatchlistReader().read_watchlist()
+
