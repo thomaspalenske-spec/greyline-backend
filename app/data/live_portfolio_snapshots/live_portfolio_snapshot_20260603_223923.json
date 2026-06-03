@@ -1,61 +1,61 @@
 {
-  "saved_at": "2026-06-03T22:39:54.520673",
+  "saved_at": "2026-06-03T22:39:23.429699",
   "snapshot": {
-    "timestamp": "2026-06-03T22:39:54.520441",
+    "timestamp": "2026-06-03T22:39:23.429519",
     "broker": "TradeStation",
     "accounts": {
-      "timestamp": "2026-06-03T22:39:52.528494",
+      "timestamp": "2026-06-03T22:39:20.365365",
       "broker": "TradeStation",
       "account_discovery_attempted": true,
       "http_status": 401,
       "execution_enabled": false,
       "status": "ACCOUNT_DISCOVERY_FAILED",
-      "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"3da8578a-66aa-439e-a133-5bc70d0bf4b3\"}"
+      "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"c1e8d1a3-9482-4358-bc39-57779f9e54f9\"}"
     },
     "balances": {
-      "timestamp": "2026-06-03T22:39:53.400190",
+      "timestamp": "2026-06-03T22:39:21.265114",
       "first_attempt_status": "BALANCE_READ_FAILED",
       "refresh_attempted": true,
       "refresh_status": "TOKEN_REFRESH_SUCCESS",
       "second_attempt_status": "BALANCE_READ_FAILED",
       "final_result": {
-        "timestamp": "2026-06-03T22:39:53.397127",
+        "timestamp": "2026-06-03T22:39:21.262461",
         "broker": "TradeStation",
         "balance_attempted": true,
         "http_status": 401,
         "execution_enabled": false,
         "status": "BALANCE_READ_FAILED",
-        "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"be98f3d4-83b7-4591-b9c9-26e632a7c6cf\"}"
+        "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"a25656bd-a740-4f6b-9866-788c3833f844\"}"
       },
       "execution_enabled": false,
       "status": "BALANCE_RETRY_FAILED"
     },
     "positions": {
-      "timestamp": "2026-06-03T22:39:54.238036",
+      "timestamp": "2026-06-03T22:39:22.733348",
       "first_attempt_status": "POSITIONS_READ_FAILED",
       "refresh_attempted": true,
       "refresh_status": "TOKEN_REFRESH_SUCCESS",
       "second_attempt_status": "POSITIONS_READ_FAILED",
       "final_result": {
-        "timestamp": "2026-06-03T22:39:54.236214",
+        "timestamp": "2026-06-03T22:39:22.730425",
         "broker": "TradeStation",
         "positions_attempted": true,
         "http_status": 401,
         "execution_enabled": false,
         "status": "POSITIONS_READ_FAILED",
-        "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"747b1bf5-9919-477b-803b-88ddc20e09a7\"}"
+        "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"8df334fa-1d6a-4d67-83ff-a57adb62696f\"}"
       },
       "execution_enabled": false,
       "status": "POSITIONS_RETRY_FAILED"
     },
     "orders": {
-      "timestamp": "2026-06-03T22:39:54.518261",
+      "timestamp": "2026-06-03T22:39:23.428190",
       "broker": "TradeStation",
       "orders_attempted": true,
       "http_status": 401,
       "execution_enabled": false,
       "status": "ORDERS_READ_FAILED",
-      "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"471b0af5-c115-439f-85a5-e23434a2aa55\"}"
+      "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"dbecc84f-f9a2-4612-9d3e-6a4e70be3c43\"}"
     },
     "execution_enabled": false,
     "snapshot_healthy": false,

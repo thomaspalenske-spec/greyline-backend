@@ -11,6 +11,15 @@ def test_all_get_routes_execute():
         "/redoc",
         "/tradestation-token-exchange",
         "/tradestation-account-discovery-live",
+        "/portfolio-equity-timeline-record",
+        "/live-portfolio-health",
+        "/live-portfolio-snapshot-persist",
+        "/live-portfolio-snapshot",
+        "/tradestation-orders-live",
+        "/tradestation-positions-live",
+        "/tradestation-balance-live",
+        "/tradestation-positions-retry",
+        "/tradestation-balance-retry",
     }
 
     for route in main.app.routes:

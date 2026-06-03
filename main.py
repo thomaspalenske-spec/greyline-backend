@@ -649,3 +649,11 @@ from app.services.portfolio_analytics_persistence_service import PortfolioAnalyt
 def portfolio_analytics_persist():
     return PortfolioAnalyticsPersistenceService().save_and_verify_analytics()
 
+
+from app.services.portfolio_analytics_reader import PortfolioAnalyticsReader
+
+
+@app.get("/portfolio-analytics-reader")
+def portfolio_analytics_reader():
+    return PortfolioAnalyticsReader().read_latest()
+
