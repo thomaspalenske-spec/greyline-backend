@@ -521,3 +521,19 @@ from app.services.tradestation_account_discovery_live_engine import TradeStation
 def tradestation_account_discovery_live():
     return TradeStationAccountDiscoveryLiveEngine().discover_accounts()
 
+
+from app.services.tradestation_balance_live_engine import TradeStationBalanceLiveEngine
+
+
+@app.get("/tradestation-balance-live")
+def tradestation_balance_live():
+    return TradeStationBalanceLiveEngine().get_balance()
+
+
+from app.services.tradestation_token_refresh_engine import TradeStationTokenRefreshEngine
+
+
+@app.get("/tradestation-token-refresh")
+def tradestation_token_refresh():
+    return TradeStationTokenRefreshEngine().refresh_access_token()
+
