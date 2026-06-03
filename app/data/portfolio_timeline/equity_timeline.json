@@ -40,5 +40,23 @@
     "source": "LIVE_PORTFOLIO_SNAPSHOT",
     "balance_response_preview_present": true,
     "execution_enabled": false
+  },
+  {
+    "timestamp": "2026-06-03T22:08:10.999320",
+    "source": "LIVE_PORTFOLIO_SNAPSHOT",
+    "balance_response_preview_present": true,
+    "execution_enabled": false
+  },
+  {
+    "timestamp": "2026-06-03T22:08:19.159496",
+    "source": "LIVE_PORTFOLIO_SNAPSHOT",
+    "balance_response_preview_present": true,
+    "execution_enabled": false
+  },
+  {
+    "timestamp": "2026-06-03T22:08:25.153073",
+    "source": "LIVE_PORTFOLIO_SNAPSHOT",
+    "balance_response_preview_present": true,
+    "execution_enabled": false
   }
 ]

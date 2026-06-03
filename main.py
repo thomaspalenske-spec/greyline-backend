@@ -633,3 +633,11 @@ from app.services.portfolio_equity_timeline_reader import PortfolioEquityTimelin
 def portfolio_equity_timeline():
     return PortfolioEquityTimelineReader().read_timeline()
 
+
+from app.services.portfolio_analytics_engine import PortfolioAnalyticsEngine
+
+
+@app.get("/portfolio-analytics")
+def portfolio_analytics():
+    return PortfolioAnalyticsEngine().analyze()
+
