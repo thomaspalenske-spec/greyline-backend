@@ -585,3 +585,11 @@ from app.services.tradestation_orders_live_engine import TradeStationOrdersLiveE
 def tradestation_orders_live():
     return TradeStationOrdersLiveEngine().get_orders()
 
+
+from app.services.live_portfolio_snapshot_builder import LivePortfolioSnapshotBuilder
+
+
+@app.get("/live-portfolio-snapshot")
+def live_portfolio_snapshot():
+    return LivePortfolioSnapshotBuilder().build_snapshot()
+
