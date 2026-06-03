@@ -405,3 +405,11 @@ from app.services.portfolio_balance_model_engine import PortfolioBalanceModelEng
 def portfolio_balance_model():
     return PortfolioBalanceModelEngine().create_empty_balance()
 
+
+from app.services.portfolio_account_model_engine import PortfolioAccountModelEngine
+
+
+@app.get("/portfolio-account-model")
+def portfolio_account_model():
+    return PortfolioAccountModelEngine().create_empty_account()
+
