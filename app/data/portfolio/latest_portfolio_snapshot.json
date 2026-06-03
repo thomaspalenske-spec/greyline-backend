@@ -1,12 +1,26 @@
 {
-  "saved_at": "2026-06-03T12:56:32.524842",
+  "saved_at": "2026-06-03T13:00:29.752699",
   "snapshot": {
-    "account_id": null,
-    "cash_balance": 0.0,
-    "equity": 0.0,
+    "timestamp": "2026-06-03T13:00:29.752476",
+    "account": {
+      "account_id": null,
+      "account_type": null,
+      "broker": "TradeStation"
+    },
+    "balance": {
+      "cash_balance": 0.0,
+      "equity": 0.0,
+      "buying_power": 0.0,
+      "day_trading_buying_power": 0.0,
+      "maintenance_margin": 0.0,
+      "excess_liquidity": 0.0
+    },
     "positions": [],
     "open_orders": [],
-    "source": "TEST_ONLY",
-    "execution_enabled": false
+    "snapshots": [],
+    "source": "MODEL_ONLY",
+    "broker_connected": false,
+    "execution_enabled": false,
+    "status": "PORTFOLIO_AGGREGATION_ACTIVE"
   }
 }

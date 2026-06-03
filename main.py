@@ -449,3 +449,11 @@ def portfolio_repository_test():
         "status": "PORTFOLIO_REPOSITORY_TEST_PASS"
     }
 
+
+from app.services.portfolio_snapshot_service import PortfolioSnapshotService
+
+
+@app.get("/portfolio-snapshot-service")
+def portfolio_snapshot_service():
+    return PortfolioSnapshotService().create_and_verify_snapshot()
+
