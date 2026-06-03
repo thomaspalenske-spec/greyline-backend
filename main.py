@@ -465,3 +465,11 @@ from app.services.portfolio_state_engine import PortfolioStateEngine
 def portfolio_state():
     return PortfolioStateEngine().evaluate_state()
 
+
+from app.services.portfolio_integrity_engine import PortfolioIntegrityEngine
+
+
+@app.get("/portfolio-integrity")
+def portfolio_integrity():
+    return PortfolioIntegrityEngine().evaluate_integrity()
+
