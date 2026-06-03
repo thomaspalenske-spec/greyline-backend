@@ -473,3 +473,11 @@ from app.services.portfolio_integrity_engine import PortfolioIntegrityEngine
 def portfolio_integrity():
     return PortfolioIntegrityEngine().evaluate_integrity()
 
+
+from app.services.portfolio_health_dashboard_engine import PortfolioHealthDashboardEngine
+
+
+@app.get("/portfolio-health")
+def portfolio_health():
+    return PortfolioHealthDashboardEngine().get_dashboard()
+
