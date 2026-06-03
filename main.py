@@ -317,3 +317,11 @@ def backend_ucfs():
 @app.get("/restore")
 def restore():
     return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
+
+from app.services.trade_station_engine import TradeStationEngine
+
+
+@app.get("/tradestation-status")
+def tradestation_status():
+    return TradeStationEngine().evaluate()
+
