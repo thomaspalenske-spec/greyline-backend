@@ -489,3 +489,11 @@ from app.services.tradestation_oauth_url_engine import TradeStationOAuthUrlEngin
 def tradestation_oauth_url():
     return TradeStationOAuthUrlEngine().generate_url()
 
+
+from app.services.tradestation_token_exchange_readiness_engine import TradeStationTokenExchangeReadinessEngine
+
+
+@app.get("/tradestation-token-exchange-readiness")
+def tradestation_token_exchange_readiness():
+    return TradeStationTokenExchangeReadinessEngine().evaluate()
+
