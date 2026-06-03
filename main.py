@@ -325,3 +325,11 @@ from app.services.trade_station_engine import TradeStationEngine
 def tradestation_status():
     return TradeStationEngine().evaluate()
 
+
+from app.services.tradestation_oauth_readiness_engine import TradeStationOAuthReadinessEngine
+
+
+@app.get("/tradestation-oauth-readiness")
+def tradestation_oauth_readiness():
+    return TradeStationOAuthReadinessEngine().evaluate()
+
