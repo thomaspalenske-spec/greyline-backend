@@ -7,6 +7,7 @@ IGNORED_ROUTES = {
     "/docs/oauth2-redirect",
     "/redoc",
         "/tradestation-token-exchange",
+        "/tradestation-account-discovery-live",
 }
 
 

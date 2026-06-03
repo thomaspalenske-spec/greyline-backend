@@ -10,6 +10,7 @@ def test_all_get_routes_execute():
         "/docs/oauth2-redirect",
         "/redoc",
         "/tradestation-token-exchange",
+        "/tradestation-account-discovery-live",
     }
 
     for route in main.app.routes:
