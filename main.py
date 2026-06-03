@@ -421,3 +421,31 @@ from app.services.portfolio_aggregation_engine import PortfolioAggregationEngine
 def portfolio():
     return PortfolioAggregationEngine().aggregate_empty_portfolio()
 
+
+from app.services.portfolio_repository import PortfolioRepository
+
+
+@app.get("/portfolio-repository-test")
+def portfolio_repository_test():
+    repo = PortfolioRepository()
+
+    snapshot = {
+        "account_id": None,
+        "cash_balance": 0.0,
+        "equity": 0.0,
+        "positions": [],
+        "open_orders": [],
+        "source": "TEST_ONLY",
+        "execution_enabled": False
+    }
+
+    save_result = repo.save_snapshot(snapshot)
+    load_result = repo.load_latest_snapshot()
+
+    return {
+        "save_result": save_result,
+        "load_result": load_result,
+        "execution_enabled": False,
+        "status": "PORTFOLIO_REPOSITORY_TEST_PASS"
+    }
+

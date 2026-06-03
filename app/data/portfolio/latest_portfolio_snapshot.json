@@ -1,0 +1,12 @@
+{
+  "saved_at": "2026-06-03T12:56:32.524842",
+  "snapshot": {
+    "account_id": null,
+    "cash_balance": 0.0,
+    "equity": 0.0,
+    "positions": [],
+    "open_orders": [],
+    "source": "TEST_ONLY",
+    "execution_enabled": false
+  }
+}
