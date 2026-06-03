@@ -657,3 +657,11 @@ from app.services.portfolio_analytics_reader import PortfolioAnalyticsReader
 def portfolio_analytics_reader():
     return PortfolioAnalyticsReader().read_latest()
 
+
+from app.services.portfolio_dashboard_service import PortfolioDashboardService
+
+
+@app.get("/portfolio-dashboard")
+def portfolio_dashboard():
+    return PortfolioDashboardService().get_dashboard()
+
