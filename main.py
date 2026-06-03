@@ -617,3 +617,19 @@ from app.services.portfolio_equity_timeline_engine import PortfolioEquityTimelin
 def portfolio_equity_timeline_record():
     return PortfolioEquityTimelineEngine().record_equity_point()
 
+
+from app.services.portfolio_equity_timeline_reader import PortfolioEquityTimelineReader
+
+
+@app.get("/portfolio-equity-timeline")
+def portfolio_equity_timeline():
+    return PortfolioEquityTimelineReader().read_timeline()
+
+
+from app.services.portfolio_equity_timeline_reader import PortfolioEquityTimelineReader
+
+
+@app.get("/portfolio-equity-timeline")
+def portfolio_equity_timeline():
+    return PortfolioEquityTimelineReader().read_timeline()
+
