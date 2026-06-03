@@ -601,3 +601,11 @@ from app.services.live_portfolio_snapshot_persistence_service import LivePortfol
 def live_portfolio_snapshot_persist():
     return LivePortfolioSnapshotPersistenceService().save_and_verify_live_snapshot()
 
+
+from app.services.live_portfolio_health_dashboard_service import LivePortfolioHealthDashboardService
+
+
+@app.get("/live-portfolio-health")
+def live_portfolio_health():
+    return LivePortfolioHealthDashboardService().get_health_status()
+

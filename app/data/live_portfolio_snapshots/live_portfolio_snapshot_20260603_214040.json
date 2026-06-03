@@ -1,10 +1,10 @@
 {
-  "saved_at": "2026-06-03T21:40:48.166705",
+  "saved_at": "2026-06-03T21:40:40.108288",
   "snapshot": {
-    "timestamp": "2026-06-03T21:40:48.166455",
+    "timestamp": "2026-06-03T21:40:40.107981",
     "broker": "TradeStation",
     "accounts": {
-      "timestamp": "2026-06-03T21:40:46.219910",
+      "timestamp": "2026-06-03T21:40:39.227689",
       "broker": "TradeStation",
       "account_discovery_attempted": true,
       "http_status": 200,
@@ -13,11 +13,11 @@
       "response_preview": "{\"Accounts\":[{\"AccountID\":\"12052606\",\"Currency\":\"USD\",\"Status\":\"Active\",\"AccountType\":\"Margin\",\"AccountDetail\":{\"IsStockLocateEligible\":false,\"EnrolledInRegTProgram\":true,\"RequiresBuyingPowerWarning\":true,\"CryptoEnabled\":false,\"DayTradingQualified\":true,\"OptionApprovalLevel\":2,\"PatternDayTrader\":false}},{\"AccountID\":\"210WME98\",\"Currency\":\"USD\",\"Status\":\"Active\",\"AccountType\":\"Futures\"}]}\n"
     },
     "balances": {
-      "timestamp": "2026-06-03T21:40:46.931107",
+      "timestamp": "2026-06-03T21:40:39.518306",
       "first_attempt_status": "BALANCE_READ_SUCCESS",
       "refresh_attempted": false,
       "final_result": {
-        "timestamp": "2026-06-03T21:40:46.928593",
+        "timestamp": "2026-06-03T21:40:39.515490",
         "broker": "TradeStation",
         "balance_attempted": true,
         "http_status": 200,
@@ -29,11 +29,11 @@
       "status": "BALANCE_RETRY_NOT_REQUIRED"
     },
     "positions": {
-      "timestamp": "2026-06-03T21:40:47.536512",
+      "timestamp": "2026-06-03T21:40:39.832340",
       "first_attempt_status": "POSITIONS_READ_SUCCESS",
       "refresh_attempted": false,
       "final_result": {
-        "timestamp": "2026-06-03T21:40:47.533399",
+        "timestamp": "2026-06-03T21:40:39.829679",
         "broker": "TradeStation",
         "positions_attempted": true,
         "http_status": 200,
@@ -45,7 +45,7 @@
       "status": "POSITIONS_RETRY_NOT_REQUIRED"
     },
     "orders": {
-      "timestamp": "2026-06-03T21:40:48.163833",
+      "timestamp": "2026-06-03T21:40:40.104999",
       "broker": "TradeStation",
       "orders_attempted": true,
       "http_status": 200,
