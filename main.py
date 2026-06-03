@@ -537,3 +537,27 @@ from app.services.tradestation_token_refresh_engine import TradeStationTokenRefr
 def tradestation_token_refresh():
     return TradeStationTokenRefreshEngine().refresh_access_token()
 
+
+from app.services.tradestation_balance_retry_service import TradeStationBalanceRetryService
+
+
+@app.get("/tradestation-balance-retry")
+def tradestation_balance_retry():
+    return TradeStationBalanceRetryService().get_balance_with_refresh_retry()
+
+
+from app.services.tradestation_balance_retry_service import TradeStationBalanceRetryService
+
+
+@app.get("/tradestation-balance-retry")
+def tradestation_balance_retry():
+    return TradeStationBalanceRetryService().get_balance_with_refresh_retry()
+
+
+from app.services.tradestation_balance_retry_service import TradeStationBalanceRetryService
+
+
+@app.get("/tradestation-balance-retry")
+def tradestation_balance_retry():
+    return TradeStationBalanceRetryService().get_balance_with_refresh_retry()
+
