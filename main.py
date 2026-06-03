@@ -333,3 +333,11 @@ from app.services.tradestation_oauth_readiness_engine import TradeStationOAuthRe
 def tradestation_oauth_readiness():
     return TradeStationOAuthReadinessEngine().evaluate()
 
+
+from app.services.tradestation_account_discovery_engine import TradeStationAccountDiscoveryEngine
+
+
+@app.get("/tradestation-account-discovery")
+def tradestation_account_discovery():
+    return TradeStationAccountDiscoveryEngine().evaluate()
+
