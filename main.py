@@ -397,3 +397,11 @@ from app.services.portfolio_order_model_engine import PortfolioOrderModelEngine
 def portfolio_order_model():
     return PortfolioOrderModelEngine().create_empty_order()
 
+
+from app.services.portfolio_balance_model_engine import PortfolioBalanceModelEngine
+
+
+@app.get("/portfolio-balance-model")
+def portfolio_balance_model():
+    return PortfolioBalanceModelEngine().create_empty_balance()
+
