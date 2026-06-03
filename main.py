@@ -481,3 +481,11 @@ from app.services.portfolio_health_dashboard_engine import PortfolioHealthDashbo
 def portfolio_health():
     return PortfolioHealthDashboardEngine().get_dashboard()
 
+
+from app.services.tradestation_oauth_url_engine import TradeStationOAuthUrlEngine
+
+
+@app.get("/tradestation-oauth-url")
+def tradestation_oauth_url():
+    return TradeStationOAuthUrlEngine().generate_url()
+
