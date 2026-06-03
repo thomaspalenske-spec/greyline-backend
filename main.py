@@ -569,3 +569,11 @@ from app.services.tradestation_positions_live_engine import TradeStationPosition
 def tradestation_positions_live():
     return TradeStationPositionsLiveEngine().get_positions()
 
+
+from app.services.tradestation_positions_retry_service import TradeStationPositionsRetryService
+
+
+@app.get("/tradestation-positions-retry")
+def tradestation_positions_retry():
+    return TradeStationPositionsRetryService().get_positions_with_refresh_retry()
+
