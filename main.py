@@ -240,7 +240,7 @@ def broker_sandbox_plan():
 from app.services.tradestation_readiness_checklist_engine import TradeStationReadinessChecklistEngine
 from app.services.tradestation_sandbox_readiness_engine import TradeStationSandboxReadinessEngine
 from app.services.tradestation_credential_validation_engine import TradeStationCredentialValidationEngine
-from app.services.api_credential_readiness_engine import APICredentialReadinessEngine
+from app.services.api_credential_readiness_engine import ApiCredentialReadinessEngine
 from app.services.broker_integration_readiness_engine import BrokerIntegrationReadinessEngine
 from app.services.broker_integration_blocker_engine import BrokerIntegrationBlockerEngine
 
@@ -264,7 +264,7 @@ def tradestation_credential_validation():
 
 @app.get("/api-credential-readiness")
 def api_credential_readiness():
-    return APICredentialReadinessEngine().evaluate_readiness()
+    return ApiCredentialReadinessEngine().evaluate_readiness()
 
 
 @app.get("/broker-integration-readiness")
@@ -278,3 +278,53 @@ def broker_integration_readiness():
 @app.get("/broker-integration-blockers")
 def broker_integration_blockers():
     return BrokerIntegrationBlockerEngine().evaluate_blockers()
+
+
+from app.services.account_drift_detector_engine import AccountDriftDetectorEngine
+from app.services.account_health_engine import AccountHealthEngine
+from app.services.audit_log_engine import AuditLogEngine
+from app.services.backend_capability_registry_engine import BackendCapabilityRegistryEngine
+from app.services.backend_control_center_engine import BackendControlCenterEngine
+from app.services.backend_phase_gate_engine import BackendPhaseGateEngine
+from app.services.backend_ucf_registry_engine import BackendUcfRegistryEngine
+from app.services.restore_engine import RestoreEngine
+
+
+@app.get("/account-drift")
+def account_drift():
+    return AccountDriftDetectorEngine().detect_drift()
+
+
+@app.get("/account-health")
+def account_health():
+    return AccountHealthEngine().get_health()
+
+
+@app.get("/audit-log")
+def audit_log():
+    return AuditLogEngine().get_log()
+
+
+@app.get("/backend-capabilities")
+def backend_capabilities():
+    return BackendCapabilityRegistryEngine().get_capabilities()
+
+
+@app.get("/backend-control-center")
+def backend_control_center():
+    return BackendControlCenterEngine().get_control_center()
+
+
+@app.get("/backend-phase-gate")
+def backend_phase_gate():
+    return BackendPhaseGateEngine().evaluate_phase_gate()
+
+
+@app.get("/backend-ucfs")
+def backend_ucfs():
+    return BackendUcfRegistryEngine().get_registry()
+
+
+@app.get("/restore")
+def restore():
+    return RestoreEngine().restore()
