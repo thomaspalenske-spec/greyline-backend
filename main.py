@@ -381,3 +381,11 @@ from app.services.portfolio_snapshot_model_engine import PortfolioSnapshotModelE
 def portfolio_snapshot_model():
     return PortfolioSnapshotModelEngine().create_empty_snapshot()
 
+
+from app.services.portfolio_position_model_engine import PortfolioPositionModelEngine
+
+
+@app.get("/portfolio-position-model")
+def portfolio_position_model():
+    return PortfolioPositionModelEngine().create_empty_position()
+
