@@ -389,3 +389,11 @@ from app.services.portfolio_position_model_engine import PortfolioPositionModelE
 def portfolio_position_model():
     return PortfolioPositionModelEngine().create_empty_position()
 
+
+from app.services.portfolio_order_model_engine import PortfolioOrderModelEngine
+
+
+@app.get("/portfolio-order-model")
+def portfolio_order_model():
+    return PortfolioOrderModelEngine().create_empty_order()
+
