@@ -609,3 +609,11 @@ from app.services.live_portfolio_health_dashboard_service import LivePortfolioHe
 def live_portfolio_health():
     return LivePortfolioHealthDashboardService().get_health_status()
 
+
+from app.services.portfolio_equity_timeline_engine import PortfolioEquityTimelineEngine
+
+
+@app.get("/portfolio-equity-timeline-record")
+def portfolio_equity_timeline_record():
+    return PortfolioEquityTimelineEngine().record_equity_point()
+

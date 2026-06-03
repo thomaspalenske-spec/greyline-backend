@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp": "2026-06-03T21:51:12.232675",
+    "source": "LIVE_PORTFOLIO_SNAPSHOT",
+    "balance_response_preview_present": true,
+    "execution_enabled": false
+  },
+  {
+    "timestamp": "2026-06-03T21:51:20.351763",
+    "source": "LIVE_PORTFOLIO_SNAPSHOT",
+    "balance_response_preview_present": true,
+    "execution_enabled": false
+  },
+  {
+    "timestamp": "2026-06-03T21:51:26.555569",
+    "source": "LIVE_PORTFOLIO_SNAPSHOT",
+    "balance_response_preview_present": true,
+    "execution_enabled": false
+  },
+  {
+    "timestamp": "2026-06-03T21:51:41.003750",
+    "source": "LIVE_PORTFOLIO_SNAPSHOT",
+    "balance_response_preview_present": true,
+    "execution_enabled": false
+  }
+]
