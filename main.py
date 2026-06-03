@@ -341,3 +341,11 @@ from app.services.tradestation_account_discovery_engine import TradeStationAccou
 def tradestation_account_discovery():
     return TradeStationAccountDiscoveryEngine().evaluate()
 
+
+from app.services.tradestation_read_only_client import TradeStationReadOnlyClient
+
+
+@app.get("/tradestation-read-only-client")
+def tradestation_read_only_client():
+    return TradeStationReadOnlyClient().evaluate()
+
