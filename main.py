@@ -365,3 +365,11 @@ from app.services.tradestation_integration_dashboard_engine import TradeStationI
 def tradestation_dashboard():
     return TradeStationIntegrationDashboardEngine().get_dashboard()
 
+
+from app.services.portfolio_data_model_engine import PortfolioDataModelEngine
+
+
+@app.get("/portfolio-schema")
+def portfolio_schema():
+    return PortfolioDataModelEngine().get_schema()
+
