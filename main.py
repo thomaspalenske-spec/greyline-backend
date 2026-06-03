@@ -681,3 +681,11 @@ from app.services.portfolio_alert_engine import PortfolioAlertEngine
 def portfolio_alerts():
     return PortfolioAlertEngine().evaluate_alerts()
 
+
+from app.services.watchlist_engine import WatchlistEngine
+
+
+@app.get("/watchlist")
+def watchlist():
+    return WatchlistEngine().get_watchlist()
+
