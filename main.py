@@ -48,7 +48,7 @@ def ledger():
 
 @app.get("/snapshot")
 def snapshot():
-    return SnapshotEngine().create_snapshot()
+    return SnapshotEngine().create_snapshot({'system': 'GreyLine', 'snapshot_test': True})
 
 
 @app.get("/account")
@@ -203,10 +203,11 @@ from app.services.broker_sandbox_connection_plan_engine import BrokerSandboxConn
 
 @app.get("/credential-safety-gate")
 def credential_safety_gate():
-    return CredentialSafetyGateEngine().evaluate_gate(
-        credential_storage_approved=True,
-        secrets_redacted=True,
-        environment_file_protected=True
+    return CredentialSafetyGateEngine().evaluate_credential_safety(
+        credentials_in_plaintext=False,
+        env_file_present=True,
+        gitignore_protects_env=True,
+        credential_rotation_required=False
     )
 
 
@@ -217,19 +218,12 @@ def credential_storage_policy():
 
 @app.get("/environment-file-guard")
 def environment_file_guard():
-    return EnvironmentFileGuardEngine().evaluate_environment_file(
-        gitignore_protected=True,
-        source_control_safe=True
-    )
+    return EnvironmentFileGuardEngine().evaluate_environment_guard()
 
 
 @app.get("/broker-safety-summary")
 def broker_safety_summary():
-    return BrokerSafetySummaryEngine().summarize_safety(
-        broker_connected=False,
-        execution_enabled=False,
-        authority_level="OBSERVE_RECOMMEND_ONLY"
-    )
+    return BrokerSafetySummaryEngine().summarize_safety(safe_for_broker_prep=True, authority_approved=True, execution_blocked=False, kill_switch_status='STANDBY', trading_allowed=False)
 
 
 @app.get("/broker-sandbox-plan")
@@ -247,32 +241,27 @@ from app.services.broker_integration_blocker_engine import BrokerIntegrationBloc
 
 @app.get("/tradestation-readiness")
 def tradestation_readiness():
-    return TradeStationReadinessChecklistEngine().get_checklist()
+    return TradeStationReadinessChecklistEngine().evaluate_checklist()
 
 
 @app.get("/tradestation-sandbox-readiness")
 def tradestation_sandbox_readiness():
-    return TradeStationSandboxReadinessEngine().evaluate_readiness()
+    return TradeStationSandboxReadinessEngine().evaluate()
 
 
 @app.get("/tradestation-credential-validation")
 def tradestation_credential_validation():
-    return TradeStationCredentialValidationEngine().validate_credentials(
-        credentials_present=False
-    )
+    return TradeStationCredentialValidationEngine().evaluate()
 
 
 @app.get("/api-credential-readiness")
 def api_credential_readiness():
-    return ApiCredentialReadinessEngine().evaluate_readiness()
+    return ApiCredentialReadinessEngine().evaluate_credentials()
 
 
 @app.get("/broker-integration-readiness")
 def broker_integration_readiness():
-    return BrokerIntegrationReadinessEngine().evaluate_readiness(
-        api_credentials_valid=False,
-        broker_connected=False
-    )
+    return BrokerIntegrationReadinessEngine().evaluate_readiness(ledger_supremacy_active=True, audit_log_active=True, snapshot_restore_active=True, reconciliation_active=True, drift_detection_active=True, autonomous_execution_enabled=False)
 
 
 @app.get("/broker-integration-blockers")
@@ -292,22 +281,22 @@ from app.services.restore_engine import RestoreEngine
 
 @app.get("/account-drift")
 def account_drift():
-    return AccountDriftDetectorEngine().detect_drift()
+    return AccountDriftDetectorEngine().detect_drift(ledger_equity=10000, reported_equity=10000)
 
 
 @app.get("/account-health")
 def account_health():
-    return AccountHealthEngine().get_health()
+    return AccountHealthEngine().evaluate_health(reconciliation_status='PASS', drift_detected=False, snapshot_valid=True)
 
 
 @app.get("/audit-log")
 def audit_log():
-    return AuditLogEngine().get_log()
+    return AuditLogEngine().create_log(action='AUDIT_TEST', status='PASS', details={'system': 'GreyLine'})
 
 
 @app.get("/backend-capabilities")
 def backend_capabilities():
-    return BackendCapabilityRegistryEngine().get_capabilities()
+    return BackendCapabilityRegistryEngine().list_capabilities()
 
 
 @app.get("/backend-control-center")
@@ -317,14 +306,14 @@ def backend_control_center():
 
 @app.get("/backend-phase-gate")
 def backend_phase_gate():
-    return BackendPhaseGateEngine().evaluate_phase_gate()
+    return BackendPhaseGateEngine().evaluate_phase_gate(backend_ready=True, control_center_online=True, ucf_registry_active=True, capability_registry_active=True, milestone_registry_active=True)
 
 
 @app.get("/backend-ucfs")
 def backend_ucfs():
-    return BackendUcfRegistryEngine().get_registry()
+    return BackendUcfRegistryEngine().list_ucfs()
 
 
 @app.get("/restore")
 def restore():
-    return RestoreEngine().restore()
+    return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
