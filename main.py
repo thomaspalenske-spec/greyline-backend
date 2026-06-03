@@ -673,3 +673,11 @@ from app.services.portfolio_summary_engine import PortfolioSummaryEngine
 def portfolio_summary():
     return PortfolioSummaryEngine().get_summary()
 
+
+from app.services.portfolio_alert_engine import PortfolioAlertEngine
+
+
+@app.get("/portfolio-alerts")
+def portfolio_alerts():
+    return PortfolioAlertEngine().evaluate_alerts()
+
