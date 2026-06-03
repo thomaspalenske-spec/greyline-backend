@@ -561,3 +561,11 @@ from app.services.tradestation_balance_retry_service import TradeStationBalanceR
 def tradestation_balance_retry():
     return TradeStationBalanceRetryService().get_balance_with_refresh_retry()
 
+
+from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+
+
+@app.get("/tradestation-positions-live")
+def tradestation_positions_live():
+    return TradeStationPositionsLiveEngine().get_positions()
+
