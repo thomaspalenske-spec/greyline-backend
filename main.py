@@ -413,3 +413,11 @@ from app.services.portfolio_account_model_engine import PortfolioAccountModelEng
 def portfolio_account_model():
     return PortfolioAccountModelEngine().create_empty_account()
 
+
+from app.services.portfolio_aggregation_engine import PortfolioAggregationEngine
+
+
+@app.get("/portfolio")
+def portfolio():
+    return PortfolioAggregationEngine().aggregate_empty_portfolio()
+
