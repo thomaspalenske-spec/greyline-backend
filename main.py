@@ -373,3 +373,11 @@ from app.services.portfolio_data_model_engine import PortfolioDataModelEngine
 def portfolio_schema():
     return PortfolioDataModelEngine().get_schema()
 
+
+from app.services.portfolio_snapshot_model_engine import PortfolioSnapshotModelEngine
+
+
+@app.get("/portfolio-snapshot-model")
+def portfolio_snapshot_model():
+    return PortfolioSnapshotModelEngine().create_empty_snapshot()
+
