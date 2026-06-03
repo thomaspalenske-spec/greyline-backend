@@ -641,3 +641,11 @@ from app.services.portfolio_analytics_engine import PortfolioAnalyticsEngine
 def portfolio_analytics():
     return PortfolioAnalyticsEngine().analyze()
 
+
+from app.services.portfolio_analytics_persistence_service import PortfolioAnalyticsPersistenceService
+
+
+@app.get("/portfolio-analytics-persist")
+def portfolio_analytics_persist():
+    return PortfolioAnalyticsPersistenceService().save_and_verify_analytics()
+
