@@ -457,3 +457,11 @@ from app.services.portfolio_snapshot_service import PortfolioSnapshotService
 def portfolio_snapshot_service():
     return PortfolioSnapshotService().create_and_verify_snapshot()
 
+
+from app.services.portfolio_state_engine import PortfolioStateEngine
+
+
+@app.get("/portfolio-state")
+def portfolio_state():
+    return PortfolioStateEngine().evaluate_state()
+
