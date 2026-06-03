@@ -349,3 +349,11 @@ from app.services.tradestation_read_only_client import TradeStationReadOnlyClien
 def tradestation_read_only_client():
     return TradeStationReadOnlyClient().evaluate()
 
+
+from app.services.tradestation_endpoint_map_engine import TradeStationEndpointMapEngine
+
+
+@app.get("/tradestation-endpoint-map")
+def tradestation_endpoint_map():
+    return TradeStationEndpointMapEngine().get_endpoint_map()
+
