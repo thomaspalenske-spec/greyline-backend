@@ -665,3 +665,11 @@ from app.services.portfolio_dashboard_service import PortfolioDashboardService
 def portfolio_dashboard():
     return PortfolioDashboardService().get_dashboard()
 
+
+from app.services.portfolio_summary_engine import PortfolioSummaryEngine
+
+
+@app.get("/portfolio-summary")
+def portfolio_summary():
+    return PortfolioSummaryEngine().get_summary()
+
