@@ -593,3 +593,11 @@ from app.services.live_portfolio_snapshot_builder import LivePortfolioSnapshotBu
 def live_portfolio_snapshot():
     return LivePortfolioSnapshotBuilder().build_snapshot()
 
+
+from app.services.live_portfolio_snapshot_persistence_service import LivePortfolioSnapshotPersistenceService
+
+
+@app.get("/live-portfolio-snapshot-persist")
+def live_portfolio_snapshot_persist():
+    return LivePortfolioSnapshotPersistenceService().save_and_verify_live_snapshot()
+
