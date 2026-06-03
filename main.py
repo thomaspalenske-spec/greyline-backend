@@ -357,3 +357,11 @@ from app.services.tradestation_endpoint_map_engine import TradeStationEndpointMa
 def tradestation_endpoint_map():
     return TradeStationEndpointMapEngine().get_endpoint_map()
 
+
+from app.services.tradestation_integration_dashboard_engine import TradeStationIntegrationDashboardEngine
+
+
+@app.get("/tradestation-dashboard")
+def tradestation_dashboard():
+    return TradeStationIntegrationDashboardEngine().get_dashboard()
+
