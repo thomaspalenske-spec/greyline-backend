@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T19:10:46.233645",
+  "symbol": "IBIT",
+  "quote_data": {
+    "timestamp": "2026-06-04T19:10:46.231260",
+    "broker": "TradeStation",
+    "symbol": "IBIT",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "21c7bb74-d5d8-4ae5-8ddf-a85fcd0f802c"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"21c7bb74-d5d8-4ae5-8ddf-a85fcd0f802c\"}"
+  }
+}

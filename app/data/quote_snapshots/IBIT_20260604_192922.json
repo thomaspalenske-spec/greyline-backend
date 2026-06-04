@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T19:29:22.080075",
+  "symbol": "IBIT",
+  "quote_data": {
+    "timestamp": "2026-06-04T19:29:22.077033",
+    "broker": "TradeStation",
+    "symbol": "IBIT",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "IBIT",
+          "Open": "35.78",
+          "High": "36.53",
+          "Low": "35.615",
+          "PreviousClose": "37",
+          "Last": "36.29",
+          "Ask": "36.3",
+          "AskSize": "13100",
+          "Bid": "36.29",
+          "BidSize": "10300",
+          "NetChange": "-0.71",
+          "NetChangePct": "-1.91891891891892",
+          "High52Week": "71.82",
+          "High52WeekTimestamp": "2025-10-06T00:00:00Z",
+          "Low52Week": "35.3",
+          "Low52WeekTimestamp": "2026-02-05T00:00:00Z",
+          "Volume": "65375867",
+          "PreviousVolume": "53124102",
+          "Close": "36.29",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T19:29:21Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "135",
+          "LastVenue": "TRF",
+          "VWAP": "36.0996854518795"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"IBIT\",\"Open\":\"35.78\",\"High\":\"36.53\",\"Low\":\"35.615\",\"PreviousClose\":\"37\",\"Last\":\"36.29\",\"Ask\":\"36.3\",\"AskSize\":\"13100\",\"Bid\":\"36.29\",\"BidSize\":\"10300\",\"NetChange\":\"-0.71\",\"NetChangePct\":\"-1.91891891891892\",\"High52Week\":\"71.82\",\"High52WeekTimestamp\":\"2025-10-06T00:00:00Z\",\"Low52Week\":\"35.3\",\"Low52WeekTimestamp\":\"2026-02-05T00:00:00Z\",\"Volume\":\"65375867\",\"PreviousVolume\":\"53124102\",\"Close\":\"36.29\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T19:29:21Z\",\"Ti"
+  }
+}

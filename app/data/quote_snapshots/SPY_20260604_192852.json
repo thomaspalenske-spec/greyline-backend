@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T19:28:52.219535",
+  "symbol": "SPY",
+  "quote_data": {
+    "timestamp": "2026-06-04T19:28:52.216785",
+    "broker": "TradeStation",
+    "symbol": "SPY",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "SPY",
+          "Open": "752.12",
+          "High": "758.15991",
+          "Low": "751.46997",
+          "PreviousClose": "754.23999",
+          "Last": "758.15",
+          "Ask": "758.16",
+          "AskSize": "520",
+          "Bid": "758.14",
+          "BidSize": "320",
+          "NetChange": "3.91001",
+          "NetChangePct": "0.518403963173578",
+          "High52Week": "760.40002",
+          "High52WeekTimestamp": "2026-06-02T00:00:00Z",
+          "Low52Week": "591.04999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "32825489",
+          "PreviousVolume": "51404146",
+          "Close": "758.15002",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T19:28:51Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "289",
+          "LastVenue": "NASDAQ",
+          "VWAP": "755.479453620882"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"SPY\",\"Open\":\"752.12\",\"High\":\"758.15991\",\"Low\":\"751.46997\",\"PreviousClose\":\"754.23999\",\"Last\":\"758.15\",\"Ask\":\"758.16\",\"AskSize\":\"520\",\"Bid\":\"758.14\",\"BidSize\":\"320\",\"NetChange\":\"3.91001\",\"NetChangePct\":\"0.518403963173578\",\"High52Week\":\"760.40002\",\"High52WeekTimestamp\":\"2026-06-02T00:00:00Z\",\"Low52Week\":\"591.04999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"32825489\",\"PreviousVolume\":\"51404146\",\"Close\":\"758.15002\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTim"
+  }
+}

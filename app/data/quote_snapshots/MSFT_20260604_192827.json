@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T19:28:27.597079",
+  "symbol": "MSFT",
+  "quote_data": {
+    "timestamp": "2026-06-04T19:28:27.593638",
+    "broker": "TradeStation",
+    "symbol": "MSFT",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "MSFT",
+          "Open": "435.81",
+          "High": "436.14999",
+          "Low": "426.41",
+          "PreviousClose": "427.34",
+          "Last": "427.6317",
+          "Ask": "427.64",
+          "AskSize": "120",
+          "Bid": "427.61",
+          "BidSize": "200",
+          "NetChange": "0.2917",
+          "NetChangePct": "0.068259465530959",
+          "High52Week": "555.45001",
+          "High52WeekTimestamp": "2025-07-31T00:00:00Z",
+          "Low52Week": "356.28",
+          "Low52WeekTimestamp": "2026-03-30T00:00:00Z",
+          "Volume": "18493982",
+          "PreviousVolume": "39037007",
+          "Close": "427.63171",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T19:28:26Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "70",
+          "LastVenue": "TRF",
+          "VWAP": "429.811789090962"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"MSFT\",\"Open\":\"435.81\",\"High\":\"436.14999\",\"Low\":\"426.41\",\"PreviousClose\":\"427.34\",\"Last\":\"427.6317\",\"Ask\":\"427.64\",\"AskSize\":\"120\",\"Bid\":\"427.61\",\"BidSize\":\"200\",\"NetChange\":\"0.2917\",\"NetChangePct\":\"0.068259465530959\",\"High52Week\":\"555.45001\",\"High52WeekTimestamp\":\"2025-07-31T00:00:00Z\",\"Low52Week\":\"356.28\",\"Low52WeekTimestamp\":\"2026-03-30T00:00:00Z\",\"Volume\":\"18493982\",\"PreviousVolume\":\"39037007\",\"Close\":\"427.63171\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"202"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T19:28:49.835532",
+  "symbol": "PLTR",
+  "quote_data": {
+    "timestamp": "2026-06-04T19:28:49.834277",
+    "broker": "TradeStation",
+    "symbol": "PLTR",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "PLTR",
+          "Open": "145.46001",
+          "High": "146.37",
+          "Low": "140.272",
+          "PreviousClose": "142.2",
+          "Last": "141.5695",
+          "Ask": "141.57",
+          "AskSize": "400",
+          "Bid": "141.53",
+          "BidSize": "100",
+          "NetChange": "-0.6305",
+          "NetChangePct": "-0.443389592123769",
+          "High52Week": "207.52",
+          "High52WeekTimestamp": "2025-11-03T00:00:00Z",
+          "Low52Week": "118.93",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "33509807",
+          "PreviousVolume": "41072510",
+          "Close": "141.5695",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T19:28:49Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "535",
+          "LastVenue": "TRF",
+          "VWAP": "142.778288280321"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"PLTR\",\"Open\":\"145.46001\",\"High\":\"146.37\",\"Low\":\"140.272\",\"PreviousClose\":\"142.2\",\"Last\":\"141.5695\",\"Ask\":\"141.57\",\"AskSize\":\"400\",\"Bid\":\"141.53\",\"BidSize\":\"100\",\"NetChange\":\"-0.6305\",\"NetChangePct\":\"-0.443389592123769\",\"High52Week\":\"207.52\",\"High52WeekTimestamp\":\"2025-11-03T00:00:00Z\",\"Low52Week\":\"118.93\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"33509807\",\"PreviousVolume\":\"41072510\",\"Close\":\"141.5695\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-"
+  }
+}

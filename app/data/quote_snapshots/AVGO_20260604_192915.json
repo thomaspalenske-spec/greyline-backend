@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T19:29:15.458699",
+  "symbol": "AVGO",
+  "quote_data": {
+    "timestamp": "2026-06-04T19:29:15.455362",
+    "broker": "TradeStation",
+    "symbol": "AVGO",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AVGO",
+          "Open": "408.98999",
+          "High": "426.48001",
+          "Low": "403.0101",
+          "PreviousClose": "479.23001",
+          "Last": "420.5701",
+          "Ask": "420.63",
+          "AskSize": "40",
+          "Bid": "420.57",
+          "BidSize": "40",
+          "NetChange": "-58.65991",
+          "NetChangePct": "-12.2404500502796",
+          "High52Week": "495",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "241.11",
+          "Low52WeekTimestamp": "2025-06-09T00:00:00Z",
+          "Volume": "69021418",
+          "PreviousVolume": "50126446",
+          "Close": "420.5701",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T19:29:15Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "401",
+          "LastVenue": "TRF",
+          "VWAP": "412.511701054426"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AVGO\",\"Open\":\"408.98999\",\"High\":\"426.48001\",\"Low\":\"403.0101\",\"PreviousClose\":\"479.23001\",\"Last\":\"420.5701\",\"Ask\":\"420.63\",\"AskSize\":\"40\",\"Bid\":\"420.57\",\"BidSize\":\"40\",\"NetChange\":\"-58.65991\",\"NetChangePct\":\"-12.2404500502796\",\"High52Week\":\"495\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"241.11\",\"Low52WeekTimestamp\":\"2025-06-09T00:00:00Z\",\"Volume\":\"69021418\",\"PreviousVolume\":\"50126446\",\"Close\":\"420.5701\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2"
+  }
+}

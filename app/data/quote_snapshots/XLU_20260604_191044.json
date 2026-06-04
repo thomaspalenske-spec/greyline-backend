@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T19:10:44.512768",
+  "symbol": "XLU",
+  "quote_data": {
+    "timestamp": "2026-06-04T19:10:44.510065",
+    "broker": "TradeStation",
+    "symbol": "XLU",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "c1f2e5e8-e301-4383-8e84-51c967e7b142"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"c1f2e5e8-e301-4383-8e84-51c967e7b142\"}"
+  }
+}
