@@ -769,3 +769,11 @@ from app.services.setup_scoring_engine import SetupScoringEngine
 def setup_score_nvda():
     return SetupScoringEngine().score_symbol("NVDA")
 
+
+from app.services.execution_governor import ExecutionGovernor
+
+
+@app.get("/execution-governor-execute")
+def execution_governor_execute():
+    return ExecutionGovernor().evaluate_execution_permission("EXECUTE")
+
