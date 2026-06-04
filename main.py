@@ -995,3 +995,11 @@ from app.services.sector_rotation_summary_engine import SectorRotationSummaryEng
 def sector_rotation_summary():
     return SectorRotationSummaryEngine().summarize()
 
+
+from app.services.cross_asset_flow_engine import CrossAssetFlowEngine
+
+
+@app.get("/cross-asset-flow")
+def cross_asset_flow():
+    return CrossAssetFlowEngine().evaluate_cross_asset_flow()
+
