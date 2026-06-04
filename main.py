@@ -777,3 +777,11 @@ from app.services.execution_governor import ExecutionGovernor
 def execution_governor_execute():
     return ExecutionGovernor().evaluate_execution_permission("EXECUTE")
 
+
+from app.services.opportunity_summary_engine import OpportunitySummaryEngine
+
+
+@app.get("/opportunity-summary")
+def opportunity_summary():
+    return OpportunitySummaryEngine().get_summary()
+
