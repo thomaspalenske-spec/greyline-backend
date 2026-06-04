@@ -833,3 +833,11 @@ from app.services.institutional_sponsorship_scoring_engine import InstitutionalS
 def institutional_sponsorship_score_nvda():
     return InstitutionalSponsorshipScoringEngine().score_symbol("NVDA")
 
+
+from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
+
+
+@app.get("/asymmetry-score-nvda")
+def asymmetry_score_nvda():
+    return AsymmetryScoringEngine().score_symbol("NVDA")
+
