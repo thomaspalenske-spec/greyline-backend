@@ -753,3 +753,11 @@ from app.services.opportunity_scoring_engine import OpportunityScoringEngine
 def opportunity_scores():
     return OpportunityScoringEngine().score_opportunities()
 
+
+from app.services.liquidity_scoring_engine import LiquidityScoringEngine
+
+
+@app.get("/liquidity-score-nvda")
+def liquidity_score_nvda():
+    return LiquidityScoringEngine().score_symbol("NVDA")
+
