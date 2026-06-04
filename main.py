@@ -1003,3 +1003,11 @@ from app.services.cross_asset_flow_engine import CrossAssetFlowEngine
 def cross_asset_flow():
     return CrossAssetFlowEngine().evaluate_cross_asset_flow()
 
+
+from app.services.cross_asset_flow_summary_engine import CrossAssetFlowSummaryEngine
+
+
+@app.get("/cross-asset-flow-summary")
+def cross_asset_flow_summary():
+    return CrossAssetFlowSummaryEngine().summarize()
+
