@@ -737,3 +737,11 @@ from app.services.universe_quote_scanner import UniverseQuoteScanner
 def universe_quote_scan():
     return UniverseQuoteScanner().scan_universe()
 
+
+from app.services.live_universe_quote_scanner import LiveUniverseQuoteScanner
+
+
+@app.get("/live-universe-quote-scan")
+def live_universe_quote_scan():
+    return LiveUniverseQuoteScanner().scan_safe_subset()
+
