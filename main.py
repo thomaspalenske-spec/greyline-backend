@@ -817,3 +817,11 @@ from app.services.trend_persistence_scoring_engine import TrendPersistenceScorin
 def trend_persistence_score_nvda():
     return TrendPersistenceScoringEngine().score_symbol("NVDA")
 
+
+from app.services.breadth_scoring_engine import BreadthScoringEngine
+
+
+@app.get("/breadth-score-nvda")
+def breadth_score_nvda():
+    return BreadthScoringEngine().score_symbol("NVDA")
+
