@@ -721,3 +721,11 @@ from app.services.watchlist_market_scanner import WatchlistMarketScanner
 def watchlist_market_scan():
     return WatchlistMarketScanner().scan()
 
+
+from app.services.market_universe_engine import MarketUniverseEngine
+
+
+@app.get("/market-universe")
+def market_universe():
+    return MarketUniverseEngine().get_universe()
+
