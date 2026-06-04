@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:51:54.269237",
+  "symbol": "AAPL",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:51:54.267921",
+    "broker": "TradeStation",
+    "symbol": "AAPL",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AAPL",
+          "Open": "313.23001",
+          "High": "313.54001",
+          "Low": "309.64999",
+          "PreviousClose": "310.26001",
+          "Last": "310.08",
+          "Ask": "310.09",
+          "AskSize": "80",
+          "Bid": "310.07",
+          "BidSize": "280",
+          "NetChange": "-0.18001",
+          "NetChangePct": "-0.0580190789009515",
+          "High52Week": "316.94",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "195.07001",
+          "Low52WeekTimestamp": "2025-06-18T00:00:00Z",
+          "Volume": "14393271",
+          "PreviousVolume": "50836705",
+          "Close": "310.07999",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:51:53Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "93",
+          "LastVenue": "NASDAQ",
+          "VWAP": "311.212258031563"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AAPL\",\"Open\":\"313.23001\",\"High\":\"313.54001\",\"Low\":\"309.64999\",\"PreviousClose\":\"310.26001\",\"Last\":\"310.08\",\"Ask\":\"310.09\",\"AskSize\":\"80\",\"Bid\":\"310.07\",\"BidSize\":\"280\",\"NetChange\":\"-0.18001\",\"NetChangePct\":\"-0.0580190789009515\",\"High52Week\":\"316.94\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"195.07001\",\"Low52WeekTimestamp\":\"2025-06-18T00:00:00Z\",\"Volume\":\"14393271\",\"PreviousVolume\":\"50836705\",\"Close\":\"310.07999\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"Trade"
+  }
+}

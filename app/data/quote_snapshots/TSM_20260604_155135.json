@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:51:35.254158",
+  "symbol": "TSM",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:51:35.251101",
+    "broker": "TradeStation",
+    "symbol": "TSM",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "TSM",
+          "Open": "430.63339",
+          "High": "447.72989",
+          "Low": "427.29999",
+          "PreviousClose": "436.69",
+          "Last": "443.305",
+          "Ask": "443.43",
+          "AskSize": "40",
+          "Bid": "443.18",
+          "BidSize": "40",
+          "NetChange": "6.615",
+          "NetChangePct": "1.5148045524285",
+          "High52Week": "450.1636",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "202.28",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "5972419",
+          "PreviousVolume": "10248037",
+          "Close": "443.30499",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:51:35Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "NASDAQ",
+          "VWAP": "437.670201895316"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"TSM\",\"Open\":\"430.63339\",\"High\":\"447.72989\",\"Low\":\"427.29999\",\"PreviousClose\":\"436.69\",\"Last\":\"443.305\",\"Ask\":\"443.43\",\"AskSize\":\"40\",\"Bid\":\"443.18\",\"BidSize\":\"40\",\"NetChange\":\"6.615\",\"NetChangePct\":\"1.5148045524285\",\"High52Week\":\"450.1636\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"202.28\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"5972419\",\"PreviousVolume\":\"10248037\",\"Close\":\"443.30499\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-0"
+  }
+}

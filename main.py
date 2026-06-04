@@ -937,3 +937,21 @@ from app.services.institutional_flow_summary_engine import InstitutionalFlowSumm
 def institutional_flow_summary_nvda():
     return InstitutionalFlowSummaryEngine().summarize_symbol("NVDA")
 
+
+from app.services.leadership_rotation_engine import LeadershipRotationEngine
+
+
+@app.get("/leadership-rotation-core")
+def leadership_rotation_core():
+    return LeadershipRotationEngine().evaluate_leaders([
+        "NVDA", "AMD", "META", "PLTR", "TSM"
+    ])
+
+
+from app.services.universe_snapshot_capture_engine import UniverseSnapshotCaptureEngine
+
+
+@app.get("/universe-snapshot-capture")
+def universe_snapshot_capture():
+    return UniverseSnapshotCaptureEngine().capture_core_universe()
+

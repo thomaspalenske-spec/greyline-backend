@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:51:21.875415",
+  "symbol": "MSTR",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:51:21.872714",
+    "broker": "TradeStation",
+    "symbol": "MSTR",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "MSTR",
+          "Open": "126.745",
+          "High": "131.47",
+          "Low": "125.65",
+          "PreviousClose": "126.545",
+          "Last": "128.295",
+          "Ask": "128.31",
+          "AskSize": "600",
+          "Bid": "128.25",
+          "BidSize": "200",
+          "NetChange": "1.75",
+          "NetChangePct": "1.38290726618989",
+          "High52Week": "457.22",
+          "High52WeekTimestamp": "2025-07-16T00:00:00Z",
+          "Low52Week": "104.165",
+          "Low52WeekTimestamp": "2026-02-05T00:00:00Z",
+          "Volume": "11938227",
+          "PreviousVolume": "21141778",
+          "Close": "128.295",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:51:19Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "TRF",
+          "VWAP": "128.910595233659"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"MSTR\",\"Open\":\"126.745\",\"High\":\"131.47\",\"Low\":\"125.65\",\"PreviousClose\":\"126.545\",\"Last\":\"128.295\",\"Ask\":\"128.31\",\"AskSize\":\"600\",\"Bid\":\"128.25\",\"BidSize\":\"200\",\"NetChange\":\"1.75\",\"NetChangePct\":\"1.38290726618989\",\"High52Week\":\"457.22\",\"High52WeekTimestamp\":\"2025-07-16T00:00:00Z\",\"Low52Week\":\"104.165\",\"Low52WeekTimestamp\":\"2026-02-05T00:00:00Z\",\"Volume\":\"11938227\",\"PreviousVolume\":\"21141778\",\"Close\":\"128.295\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T1"
+  }
+}
