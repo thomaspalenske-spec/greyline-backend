@@ -809,3 +809,11 @@ from app.services.expected_value_scoring_engine import ExpectedValueScoringEngin
 def expected_value_score_nvda():
     return ExpectedValueScoringEngine().score_symbol("NVDA")
 
+
+from app.services.trend_persistence_scoring_engine import TrendPersistenceScoringEngine
+
+
+@app.get("/trend-persistence-score-nvda")
+def trend_persistence_score_nvda():
+    return TrendPersistenceScoringEngine().score_symbol("NVDA")
+
