@@ -881,3 +881,11 @@ from app.services.quote_snapshot_comparison_engine import QuoteSnapshotCompariso
 def quote_snapshot_compare_nvda():
     return QuoteSnapshotComparisonEngine().compare_latest_two("NVDA")
 
+
+from app.services.historical_momentum_engine import HistoricalMomentumEngine
+
+
+@app.get("/historical-momentum-nvda")
+def historical_momentum_nvda():
+    return HistoricalMomentumEngine().calculate_momentum("NVDA")
+
