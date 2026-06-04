@@ -825,3 +825,11 @@ from app.services.breadth_scoring_engine import BreadthScoringEngine
 def breadth_score_nvda():
     return BreadthScoringEngine().score_symbol("NVDA")
 
+
+from app.services.institutional_sponsorship_scoring_engine import InstitutionalSponsorshipScoringEngine
+
+
+@app.get("/institutional-sponsorship-score-nvda")
+def institutional_sponsorship_score_nvda():
+    return InstitutionalSponsorshipScoringEngine().score_symbol("NVDA")
+
