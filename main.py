@@ -713,3 +713,11 @@ from app.services.watchlist_health_dashboard import WatchlistHealthDashboard
 def watchlist_health():
     return WatchlistHealthDashboard().get_health()
 
+
+from app.services.watchlist_market_scanner import WatchlistMarketScanner
+
+
+@app.get("/watchlist-market-scan")
+def watchlist_market_scan():
+    return WatchlistMarketScanner().scan()
+
