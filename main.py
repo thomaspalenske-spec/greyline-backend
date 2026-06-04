@@ -729,3 +729,11 @@ from app.services.market_universe_engine import MarketUniverseEngine
 def market_universe():
     return MarketUniverseEngine().get_universe()
 
+
+from app.services.universe_quote_scanner import UniverseQuoteScanner
+
+
+@app.get("/universe-quote-scan")
+def universe_quote_scan():
+    return UniverseQuoteScanner().scan_universe()
+
