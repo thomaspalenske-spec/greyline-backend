@@ -3,6 +3,7 @@ from datetime import datetime
 from app.services.live_universe_quote_scanner import LiveUniverseQuoteScanner
 from app.services.liquidity_scoring_engine import LiquidityScoringEngine
 from app.services.setup_scoring_engine import SetupScoringEngine
+from app.services.execution_governor import ExecutionGovernor
 
 
 class OpportunityScoringEngine:
@@ -37,6 +38,8 @@ class OpportunityScoringEngine:
             else:
                 result = "REJECT"
 
+            governor = ExecutionGovernor().evaluate_execution_permission(result)
+
             opportunities.append({
                 "symbol": symbol,
                 "quote_status": quote_status,
@@ -45,6 +48,8 @@ class OpportunityScoringEngine:
                 "setup_score": setup_score,
                 "composite_score": composite_score,
                 "result": result,
+                "order_placement_allowed": governor.get("order_placement_allowed"),
+                "governor_status": governor.get("status"),
                 "execution_enabled": False
             })
 
