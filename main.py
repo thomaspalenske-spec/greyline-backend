@@ -857,3 +857,11 @@ from app.services.quote_snapshot_service import QuoteSnapshotService
 def quote_snapshot_nvda():
     return QuoteSnapshotService().capture_symbol_snapshot("NVDA")
 
+
+from app.services.quote_snapshot_reader import QuoteSnapshotReader
+
+
+@app.get("/quote-snapshot-reader-nvda")
+def quote_snapshot_reader_nvda():
+    return QuoteSnapshotReader().read_latest_snapshot("NVDA")
+
