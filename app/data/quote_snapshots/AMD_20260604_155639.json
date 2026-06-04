@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:56:39.360001",
+  "symbol": "AMD",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:56:39.357516",
+    "broker": "TradeStation",
+    "symbol": "AMD",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AMD",
+          "Open": "514.75",
+          "High": "526.46997",
+          "Low": "499.87009",
+          "PreviousClose": "542.52002",
+          "Last": "520.5957",
+          "Ask": "520.69",
+          "AskSize": "100",
+          "Bid": "520.28",
+          "BidSize": "100",
+          "NetChange": "-21.92432",
+          "NetChangePct": "-4.04120017543316",
+          "High52Week": "546.44",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "114.71",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "16274005",
+          "PreviousVolume": "29411149",
+          "Close": "520.5957",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:56:39Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "131",
+          "LastVenue": "TRF",
+          "VWAP": "513.062088054018"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AMD\",\"Open\":\"514.75\",\"High\":\"526.46997\",\"Low\":\"499.87009\",\"PreviousClose\":\"542.52002\",\"Last\":\"520.5957\",\"Ask\":\"520.69\",\"AskSize\":\"100\",\"Bid\":\"520.28\",\"BidSize\":\"100\",\"NetChange\":\"-21.92432\",\"NetChangePct\":\"-4.04120017543316\",\"High52Week\":\"546.44\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"114.71\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"16274005\",\"PreviousVolume\":\"29411149\",\"Close\":\"520.5957\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:56:45.134286",
+  "symbol": "XLP",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:56:45.132054",
+    "broker": "TradeStation",
+    "symbol": "XLP",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "XLP",
+          "Open": "83.34",
+          "High": "83.61",
+          "Low": "82.165",
+          "PreviousClose": "82.16",
+          "Last": "82.44",
+          "Ask": "82.44",
+          "AskSize": "3400",
+          "Bid": "82.43",
+          "BidSize": "4300",
+          "NetChange": "0.28",
+          "NetChangePct": "0.340798442064265",
+          "High52Week": "90.14",
+          "High52WeekTimestamp": "2026-02-17T00:00:00Z",
+          "Low52Week": "75.16",
+          "Low52WeekTimestamp": "2025-11-06T00:00:00Z",
+          "Volume": "7317097",
+          "PreviousVolume": "14750329",
+          "Close": "82.44",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:56:45Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "300",
+          "LastVenue": "ARCX",
+          "VWAP": "82.9975770393189"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"XLP\",\"Open\":\"83.34\",\"High\":\"83.61\",\"Low\":\"82.165\",\"PreviousClose\":\"82.16\",\"Last\":\"82.44\",\"Ask\":\"82.44\",\"AskSize\":\"3400\",\"Bid\":\"82.43\",\"BidSize\":\"4300\",\"NetChange\":\"0.28\",\"NetChangePct\":\"0.340798442064265\",\"High52Week\":\"90.14\",\"High52WeekTimestamp\":\"2026-02-17T00:00:00Z\",\"Low52Week\":\"75.16\",\"Low52WeekTimestamp\":\"2025-11-06T00:00:00Z\",\"Volume\":\"7317097\",\"PreviousVolume\":\"14750329\",\"Close\":\"82.44\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T15:56:45Z\",\"Ti"
+  }
+}

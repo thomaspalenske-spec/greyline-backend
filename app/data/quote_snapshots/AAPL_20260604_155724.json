@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:57:24.961230",
+  "symbol": "AAPL",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:57:24.957624",
+    "broker": "TradeStation",
+    "symbol": "AAPL",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AAPL",
+          "Open": "313.23001",
+          "High": "313.54001",
+          "Low": "309.64999",
+          "PreviousClose": "310.26001",
+          "Last": "310.13",
+          "Ask": "310.16",
+          "AskSize": "40",
+          "Bid": "310.14",
+          "BidSize": "80",
+          "NetChange": "-0.13001",
+          "NetChangePct": "-0.0419035634015483",
+          "High52Week": "316.94",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "195.07001",
+          "Low52WeekTimestamp": "2025-06-18T00:00:00Z",
+          "Volume": "14718539",
+          "PreviousVolume": "50836705",
+          "Close": "310.13",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:57:24Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "120",
+          "LastVenue": "BATS",
+          "VWAP": "311.183615917124"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AAPL\",\"Open\":\"313.23001\",\"High\":\"313.54001\",\"Low\":\"309.64999\",\"PreviousClose\":\"310.26001\",\"Last\":\"310.13\",\"Ask\":\"310.16\",\"AskSize\":\"40\",\"Bid\":\"310.14\",\"BidSize\":\"80\",\"NetChange\":\"-0.13001\",\"NetChangePct\":\"-0.0419035634015483\",\"High52Week\":\"316.94\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"195.07001\",\"Low52WeekTimestamp\":\"2025-06-18T00:00:00Z\",\"Volume\":\"14718539\",\"PreviousVolume\":\"50836705\",\"Close\":\"310.13\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime"
+  }
+}

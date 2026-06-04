@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:57:25.252932",
+  "symbol": "SMH",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:57:25.250014",
+    "broker": "TradeStation",
+    "symbol": "SMH",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "SMH",
+          "Open": "613",
+          "High": "625.7099",
+          "Low": "604.60999",
+          "PreviousClose": "637.90002",
+          "Last": "621.56",
+          "Ask": "621.59",
+          "AskSize": "40",
+          "Bid": "621.41",
+          "BidSize": "240",
+          "NetChange": "-16.34002",
+          "NetChangePct": "-2.5615330753556",
+          "High52Week": "642.77002",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "249.75999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "5902237",
+          "PreviousVolume": "10179872",
+          "Close": "621.56",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:57:23Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "NYSE",
+          "VWAP": "614.782827184226"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"SMH\",\"Open\":\"613\",\"High\":\"625.7099\",\"Low\":\"604.60999\",\"PreviousClose\":\"637.90002\",\"Last\":\"621.56\",\"Ask\":\"621.59\",\"AskSize\":\"40\",\"Bid\":\"621.41\",\"BidSize\":\"240\",\"NetChange\":\"-16.34002\",\"NetChangePct\":\"-2.5615330753556\",\"High52Week\":\"642.77002\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"249.75999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"5902237\",\"PreviousVolume\":\"10179872\",\"Close\":\"621.56\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026"
+  }
+}

@@ -955,3 +955,11 @@ from app.services.universe_snapshot_capture_engine import UniverseSnapshotCaptur
 def universe_snapshot_capture():
     return UniverseSnapshotCaptureEngine().capture_core_universe()
 
+
+from app.services.universe_snapshot_reader import UniverseSnapshotReader
+
+
+@app.get("/universe-snapshot-coverage")
+def universe_snapshot_coverage():
+    return UniverseSnapshotReader().read_snapshot_coverage()
+

@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:57:24.617485",
+  "symbol": "TSLA",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:57:24.614440",
+    "broker": "TradeStation",
+    "symbol": "TSLA",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "TSLA",
+          "Open": "419.84",
+          "High": "426.34991",
+          "Low": "417.16",
+          "PreviousClose": "423.70001",
+          "Last": "418.6",
+          "Ask": "418.67",
+          "AskSize": "40",
+          "Bid": "418.54",
+          "BidSize": "240",
+          "NetChange": "-5.10001",
+          "NetChangePct": "-1.20368418211744",
+          "High52Week": "498.82999",
+          "High52WeekTimestamp": "2025-12-22T00:00:00Z",
+          "Low52Week": "273.20999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "17996606",
+          "PreviousVolume": "44500733",
+          "Close": "418.60001",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:57:24Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "200",
+          "LastVenue": "TRF",
+          "VWAP": "421.202593209808"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"TSLA\",\"Open\":\"419.84\",\"High\":\"426.34991\",\"Low\":\"417.16\",\"PreviousClose\":\"423.70001\",\"Last\":\"418.6\",\"Ask\":\"418.67\",\"AskSize\":\"40\",\"Bid\":\"418.54\",\"BidSize\":\"240\",\"NetChange\":\"-5.10001\",\"NetChangePct\":\"-1.20368418211744\",\"High52Week\":\"498.82999\",\"High52WeekTimestamp\":\"2025-12-22T00:00:00Z\",\"Low52Week\":\"273.20999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"17996606\",\"PreviousVolume\":\"44500733\",\"Close\":\"418.60001\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":"
+  }
+}

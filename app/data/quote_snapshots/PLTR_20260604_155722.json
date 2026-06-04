@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:57:22.083442",
+  "symbol": "PLTR",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:57:22.080428",
+    "broker": "TradeStation",
+    "symbol": "PLTR",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "PLTR",
+          "Open": "145.46001",
+          "High": "146.37",
+          "Low": "140.5",
+          "PreviousClose": "142.2",
+          "Last": "142.49",
+          "Ask": "142.52",
+          "AskSize": "300",
+          "Bid": "142.46",
+          "BidSize": "200",
+          "NetChange": "0.29",
+          "NetChangePct": "0.20393811533052",
+          "High52Week": "207.52",
+          "High52WeekTimestamp": "2025-11-03T00:00:00Z",
+          "Low52Week": "118.93",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "23153327",
+          "PreviousVolume": "41072510",
+          "Close": "142.49001",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:57:21Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "TRF",
+          "VWAP": "143.328130670893"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"PLTR\",\"Open\":\"145.46001\",\"High\":\"146.37\",\"Low\":\"140.5\",\"PreviousClose\":\"142.2\",\"Last\":\"142.49\",\"Ask\":\"142.52\",\"AskSize\":\"300\",\"Bid\":\"142.46\",\"BidSize\":\"200\",\"NetChange\":\"0.29\",\"NetChangePct\":\"0.20393811533052\",\"High52Week\":\"207.52\",\"High52WeekTimestamp\":\"2025-11-03T00:00:00Z\",\"Low52Week\":\"118.93\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"23153327\",\"PreviousVolume\":\"41072510\",\"Close\":\"142.49001\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T15"
+  }
+}

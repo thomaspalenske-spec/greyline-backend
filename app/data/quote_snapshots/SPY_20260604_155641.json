@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T15:56:41.963138",
+  "symbol": "SPY",
+  "quote_data": {
+    "timestamp": "2026-06-04T15:56:41.960190",
+    "broker": "TradeStation",
+    "symbol": "SPY",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "SPY",
+          "Open": "752.12",
+          "High": "755.96997",
+          "Low": "751.46997",
+          "PreviousClose": "754.23999",
+          "Last": "755.2",
+          "Ask": "755.22",
+          "AskSize": "280",
+          "Bid": "755.2",
+          "BidSize": "400",
+          "NetChange": "0.96001",
+          "NetChangePct": "0.127281768764343",
+          "High52Week": "760.40002",
+          "High52WeekTimestamp": "2026-06-02T00:00:00Z",
+          "Low52Week": "591.04999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "17959484",
+          "PreviousVolume": "51404146",
+          "Close": "755.20001",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T15:56:41Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "ARCX",
+          "VWAP": "753.795492025419"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"SPY\",\"Open\":\"752.12\",\"High\":\"755.96997\",\"Low\":\"751.46997\",\"PreviousClose\":\"754.23999\",\"Last\":\"755.2\",\"Ask\":\"755.22\",\"AskSize\":\"280\",\"Bid\":\"755.2\",\"BidSize\":\"400\",\"NetChange\":\"0.96001\",\"NetChangePct\":\"0.127281768764343\",\"High52Week\":\"760.40002\",\"High52WeekTimestamp\":\"2026-06-02T00:00:00Z\",\"Low52Week\":\"591.04999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"17959484\",\"PreviousVolume\":\"51404146\",\"Close\":\"755.20001\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\""
+  }
+}
