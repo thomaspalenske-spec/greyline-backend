@@ -913,3 +913,11 @@ from app.services.institutional_flow_engine import InstitutionalFlowEngine
 def institutional_flow_nvda():
     return InstitutionalFlowEngine().evaluate_symbol("NVDA", "SPY")
 
+
+from app.services.institutional_accumulation_engine import InstitutionalAccumulationEngine
+
+
+@app.get("/institutional-accumulation-nvda")
+def institutional_accumulation_nvda():
+    return InstitutionalAccumulationEngine().evaluate_symbol("NVDA")
+
