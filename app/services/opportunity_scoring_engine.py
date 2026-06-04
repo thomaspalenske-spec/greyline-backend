@@ -6,6 +6,7 @@ from app.services.setup_scoring_engine import SetupScoringEngine
 from app.services.execution_governor import ExecutionGovernor
 from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.volatility_scoring_engine import VolatilityScoringEngine
+from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
 
 
 class OpportunityScoringEngine:
@@ -28,13 +29,16 @@ class OpportunityScoringEngine:
 
             volatility_score = VolatilityScoringEngine().score_symbol(symbol).get("volatility_score", 50)
 
+            expected_value_score = ExpectedValueScoringEngine().score_symbol(symbol).get("expected_value_score", 50)
+
             composite_score = round(
                 (
-                    market_data_score * 0.25
-                    + liquidity_score * 0.20
-                    + setup_score * 0.22
-                    + regime_score * 0.18
-                    + volatility_score * 0.15
+                    market_data_score * 0.20
+                    + liquidity_score * 0.18
+                    + setup_score * 0.18
+                    + regime_score * 0.16
+                    + volatility_score * 0.13
+                    + expected_value_score * 0.15
                 ),
                 2
             )
@@ -56,6 +60,7 @@ class OpportunityScoringEngine:
                 "setup_score": setup_score,
                 "regime_score": regime_score,
                 "volatility_score": volatility_score,
+                "expected_value_score": expected_value_score,
                 "composite_score": composite_score,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
