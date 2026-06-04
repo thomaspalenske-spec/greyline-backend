@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T16:08:42.685897",
+  "symbol": "COIN",
+  "quote_data": {
+    "timestamp": "2026-06-04T16:08:42.684455",
+    "broker": "TradeStation",
+    "symbol": "COIN",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "COIN",
+          "Open": "164.19",
+          "High": "166.3999",
+          "Low": "161.89",
+          "PreviousClose": "163.22",
+          "Last": "163.15",
+          "Ask": "163.3",
+          "AskSize": "1000",
+          "Bid": "163.15",
+          "BidSize": "1000",
+          "NetChange": "-0.07",
+          "NetChangePct": "-0.0428869011150594",
+          "High52Week": "444.64499",
+          "High52WeekTimestamp": "2025-07-18T00:00:00Z",
+          "Low52Week": "139.36",
+          "Low52WeekTimestamp": "2026-02-12T00:00:00Z",
+          "Volume": "4532311",
+          "PreviousVolume": "9544614",
+          "Close": "163.14999",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T16:08:36Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "TRF",
+          "VWAP": "164.025390852337"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"COIN\",\"Open\":\"164.19\",\"High\":\"166.3999\",\"Low\":\"161.89\",\"PreviousClose\":\"163.22\",\"Last\":\"163.15\",\"Ask\":\"163.3\",\"AskSize\":\"1000\",\"Bid\":\"163.15\",\"BidSize\":\"1000\",\"NetChange\":\"-0.07\",\"NetChangePct\":\"-0.0428869011150594\",\"High52Week\":\"444.64499\",\"High52WeekTimestamp\":\"2025-07-18T00:00:00Z\",\"Low52Week\":\"139.36\",\"Low52WeekTimestamp\":\"2026-02-12T00:00:00Z\",\"Volume\":\"4532311\",\"PreviousVolume\":\"9544614\",\"Close\":\"163.14999\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-0"
+  }
+}

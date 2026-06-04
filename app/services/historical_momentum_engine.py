@@ -17,15 +17,17 @@ class HistoricalMomentumEngine:
         )
 
         prices = []
-
         comparison_engine = QuoteSnapshotComparisonEngine()
 
         for file in files:
-            data = json.loads(file.read_text())
-            price = comparison_engine._extract_price(data)
+            try:
+                data = json.loads(file.read_text())
+                price = comparison_engine._extract_price(data)
 
-            if price is not None:
-                prices.append(price)
+                if price is not None:
+                    prices.append(price)
+            except Exception:
+                pass
 
         if len(prices) < 2:
             return {
@@ -38,26 +40,41 @@ class HistoricalMomentumEngine:
             }
 
         latest_price = prices[0]
-        previous_price = prices[1]
 
-        price_change = round(latest_price - previous_price, 4)
+        def pct_change_from(index):
+            if len(prices) <= index or prices[index] == 0:
+                return None
+            return round(((latest_price - prices[index]) / prices[index]) * 100, 4)
 
-        percent_change = (
-            round((price_change / previous_price) * 100, 4)
-            if previous_price
+        short_term_pct = pct_change_from(1)
+        intermediate_pct = pct_change_from(5)
+        long_term_pct = pct_change_from(10)
+
+        available_changes = [
+            value for value in [
+                short_term_pct,
+                intermediate_pct,
+                long_term_pct
+            ]
+            if value is not None
+        ]
+
+        average_momentum_pct = (
+            round(sum(available_changes) / len(available_changes), 4)
+            if available_changes
             else 0
         )
 
-        if percent_change > 1:
+        if average_momentum_pct > 1:
             momentum_score = 90
             momentum_state = "STRONG_POSITIVE_MOMENTUM"
-        elif percent_change > 0.25:
+        elif average_momentum_pct > 0.25:
             momentum_score = 75
             momentum_state = "POSITIVE_MOMENTUM"
-        elif percent_change > -0.25:
+        elif average_momentum_pct > -0.25:
             momentum_score = 55
             momentum_state = "FLAT_MOMENTUM"
-        elif percent_change > -1:
+        elif average_momentum_pct > -1:
             momentum_score = 40
             momentum_state = "NEGATIVE_MOMENTUM"
         else:
@@ -70,9 +87,10 @@ class HistoricalMomentumEngine:
             "momentum_available": True,
             "valid_price_points": len(prices),
             "latest_price": latest_price,
-            "previous_price": previous_price,
-            "price_change": price_change,
-            "percent_change": percent_change,
+            "short_term_percent_change": short_term_pct,
+            "intermediate_percent_change": intermediate_pct,
+            "long_term_percent_change": long_term_pct,
+            "average_momentum_percent": average_momentum_pct,
             "momentum_score": momentum_score,
             "momentum_state": momentum_state,
             "execution_enabled": False,

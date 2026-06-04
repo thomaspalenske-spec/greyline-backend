@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T16:02:53.986686",
+  "symbol": "IWM",
+  "quote_data": {
+    "timestamp": "2026-06-04T16:02:53.984401",
+    "broker": "TradeStation",
+    "symbol": "IWM",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "IWM",
+          "Open": "287.55499",
+          "High": "291.95001",
+          "Low": "286.66",
+          "PreviousClose": "287.67001",
+          "Last": "290.82",
+          "Ask": "290.81",
+          "AskSize": "160",
+          "Bid": "290.8",
+          "BidSize": "120",
+          "NetChange": "3.14999",
+          "NetChangePct": "1.09500117860739",
+          "High52Week": "292.73999",
+          "High52WeekTimestamp": "2026-05-28T00:00:00Z",
+          "Low52Week": "206.81",
+          "Low52WeekTimestamp": "2025-06-23T00:00:00Z",
+          "Volume": "12200491",
+          "PreviousVolume": "29169341",
+          "Close": "290.82001",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T16:02:52Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "NASDAQ",
+          "VWAP": "289.568314811672"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"IWM\",\"Open\":\"287.55499\",\"High\":\"291.95001\",\"Low\":\"286.66\",\"PreviousClose\":\"287.67001\",\"Last\":\"290.82\",\"Ask\":\"290.81\",\"AskSize\":\"160\",\"Bid\":\"290.8\",\"BidSize\":\"120\",\"NetChange\":\"3.14999\",\"NetChangePct\":\"1.09500117860739\",\"High52Week\":\"292.73999\",\"High52WeekTimestamp\":\"2026-05-28T00:00:00Z\",\"Low52Week\":\"206.81\",\"Low52WeekTimestamp\":\"2025-06-23T00:00:00Z\",\"Volume\":\"12200491\",\"PreviousVolume\":\"29169341\",\"Close\":\"290.82001\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2"
+  }
+}

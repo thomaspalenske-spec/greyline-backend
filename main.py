@@ -963,3 +963,11 @@ from app.services.universe_snapshot_reader import UniverseSnapshotReader
 def universe_snapshot_coverage():
     return UniverseSnapshotReader().read_snapshot_coverage()
 
+
+from app.services.universe_momentum_ranking_engine import UniverseMomentumRankingEngine
+
+
+@app.get("/universe-momentum-rankings")
+def universe_momentum_rankings():
+    return UniverseMomentumRankingEngine().rank_universe()
+

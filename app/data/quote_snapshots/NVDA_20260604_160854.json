@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T16:08:54.659229",
+  "symbol": "NVDA",
+  "quote_data": {
+    "timestamp": "2026-06-04T16:08:54.656868",
+    "broker": "TradeStation",
+    "symbol": "NVDA",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "NVDA",
+          "Open": "213.905",
+          "High": "217.87",
+          "Low": "210.97",
+          "PreviousClose": "214.75",
+          "Last": "217.605",
+          "Ask": "217.62",
+          "AskSize": "500",
+          "Bid": "217.59",
+          "BidSize": "900",
+          "NetChange": "2.855",
+          "NetChangePct": "1.32945285215367",
+          "High52Week": "236.53999",
+          "High52WeekTimestamp": "2026-05-14T00:00:00Z",
+          "Low52Week": "138.83",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "76560005",
+          "PreviousVolume": "160907001",
+          "Close": "217.605",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T16:08:54Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "190",
+          "LastVenue": "TRF",
+          "VWAP": "214.364676907973"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"NVDA\",\"Open\":\"213.905\",\"High\":\"217.87\",\"Low\":\"210.97\",\"PreviousClose\":\"214.75\",\"Last\":\"217.605\",\"Ask\":\"217.62\",\"AskSize\":\"500\",\"Bid\":\"217.59\",\"BidSize\":\"900\",\"NetChange\":\"2.855\",\"NetChangePct\":\"1.32945285215367\",\"High52Week\":\"236.53999\",\"High52WeekTimestamp\":\"2026-05-14T00:00:00Z\",\"Low52Week\":\"138.83\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"76560005\",\"PreviousVolume\":\"160907001\",\"Close\":\"217.605\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-0"
+  }
+}

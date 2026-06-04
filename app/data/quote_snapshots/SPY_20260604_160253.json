@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T16:02:53.709104",
+  "symbol": "SPY",
+  "quote_data": {
+    "timestamp": "2026-06-04T16:02:53.707901",
+    "broker": "TradeStation",
+    "symbol": "SPY",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "SPY",
+          "Open": "752.12",
+          "High": "755.96997",
+          "Low": "751.46997",
+          "PreviousClose": "754.23999",
+          "Last": "755.5",
+          "Ask": "755.52",
+          "AskSize": "800",
+          "Bid": "755.5",
+          "BidSize": "440",
+          "NetChange": "1.26001",
+          "NetChangePct": "0.167056907178841",
+          "High52Week": "760.40002",
+          "High52WeekTimestamp": "2026-06-02T00:00:00Z",
+          "Low52Week": "591.04999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "18291094",
+          "PreviousVolume": "51404146",
+          "Close": "755.5",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T16:02:52Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "BATS",
+          "VWAP": "753.832805027211"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"SPY\",\"Open\":\"752.12\",\"High\":\"755.96997\",\"Low\":\"751.46997\",\"PreviousClose\":\"754.23999\",\"Last\":\"755.5\",\"Ask\":\"755.52\",\"AskSize\":\"800\",\"Bid\":\"755.5\",\"BidSize\":\"440\",\"NetChange\":\"1.26001\",\"NetChangePct\":\"0.167056907178841\",\"High52Week\":\"760.40002\",\"High52WeekTimestamp\":\"2026-06-02T00:00:00Z\",\"Low52Week\":\"591.04999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"18291094\",\"PreviousVolume\":\"51404146\",\"Close\":\"755.5\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"20"
+  }
+}

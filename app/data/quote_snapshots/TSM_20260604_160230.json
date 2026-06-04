@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T16:02:30.640503",
+  "symbol": "TSM",
+  "quote_data": {
+    "timestamp": "2026-06-04T16:02:30.637753",
+    "broker": "TradeStation",
+    "symbol": "TSM",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "TSM",
+          "Open": "430.63339",
+          "High": "447.72989",
+          "Low": "427.29999",
+          "PreviousClose": "436.69",
+          "Last": "444.53",
+          "Ask": "444.6",
+          "AskSize": "160",
+          "Bid": "444.49",
+          "BidSize": "40",
+          "NetChange": "7.84",
+          "NetChangePct": "1.79532391398933",
+          "High52Week": "450.1636",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "202.28",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "6193318",
+          "PreviousVolume": "10248037",
+          "Close": "444.53",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T16:02:30Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "NYSE",
+          "VWAP": "437.97240105889"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"TSM\",\"Open\":\"430.63339\",\"High\":\"447.72989\",\"Low\":\"427.29999\",\"PreviousClose\":\"436.69\",\"Last\":\"444.53\",\"Ask\":\"444.6\",\"AskSize\":\"160\",\"Bid\":\"444.49\",\"BidSize\":\"40\",\"NetChange\":\"7.84\",\"NetChangePct\":\"1.79532391398933\",\"High52Week\":\"450.1636\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"202.28\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"6193318\",\"PreviousVolume\":\"10248037\",\"Close\":\"444.53\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04"
+  }
+}

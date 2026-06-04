@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T16:08:39.771916",
+  "symbol": "XLV",
+  "quote_data": {
+    "timestamp": "2026-06-04T16:08:39.769235",
+    "broker": "TradeStation",
+    "symbol": "XLV",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "XLV",
+          "Open": "150.38",
+          "High": "152.53999",
+          "Low": "150.28999",
+          "PreviousClose": "147.55",
+          "Last": "151.72",
+          "Ask": "151.73",
+          "AskSize": "400",
+          "Bid": "151.72",
+          "BidSize": "1200",
+          "NetChange": "4.17",
+          "NetChangePct": "2.82616062351745",
+          "High52Week": "160.59",
+          "High52WeekTimestamp": "2026-01-07T00:00:00Z",
+          "Low52Week": "127.96",
+          "Low52WeekTimestamp": "2025-08-07T00:00:00Z",
+          "Volume": "7742870",
+          "PreviousVolume": "9836036",
+          "Close": "151.72",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T16:08:37Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "ARCX",
+          "VWAP": "151.617981064392"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"XLV\",\"Open\":\"150.38\",\"High\":\"152.53999\",\"Low\":\"150.28999\",\"PreviousClose\":\"147.55\",\"Last\":\"151.72\",\"Ask\":\"151.73\",\"AskSize\":\"400\",\"Bid\":\"151.72\",\"BidSize\":\"1200\",\"NetChange\":\"4.17\",\"NetChangePct\":\"2.82616062351745\",\"High52Week\":\"160.59\",\"High52WeekTimestamp\":\"2026-01-07T00:00:00Z\",\"Low52Week\":\"127.96\",\"Low52WeekTimestamp\":\"2025-08-07T00:00:00Z\",\"Volume\":\"7742870\",\"PreviousVolume\":\"9836036\",\"Close\":\"151.72\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T16"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T16:08:38.544764",
+  "symbol": "XLF",
+  "quote_data": {
+    "timestamp": "2026-06-04T16:08:38.543400",
+    "broker": "TradeStation",
+    "symbol": "XLF",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "XLF",
+          "Open": "51.54",
+          "High": "52.26",
+          "Low": "51.48",
+          "PreviousClose": "50.87",
+          "Last": "52.1685",
+          "Ask": "52.17",
+          "AskSize": "19500",
+          "Bid": "52.16",
+          "BidSize": "20300",
+          "NetChange": "1.2985",
+          "NetChangePct": "2.55258502064085",
+          "High52Week": "56.515",
+          "High52WeekTimestamp": "2026-01-06T00:00:00Z",
+          "Low52Week": "47.67",
+          "Low52WeekTimestamp": "2026-03-27T00:00:00Z",
+          "Volume": "26019273",
+          "PreviousVolume": "44906667",
+          "Close": "52.1685",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T16:08:37Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "150",
+          "LastVenue": "NASDAQ",
+          "VWAP": "51.9868991217473"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"XLF\",\"Open\":\"51.54\",\"High\":\"52.26\",\"Low\":\"51.48\",\"PreviousClose\":\"50.87\",\"Last\":\"52.1685\",\"Ask\":\"52.17\",\"AskSize\":\"19500\",\"Bid\":\"52.16\",\"BidSize\":\"20300\",\"NetChange\":\"1.2985\",\"NetChangePct\":\"2.55258502064085\",\"High52Week\":\"56.515\",\"High52WeekTimestamp\":\"2026-01-06T00:00:00Z\",\"Low52Week\":\"47.67\",\"Low52WeekTimestamp\":\"2026-03-27T00:00:00Z\",\"Volume\":\"26019273\",\"PreviousVolume\":\"44906667\",\"Close\":\"52.1685\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T16:08:"
+  }
+}
