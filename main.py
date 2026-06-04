@@ -1011,3 +1011,11 @@ from app.services.cross_asset_flow_summary_engine import CrossAssetFlowSummaryEn
 def cross_asset_flow_summary():
     return CrossAssetFlowSummaryEngine().summarize()
 
+
+from app.services.greyline_institutional_command_center import GreyLineInstitutionalCommandCenter
+
+
+@app.get("/greyline-command-center")
+def greyline_command_center():
+    return GreyLineInstitutionalCommandCenter().get_command_center()
+
