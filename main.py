@@ -1019,3 +1019,11 @@ from app.services.greyline_institutional_command_center import GreyLineInstituti
 def greyline_command_center():
     return GreyLineInstitutionalCommandCenter().get_command_center()
 
+
+from app.services.rotation_velocity_engine import RotationVelocityEngine
+
+
+@app.get("/rotation-velocity")
+def rotation_velocity():
+    return RotationVelocityEngine().evaluate_velocity()
+
