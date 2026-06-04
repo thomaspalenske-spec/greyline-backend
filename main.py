@@ -745,3 +745,11 @@ from app.services.live_universe_quote_scanner import LiveUniverseQuoteScanner
 def live_universe_quote_scan():
     return LiveUniverseQuoteScanner().scan_safe_subset()
 
+
+from app.services.opportunity_scoring_engine import OpportunityScoringEngine
+
+
+@app.get("/opportunity-scores")
+def opportunity_scores():
+    return OpportunityScoringEngine().score_opportunities()
+
