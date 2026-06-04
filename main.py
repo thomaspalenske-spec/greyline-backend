@@ -1035,3 +1035,11 @@ from app.services.institutional_sponsorship_engine import InstitutionalSponsorsh
 def institutional_sponsorship_nvda():
     return InstitutionalSponsorshipEngine().evaluate_symbol("NVDA")
 
+
+from app.services.options_flow_engine import OptionsFlowEngine
+
+
+@app.get("/options-flow-nvda")
+def options_flow_nvda():
+    return OptionsFlowEngine().evaluate_symbol("NVDA")
+
