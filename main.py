@@ -897,3 +897,11 @@ from app.services.relative_strength_engine import RelativeStrengthEngine
 def relative_strength_nvda():
     return RelativeStrengthEngine().compare_to_benchmark("NVDA", "SPY")
 
+
+from app.services.volume_expansion_engine import VolumeExpansionEngine
+
+
+@app.get("/volume-expansion-nvda")
+def volume_expansion_nvda():
+    return VolumeExpansionEngine().calculate_volume_expansion("NVDA")
+
