@@ -705,3 +705,11 @@ from app.services.watchlist_analytics_engine import WatchlistAnalyticsEngine
 def watchlist_analytics():
     return WatchlistAnalyticsEngine().analyze_watchlist()
 
+
+from app.services.watchlist_health_dashboard import WatchlistHealthDashboard
+
+
+@app.get("/watchlist-health")
+def watchlist_health():
+    return WatchlistHealthDashboard().get_health()
+
