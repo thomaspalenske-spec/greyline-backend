@@ -2,6 +2,7 @@ from datetime import datetime
 
 from app.services.live_universe_quote_scanner import LiveUniverseQuoteScanner
 from app.services.liquidity_scoring_engine import LiquidityScoringEngine
+from app.services.setup_scoring_engine import SetupScoringEngine
 
 
 class OpportunityScoringEngine:
@@ -18,7 +19,7 @@ class OpportunityScoringEngine:
 
             market_data_score = 100 if http_status == 200 else 0
             liquidity_score = LiquidityScoringEngine().score_symbol(symbol).get('liquidity_score', 50)
-            setup_score = 50
+            setup_score = SetupScoringEngine().score_symbol(symbol).get('setup_score', 50)
 
             composite_score = round(
                 (
