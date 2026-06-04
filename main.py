@@ -1027,3 +1027,11 @@ from app.services.rotation_velocity_engine import RotationVelocityEngine
 def rotation_velocity():
     return RotationVelocityEngine().evaluate_velocity()
 
+
+from app.services.institutional_sponsorship_engine import InstitutionalSponsorshipEngine
+
+
+@app.get("/institutional-sponsorship-nvda")
+def institutional_sponsorship_nvda():
+    return InstitutionalSponsorshipEngine().evaluate_symbol("NVDA")
+
