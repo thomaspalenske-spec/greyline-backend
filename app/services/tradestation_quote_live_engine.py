@@ -36,6 +36,11 @@ class TradeStationQuoteLiveEngine:
             timeout=20
         )
 
+        try:
+            response_json = response.json()
+        except Exception:
+            response_json = None
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "broker": "TradeStation",
@@ -44,5 +49,6 @@ class TradeStationQuoteLiveEngine:
             "http_status": response.status_code,
             "execution_enabled": False,
             "status": "QUOTE_READ_SUCCESS" if response.status_code == 200 else "QUOTE_READ_FAILED",
+            "response_json": response_json,
             "response_preview": response.text[:500]
         }
