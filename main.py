@@ -905,3 +905,11 @@ from app.services.volume_expansion_engine import VolumeExpansionEngine
 def volume_expansion_nvda():
     return VolumeExpansionEngine().calculate_volume_expansion("NVDA")
 
+
+from app.services.institutional_flow_engine import InstitutionalFlowEngine
+
+
+@app.get("/institutional-flow-nvda")
+def institutional_flow_nvda():
+    return InstitutionalFlowEngine().evaluate_symbol("NVDA", "SPY")
+
