@@ -761,3 +761,11 @@ from app.services.liquidity_scoring_engine import LiquidityScoringEngine
 def liquidity_score_nvda():
     return LiquidityScoringEngine().score_symbol("NVDA")
 
+
+from app.services.setup_scoring_engine import SetupScoringEngine
+
+
+@app.get("/setup-score-nvda")
+def setup_score_nvda():
+    return SetupScoringEngine().score_symbol("NVDA")
+
