@@ -11,6 +11,7 @@ from app.services.trend_persistence_scoring_engine import TrendPersistenceScorin
 from app.services.breadth_scoring_engine import BreadthScoringEngine
 from app.services.institutional_sponsorship_scoring_engine import InstitutionalSponsorshipScoringEngine
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
+from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 
 
 class OpportunityScoringEngine:
@@ -43,18 +44,21 @@ class OpportunityScoringEngine:
 
             asymmetry_score = AsymmetryScoringEngine().score_symbol(symbol).get("asymmetry_score", 50)
 
+            risk_state_score = RiskStateScoringEngine().score_symbol(symbol).get("risk_state_score", 50)
+
             composite_score = round(
                 (
-                    market_data_score * 0.10
-                    + liquidity_score * 0.13
-                    + setup_score * 0.14
-                    + regime_score * 0.11
-                    + volatility_score * 0.09
-                    + expected_value_score * 0.11
-                    + trend_persistence_score * 0.09
+                    market_data_score * 0.09
+                    + liquidity_score * 0.12
+                    + setup_score * 0.13
+                    + regime_score * 0.10
+                    + volatility_score * 0.08
+                    + expected_value_score * 0.10
+                    + trend_persistence_score * 0.08
                     + breadth_score * 0.07
                     + institutional_sponsorship_score * 0.06
-                    + asymmetry_score * 0.10
+                    + asymmetry_score * 0.09
+                    + risk_state_score * 0.08
                 ),
                 2
             )
@@ -81,6 +85,7 @@ class OpportunityScoringEngine:
                 "breadth_score": breadth_score,
                 "institutional_sponsorship_score": institutional_sponsorship_score,
                 "asymmetry_score": asymmetry_score,
+                "risk_state_score": risk_state_score,
                 "composite_score": composite_score,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
