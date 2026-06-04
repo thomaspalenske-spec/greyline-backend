@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:38:02.442257",
+  "symbol": "SMH",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:38:02.440109",
+    "broker": "TradeStation",
+    "symbol": "SMH",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "SMH",
+          "Open": "613",
+          "High": "634.78003",
+          "Low": "604.60999",
+          "PreviousClose": "637.90002",
+          "Last": "631.16",
+          "Ask": "631.19",
+          "AskSize": "40",
+          "Bid": "631.06",
+          "BidSize": "40",
+          "NetChange": "-6.74002",
+          "NetChangePct": "-1.05659504447108",
+          "High52Week": "642.77002",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "249.75999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "7950066",
+          "PreviousVolume": "10179872",
+          "Close": "631.15997",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:38:01Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "EDGX",
+          "VWAP": "618.568888295189"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"SMH\",\"Open\":\"613\",\"High\":\"634.78003\",\"Low\":\"604.60999\",\"PreviousClose\":\"637.90002\",\"Last\":\"631.16\",\"Ask\":\"631.19\",\"AskSize\":\"40\",\"Bid\":\"631.06\",\"BidSize\":\"40\",\"NetChange\":\"-6.74002\",\"NetChangePct\":\"-1.05659504447108\",\"High52Week\":\"642.77002\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"249.75999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"7950066\",\"PreviousVolume\":\"10179872\",\"Close\":\"631.15997\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2"
+  }
+}

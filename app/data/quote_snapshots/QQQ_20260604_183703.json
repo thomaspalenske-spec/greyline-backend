@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:37:03.006403",
+  "symbol": "QQQ",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:37:03.005371",
+    "broker": "TradeStation",
+    "symbol": "QQQ",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "QQQ",
+          "Open": "735.47998",
+          "High": "743.42999",
+          "Low": "732.62",
+          "PreviousClose": "744.21002",
+          "Last": "742.84",
+          "Ask": "742.86",
+          "AskSize": "360",
+          "Bid": "742.83",
+          "BidSize": "1000",
+          "NetChange": "-1.37002",
+          "NetChangePct": "-0.184090507139369",
+          "High52Week": "748.65002",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "522.65997",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "27241438",
+          "PreviousVolume": "40270198",
+          "Close": "742.84003",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:37:01Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "TRF",
+          "VWAP": "737.805501119865"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"QQQ\",\"Open\":\"735.47998\",\"High\":\"743.42999\",\"Low\":\"732.62\",\"PreviousClose\":\"744.21002\",\"Last\":\"742.84\",\"Ask\":\"742.86\",\"AskSize\":\"360\",\"Bid\":\"742.83\",\"BidSize\":\"1000\",\"NetChange\":\"-1.37002\",\"NetChangePct\":\"-0.184090507139369\",\"High52Week\":\"748.65002\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"522.65997\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"27241438\",\"PreviousVolume\":\"40270198\",\"Close\":\"742.84003\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"Trade"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:37:58.793216",
+  "symbol": "META",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:37:58.790384",
+    "broker": "TradeStation",
+    "symbol": "META",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "META",
+          "Open": "623.66998",
+          "High": "642.40002",
+          "Low": "622.42999",
+          "PreviousClose": "622.97998",
+          "Last": "626.33",
+          "Ask": "626.33",
+          "AskSize": "120",
+          "Bid": "626.23",
+          "BidSize": "40",
+          "NetChange": "3.35002",
+          "NetChangePct": "0.537741196755632",
+          "High52Week": "796.25",
+          "High52WeekTimestamp": "2025-08-15T00:00:00Z",
+          "Low52Week": "520.26001",
+          "Low52WeekTimestamp": "2026-03-27T00:00:00Z",
+          "Volume": "13242615",
+          "PreviousVolume": "23020056",
+          "Close": "626.33002",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:37:58Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "81",
+          "LastVenue": "TRF",
+          "VWAP": "634.834923756694"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"META\",\"Open\":\"623.66998\",\"High\":\"642.40002\",\"Low\":\"622.42999\",\"PreviousClose\":\"622.97998\",\"Last\":\"626.33\",\"Ask\":\"626.33\",\"AskSize\":\"120\",\"Bid\":\"626.23\",\"BidSize\":\"40\",\"NetChange\":\"3.35002\",\"NetChangePct\":\"0.537741196755632\",\"High52Week\":\"796.25\",\"High52WeekTimestamp\":\"2025-08-15T00:00:00Z\",\"Low52Week\":\"520.26001\",\"Low52WeekTimestamp\":\"2026-03-27T00:00:00Z\",\"Volume\":\"13242615\",\"PreviousVolume\":\"23020056\",\"Close\":\"626.33002\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTim"
+  }
+}

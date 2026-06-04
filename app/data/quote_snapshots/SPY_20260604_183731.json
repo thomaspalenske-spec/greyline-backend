@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:37:31.131357",
+  "symbol": "SPY",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:37:31.128161",
+    "broker": "TradeStation",
+    "symbol": "SPY",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "SPY",
+          "Open": "752.12",
+          "High": "757.95001",
+          "Low": "751.46997",
+          "PreviousClose": "754.23999",
+          "Last": "757.925",
+          "Ask": "757.93",
+          "AskSize": "280",
+          "Bid": "757.92",
+          "BidSize": "280",
+          "NetChange": "3.68501",
+          "NetChangePct": "0.488572609362704",
+          "High52Week": "760.40002",
+          "High52WeekTimestamp": "2026-06-02T00:00:00Z",
+          "Low52Week": "591.04999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "28437977",
+          "PreviousVolume": "51404146",
+          "Close": "757.92499",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:37:30Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "84",
+          "LastVenue": "NASDAQ",
+          "VWAP": "755.074935777016"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"SPY\",\"Open\":\"752.12\",\"High\":\"757.95001\",\"Low\":\"751.46997\",\"PreviousClose\":\"754.23999\",\"Last\":\"757.925\",\"Ask\":\"757.93\",\"AskSize\":\"280\",\"Bid\":\"757.92\",\"BidSize\":\"280\",\"NetChange\":\"3.68501\",\"NetChangePct\":\"0.488572609362704\",\"High52Week\":\"760.40002\",\"High52WeekTimestamp\":\"2026-06-02T00:00:00Z\",\"Low52Week\":\"591.04999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"28437977\",\"PreviousVolume\":\"51404146\",\"Close\":\"757.92499\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTi"
+  }
+}

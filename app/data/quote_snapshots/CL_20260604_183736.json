@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:37:36.855617",
+  "symbol": "CL",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:37:36.852492",
+    "broker": "TradeStation",
+    "symbol": "CL",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "CL",
+          "Open": "86.49",
+          "High": "87.15",
+          "Low": "84.3",
+          "PreviousClose": "84.87",
+          "Last": "84.71",
+          "Ask": "84.73",
+          "AskSize": "200",
+          "Bid": "84.69",
+          "BidSize": "500",
+          "NetChange": "-0.16",
+          "NetChangePct": "-0.188523624366678",
+          "High52Week": "99.33",
+          "High52WeekTimestamp": "2026-02-27T00:00:00Z",
+          "Low52Week": "74.545",
+          "Low52WeekTimestamp": "2025-11-03T00:00:00Z",
+          "Volume": "2819380",
+          "PreviousVolume": "7489373",
+          "Close": "84.71",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:37:22Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "NASDAQ",
+          "VWAP": "85.317787799265"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"CL\",\"Open\":\"86.49\",\"High\":\"87.15\",\"Low\":\"84.3\",\"PreviousClose\":\"84.87\",\"Last\":\"84.71\",\"Ask\":\"84.73\",\"AskSize\":\"200\",\"Bid\":\"84.69\",\"BidSize\":\"500\",\"NetChange\":\"-0.16\",\"NetChangePct\":\"-0.188523624366678\",\"High52Week\":\"99.33\",\"High52WeekTimestamp\":\"2026-02-27T00:00:00Z\",\"Low52Week\":\"74.545\",\"Low52WeekTimestamp\":\"2025-11-03T00:00:00Z\",\"Volume\":\"2819380\",\"PreviousVolume\":\"7489373\",\"Close\":\"84.71\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T18:37:22Z\",\"TickS"
+  }
+}

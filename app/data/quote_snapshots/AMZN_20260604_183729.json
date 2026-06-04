@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:37:29.755779",
+  "symbol": "AMZN",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:37:29.752825",
+    "broker": "TradeStation",
+    "symbol": "AMZN",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AMZN",
+          "Open": "253.12",
+          "High": "255.83",
+          "Low": "251.75",
+          "PreviousClose": "250.02",
+          "Last": "254.805",
+          "Ask": "254.81",
+          "AskSize": "100",
+          "Bid": "254.78",
+          "BidSize": "100",
+          "NetChange": "4.785",
+          "NetChangePct": "1.91384689224862",
+          "High52Week": "278.56",
+          "High52WeekTimestamp": "2026-05-05T00:00:00Z",
+          "Low52Week": "196",
+          "Low52WeekTimestamp": "2026-02-17T00:00:00Z",
+          "Volume": "23237463",
+          "PreviousVolume": "51394191",
+          "Close": "254.80499",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:37:29Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "IEX",
+          "VWAP": "253.892906901244"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AMZN\",\"Open\":\"253.12\",\"High\":\"255.83\",\"Low\":\"251.75\",\"PreviousClose\":\"250.02\",\"Last\":\"254.805\",\"Ask\":\"254.81\",\"AskSize\":\"100\",\"Bid\":\"254.78\",\"BidSize\":\"100\",\"NetChange\":\"4.785\",\"NetChangePct\":\"1.91384689224862\",\"High52Week\":\"278.56\",\"High52WeekTimestamp\":\"2026-05-05T00:00:00Z\",\"Low52Week\":\"196\",\"Low52WeekTimestamp\":\"2026-02-17T00:00:00Z\",\"Volume\":\"23237463\",\"PreviousVolume\":\"51394191\",\"Close\":\"254.80499\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T18:3"
+  }
+}

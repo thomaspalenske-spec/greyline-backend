@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:37:29.149186",
+  "symbol": "TSM",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:37:29.146424",
+    "broker": "TradeStation",
+    "symbol": "TSM",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "TSM",
+          "Open": "430.63339",
+          "High": "447.72989",
+          "Low": "427.29999",
+          "PreviousClose": "436.69",
+          "Last": "446.94",
+          "Ask": "447",
+          "AskSize": "160",
+          "Bid": "446.88",
+          "BidSize": "120",
+          "NetChange": "10.25",
+          "NetChangePct": "2.34720282122329",
+          "High52Week": "450.1636",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "202.28",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "8586383",
+          "PreviousVolume": "10248037",
+          "Close": "446.94",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:37:28Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "150",
+          "LastVenue": "NASDAQ",
+          "VWAP": "440.1367942873"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"TSM\",\"Open\":\"430.63339\",\"High\":\"447.72989\",\"Low\":\"427.29999\",\"PreviousClose\":\"436.69\",\"Last\":\"446.94\",\"Ask\":\"447\",\"AskSize\":\"160\",\"Bid\":\"446.88\",\"BidSize\":\"120\",\"NetChange\":\"10.25\",\"NetChangePct\":\"2.34720282122329\",\"High52Week\":\"450.1636\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"202.28\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"8586383\",\"PreviousVolume\":\"10248037\",\"Close\":\"446.94\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04"
+  }
+}

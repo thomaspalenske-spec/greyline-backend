@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:37:04.133905",
+  "symbol": "TSLA",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:37:04.130843",
+    "broker": "TradeStation",
+    "symbol": "TSLA",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "TSLA",
+          "Open": "419.84",
+          "High": "426.34991",
+          "Low": "417.16",
+          "PreviousClose": "423.70001",
+          "Last": "419.7079",
+          "Ask": "419.73",
+          "AskSize": "40",
+          "Bid": "419.64",
+          "BidSize": "80",
+          "NetChange": "-3.99211",
+          "NetChangePct": "-0.942202007500543",
+          "High52Week": "498.82999",
+          "High52WeekTimestamp": "2025-12-22T00:00:00Z",
+          "Low52Week": "273.20999",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "25353006",
+          "PreviousVolume": "44500733",
+          "Close": "419.70789",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:37:03Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "75",
+          "LastVenue": "TRF",
+          "VWAP": "420.678765119939"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"TSLA\",\"Open\":\"419.84\",\"High\":\"426.34991\",\"Low\":\"417.16\",\"PreviousClose\":\"423.70001\",\"Last\":\"419.7079\",\"Ask\":\"419.73\",\"AskSize\":\"40\",\"Bid\":\"419.64\",\"BidSize\":\"80\",\"NetChange\":\"-3.99211\",\"NetChangePct\":\"-0.942202007500543\",\"High52Week\":\"498.82999\",\"High52WeekTimestamp\":\"2025-12-22T00:00:00Z\",\"Low52Week\":\"273.20999\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"25353006\",\"PreviousVolume\":\"44500733\",\"Close\":\"419.70789\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTim"
+  }
+}

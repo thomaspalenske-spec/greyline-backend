@@ -979,3 +979,11 @@ from app.services.leadership_persistence_engine import LeadershipPersistenceEngi
 def leadership_persistence():
     return LeadershipPersistenceEngine().evaluate_persistence()
 
+
+from app.services.leadership_rotation_summary_engine import LeadershipRotationSummaryEngine
+
+
+@app.get("/leadership-rotation-summary")
+def leadership_rotation_summary():
+    return LeadershipRotationSummaryEngine().summarize()
+
