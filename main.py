@@ -785,3 +785,11 @@ from app.services.opportunity_summary_engine import OpportunitySummaryEngine
 def opportunity_summary():
     return OpportunitySummaryEngine().get_summary()
 
+
+from app.services.regime_scoring_engine import RegimeScoringEngine
+
+
+@app.get("/regime-score-nvda")
+def regime_score_nvda():
+    return RegimeScoringEngine().score_symbol("NVDA")
+
