@@ -889,3 +889,11 @@ from app.services.historical_momentum_engine import HistoricalMomentumEngine
 def historical_momentum_nvda():
     return HistoricalMomentumEngine().calculate_momentum("NVDA")
 
+
+from app.services.relative_strength_engine import RelativeStrengthEngine
+
+
+@app.get("/relative-strength-nvda")
+def relative_strength_nvda():
+    return RelativeStrengthEngine().compare_to_benchmark("NVDA", "SPY")
+
