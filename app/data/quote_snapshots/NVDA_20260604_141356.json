@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-06-04T14:13:56.751633",
+  "symbol": "NVDA",
+  "quote_data": {
+    "timestamp": "2026-06-04T14:13:56.748383",
+    "broker": "TradeStation",
+    "symbol": "NVDA",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"NVDA\",\"Open\":\"213.905\",\"High\":\"215.73\",\"Low\":\"210.97\",\"PreviousClose\":\"214.75\",\"Last\":\"212.76\",\"Ask\":\"212.78\",\"AskSize\":\"100\",\"Bid\":\"212.74\",\"BidSize\":\"600\",\"NetChange\":\"-1.99\",\"NetChangePct\":\"-0.926658905704307\",\"High52Week\":\"236.53999\",\"High52WeekTimestamp\":\"2026-05-14T00:00:00Z\",\"Low52Week\":\"138.83\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"36967374\",\"PreviousVolume\":\"160907001\",\"Close\":\"212.75999\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-0"
+  }
+}

@@ -873,3 +873,11 @@ from app.services.quote_momentum_engine import QuoteMomentumEngine
 def quote_momentum_nvda():
     return QuoteMomentumEngine().calculate_momentum("NVDA")
 
+
+from app.services.quote_snapshot_comparison_engine import QuoteSnapshotComparisonEngine
+
+
+@app.get("/quote-snapshot-compare-nvda")
+def quote_snapshot_compare_nvda():
+    return QuoteSnapshotComparisonEngine().compare_latest_two("NVDA")
+
