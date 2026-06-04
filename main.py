@@ -971,3 +971,11 @@ from app.services.universe_momentum_ranking_engine import UniverseMomentumRankin
 def universe_momentum_rankings():
     return UniverseMomentumRankingEngine().rank_universe()
 
+
+from app.services.leadership_persistence_engine import LeadershipPersistenceEngine
+
+
+@app.get("/leadership-persistence")
+def leadership_persistence():
+    return LeadershipPersistenceEngine().evaluate_persistence()
+

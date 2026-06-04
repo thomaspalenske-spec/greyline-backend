@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T18:16:00.724202",
+  "symbol": "NQ",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:16:00.721558",
+    "broker": "TradeStation",
+    "symbol": "NQ",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "9f5d18de-f970-4a68-a812-662ac8b077b0"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"9f5d18de-f970-4a68-a812-662ac8b077b0\"}"
+  }
+}

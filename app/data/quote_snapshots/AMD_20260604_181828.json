@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:18:28.334350",
+  "symbol": "AMD",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:18:28.331262",
+    "broker": "TradeStation",
+    "symbol": "AMD",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AMD",
+          "Open": "514.75",
+          "High": "532.19",
+          "Low": "499.87009",
+          "PreviousClose": "542.52002",
+          "Last": "529.1",
+          "Ask": "529.49",
+          "AskSize": "200",
+          "Bid": "529.1",
+          "BidSize": "100",
+          "NetChange": "-13.42002",
+          "NetChangePct": "-2.47364512004552",
+          "High52Week": "546.44",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "114.71",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "21294840",
+          "PreviousVolume": "29411149",
+          "Close": "529.09998",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:18:28Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "350",
+          "LastVenue": "TRF",
+          "VWAP": "515.929948503042"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AMD\",\"Open\":\"514.75\",\"High\":\"532.19\",\"Low\":\"499.87009\",\"PreviousClose\":\"542.52002\",\"Last\":\"529.1\",\"Ask\":\"529.49\",\"AskSize\":\"200\",\"Bid\":\"529.1\",\"BidSize\":\"100\",\"NetChange\":\"-13.42002\",\"NetChangePct\":\"-2.47364512004552\",\"High52Week\":\"546.44\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"114.71\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"21294840\",\"PreviousVolume\":\"29411149\",\"Close\":\"529.09998\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-"
+  }
+}

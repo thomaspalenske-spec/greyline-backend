@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:18:54.778148",
+  "symbol": "PLTR",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:18:54.775415",
+    "broker": "TradeStation",
+    "symbol": "PLTR",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "PLTR",
+          "Open": "145.46001",
+          "High": "146.37",
+          "Low": "140.272",
+          "PreviousClose": "142.2",
+          "Last": "141.47",
+          "Ask": "141.47",
+          "AskSize": "100",
+          "Bid": "141.44",
+          "BidSize": "100",
+          "NetChange": "-0.73",
+          "NetChangePct": "-0.513361462728551",
+          "High52Week": "207.52",
+          "High52WeekTimestamp": "2025-11-03T00:00:00Z",
+          "Low52Week": "118.93",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "30236709",
+          "PreviousVolume": "41072510",
+          "Close": "141.47",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:18:54Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "NASDAQ",
+          "VWAP": "142.871105446092"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"PLTR\",\"Open\":\"145.46001\",\"High\":\"146.37\",\"Low\":\"140.272\",\"PreviousClose\":\"142.2\",\"Last\":\"141.47\",\"Ask\":\"141.47\",\"AskSize\":\"100\",\"Bid\":\"141.44\",\"BidSize\":\"100\",\"NetChange\":\"-0.73\",\"NetChangePct\":\"-0.513361462728551\",\"High52Week\":\"207.52\",\"High52WeekTimestamp\":\"2025-11-03T00:00:00Z\",\"Low52Week\":\"118.93\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"30236709\",\"PreviousVolume\":\"41072510\",\"Close\":\"141.47\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T"
+  }
+}

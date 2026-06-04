@@ -20,8 +20,10 @@ class UniverseMomentumRankingEngine:
                 "momentum_available": momentum.get("momentum_available"),
                 "valid_price_points": momentum.get("valid_price_points"),
                 "latest_price": momentum.get("latest_price"),
-                "previous_price": momentum.get("previous_price"),
-                "percent_change": momentum.get("percent_change"),
+                "short_term_percent_change": momentum.get("short_term_percent_change"),
+                "intermediate_percent_change": momentum.get("intermediate_percent_change"),
+                "long_term_percent_change": momentum.get("long_term_percent_change"),
+                "average_momentum_percent": momentum.get("average_momentum_percent"),
                 "momentum_score": momentum.get("momentum_score", 0),
                 "momentum_state": momentum.get("momentum_state"),
                 "execution_enabled": False

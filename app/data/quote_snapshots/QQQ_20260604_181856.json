@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:18:56.942793",
+  "symbol": "QQQ",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:18:56.940123",
+    "broker": "TradeStation",
+    "symbol": "QQQ",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "QQQ",
+          "Open": "735.47998",
+          "High": "743.42999",
+          "Low": "732.62",
+          "PreviousClose": "744.21002",
+          "Last": "743.21",
+          "Ask": "743.27",
+          "AskSize": "120",
+          "Bid": "743.24",
+          "BidSize": "80",
+          "NetChange": "-1.00002",
+          "NetChangePct": "-0.134373358746231",
+          "High52Week": "748.65002",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "522.65997",
+          "Low52WeekTimestamp": "2025-06-05T00:00:00Z",
+          "Volume": "26260906",
+          "PreviousVolume": "40270198",
+          "Close": "743.21002",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:18:54Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "IEX",
+          "VWAP": "737.631780520706"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"QQQ\",\"Open\":\"735.47998\",\"High\":\"743.42999\",\"Low\":\"732.62\",\"PreviousClose\":\"744.21002\",\"Last\":\"743.21\",\"Ask\":\"743.27\",\"AskSize\":\"120\",\"Bid\":\"743.24\",\"BidSize\":\"80\",\"NetChange\":\"-1.00002\",\"NetChangePct\":\"-0.134373358746231\",\"High52Week\":\"748.65002\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"522.65997\",\"Low52WeekTimestamp\":\"2025-06-05T00:00:00Z\",\"Volume\":\"26260906\",\"PreviousVolume\":\"40270198\",\"Close\":\"743.21002\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTi"
+  }
+}

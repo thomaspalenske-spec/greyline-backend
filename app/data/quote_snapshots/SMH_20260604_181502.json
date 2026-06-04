@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T18:15:02.086226",
+  "symbol": "SMH",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:15:02.083367",
+    "broker": "TradeStation",
+    "symbol": "SMH",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "724bf1fc-c425-4f3f-ae25-f8a34f29bd9f"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"724bf1fc-c425-4f3f-ae25-f8a34f29bd9f\"}"
+  }
+}

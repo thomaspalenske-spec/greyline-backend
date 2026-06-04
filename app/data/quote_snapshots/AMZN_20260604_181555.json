@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T18:15:55.455000",
+  "symbol": "AMZN",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:15:55.452621",
+    "broker": "TradeStation",
+    "symbol": "AMZN",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "5cc36ccb-24f2-4a05-92dc-20261b116852"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"5cc36ccb-24f2-4a05-92dc-20261b116852\"}"
+  }
+}

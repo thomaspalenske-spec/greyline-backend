@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T18:15:04.735551",
+  "symbol": "ES",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:15:04.733213",
+    "broker": "TradeStation",
+    "symbol": "ES",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "6dc281a7-9bf7-4d8a-b2a6-9270824dd1fa"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"6dc281a7-9bf7-4d8a-b2a6-9270824dd1fa\"}"
+  }
+}

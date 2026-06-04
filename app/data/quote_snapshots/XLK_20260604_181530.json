@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T18:15:30.310564",
+  "symbol": "XLK",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:15:30.307545",
+    "broker": "TradeStation",
+    "symbol": "XLK",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "923f9bef-7df4-4734-8b57-dae708f29b3d"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"923f9bef-7df4-4734-8b57-dae708f29b3d\"}"
+  }
+}

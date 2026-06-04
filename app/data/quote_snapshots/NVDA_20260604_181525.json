@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-04T18:15:25.970487",
+  "symbol": "NVDA",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:15:25.968384",
+    "broker": "TradeStation",
+    "symbol": "NVDA",
+    "quote_attempted": true,
+    "http_status": 401,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_FAILED",
+    "response_json": {
+      "Message": "Access token has expired.",
+      "StatusCode": 401,
+      "TraceID": "72e9e71d-bffb-4ae1-8700-dc8982597e16"
+    },
+    "response_preview": "{\"Message\":\"Access token has expired.\",\"StatusCode\":401,\"TraceID\":\"72e9e71d-bffb-4ae1-8700-dc8982597e16\"}"
+  }
+}

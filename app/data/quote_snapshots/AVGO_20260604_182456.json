@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:24:56.554765",
+  "symbol": "AVGO",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:24:56.552047",
+    "broker": "TradeStation",
+    "symbol": "AVGO",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AVGO",
+          "Open": "408.98999",
+          "High": "426.48001",
+          "Low": "403.0101",
+          "PreviousClose": "479.23001",
+          "Last": "418.265",
+          "Ask": "418.3",
+          "AskSize": "80",
+          "Bid": "418.23",
+          "BidSize": "160",
+          "NetChange": "-60.96501",
+          "NetChangePct": "-12.7214508123145",
+          "High52Week": "495",
+          "High52WeekTimestamp": "2026-06-03T00:00:00Z",
+          "Low52Week": "241.11",
+          "Low52WeekTimestamp": "2025-06-09T00:00:00Z",
+          "Volume": "62155939",
+          "PreviousVolume": "50126446",
+          "Close": "418.26501",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:24:56Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "40",
+          "LastVenue": "ARCX",
+          "VWAP": "411.837590634595"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AVGO\",\"Open\":\"408.98999\",\"High\":\"426.48001\",\"Low\":\"403.0101\",\"PreviousClose\":\"479.23001\",\"Last\":\"418.265\",\"Ask\":\"418.3\",\"AskSize\":\"80\",\"Bid\":\"418.23\",\"BidSize\":\"160\",\"NetChange\":\"-60.96501\",\"NetChangePct\":\"-12.7214508123145\",\"High52Week\":\"495\",\"High52WeekTimestamp\":\"2026-06-03T00:00:00Z\",\"Low52Week\":\"241.11\",\"Low52WeekTimestamp\":\"2025-06-09T00:00:00Z\",\"Volume\":\"62155939\",\"PreviousVolume\":\"50126446\",\"Close\":\"418.26501\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2"
+  }
+}

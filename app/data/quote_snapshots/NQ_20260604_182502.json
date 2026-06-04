@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-06-04T18:25:02.047468",
+  "symbol": "NQ",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:25:02.044205",
+    "broker": "TradeStation",
+    "symbol": "NQ",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Errors": [
+        {
+          "Symbol": "NQ",
+          "Error": "FAILED, INVALID SYMBOL"
+        }
+      ]
+    },
+    "response_preview": "{\"Errors\":[{\"Symbol\":\"NQ\",\"Error\":\"FAILED, INVALID SYMBOL\"}]}"
+  }
+}

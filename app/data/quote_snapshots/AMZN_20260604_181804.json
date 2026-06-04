@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:18:04.327644",
+  "symbol": "AMZN",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:18:04.323796",
+    "broker": "TradeStation",
+    "symbol": "AMZN",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "AMZN",
+          "Open": "253.12",
+          "High": "255.83",
+          "Low": "251.75",
+          "PreviousClose": "250.02",
+          "Last": "254.47",
+          "Ask": "254.49",
+          "AskSize": "100",
+          "Bid": "254.45",
+          "BidSize": "100",
+          "NetChange": "4.45",
+          "NetChangePct": "1.77985761139109",
+          "High52Week": "278.56",
+          "High52WeekTimestamp": "2026-05-05T00:00:00Z",
+          "Low52Week": "196",
+          "Low52WeekTimestamp": "2026-02-17T00:00:00Z",
+          "Volume": "22550158",
+          "PreviousVolume": "51394191",
+          "Close": "254.47",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:18:04Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "EDGX",
+          "VWAP": "253.869651652989"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"AMZN\",\"Open\":\"253.12\",\"High\":\"255.83\",\"Low\":\"251.75\",\"PreviousClose\":\"250.02\",\"Last\":\"254.47\",\"Ask\":\"254.49\",\"AskSize\":\"100\",\"Bid\":\"254.45\",\"BidSize\":\"100\",\"NetChange\":\"4.45\",\"NetChangePct\":\"1.77985761139109\",\"High52Week\":\"278.56\",\"High52WeekTimestamp\":\"2026-05-05T00:00:00Z\",\"Low52Week\":\"196\",\"Low52WeekTimestamp\":\"2026-02-17T00:00:00Z\",\"Volume\":\"22550158\",\"PreviousVolume\":\"51394191\",\"Close\":\"254.47\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T18:18:04Z"
+  }
+}

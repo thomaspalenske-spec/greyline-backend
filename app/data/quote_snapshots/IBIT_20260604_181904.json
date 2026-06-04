@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:19:04.487748",
+  "symbol": "IBIT",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:19:04.486108",
+    "broker": "TradeStation",
+    "symbol": "IBIT",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "IBIT",
+          "Open": "35.78",
+          "High": "36.53",
+          "Low": "35.615",
+          "PreviousClose": "37",
+          "Last": "35.87",
+          "Ask": "35.88",
+          "AskSize": "44000",
+          "Bid": "35.87",
+          "BidSize": "1000",
+          "NetChange": "-1.13",
+          "NetChangePct": "-3.05405405405405",
+          "High52Week": "71.82",
+          "High52WeekTimestamp": "2025-10-06T00:00:00Z",
+          "Low52Week": "35.3",
+          "Low52WeekTimestamp": "2026-02-05T00:00:00Z",
+          "Volume": "56395720",
+          "PreviousVolume": "53124102",
+          "Close": "35.87",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:19:02Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "BATS",
+          "VWAP": "36.0939633475674"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"IBIT\",\"Open\":\"35.78\",\"High\":\"36.53\",\"Low\":\"35.615\",\"PreviousClose\":\"37\",\"Last\":\"35.87\",\"Ask\":\"35.88\",\"AskSize\":\"44000\",\"Bid\":\"35.87\",\"BidSize\":\"1000\",\"NetChange\":\"-1.13\",\"NetChangePct\":\"-3.05405405405405\",\"High52Week\":\"71.82\",\"High52WeekTimestamp\":\"2025-10-06T00:00:00Z\",\"Low52Week\":\"35.3\",\"Low52WeekTimestamp\":\"2026-02-05T00:00:00Z\",\"Volume\":\"56395720\",\"PreviousVolume\":\"53124102\",\"Close\":\"35.87\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T18:19:02Z\",\"Ti"
+  }
+}

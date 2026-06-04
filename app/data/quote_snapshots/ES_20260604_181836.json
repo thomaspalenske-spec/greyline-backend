@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-04T18:18:36.369398",
+  "symbol": "ES",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:18:36.366547",
+    "broker": "TradeStation",
+    "symbol": "ES",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Quotes": [
+        {
+          "Symbol": "ES",
+          "Open": "68.76",
+          "High": "69.65",
+          "Low": "68.39",
+          "PreviousClose": "68.18",
+          "Last": "69.44",
+          "Ask": "69.45",
+          "AskSize": "200",
+          "Bid": "69.43",
+          "BidSize": "300",
+          "NetChange": "1.26",
+          "NetChangePct": "1.84804928131417",
+          "High52Week": "76.41",
+          "High52WeekTimestamp": "2026-02-27T00:00:00Z",
+          "Low52Week": "61.53",
+          "Low52WeekTimestamp": "2025-08-25T00:00:00Z",
+          "Volume": "1254313",
+          "PreviousVolume": "3492233",
+          "Close": "69.44",
+          "DailyOpenInterest": "0",
+          "Restrictions": [],
+          "TradeTime": "2026-06-04T18:18:31Z",
+          "TickSizeTier": "0",
+          "MarketFlags": {
+            "IsDelayed": false,
+            "IsHardToBorrow": false,
+            "IsBats": false,
+            "IsHalted": false
+          },
+          "LastSize": "100",
+          "LastVenue": "IEX",
+          "VWAP": "69.1774703023601"
+        }
+      ]
+    },
+    "response_preview": "{\"Quotes\":[{\"Symbol\":\"ES\",\"Open\":\"68.76\",\"High\":\"69.65\",\"Low\":\"68.39\",\"PreviousClose\":\"68.18\",\"Last\":\"69.44\",\"Ask\":\"69.45\",\"AskSize\":\"200\",\"Bid\":\"69.43\",\"BidSize\":\"300\",\"NetChange\":\"1.26\",\"NetChangePct\":\"1.84804928131417\",\"High52Week\":\"76.41\",\"High52WeekTimestamp\":\"2026-02-27T00:00:00Z\",\"Low52Week\":\"61.53\",\"Low52WeekTimestamp\":\"2025-08-25T00:00:00Z\",\"Volume\":\"1254313\",\"PreviousVolume\":\"3492233\",\"Close\":\"69.44\",\"DailyOpenInterest\":\"0\",\"Restrictions\":[],\"TradeTime\":\"2026-06-04T18:18:31Z\",\"TickSize"
+  }
+}

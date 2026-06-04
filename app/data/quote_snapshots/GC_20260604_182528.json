@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-06-04T18:25:28.965000",
+  "symbol": "GC",
+  "quote_data": {
+    "timestamp": "2026-06-04T18:25:28.964012",
+    "broker": "TradeStation",
+    "symbol": "GC",
+    "quote_attempted": true,
+    "http_status": 200,
+    "execution_enabled": false,
+    "status": "QUOTE_READ_SUCCESS",
+    "response_json": {
+      "Errors": [
+        {
+          "Symbol": "GC",
+          "Error": "FAILED, INVALID SYMBOL"
+        }
+      ]
+    },
+    "response_preview": "{\"Errors\":[{\"Symbol\":\"GC\",\"Error\":\"FAILED, INVALID SYMBOL\"}]}"
+  }
+}
