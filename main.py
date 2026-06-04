@@ -865,3 +865,11 @@ from app.services.quote_snapshot_reader import QuoteSnapshotReader
 def quote_snapshot_reader_nvda():
     return QuoteSnapshotReader().read_latest_snapshot("NVDA")
 
+
+from app.services.quote_momentum_engine import QuoteMomentumEngine
+
+
+@app.get("/quote-momentum-nvda")
+def quote_momentum_nvda():
+    return QuoteMomentumEngine().calculate_momentum("NVDA")
+
