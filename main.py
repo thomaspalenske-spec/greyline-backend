@@ -929,3 +929,11 @@ from app.services.institutional_distribution_engine import InstitutionalDistribu
 def institutional_distribution_nvda():
     return InstitutionalDistributionEngine().evaluate_symbol("NVDA")
 
+
+from app.services.institutional_flow_summary_engine import InstitutionalFlowSummaryEngine
+
+
+@app.get("/institutional-flow-summary-nvda")
+def institutional_flow_summary_nvda():
+    return InstitutionalFlowSummaryEngine().summarize_symbol("NVDA")
+
