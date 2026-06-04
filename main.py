@@ -841,3 +841,11 @@ from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 def asymmetry_score_nvda():
     return AsymmetryScoringEngine().score_symbol("NVDA")
 
+
+from app.services.risk_state_scoring_engine import RiskStateScoringEngine
+
+
+@app.get("/risk-state-score-nvda")
+def risk_state_score_nvda():
+    return RiskStateScoringEngine().score_symbol("NVDA")
+
