@@ -5,6 +5,7 @@ from app.services.liquidity_scoring_engine import LiquidityScoringEngine
 from app.services.setup_scoring_engine import SetupScoringEngine
 from app.services.execution_governor import ExecutionGovernor
 from app.services.regime_scoring_engine import RegimeScoringEngine
+from app.services.volatility_scoring_engine import VolatilityScoringEngine
 
 
 class OpportunityScoringEngine:
@@ -25,12 +26,15 @@ class OpportunityScoringEngine:
 
             regime_score = RegimeScoringEngine().score_symbol(symbol).get("regime_score", 50)
 
+            volatility_score = VolatilityScoringEngine().score_symbol(symbol).get("volatility_score", 50)
+
             composite_score = round(
                 (
-                    market_data_score * 0.30
-                    + liquidity_score * 0.25
-                    + setup_score * 0.25
-                    + regime_score * 0.20
+                    market_data_score * 0.25
+                    + liquidity_score * 0.20
+                    + setup_score * 0.22
+                    + regime_score * 0.18
+                    + volatility_score * 0.15
                 ),
                 2
             )
@@ -51,6 +55,7 @@ class OpportunityScoringEngine:
                 "liquidity_score": liquidity_score,
                 "setup_score": setup_score,
                 "regime_score": regime_score,
+                "volatility_score": volatility_score,
                 "composite_score": composite_score,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
