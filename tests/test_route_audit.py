@@ -20,7 +20,16 @@ def test_all_get_routes_execute():
         "/tradestation-balance-live",
         "/tradestation-positions-retry",
         "/tradestation-balance-retry",
-    }
+        "/tradestation-token-refresh",
+    "/portfolio-dashboard",
+    "/portfolio-summary",
+    "/portfolio-alerts",
+    "/live-universe-quote-scan",
+    "/opportunity-scores",
+    "/opportunity-summary",
+    "/quote-snapshot-nvda",
+    "/universe-snapshot-capture",
+}
 
     for route in main.app.routes:
         if not hasattr(route, "methods"):

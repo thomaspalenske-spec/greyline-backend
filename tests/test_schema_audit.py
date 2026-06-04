@@ -17,6 +17,15 @@ IGNORED_ROUTES = {
         "/tradestation-balance-live",
         "/tradestation-positions-retry",
         "/tradestation-balance-retry",
+    "/tradestation-token-refresh",
+    "/portfolio-dashboard",
+    "/portfolio-summary",
+    "/portfolio-alerts",
+    "/live-universe-quote-scan",
+    "/opportunity-scores",
+    "/opportunity-summary",
+    "/quote-snapshot-nvda",
+    "/universe-snapshot-capture",
 }
 
 

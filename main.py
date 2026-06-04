@@ -987,3 +987,11 @@ from app.services.leadership_rotation_summary_engine import LeadershipRotationSu
 def leadership_rotation_summary():
     return LeadershipRotationSummaryEngine().summarize()
 
+
+from app.services.sector_rotation_summary_engine import SectorRotationSummaryEngine
+
+
+@app.get("/sector-rotation-summary")
+def sector_rotation_summary():
+    return SectorRotationSummaryEngine().summarize()
+
