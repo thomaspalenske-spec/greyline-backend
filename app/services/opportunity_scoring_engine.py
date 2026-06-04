@@ -7,6 +7,7 @@ from app.services.execution_governor import ExecutionGovernor
 from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.volatility_scoring_engine import VolatilityScoringEngine
 from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
+from app.services.trend_persistence_scoring_engine import TrendPersistenceScoringEngine
 
 
 class OpportunityScoringEngine:
@@ -31,14 +32,17 @@ class OpportunityScoringEngine:
 
             expected_value_score = ExpectedValueScoringEngine().score_symbol(symbol).get("expected_value_score", 50)
 
+            trend_persistence_score = TrendPersistenceScoringEngine().score_symbol(symbol).get("trend_persistence_score", 50)
+
             composite_score = round(
                 (
-                    market_data_score * 0.20
-                    + liquidity_score * 0.18
-                    + setup_score * 0.18
-                    + regime_score * 0.16
-                    + volatility_score * 0.13
-                    + expected_value_score * 0.15
+                    market_data_score * 0.16
+                    + liquidity_score * 0.16
+                    + setup_score * 0.17
+                    + regime_score * 0.14
+                    + volatility_score * 0.12
+                    + expected_value_score * 0.13
+                    + trend_persistence_score * 0.12
                 ),
                 2
             )
@@ -61,6 +65,7 @@ class OpportunityScoringEngine:
                 "regime_score": regime_score,
                 "volatility_score": volatility_score,
                 "expected_value_score": expected_value_score,
+                "trend_persistence_score": trend_persistence_score,
                 "composite_score": composite_score,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
