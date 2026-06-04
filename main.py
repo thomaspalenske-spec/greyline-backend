@@ -793,3 +793,11 @@ from app.services.regime_scoring_engine import RegimeScoringEngine
 def regime_score_nvda():
     return RegimeScoringEngine().score_symbol("NVDA")
 
+
+from app.services.volatility_scoring_engine import VolatilityScoringEngine
+
+
+@app.get("/volatility-score-nvda")
+def volatility_score_nvda():
+    return VolatilityScoringEngine().score_symbol("NVDA")
+
