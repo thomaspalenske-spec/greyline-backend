@@ -849,3 +849,11 @@ from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 def risk_state_score_nvda():
     return RiskStateScoringEngine().score_symbol("NVDA")
 
+
+from app.services.quote_snapshot_service import QuoteSnapshotService
+
+
+@app.get("/quote-snapshot-nvda")
+def quote_snapshot_nvda():
+    return QuoteSnapshotService().capture_symbol_snapshot("NVDA")
+
