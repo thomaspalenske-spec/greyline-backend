@@ -801,3 +801,11 @@ from app.services.volatility_scoring_engine import VolatilityScoringEngine
 def volatility_score_nvda():
     return VolatilityScoringEngine().score_symbol("NVDA")
 
+
+from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
+
+
+@app.get("/expected-value-score-nvda")
+def expected_value_score_nvda():
+    return ExpectedValueScoringEngine().score_symbol("NVDA")
+
