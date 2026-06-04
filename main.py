@@ -921,3 +921,11 @@ from app.services.institutional_accumulation_engine import InstitutionalAccumula
 def institutional_accumulation_nvda():
     return InstitutionalAccumulationEngine().evaluate_symbol("NVDA")
 
+
+from app.services.institutional_distribution_engine import InstitutionalDistributionEngine
+
+
+@app.get("/institutional-distribution-nvda")
+def institutional_distribution_nvda():
+    return InstitutionalDistributionEngine().evaluate_symbol("NVDA")
+
