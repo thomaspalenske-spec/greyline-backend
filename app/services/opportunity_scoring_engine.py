@@ -4,6 +4,7 @@ from app.services.live_universe_quote_scanner import LiveUniverseQuoteScanner
 from app.services.liquidity_scoring_engine import LiquidityScoringEngine
 from app.services.setup_scoring_engine import SetupScoringEngine
 from app.services.execution_governor import ExecutionGovernor
+from app.services.regime_scoring_engine import RegimeScoringEngine
 
 
 class OpportunityScoringEngine:
@@ -22,11 +23,14 @@ class OpportunityScoringEngine:
             liquidity_score = LiquidityScoringEngine().score_symbol(symbol).get('liquidity_score', 50)
             setup_score = SetupScoringEngine().score_symbol(symbol).get('setup_score', 50)
 
+            regime_score = RegimeScoringEngine().score_symbol(symbol).get("regime_score", 50)
+
             composite_score = round(
                 (
-                    market_data_score * 0.4
-                    + liquidity_score * 0.3
-                    + setup_score * 0.3
+                    market_data_score * 0.30
+                    + liquidity_score * 0.25
+                    + setup_score * 0.25
+                    + regime_score * 0.20
                 ),
                 2
             )
@@ -46,6 +50,7 @@ class OpportunityScoringEngine:
                 "market_data_score": market_data_score,
                 "liquidity_score": liquidity_score,
                 "setup_score": setup_score,
+                "regime_score": regime_score,
                 "composite_score": composite_score,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
