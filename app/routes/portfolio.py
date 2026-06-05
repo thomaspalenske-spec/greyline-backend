@@ -205,3 +205,10 @@ from app.services.live_monitoring_cycle_engine import LiveMonitoringCycleEngine
 @router.get("/live-monitoring-cycle")
 def live_monitoring_cycle():
     return LiveMonitoringCycleEngine().run_cycle()
+
+from app.services.live_monitoring_history_engine import LiveMonitoringHistoryEngine
+
+
+@router.get("/live-monitoring-history")
+def live_monitoring_history():
+    return LiveMonitoringHistoryEngine().get_history()
