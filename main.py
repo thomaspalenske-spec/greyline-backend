@@ -5,6 +5,7 @@ from app.routes import tradestation
 from app.routes import portfolio
 from app.routes import watchlist
 from app.routes import market_intelligence
+from app.routes import institutional_flow
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
@@ -13,6 +14,7 @@ app.include_router(tradestation.router)
 app.include_router(portfolio.router)
 app.include_router(watchlist.router)
 app.include_router(market_intelligence.router)
+app.include_router(institutional_flow.router)
 from app.services.ledger_engine import LedgerEngine
 from app.services.snapshot_engine import SnapshotEngine
 from app.services.account_engine import AccountEngine
@@ -298,94 +300,6 @@ def backend_ucfs():
 @app.get("/restore")
 def restore():
     return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
-
-from app.services.quote_snapshot_service import QuoteSnapshotService
-
-
-@app.get("/quote-snapshot-nvda")
-def quote_snapshot_nvda():
-    return QuoteSnapshotService().capture_symbol_snapshot("NVDA")
-
-
-from app.services.quote_snapshot_reader import QuoteSnapshotReader
-
-
-@app.get("/quote-snapshot-reader-nvda")
-def quote_snapshot_reader_nvda():
-    return QuoteSnapshotReader().read_latest_snapshot("NVDA")
-
-
-from app.services.quote_momentum_engine import QuoteMomentumEngine
-
-
-@app.get("/quote-momentum-nvda")
-def quote_momentum_nvda():
-    return QuoteMomentumEngine().calculate_momentum("NVDA")
-
-
-from app.services.quote_snapshot_comparison_engine import QuoteSnapshotComparisonEngine
-
-
-@app.get("/quote-snapshot-compare-nvda")
-def quote_snapshot_compare_nvda():
-    return QuoteSnapshotComparisonEngine().compare_latest_two("NVDA")
-
-
-from app.services.historical_momentum_engine import HistoricalMomentumEngine
-
-
-@app.get("/historical-momentum-nvda")
-def historical_momentum_nvda():
-    return HistoricalMomentumEngine().calculate_momentum("NVDA")
-
-
-from app.services.relative_strength_engine import RelativeStrengthEngine
-
-
-@app.get("/relative-strength-nvda")
-def relative_strength_nvda():
-    return RelativeStrengthEngine().compare_to_benchmark("NVDA", "SPY")
-
-
-from app.services.volume_expansion_engine import VolumeExpansionEngine
-
-
-@app.get("/volume-expansion-nvda")
-def volume_expansion_nvda():
-    return VolumeExpansionEngine().calculate_volume_expansion("NVDA")
-
-
-from app.services.institutional_flow_engine import InstitutionalFlowEngine
-
-
-@app.get("/institutional-flow-nvda")
-def institutional_flow_nvda():
-    return InstitutionalFlowEngine().evaluate_symbol("NVDA", "SPY")
-
-
-from app.services.institutional_accumulation_engine import InstitutionalAccumulationEngine
-
-
-@app.get("/institutional-accumulation-nvda")
-def institutional_accumulation_nvda():
-    return InstitutionalAccumulationEngine().evaluate_symbol("NVDA")
-
-
-from app.services.institutional_distribution_engine import InstitutionalDistributionEngine
-
-
-@app.get("/institutional-distribution-nvda")
-def institutional_distribution_nvda():
-    return InstitutionalDistributionEngine().evaluate_symbol("NVDA")
-
-
-from app.services.institutional_flow_summary_engine import InstitutionalFlowSummaryEngine
-
-
-@app.get("/institutional-flow-summary-nvda")
-def institutional_flow_summary_nvda():
-    return InstitutionalFlowSummaryEngine().summarize_symbol("NVDA")
-
 
 from app.services.leadership_rotation_engine import LeadershipRotationEngine
 
