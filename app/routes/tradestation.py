@@ -100,3 +100,11 @@ def tradestation_positions_retry():
 @router.get("/tradestation-orders-live")
 def tradestation_orders_live():
     return TradeStationOrdersLiveEngine().get_orders()
+
+
+from app.services.tradestation_token_status_engine import TradeStationTokenStatusEngine
+
+
+@router.get("/tradestation-token-status")
+def tradestation_token_status():
+    return TradeStationTokenStatusEngine().evaluate()
