@@ -6,6 +6,7 @@ from app.routes import portfolio
 from app.routes import watchlist
 from app.routes import market_intelligence
 from app.routes import institutional_flow
+from app.routes import leadership
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
@@ -15,6 +16,7 @@ app.include_router(portfolio.router)
 app.include_router(watchlist.router)
 app.include_router(market_intelligence.router)
 app.include_router(institutional_flow.router)
+app.include_router(leadership.router)
 from app.services.ledger_engine import LedgerEngine
 from app.services.snapshot_engine import SnapshotEngine
 from app.services.account_engine import AccountEngine
@@ -300,109 +302,4 @@ def backend_ucfs():
 @app.get("/restore")
 def restore():
     return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
-
-from app.services.leadership_rotation_engine import LeadershipRotationEngine
-
-
-@app.get("/leadership-rotation-core")
-def leadership_rotation_core():
-    return LeadershipRotationEngine().evaluate_leaders([
-        "NVDA", "AMD", "META", "PLTR", "TSM"
-    ])
-
-
-from app.services.universe_snapshot_capture_engine import UniverseSnapshotCaptureEngine
-
-
-@app.get("/universe-snapshot-capture")
-def universe_snapshot_capture():
-    return UniverseSnapshotCaptureEngine().capture_core_universe()
-
-
-from app.services.universe_snapshot_reader import UniverseSnapshotReader
-
-
-@app.get("/universe-snapshot-coverage")
-def universe_snapshot_coverage():
-    return UniverseSnapshotReader().read_snapshot_coverage()
-
-
-from app.services.universe_momentum_ranking_engine import UniverseMomentumRankingEngine
-
-
-@app.get("/universe-momentum-rankings")
-def universe_momentum_rankings():
-    return UniverseMomentumRankingEngine().rank_universe()
-
-
-from app.services.leadership_persistence_engine import LeadershipPersistenceEngine
-
-
-@app.get("/leadership-persistence")
-def leadership_persistence():
-    return LeadershipPersistenceEngine().evaluate_persistence()
-
-
-from app.services.leadership_rotation_summary_engine import LeadershipRotationSummaryEngine
-
-
-@app.get("/leadership-rotation-summary")
-def leadership_rotation_summary():
-    return LeadershipRotationSummaryEngine().summarize()
-
-
-from app.services.sector_rotation_summary_engine import SectorRotationSummaryEngine
-
-
-@app.get("/sector-rotation-summary")
-def sector_rotation_summary():
-    return SectorRotationSummaryEngine().summarize()
-
-
-from app.services.cross_asset_flow_engine import CrossAssetFlowEngine
-
-
-@app.get("/cross-asset-flow")
-def cross_asset_flow():
-    return CrossAssetFlowEngine().evaluate_cross_asset_flow()
-
-
-from app.services.cross_asset_flow_summary_engine import CrossAssetFlowSummaryEngine
-
-
-@app.get("/cross-asset-flow-summary")
-def cross_asset_flow_summary():
-    return CrossAssetFlowSummaryEngine().summarize()
-
-
-from app.services.greyline_institutional_command_center import GreyLineInstitutionalCommandCenter
-
-
-@app.get("/greyline-command-center")
-def greyline_command_center():
-    return GreyLineInstitutionalCommandCenter().get_command_center()
-
-
-from app.services.rotation_velocity_engine import RotationVelocityEngine
-
-
-@app.get("/rotation-velocity")
-def rotation_velocity():
-    return RotationVelocityEngine().evaluate_velocity()
-
-
-from app.services.institutional_sponsorship_engine import InstitutionalSponsorshipEngine
-
-
-@app.get("/institutional-sponsorship-nvda")
-def institutional_sponsorship_nvda():
-    return InstitutionalSponsorshipEngine().evaluate_symbol("NVDA")
-
-
-from app.services.options_flow_engine import OptionsFlowEngine
-
-
-@app.get("/options-flow-nvda")
-def options_flow_nvda():
-    return OptionsFlowEngine().evaluate_symbol("NVDA")
 
