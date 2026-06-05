@@ -1,26 +1,47 @@
 from datetime import datetime
+import json
 
 
 class LivePortfolioSnapshotNormalizer:
 
+    def _parse_preview(self, wrapper):
+        preview = wrapper.get("response_preview", "")
+
+        if not preview:
+            return {}
+
+        try:
+            return json.loads(preview)
+        except json.JSONDecodeError:
+            return {}
+
     def normalize(self, snapshot):
+        accounts_raw = self._parse_preview(snapshot.get("accounts", {}))
+        balances_raw = self._parse_preview(
+            snapshot.get("balances", {}).get("final_result", {})
+        )
+        positions_raw = self._parse_preview(
+            snapshot.get("positions", {}).get("final_result", {})
+        )
+        orders_raw = self._parse_preview(snapshot.get("orders", {}))
+
+        accounts = accounts_raw.get("Accounts", [])
+        balances = balances_raw.get("Balances", [])
+        positions = positions_raw.get("Positions", [])
+        orders = orders_raw.get("Orders", [])
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "broker": "TradeStation",
             "snapshot_healthy": snapshot.get("snapshot_healthy", False),
-            "account_count": len(
-                snapshot.get("accounts", {})
-                .get("response_preview", "")
-            ),
-            "positions_present": (
-                snapshot.get("positions", {})
-                .get("final_result", {})
-                .get("http_status") == 200
-            ),
-            "orders_present": (
-                snapshot.get("orders", {})
-                .get("http_status") == 200
-            ),
+            "account_count": len(accounts),
+            "balance_count": len(balances),
+            "position_count": len(positions),
+            "order_count": len(orders),
+            "accounts": accounts,
+            "balances": balances,
+            "positions": positions,
+            "orders": orders,
             "execution_enabled": False,
             "status": "NORMALIZED_LIVE_PORTFOLIO_READY"
         }
