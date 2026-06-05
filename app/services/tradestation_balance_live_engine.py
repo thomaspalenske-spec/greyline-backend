@@ -8,7 +8,7 @@ import requests
 class TradeStationBalanceLiveEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"))
+        load_dotenv(dotenv_path=Path(".env"), override=True)
 
     def get_balance(self):
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
