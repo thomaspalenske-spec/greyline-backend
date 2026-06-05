@@ -4,6 +4,7 @@ from app.services.tradestation_account_discovery_live_engine import TradeStation
 from app.services.tradestation_balance_retry_service import TradeStationBalanceRetryService
 from app.services.tradestation_positions_retry_service import TradeStationPositionsRetryService
 from app.services.tradestation_orders_live_engine import TradeStationOrdersLiveEngine
+from app.services.live_portfolio_snapshot_normalizer import LivePortfolioSnapshotNormalizer
 
 
 class LivePortfolioSnapshotBuilder:
@@ -21,7 +22,7 @@ class LivePortfolioSnapshotBuilder:
             and orders.get("http_status") == 200
         )
 
-        return {
+        raw_snapshot = {
             "timestamp": datetime.utcnow().isoformat(),
             "broker": "TradeStation",
             "accounts": accounts,
@@ -31,4 +32,12 @@ class LivePortfolioSnapshotBuilder:
             "execution_enabled": False,
             "snapshot_healthy": healthy,
             "status": "LIVE_PORTFOLIO_SNAPSHOT_READY" if healthy else "LIVE_PORTFOLIO_SNAPSHOT_DEGRADED"
+        }
+
+        normalized_snapshot = LivePortfolioSnapshotNormalizer().normalize(raw_snapshot)
+
+        return {
+            "raw_snapshot": raw_snapshot,
+            "normalized_snapshot": normalized_snapshot,
+            "execution_enabled": False
         }
