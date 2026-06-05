@@ -177,3 +177,10 @@ from app.services.live_broker_summary_engine import LiveBrokerSummaryEngine
 @router.get("/live-broker-summary")
 def live_broker_summary():
     return LiveBrokerSummaryEngine().summarize()
+
+from app.services.live_broker_health_engine import LiveBrokerHealthEngine
+
+
+@router.get("/live-broker-health")
+def live_broker_health():
+    return LiveBrokerHealthEngine().evaluate()
