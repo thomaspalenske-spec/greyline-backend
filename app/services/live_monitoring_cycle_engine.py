@@ -3,6 +3,7 @@ from datetime import datetime
 from app.services.live_portfolio_snapshot_persistence_service import LivePortfolioSnapshotPersistenceService
 from app.services.live_broker_health_engine import LiveBrokerHealthEngine
 from app.services.live_account_drift_engine import LiveAccountDriftEngine
+from app.services.live_monitoring_event_log import LiveMonitoringEventLog
 
 
 class LiveMonitoringCycleEngine:
@@ -12,6 +13,12 @@ class LiveMonitoringCycleEngine:
         broker_health = LiveBrokerHealthEngine().evaluate()
         account_drift = LiveAccountDriftEngine().evaluate()
 
+        event_log = LiveMonitoringEventLog().record_event({
+            "broker_health": broker_health,
+            "account_drift": account_drift,
+            "status": "LIVE_MONITORING_CYCLE_COMPLETE"
+        })
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
@@ -19,6 +26,7 @@ class LiveMonitoringCycleEngine:
             "snapshot_persistence": persistence_result,
             "broker_health": broker_health,
             "account_drift": account_drift,
+            "event_log": event_log,
             "execution_enabled": False,
             "order_placement_allowed": False,
             "status": "LIVE_MONITORING_CYCLE_COMPLETE"

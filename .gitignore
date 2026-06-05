@@ -12,3 +12,6 @@ main_route_hygiene_backup.py
 # GreyLine generated live broker snapshots
 app/data/live_portfolio_snapshots/live_portfolio_snapshot_*.json
 app/data/live_portfolio_snapshots/latest_live_portfolio_snapshot.json
+
+# GreyLine generated live monitoring logs
+app/data/live_monitoring/live_monitoring_events.jsonl
