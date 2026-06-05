@@ -7,3 +7,4 @@ app/snapshots/*.json
 
 # GreyLine generated runtime artifacts
 app/data/portfolio_analytics/portfolio_analytics_*.json
+main_route_hygiene_backup.py
