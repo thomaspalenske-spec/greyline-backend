@@ -2,11 +2,13 @@ from fastapi import FastAPI
 from app.routes import core
 from app.routes import paper_trading
 from app.routes import tradestation
+from app.routes import portfolio
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
 app.include_router(paper_trading.router)
 app.include_router(tradestation.router)
+app.include_router(portfolio.router)
 from app.services.ledger_engine import LedgerEngine
 from app.services.snapshot_engine import SnapshotEngine
 from app.services.account_engine import AccountEngine
@@ -292,122 +294,6 @@ def backend_ucfs():
 @app.get("/restore")
 def restore():
     return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
-
-from app.services.portfolio_data_model_engine import PortfolioDataModelEngine
-
-
-@app.get("/portfolio-schema")
-def portfolio_schema():
-    return PortfolioDataModelEngine().get_schema()
-
-
-from app.services.portfolio_snapshot_model_engine import PortfolioSnapshotModelEngine
-
-
-@app.get("/portfolio-snapshot-model")
-def portfolio_snapshot_model():
-    return PortfolioSnapshotModelEngine().create_empty_snapshot()
-
-
-from app.services.portfolio_position_model_engine import PortfolioPositionModelEngine
-
-
-@app.get("/portfolio-position-model")
-def portfolio_position_model():
-    return PortfolioPositionModelEngine().create_empty_position()
-
-
-from app.services.portfolio_order_model_engine import PortfolioOrderModelEngine
-
-
-@app.get("/portfolio-order-model")
-def portfolio_order_model():
-    return PortfolioOrderModelEngine().create_empty_order()
-
-
-from app.services.portfolio_balance_model_engine import PortfolioBalanceModelEngine
-
-
-@app.get("/portfolio-balance-model")
-def portfolio_balance_model():
-    return PortfolioBalanceModelEngine().create_empty_balance()
-
-
-from app.services.portfolio_account_model_engine import PortfolioAccountModelEngine
-
-
-@app.get("/portfolio-account-model")
-def portfolio_account_model():
-    return PortfolioAccountModelEngine().create_empty_account()
-
-
-from app.services.portfolio_aggregation_engine import PortfolioAggregationEngine
-
-
-@app.get("/portfolio")
-def portfolio():
-    return PortfolioAggregationEngine().aggregate_empty_portfolio()
-
-
-from app.services.portfolio_repository import PortfolioRepository
-
-
-@app.get("/portfolio-repository-test")
-def portfolio_repository_test():
-    repo = PortfolioRepository()
-
-    snapshot = {
-        "account_id": None,
-        "cash_balance": 0.0,
-        "equity": 0.0,
-        "positions": [],
-        "open_orders": [],
-        "source": "TEST_ONLY",
-        "execution_enabled": False
-    }
-
-    save_result = repo.save_snapshot(snapshot)
-    load_result = repo.load_latest_snapshot()
-
-    return {
-        "save_result": save_result,
-        "load_result": load_result,
-        "execution_enabled": False,
-        "status": "PORTFOLIO_REPOSITORY_TEST_PASS"
-    }
-
-
-from app.services.portfolio_snapshot_service import PortfolioSnapshotService
-
-
-@app.get("/portfolio-snapshot-service")
-def portfolio_snapshot_service():
-    return PortfolioSnapshotService().create_and_verify_snapshot()
-
-
-from app.services.portfolio_state_engine import PortfolioStateEngine
-
-
-@app.get("/portfolio-state")
-def portfolio_state():
-    return PortfolioStateEngine().evaluate_state()
-
-
-from app.services.portfolio_integrity_engine import PortfolioIntegrityEngine
-
-
-@app.get("/portfolio-integrity")
-def portfolio_integrity():
-    return PortfolioIntegrityEngine().evaluate_integrity()
-
-
-from app.services.portfolio_health_dashboard_engine import PortfolioHealthDashboardEngine
-
-
-@app.get("/portfolio-health")
-def portfolio_health():
-    return PortfolioHealthDashboardEngine().get_dashboard()
-
 
 from app.services.live_portfolio_snapshot_builder import LivePortfolioSnapshotBuilder
 
