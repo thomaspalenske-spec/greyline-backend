@@ -170,3 +170,10 @@ from app.services.live_account_engine import LiveAccountEngine
 @router.get("/account-live")
 def account_live():
     return LiveAccountEngine().get_account()
+
+from app.services.live_broker_summary_engine import LiveBrokerSummaryEngine
+
+
+@router.get("/live-broker-summary")
+def live_broker_summary():
+    return LiveBrokerSummaryEngine().summarize()
