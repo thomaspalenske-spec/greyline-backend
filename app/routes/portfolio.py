@@ -94,3 +94,71 @@ def portfolio_integrity():
 @router.get("/portfolio-health")
 def portfolio_health():
     return PortfolioHealthDashboardEngine().get_dashboard()
+
+
+from app.services.live_portfolio_snapshot_builder import LivePortfolioSnapshotBuilder
+from app.services.live_portfolio_snapshot_persistence_service import LivePortfolioSnapshotPersistenceService
+from app.services.live_portfolio_health_dashboard_service import LivePortfolioHealthDashboardService
+from app.services.portfolio_equity_timeline_engine import PortfolioEquityTimelineEngine
+from app.services.portfolio_equity_timeline_reader import PortfolioEquityTimelineReader
+from app.services.portfolio_analytics_engine import PortfolioAnalyticsEngine
+from app.services.portfolio_analytics_persistence_service import PortfolioAnalyticsPersistenceService
+from app.services.portfolio_analytics_reader import PortfolioAnalyticsReader
+from app.services.portfolio_dashboard_service import PortfolioDashboardService
+from app.services.portfolio_summary_engine import PortfolioSummaryEngine
+from app.services.portfolio_alert_engine import PortfolioAlertEngine
+
+
+@router.get("/live-portfolio-snapshot")
+def live_portfolio_snapshot():
+    return LivePortfolioSnapshotBuilder().build_snapshot()
+
+
+@router.get("/live-portfolio-snapshot-persist")
+def live_portfolio_snapshot_persist():
+    return LivePortfolioSnapshotPersistenceService().save_and_verify_live_snapshot()
+
+
+@router.get("/live-portfolio-health")
+def live_portfolio_health():
+    return LivePortfolioHealthDashboardService().get_health_status()
+
+
+@router.get("/portfolio-equity-timeline-record")
+def portfolio_equity_timeline_record():
+    return PortfolioEquityTimelineEngine().record_equity_point()
+
+
+@router.get("/portfolio-equity-timeline")
+def portfolio_equity_timeline():
+    return PortfolioEquityTimelineReader().read_timeline()
+
+
+@router.get("/portfolio-analytics")
+def portfolio_analytics():
+    return PortfolioAnalyticsEngine().analyze()
+
+
+@router.get("/portfolio-analytics-persist")
+def portfolio_analytics_persist():
+    return PortfolioAnalyticsPersistenceService().save_and_verify_analytics()
+
+
+@router.get("/portfolio-analytics-reader")
+def portfolio_analytics_reader():
+    return PortfolioAnalyticsReader().read_latest()
+
+
+@router.get("/portfolio-dashboard")
+def portfolio_dashboard():
+    return PortfolioDashboardService().get_dashboard()
+
+
+@router.get("/portfolio-summary")
+def portfolio_summary():
+    return PortfolioSummaryEngine().get_summary()
+
+
+@router.get("/portfolio-alerts")
+def portfolio_alerts():
+    return PortfolioAlertEngine().evaluate_alerts()
