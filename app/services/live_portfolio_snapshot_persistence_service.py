@@ -18,10 +18,13 @@ class LivePortfolioSnapshotPersistenceService:
             and load_result.get("found") is True
         )
 
+        raw_snapshot = snapshot.get("raw_snapshot", {})
+        normalized_snapshot = snapshot.get("normalized_snapshot", {})
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
-            "snapshot_status": snapshot.get("status"),
-            "snapshot_healthy": snapshot.get("snapshot_healthy"),
+            "snapshot_status": raw_snapshot.get("status"),
+            "snapshot_healthy": normalized_snapshot.get("snapshot_healthy"),
             "snapshot_saved": save_result.get("saved"),
             "snapshot_loaded": load_result.get("found"),
             "snapshot_verified": verified,
