@@ -4,6 +4,7 @@ from app.routes import paper_trading
 from app.routes import tradestation
 from app.routes import portfolio
 from app.routes import watchlist
+from app.routes import market_intelligence
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
@@ -11,6 +12,7 @@ app.include_router(paper_trading.router)
 app.include_router(tradestation.router)
 app.include_router(portfolio.router)
 app.include_router(watchlist.router)
+app.include_router(market_intelligence.router)
 from app.services.ledger_engine import LedgerEngine
 from app.services.snapshot_engine import SnapshotEngine
 from app.services.account_engine import AccountEngine
@@ -296,134 +298,6 @@ def backend_ucfs():
 @app.get("/restore")
 def restore():
     return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
-
-from app.services.market_universe_engine import MarketUniverseEngine
-
-
-@app.get("/market-universe")
-def market_universe():
-    return MarketUniverseEngine().get_universe()
-
-
-from app.services.universe_quote_scanner import UniverseQuoteScanner
-
-
-@app.get("/universe-quote-scan")
-def universe_quote_scan():
-    return UniverseQuoteScanner().scan_universe()
-
-
-from app.services.live_universe_quote_scanner import LiveUniverseQuoteScanner
-
-
-@app.get("/live-universe-quote-scan")
-def live_universe_quote_scan():
-    return LiveUniverseQuoteScanner().scan_safe_subset()
-
-
-from app.services.opportunity_scoring_engine import OpportunityScoringEngine
-
-
-@app.get("/opportunity-scores")
-def opportunity_scores():
-    return OpportunityScoringEngine().score_opportunities()
-
-
-from app.services.liquidity_scoring_engine import LiquidityScoringEngine
-
-
-@app.get("/liquidity-score-nvda")
-def liquidity_score_nvda():
-    return LiquidityScoringEngine().score_symbol("NVDA")
-
-
-from app.services.setup_scoring_engine import SetupScoringEngine
-
-
-@app.get("/setup-score-nvda")
-def setup_score_nvda():
-    return SetupScoringEngine().score_symbol("NVDA")
-
-
-from app.services.execution_governor import ExecutionGovernor
-
-
-@app.get("/execution-governor-execute")
-def execution_governor_execute():
-    return ExecutionGovernor().evaluate_execution_permission("EXECUTE")
-
-
-from app.services.opportunity_summary_engine import OpportunitySummaryEngine
-
-
-@app.get("/opportunity-summary")
-def opportunity_summary():
-    return OpportunitySummaryEngine().get_summary()
-
-
-from app.services.regime_scoring_engine import RegimeScoringEngine
-
-
-@app.get("/regime-score-nvda")
-def regime_score_nvda():
-    return RegimeScoringEngine().score_symbol("NVDA")
-
-
-from app.services.volatility_scoring_engine import VolatilityScoringEngine
-
-
-@app.get("/volatility-score-nvda")
-def volatility_score_nvda():
-    return VolatilityScoringEngine().score_symbol("NVDA")
-
-
-from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
-
-
-@app.get("/expected-value-score-nvda")
-def expected_value_score_nvda():
-    return ExpectedValueScoringEngine().score_symbol("NVDA")
-
-
-from app.services.trend_persistence_scoring_engine import TrendPersistenceScoringEngine
-
-
-@app.get("/trend-persistence-score-nvda")
-def trend_persistence_score_nvda():
-    return TrendPersistenceScoringEngine().score_symbol("NVDA")
-
-
-from app.services.breadth_scoring_engine import BreadthScoringEngine
-
-
-@app.get("/breadth-score-nvda")
-def breadth_score_nvda():
-    return BreadthScoringEngine().score_symbol("NVDA")
-
-
-from app.services.institutional_sponsorship_scoring_engine import InstitutionalSponsorshipScoringEngine
-
-
-@app.get("/institutional-sponsorship-score-nvda")
-def institutional_sponsorship_score_nvda():
-    return InstitutionalSponsorshipScoringEngine().score_symbol("NVDA")
-
-
-from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
-
-
-@app.get("/asymmetry-score-nvda")
-def asymmetry_score_nvda():
-    return AsymmetryScoringEngine().score_symbol("NVDA")
-
-
-from app.services.risk_state_scoring_engine import RiskStateScoringEngine
-
-
-@app.get("/risk-state-score-nvda")
-def risk_state_score_nvda():
-    return RiskStateScoringEngine().score_symbol("NVDA")
-
 
 from app.services.quote_snapshot_service import QuoteSnapshotService
 
