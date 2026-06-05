@@ -49,3 +49,26 @@ class LivePortfolioSnapshotRepository:
             "execution_enabled": False,
             "status": "LIVE_PORTFOLIO_SNAPSHOT_LOADED"
         }
+
+
+    def load_previous_snapshot(self):
+        snapshot_files = sorted(
+            self.storage_dir.glob("live_portfolio_snapshot_*.json")
+        )
+
+        if len(snapshot_files) < 2:
+            return {
+                "found": False,
+                "data": None,
+                "execution_enabled": False,
+                "status": "NO_PREVIOUS_LIVE_PORTFOLIO_SNAPSHOT_FOUND"
+            }
+
+        previous_file = snapshot_files[-2]
+
+        return {
+            "found": True,
+            "data": json.loads(previous_file.read_text()),
+            "execution_enabled": False,
+            "status": "PREVIOUS_LIVE_PORTFOLIO_SNAPSHOT_LOADED"
+        }
