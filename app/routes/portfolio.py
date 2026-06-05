@@ -162,3 +162,11 @@ def portfolio_summary():
 @router.get("/portfolio-alerts")
 def portfolio_alerts():
     return PortfolioAlertEngine().evaluate_alerts()
+
+
+from app.services.live_account_engine import LiveAccountEngine
+
+
+@router.get("/account-live")
+def account_live():
+    return LiveAccountEngine().get_account()
