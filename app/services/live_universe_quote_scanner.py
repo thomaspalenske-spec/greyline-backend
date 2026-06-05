@@ -16,7 +16,7 @@ class LiveUniverseQuoteScanner:
                 if symbol not in all_symbols:
                     all_symbols.append(symbol)
 
-        safe_subset = all_symbols[:5]
+        safe_subset = all_symbols[:10]
 
         results = []
 
