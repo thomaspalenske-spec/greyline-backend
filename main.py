@@ -1,18 +1,10 @@
 from fastapi import FastAPI
 from app.routes import core
+from app.routes import paper_trading
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
-
-from app.services.paper_trading_command_center_engine import PaperTradingCommandCenterEngine
-
-
-@app.get("/paper-trading-command-center")
-def paper_trading_command_center():
-    engine = PaperTradingCommandCenterEngine()
-    return engine.get_command_center()
-
-
+app.include_router(paper_trading.router)
 from app.services.ledger_engine import LedgerEngine
 from app.services.snapshot_engine import SnapshotEngine
 from app.services.account_engine import AccountEngine
