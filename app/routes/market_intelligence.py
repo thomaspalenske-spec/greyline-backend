@@ -98,3 +98,10 @@ def asymmetry_score_nvda():
 @router.get("/risk-state-score-nvda")
 def risk_state_score_nvda():
     return RiskStateScoringEngine().score_symbol("NVDA")
+
+from app.services.greyline_intelligence_dashboard_engine import GreyLineIntelligenceDashboardEngine
+
+
+@router.get("/greyline-intelligence-dashboard")
+def greyline_intelligence_dashboard():
+    return GreyLineIntelligenceDashboardEngine().get_dashboard()
