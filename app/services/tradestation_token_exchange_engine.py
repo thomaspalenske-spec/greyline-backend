@@ -66,6 +66,7 @@ class TradeStationTokenExchangeEngine:
 
         if expires_in:
             set_key(str(self.env_path), "TRADESTATION_TOKEN_EXPIRES_IN", str(expires_in))
+            set_key(str(self.env_path), "TRADESTATION_TOKEN_SAVED_AT", datetime.utcnow().isoformat())
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
@@ -74,6 +75,7 @@ class TradeStationTokenExchangeEngine:
             "access_token_saved": bool(access_token),
             "refresh_token_saved": bool(refresh_token),
             "expires_in_saved": bool(expires_in),
+            "token_saved_at_recorded": bool(expires_in),
             "execution_enabled": False,
             "status": "TOKEN_EXCHANGE_SUCCESS"
         }
