@@ -212,3 +212,10 @@ from app.services.live_monitoring_history_engine import LiveMonitoringHistoryEng
 @router.get("/live-monitoring-history")
 def live_monitoring_history():
     return LiveMonitoringHistoryEngine().get_history()
+
+from app.services.live_monitoring_scheduler_engine import LiveMonitoringSchedulerEngine
+
+
+@router.get("/live-monitoring-scheduler-run")
+def live_monitoring_scheduler_run():
+    return LiveMonitoringSchedulerEngine().run_once()
