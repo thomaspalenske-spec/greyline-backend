@@ -8,3 +8,7 @@ app/snapshots/*.json
 # GreyLine generated runtime artifacts
 app/data/portfolio_analytics/portfolio_analytics_*.json
 main_route_hygiene_backup.py
+
+# GreyLine generated live broker snapshots
+app/data/live_portfolio_snapshots/live_portfolio_snapshot_*.json
+app/data/live_portfolio_snapshots/latest_live_portfolio_snapshot.json
