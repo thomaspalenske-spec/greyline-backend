@@ -105,3 +105,10 @@ from app.services.greyline_intelligence_dashboard_engine import GreyLineIntellig
 @router.get("/greyline-intelligence-dashboard")
 def greyline_intelligence_dashboard():
     return GreyLineIntelligenceDashboardEngine().get_dashboard()
+
+from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
+
+
+@router.get("/greyline-master-decision")
+def greyline_master_decision():
+    return GreyLineMasterDecisionEngine().evaluate()
