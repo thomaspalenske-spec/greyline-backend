@@ -184,3 +184,10 @@ from app.services.live_broker_health_engine import LiveBrokerHealthEngine
 @router.get("/live-broker-health")
 def live_broker_health():
     return LiveBrokerHealthEngine().evaluate()
+
+from app.services.live_dashboard_engine import LiveDashboardEngine
+
+
+@router.get("/live-dashboard")
+def live_dashboard():
+    return LiveDashboardEngine().get_dashboard()
