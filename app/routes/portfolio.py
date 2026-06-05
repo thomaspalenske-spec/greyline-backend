@@ -191,3 +191,10 @@ from app.services.live_dashboard_engine import LiveDashboardEngine
 @router.get("/live-dashboard")
 def live_dashboard():
     return LiveDashboardEngine().get_dashboard()
+
+from app.services.live_account_drift_engine import LiveAccountDriftEngine
+
+
+@router.get("/live-account-drift")
+def live_account_drift():
+    return LiveAccountDriftEngine().evaluate()
