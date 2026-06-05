@@ -4,7 +4,12 @@ import json
 
 class LivePortfolioSnapshotNormalizer:
 
-    def _parse_preview(self, wrapper):
+    def _parse_response(self, wrapper):
+        response_json = wrapper.get("response_json")
+
+        if isinstance(response_json, dict):
+            return response_json
+
         preview = wrapper.get("response_preview", "")
 
         if not preview:
@@ -16,14 +21,14 @@ class LivePortfolioSnapshotNormalizer:
             return {}
 
     def normalize(self, snapshot):
-        accounts_raw = self._parse_preview(snapshot.get("accounts", {}))
-        balances_raw = self._parse_preview(
+        accounts_raw = self._parse_response(snapshot.get("accounts", {}))
+        balances_raw = self._parse_response(
             snapshot.get("balances", {}).get("final_result", {})
         )
-        positions_raw = self._parse_preview(
+        positions_raw = self._parse_response(
             snapshot.get("positions", {}).get("final_result", {})
         )
-        orders_raw = self._parse_preview(snapshot.get("orders", {}))
+        orders_raw = self._parse_response(snapshot.get("orders", {}))
 
         accounts = accounts_raw.get("Accounts", [])
         balances = balances_raw.get("Balances", [])

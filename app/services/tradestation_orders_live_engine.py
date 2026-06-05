@@ -5,6 +5,14 @@ from dotenv import load_dotenv
 import requests
 
 
+
+def _safe_json(response):
+    try:
+        return response.json()
+    except Exception:
+        return None
+
+
 class TradeStationOrdersLiveEngine:
 
     def __init__(self):
@@ -42,5 +50,6 @@ class TradeStationOrdersLiveEngine:
             "http_status": response.status_code,
             "execution_enabled": False,
             "status": "ORDERS_READ_SUCCESS" if response.status_code == 200 else "ORDERS_READ_FAILED",
-            "response_preview": response.text[:500]
+            "response_preview": response.text[:500],
+            "response_json": _safe_json(response)
         }
