@@ -198,3 +198,10 @@ from app.services.live_account_drift_engine import LiveAccountDriftEngine
 @router.get("/live-account-drift")
 def live_account_drift():
     return LiveAccountDriftEngine().evaluate()
+
+from app.services.live_monitoring_cycle_engine import LiveMonitoringCycleEngine
+
+
+@router.get("/live-monitoring-cycle")
+def live_monitoring_cycle():
+    return LiveMonitoringCycleEngine().run_cycle()
