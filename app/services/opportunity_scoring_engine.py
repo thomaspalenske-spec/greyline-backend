@@ -72,6 +72,20 @@ class OpportunityScoringEngine:
             else:
                 result = "REJECT"
 
+            if (
+                regime_result.get("regime") == "WEAK_LIVE"
+                or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
+            ):
+                if result == "EXECUTE":
+                    result = "WATCH"
+
+            if (
+                regime_result.get("regime") == "WEAK_LIVE"
+                or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
+            ):
+                if result == "EXECUTE":
+                    result = "WATCH"
+
             governor = ExecutionGovernor().evaluate_execution_permission(result)
 
             opportunities.append({
