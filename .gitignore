@@ -4,3 +4,6 @@ __pycache__/
 .env
 .DS_Store
 app/snapshots/*.json
+
+# GreyLine generated runtime artifacts
+app/data/portfolio_analytics/portfolio_analytics_*.json
