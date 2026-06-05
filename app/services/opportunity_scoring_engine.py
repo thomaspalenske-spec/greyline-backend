@@ -30,7 +30,8 @@ class OpportunityScoringEngine:
             liquidity_score = LiquidityScoringEngine().score_symbol(symbol).get('liquidity_score', 50)
             setup_score = SetupScoringEngine().score_symbol(symbol).get('setup_score', 50)
 
-            regime_score = RegimeScoringEngine().score_symbol(symbol).get("regime_score", 50)
+            regime_result = RegimeScoringEngine().score_symbol(symbol)
+            regime_score = regime_result.get("regime_score", 50)
 
             volatility_score = VolatilityScoringEngine().score_symbol(symbol).get("volatility_score", 50)
 
@@ -44,7 +45,8 @@ class OpportunityScoringEngine:
 
             asymmetry_score = AsymmetryScoringEngine().score_symbol(symbol).get("asymmetry_score", 50)
 
-            risk_state_score = RiskStateScoringEngine().score_symbol(symbol).get("risk_state_score", 50)
+            risk_state_result = RiskStateScoringEngine().score_symbol(symbol)
+            risk_state_score = risk_state_result.get("risk_state_score", 50)
 
             composite_score = round(
                 (
@@ -79,6 +81,15 @@ class OpportunityScoringEngine:
                 "liquidity_score": liquidity_score,
                 "setup_score": setup_score,
                 "regime_score": regime_score,
+                "regime": regime_result.get("regime"),
+                "regime_live_context": {
+                    "last": regime_result.get("last"),
+                    "previous_close": regime_result.get("previous_close"),
+                    "vwap": regime_result.get("vwap"),
+                    "net_change_pct": regime_result.get("net_change_pct"),
+                    "volume": regime_result.get("volume"),
+                    "previous_volume": regime_result.get("previous_volume"),
+                },
                 "volatility_score": volatility_score,
                 "expected_value_score": expected_value_score,
                 "trend_persistence_score": trend_persistence_score,
@@ -86,6 +97,18 @@ class OpportunityScoringEngine:
                 "institutional_sponsorship_score": institutional_sponsorship_score,
                 "asymmetry_score": asymmetry_score,
                 "risk_state_score": risk_state_score,
+                "risk_state": risk_state_result.get("risk_state"),
+                "risk_live_context": {
+                    "last": risk_state_result.get("last"),
+                    "bid": risk_state_result.get("bid"),
+                    "ask": risk_state_result.get("ask"),
+                    "spread_pct": risk_state_result.get("spread_pct"),
+                    "vwap": risk_state_result.get("vwap"),
+                    "vwap_distance_pct": risk_state_result.get("vwap_distance_pct"),
+                    "net_change_pct_abs": risk_state_result.get("net_change_pct_abs"),
+                    "volume": risk_state_result.get("volume"),
+                    "previous_volume": risk_state_result.get("previous_volume"),
+                },
                 "composite_score": composite_score,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
