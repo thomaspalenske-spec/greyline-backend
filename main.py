@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from app.routes import core
 from app.routes import paper_trading
+from app.routes import tradestation
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
 app.include_router(paper_trading.router)
+app.include_router(tradestation.router)
 from app.services.ledger_engine import LedgerEngine
 from app.services.snapshot_engine import SnapshotEngine
 from app.services.account_engine import AccountEngine
@@ -290,54 +292,6 @@ def backend_ucfs():
 @app.get("/restore")
 def restore():
     return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
-
-from app.services.trade_station_engine import TradeStationEngine
-
-
-@app.get("/tradestation-status")
-def tradestation_status():
-    return TradeStationEngine().evaluate()
-
-
-from app.services.tradestation_oauth_readiness_engine import TradeStationOAuthReadinessEngine
-
-
-@app.get("/tradestation-oauth-readiness")
-def tradestation_oauth_readiness():
-    return TradeStationOAuthReadinessEngine().evaluate()
-
-
-from app.services.tradestation_account_discovery_engine import TradeStationAccountDiscoveryEngine
-
-
-@app.get("/tradestation-account-discovery")
-def tradestation_account_discovery():
-    return TradeStationAccountDiscoveryEngine().evaluate()
-
-
-from app.services.tradestation_read_only_client import TradeStationReadOnlyClient
-
-
-@app.get("/tradestation-read-only-client")
-def tradestation_read_only_client():
-    return TradeStationReadOnlyClient().evaluate()
-
-
-from app.services.tradestation_endpoint_map_engine import TradeStationEndpointMapEngine
-
-
-@app.get("/tradestation-endpoint-map")
-def tradestation_endpoint_map():
-    return TradeStationEndpointMapEngine().get_endpoint_map()
-
-
-from app.services.tradestation_integration_dashboard_engine import TradeStationIntegrationDashboardEngine
-
-
-@app.get("/tradestation-dashboard")
-def tradestation_dashboard():
-    return TradeStationIntegrationDashboardEngine().get_dashboard()
-
 
 from app.services.portfolio_data_model_engine import PortfolioDataModelEngine
 
