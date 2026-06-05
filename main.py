@@ -3,12 +3,14 @@ from app.routes import core
 from app.routes import paper_trading
 from app.routes import tradestation
 from app.routes import portfolio
+from app.routes import watchlist
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
 app.include_router(paper_trading.router)
 app.include_router(tradestation.router)
 app.include_router(portfolio.router)
+app.include_router(watchlist.router)
 from app.services.ledger_engine import LedgerEngine
 from app.services.snapshot_engine import SnapshotEngine
 from app.services.account_engine import AccountEngine
@@ -294,46 +296,6 @@ def backend_ucfs():
 @app.get("/restore")
 def restore():
     return RestoreEngine().restore_snapshot('app/snapshots/snapshot_20260530_131732.json')
-
-from app.services.watchlist_engine import WatchlistEngine
-
-
-@app.get("/watchlist")
-def watchlist():
-    return WatchlistEngine().get_watchlist()
-
-
-from app.services.watchlist_reader import WatchlistReader
-
-
-@app.get("/watchlist-reader")
-def watchlist_reader():
-    return WatchlistReader().read_watchlist()
-
-
-from app.services.watchlist_analytics_engine import WatchlistAnalyticsEngine
-
-
-@app.get("/watchlist-analytics")
-def watchlist_analytics():
-    return WatchlistAnalyticsEngine().analyze_watchlist()
-
-
-from app.services.watchlist_health_dashboard import WatchlistHealthDashboard
-
-
-@app.get("/watchlist-health")
-def watchlist_health():
-    return WatchlistHealthDashboard().get_health()
-
-
-from app.services.watchlist_market_scanner import WatchlistMarketScanner
-
-
-@app.get("/watchlist-market-scan")
-def watchlist_market_scan():
-    return WatchlistMarketScanner().scan()
-
 
 from app.services.market_universe_engine import MarketUniverseEngine
 
