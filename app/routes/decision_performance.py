@@ -7,4 +7,4 @@ router = APIRouter()
 
 @router.get("/decision-performance")
 def decision_performance():
-    return DecisionPerformanceAttributionEngine().evaluate()
+    return DecisionPerformanceAttributionEngine().analyze()
