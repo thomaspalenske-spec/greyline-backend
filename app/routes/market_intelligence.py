@@ -112,3 +112,10 @@ from app.services.greyline_master_decision_engine import GreyLineMasterDecisionE
 @router.get("/greyline-master-decision")
 def greyline_master_decision():
     return GreyLineMasterDecisionEngine().evaluate()
+
+from app.services.master_decision_history_engine import MasterDecisionHistoryEngine
+
+
+@router.get("/master-decision-history")
+def master_decision_history():
+    return MasterDecisionHistoryEngine().get_history()
