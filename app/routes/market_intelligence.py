@@ -119,3 +119,10 @@ from app.services.master_decision_history_engine import MasterDecisionHistoryEng
 @router.get("/master-decision-history")
 def master_decision_history():
     return MasterDecisionHistoryEngine().get_history()
+
+from app.services.decision_replay_engine import DecisionReplayEngine
+
+
+@router.get("/decision-replay")
+def decision_replay():
+    return DecisionReplayEngine().replay_recent_decisions()
