@@ -9,6 +9,7 @@ from app.routes import institutional_flow
 from app.routes import leadership
 from app.routes import backend_admin
 from app.routes import broker_readiness
+from app.routes import decision_performance
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
@@ -21,3 +22,4 @@ app.include_router(institutional_flow.router)
 app.include_router(leadership.router)
 app.include_router(backend_admin.router)
 app.include_router(broker_readiness.router)
+app.include_router(decision_performance.router)
