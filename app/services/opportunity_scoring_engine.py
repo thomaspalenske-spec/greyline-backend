@@ -26,7 +26,14 @@ class OpportunityScoringEngine:
             quote_status = item.get("quote_status")
             http_status = item.get("http_status")
 
-            market_data_score = 100 if http_status == 200 else 0
+            if http_status == 200 and quote_status == "QUOTE_READ_SUCCESS":
+                market_data_score = 100
+            elif http_status == 200:
+                market_data_score = 75
+            elif quote_status == "QUOTE_READ_FAILED":
+                market_data_score = 25
+            else:
+                market_data_score = 0
             liquidity_score = LiquidityScoringEngine().score_symbol(symbol).get('liquidity_score', 50)
             setup_score = SetupScoringEngine().score_symbol(symbol).get('setup_score', 50)
 
