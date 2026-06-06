@@ -27,14 +27,26 @@ class TradeStationQuoteLiveEngine:
 
         url = base_url.rstrip("/") + f"/v3/marketdata/quotes/{symbol}"
 
-        response = requests.get(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json"
-            },
-            timeout=20
-        )
+        try:
+            response = requests.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/json"
+                },
+                timeout=20
+            )
+        except requests.RequestException as error:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "broker": "TradeStation",
+                "symbol": symbol,
+                "quote_attempted": True,
+                "http_status": None,
+                "execution_enabled": False,
+                "status": "QUOTE_READ_FAILED",
+                "error": str(error)
+            }
 
         try:
             response_json = response.json()
