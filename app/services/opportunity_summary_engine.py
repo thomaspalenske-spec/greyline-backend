@@ -5,8 +5,8 @@ from app.services.opportunity_scoring_engine import OpportunityScoringEngine
 
 class OpportunitySummaryEngine:
 
-    def get_summary(self):
-        scoring = OpportunityScoringEngine().score_opportunities()
+    def get_summary(self, limit=None):
+        scoring = OpportunityScoringEngine().score_opportunities(limit=limit)
 
         rows = []
 

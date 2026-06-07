@@ -16,12 +16,15 @@ from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 
 class OpportunityScoringEngine:
 
-    def score_opportunities(self):
+    def score_opportunities(self, limit=None):
         quote_scan = LiveUniverseQuoteScanner().scan_safe_subset()
 
         opportunities = []
+        symbols = quote_scan.get("symbols", [])
+        if limit is not None:
+            symbols = symbols[:limit]
 
-        for item in quote_scan.get("symbols", []):
+        for item in symbols:
             symbol = item.get("symbol")
             quote_status = item.get("quote_status")
             http_status = item.get("http_status")

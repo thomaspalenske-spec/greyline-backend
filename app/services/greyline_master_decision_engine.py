@@ -12,7 +12,7 @@ class GreyLineMasterDecisionEngine:
     def evaluate(self):
         broker_health = LiveBrokerHealthEngine().evaluate()
         risk_state = RiskEngine().evaluate_risk_state()
-        opportunity_summary = OpportunitySummaryEngine().get_summary()
+        opportunity_summary = OpportunitySummaryEngine().get_summary(limit=3)
 
         opportunities = opportunity_summary.get("opportunities", [])
         execute_candidates = [
