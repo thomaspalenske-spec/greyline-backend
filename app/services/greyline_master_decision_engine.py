@@ -27,6 +27,12 @@ class GreyLineMasterDecisionEngine:
                 key=lambda item: item.get("composite_score", 0),
                 reverse=True
             )[0]
+        elif opportunities:
+            top_candidate = sorted(
+                opportunities,
+                key=lambda item: item.get("composite_score", 0),
+                reverse=True
+            )[0]
 
         broker_ready = broker_health.get("health_score") == 100
         risk_allows = risk_state == "NORMAL"
