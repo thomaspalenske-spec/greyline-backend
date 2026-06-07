@@ -11,6 +11,7 @@ from app.routes import backend_admin
 from app.routes import broker_readiness
 from app.routes import decision_performance
 from app.routes import decision_outcomes
+from app.routes import decision_self_audit
 
 app = FastAPI(title="GreyLine Backend Server")
 app.include_router(core.router)
@@ -25,3 +26,4 @@ app.include_router(backend_admin.router)
 app.include_router(broker_readiness.router)
 app.include_router(decision_performance.router)
 app.include_router(decision_outcomes.router)
+app.include_router(decision_self_audit.router)
