@@ -4,6 +4,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import requests
 
+from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
+
 
 class TradeStationQuoteLiveEngine:
 
@@ -11,6 +13,7 @@ class TradeStationQuoteLiveEngine:
         load_dotenv(dotenv_path=Path(".env"), override=True)
 
     def get_quote(self, symbol):
+        maintenance = TradeStationTokenMaintenanceEngine().evaluate()
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
         base_url = getenv("TRADESTATION_SANDBOX_URL", "https://api.tradestation.com")
         symbol = symbol.upper().strip()
