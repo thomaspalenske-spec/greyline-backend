@@ -31,3 +31,7 @@ app.include_router(decision_self_audit.router)
 from app.routes import decision_metrics
 
 app.include_router(decision_metrics.router)
+
+from app.routes import operator_decision_dashboard
+
+app.include_router(operator_decision_dashboard.router)
