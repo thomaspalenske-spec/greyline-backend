@@ -4,6 +4,7 @@ from app.services.live_broker_health_engine import LiveBrokerHealthEngine
 from app.services.risk_engine import RiskEngine
 from app.services.opportunity_summary_engine import OpportunitySummaryEngine
 from app.services.execution_governor import ExecutionGovernor
+from app.services.master_decision_event_log import MasterDecisionEventLog
 
 
 class GreyLineMasterDecisionEngine:
@@ -48,7 +49,7 @@ class GreyLineMasterDecisionEngine:
             top_candidate.get("result") if top_candidate else "NO_ACTION"
         )
 
-        return {
+        result = {
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
             "source": "MASTER_DECISION_READ_ONLY",
@@ -64,3 +65,9 @@ class GreyLineMasterDecisionEngine:
             "order_placement_allowed": False,
             "status": "GREYLINE_MASTER_DECISION_READY"
         }
+
+        log_result = MasterDecisionEventLog().record_decision(result)
+        result["decision_event_logged"] = log_result.get("event_logged")
+        result["decision_event_log_status"] = log_result.get("status")
+
+        return result
