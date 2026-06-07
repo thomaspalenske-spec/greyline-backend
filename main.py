@@ -51,3 +51,7 @@ app.include_router(forward_outcomes.router)
 from app.routes import tradestation_token_maintenance
 
 app.include_router(tradestation_token_maintenance.router)
+
+from app.routes import tradestation_auth_exchange
+
+app.include_router(tradestation_auth_exchange.router)
