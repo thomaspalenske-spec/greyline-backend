@@ -27,3 +27,7 @@ app.include_router(broker_readiness.router)
 app.include_router(decision_performance.router)
 app.include_router(decision_outcomes.router)
 app.include_router(decision_self_audit.router)
+
+from app.routes import decision_metrics
+
+app.include_router(decision_metrics.router)
