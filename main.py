@@ -55,3 +55,7 @@ app.include_router(tradestation_token_maintenance.router)
 from app.routes import tradestation_auth_exchange
 
 app.include_router(tradestation_auth_exchange.router)
+
+from app.routes import tradestation_auth_url
+
+app.include_router(tradestation_auth_url.router)
