@@ -43,3 +43,7 @@ app.include_router(decision_scheduler.router)
 from app.routes import decision_validation
 
 app.include_router(decision_validation.router)
+
+from app.routes import forward_outcomes
+
+app.include_router(forward_outcomes.router)
