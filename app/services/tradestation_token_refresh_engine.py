@@ -1,79 +1,80 @@
 from datetime import datetime
 from os import getenv
 from pathlib import Path
-from dotenv import load_dotenv, set_key
+
 import requests
+from dotenv import load_dotenv, set_key
 
 
 class TradeStationTokenRefreshEngine:
 
-    TOKEN_URL = "https://signin.tradestation.com/oauth/token"
-
     def __init__(self):
-        self.env_path = Path(".env")
-        load_dotenv(dotenv_path=self.env_path)
+        load_dotenv(dotenv_path=Path(".env"), override=True)
 
-    def refresh_access_token(self):
+    def refresh(self):
+        api_key = getenv("TRADESTATION_API_KEY", "")
+        api_secret = getenv("TRADESTATION_API_SECRET", "")
         refresh_token = getenv("TRADESTATION_REFRESH_TOKEN", "")
-        client_id = getenv("TRADESTATION_API_KEY", "")
-        client_secret = getenv("TRADESTATION_API_SECRET", "")
+        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://api.tradestation.com")
 
-        if not refresh_token or not client_id or not client_secret:
+        if not api_key or not api_secret or not refresh_token:
             return {
                 "timestamp": datetime.utcnow().isoformat(),
-                "broker": "TradeStation",
-                "refresh_attempted": False,
+                "token_refreshed": False,
+                "missing_api_key": not bool(api_key),
+                "missing_api_secret": not bool(api_secret),
+                "missing_refresh_token": not bool(refresh_token),
                 "execution_enabled": False,
-                "status": "REFRESH_TOKEN_OR_CREDENTIALS_REQUIRED"
+                "order_placement_allowed": False,
+                "status": "TOKEN_REFRESH_REQUIREMENTS_MISSING",
             }
+
+        url = base_url.rstrip("/") + "/v3/security/authorize/token"
 
         response = requests.post(
-            self.TOKEN_URL,
+            url,
             data={
                 "grant_type": "refresh_token",
-                "client_id": client_id,
-                "client_secret": client_secret,
+                "client_id": api_key,
+                "client_secret": api_secret,
                 "refresh_token": refresh_token,
             },
-            headers={"content-type": "application/x-www-form-urlencoded"},
-            timeout=20
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=20,
         )
 
-        if response.status_code != 200:
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {}
+
+        if response.status_code != 200 or "access_token" not in payload:
             return {
                 "timestamp": datetime.utcnow().isoformat(),
-                "broker": "TradeStation",
-                "refresh_attempted": True,
+                "token_refreshed": False,
                 "http_status": response.status_code,
-                "response_text": response.text[:500],
+                "response_preview": response.text[:500],
                 "execution_enabled": False,
-                "status": "TOKEN_REFRESH_FAILED"
+                "order_placement_allowed": False,
+                "status": "TOKEN_REFRESH_FAILED",
             }
 
-        data = response.json()
+        set_key(".env", "TRADESTATION_ACCESS_TOKEN", payload.get("access_token", ""))
 
-        access_token = data.get("access_token")
-        new_refresh_token = data.get("refresh_token")
-        expires_in = data.get("expires_in")
+        if payload.get("refresh_token"):
+            set_key(".env", "TRADESTATION_REFRESH_TOKEN", payload.get("refresh_token"))
 
-        if access_token:
-            set_key(str(self.env_path), "TRADESTATION_ACCESS_TOKEN", access_token)
+        if payload.get("expires_in"):
+            set_key(".env", "TRADESTATION_TOKEN_EXPIRES_IN", str(payload.get("expires_in")))
 
-        if new_refresh_token:
-            set_key(str(self.env_path), "TRADESTATION_REFRESH_TOKEN", new_refresh_token)
-
-        if expires_in:
-            set_key(str(self.env_path), "TRADESTATION_TOKEN_EXPIRES_IN", str(expires_in))
-            set_key(str(self.env_path), "TRADESTATION_TOKEN_SAVED_AT", datetime.utcnow().isoformat())
+        set_key(".env", "TRADESTATION_TOKEN_SAVED_AT", datetime.utcnow().isoformat())
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
-            "broker": "TradeStation",
-            "refresh_attempted": True,
-            "access_token_saved": bool(access_token),
-            "refresh_token_saved": bool(new_refresh_token),
-            "expires_in_saved": bool(expires_in),
-            "token_saved_at_recorded": bool(expires_in),
+            "token_refreshed": True,
+            "http_status": response.status_code,
+            "expires_in": payload.get("expires_in"),
             "execution_enabled": False,
-            "status": "TOKEN_REFRESH_SUCCESS"
+            "order_placement_allowed": False,
+            "status": "TOKEN_REFRESH_SUCCESS",
         }
