@@ -91,3 +91,7 @@ app.include_router(decision_weight_recommendations.router)
 from app.routes import adaptive_weight_governance
 
 app.include_router(adaptive_weight_governance.router)
+
+from app.routes import system_health
+
+app.include_router(system_health.router)
