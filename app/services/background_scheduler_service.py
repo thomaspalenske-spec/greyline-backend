@@ -7,6 +7,7 @@ from app.services.decision_scheduler_engine import DecisionSchedulerEngine
 from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
 from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
+from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
 class BackgroundSchedulerService:
@@ -92,6 +93,19 @@ class BackgroundSchedulerService:
         cls._cycle_count += 1
         cls._last_run = started
         cls._last_status = "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+
+        ImmutableAuditLedgerEngine().record(
+            "BACKGROUND_SCHEDULER_CYCLE",
+            {
+                "cycle_count": cls._cycle_count,
+                "token_maintenance_status": token.get("status"),
+                "decision_status": decision.get("status"),
+                "forward_outcome_status": forward.get("status"),
+                "learning_memory_status": learning.get("status"),
+                "system_health_status": health.get("status"),
+                "overall_health": health.get("overall_health"),
+            },
+        )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
