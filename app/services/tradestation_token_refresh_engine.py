@@ -4,6 +4,7 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv, set_key
+from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
 class TradeStationTokenRefreshEngine:
@@ -49,7 +50,7 @@ class TradeStationTokenRefreshEngine:
             payload = {}
 
         if response.status_code != 200 or "access_token" not in payload:
-            return {
+            result = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "token_refreshed": False,
                 "http_status": response.status_code,
@@ -58,6 +59,17 @@ class TradeStationTokenRefreshEngine:
                 "order_placement_allowed": False,
                 "status": "TOKEN_REFRESH_FAILED",
             }
+
+            ImmutableAuditLedgerEngine().record(
+                "TRADESTATION_TOKEN_REFRESH",
+                {
+                    "token_refreshed": False,
+                    "http_status": response.status_code,
+                    "status": "TOKEN_REFRESH_FAILED",
+                },
+            )
+
+            return result
 
         set_key(".env", "TRADESTATION_ACCESS_TOKEN", payload.get("access_token", ""))
 
@@ -69,7 +81,7 @@ class TradeStationTokenRefreshEngine:
 
         set_key(".env", "TRADESTATION_TOKEN_SAVED_AT", datetime.utcnow().isoformat())
 
-        return {
+        result = {
             "timestamp": datetime.utcnow().isoformat(),
             "token_refreshed": True,
             "http_status": response.status_code,
@@ -78,3 +90,15 @@ class TradeStationTokenRefreshEngine:
             "order_placement_allowed": False,
             "status": "TOKEN_REFRESH_SUCCESS",
         }
+
+        ImmutableAuditLedgerEngine().record(
+            "TRADESTATION_TOKEN_REFRESH",
+            {
+                "token_refreshed": True,
+                "http_status": response.status_code,
+                "expires_in": payload.get("expires_in"),
+                "status": "TOKEN_REFRESH_SUCCESS",
+            },
+        )
+
+        return result
