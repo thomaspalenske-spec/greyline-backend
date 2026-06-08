@@ -71,3 +71,7 @@ app.include_router(decision_accuracy_dashboard.router)
 from app.routes import decision_learning
 
 app.include_router(decision_learning.router)
+
+from app.routes import decision_learning_memory
+
+app.include_router(decision_learning_memory.router)
