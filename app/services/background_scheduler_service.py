@@ -1,0 +1,111 @@
+import threading
+import time
+from datetime import datetime
+
+from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
+from app.services.decision_scheduler_engine import DecisionSchedulerEngine
+from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
+from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
+from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
+
+
+class BackgroundSchedulerService:
+    _thread = None
+    _stop_event = threading.Event()
+    _enabled = False
+    _last_run = None
+    _last_status = None
+    _cycle_count = 0
+
+    @classmethod
+    def start(cls, interval_seconds=300):
+        if cls._enabled:
+            return cls.status()
+
+        cls._enabled = True
+        cls._stop_event.clear()
+
+        cls._thread = threading.Thread(
+            target=cls._run_loop,
+            args=(interval_seconds,),
+            daemon=True,
+        )
+        cls._thread.start()
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "scheduler_enabled": True,
+            "interval_seconds": interval_seconds,
+            "execution_enabled": False,
+            "order_placement_allowed": False,
+            "status": "BACKGROUND_SCHEDULER_STARTED",
+        }
+
+    @classmethod
+    def stop(cls):
+        cls._enabled = False
+        cls._stop_event.set()
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "scheduler_enabled": False,
+            "execution_enabled": False,
+            "order_placement_allowed": False,
+            "status": "BACKGROUND_SCHEDULER_STOPPED",
+        }
+
+    @classmethod
+    def status(cls):
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "scheduler_enabled": cls._enabled,
+            "cycle_count": cls._cycle_count,
+            "last_run": cls._last_run,
+            "last_status": cls._last_status,
+            "thread_alive": bool(cls._thread and cls._thread.is_alive()),
+            "execution_enabled": False,
+            "order_placement_allowed": False,
+            "status": "BACKGROUND_SCHEDULER_STATUS_READY",
+        }
+
+    @classmethod
+    def run_once(cls):
+        result = cls._run_cycle()
+        return result
+
+    @classmethod
+    def _run_loop(cls, interval_seconds):
+        while not cls._stop_event.is_set():
+            cls._run_cycle()
+            cls._stop_event.wait(interval_seconds)
+
+    @classmethod
+    def _run_cycle(cls):
+        started = datetime.utcnow().isoformat()
+
+        token = TradeStationTokenMaintenanceEngine().evaluate()
+        decision = DecisionSchedulerEngine().run_manual_cycle()
+        forward = ForwardOutcomeCaptureEngine().capture()
+        learning = DecisionLearningMemoryEngine().record_current_learning()
+        health = SystemHealthDashboardEngine().status()
+
+        cls._cycle_count += 1
+        cls._last_run = started
+        cls._last_status = "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "source": "BACKGROUND_SCHEDULER",
+            "cycle_started": started,
+            "cycle_count": cls._cycle_count,
+            "token_maintenance_status": token.get("status"),
+            "decision_status": decision.get("status"),
+            "forward_outcome_status": forward.get("status"),
+            "learning_memory_status": learning.get("status"),
+            "system_health_status": health.get("status"),
+            "overall_health": health.get("overall_health"),
+            "execution_enabled": False,
+            "order_placement_allowed": False,
+            "status": "BACKGROUND_SCHEDULER_CYCLE_COMPLETE",
+        }

@@ -99,3 +99,7 @@ app.include_router(system_health.router)
 from app.routes import startup_recovery
 
 app.include_router(startup_recovery.router)
+
+from app.routes import background_scheduler
+
+app.include_router(background_scheduler.router)
