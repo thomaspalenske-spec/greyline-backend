@@ -5,6 +5,7 @@ from app.services.system_health_dashboard_engine import SystemHealthDashboardEng
 from app.services.master_decision_history_engine import MasterDecisionHistoryEngine
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
 from app.services.adaptive_weight_governance_engine import AdaptiveWeightGovernanceEngine
+from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
 class StartupRecoveryEngine:
@@ -48,6 +49,20 @@ class StartupRecoveryEngine:
             decision_history_ready,
             filesystem_ready,
         ])
+
+        ImmutableAuditLedgerEngine().record(
+            "STARTUP_READINESS_CHECK",
+            {
+                "startup_ready": overall_ready,
+                "broker_ready": broker_ready,
+                "scheduler_ready": scheduler_ready,
+                "decision_history_ready": decision_history_ready,
+                "learning_memory_ready": learning_ready,
+                "governance_ready": governance_ready,
+                "filesystem_ready": filesystem_ready,
+                "system_health_status": health.get("overall_health"),
+            },
+        )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
