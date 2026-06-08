@@ -4,6 +4,7 @@ from app.services.tradestation_token_maintenance_engine import TradeStationToken
 from app.services.decision_scheduler_engine import DecisionSchedulerEngine
 from app.services.learning_analytics_engine import LearningAnalyticsEngine
 from app.services.adaptive_weight_governance_engine import AdaptiveWeightGovernanceEngine
+from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
 class SystemHealthDashboardEngine:
@@ -25,6 +26,17 @@ class SystemHealthDashboardEngine:
             learning_healthy,
             governance_healthy
         ])
+
+        ImmutableAuditLedgerEngine().record(
+            "SYSTEM_HEALTH_CHECK",
+            {
+                "overall_health": "HEALTHY" if overall else "DEGRADED",
+                "broker_healthy": broker_healthy,
+                "scheduler_healthy": scheduler_healthy,
+                "learning_healthy": learning_healthy,
+                "governance_healthy": governance_healthy,
+            },
+        )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
