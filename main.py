@@ -87,3 +87,7 @@ app.include_router(decision_feature_attribution.router)
 from app.routes import decision_weight_recommendations
 
 app.include_router(decision_weight_recommendations.router)
+
+from app.routes import adaptive_weight_governance
+
+app.include_router(adaptive_weight_governance.router)
