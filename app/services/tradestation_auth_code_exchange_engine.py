@@ -31,7 +31,7 @@ class TradeStationAuthCodeExchangeEngine:
                 "status": "AUTH_CODE_EXCHANGE_REQUIREMENTS_MISSING",
             }
 
-        url = base_url.rstrip("/") + "/v3/security/authorize/token"
+        url = "https://signin.tradestation.com/oauth/token"
 
         response = requests.post(
             url,
