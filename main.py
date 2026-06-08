@@ -103,3 +103,7 @@ app.include_router(startup_recovery.router)
 from app.routes import background_scheduler
 
 app.include_router(background_scheduler.router)
+
+from app.routes import audit_ledger
+
+app.include_router(audit_ledger.router)
