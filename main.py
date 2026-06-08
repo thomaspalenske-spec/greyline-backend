@@ -75,3 +75,7 @@ app.include_router(decision_learning.router)
 from app.routes import decision_learning_memory
 
 app.include_router(decision_learning_memory.router)
+
+from app.routes import learning_analytics
+
+app.include_router(learning_analytics.router)
