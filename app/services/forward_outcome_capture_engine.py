@@ -34,6 +34,12 @@ class ForwardOutcomeCaptureEngine:
                 quote = TradeStationQuoteLiveEngine().get_quote(symbol)
                 captured_count += 1
 
+                quote_row = {}
+                response_json = quote.get("response_json") or {}
+                quotes = response_json.get("Quotes") or []
+                if quotes:
+                    quote_row = quotes[0]
+
                 captures.append({
                     "decision_timestamp": item.get("original_timestamp"),
                     "capture_timestamp": datetime.utcnow().isoformat(),
@@ -41,11 +47,13 @@ class ForwardOutcomeCaptureEngine:
                     "symbol": symbol,
                     "replay_state": item.get("replay_state"),
                     "quote_status": quote.get("status"),
-                    "last": quote.get("last"),
-                    "bid": quote.get("bid"),
-                    "ask": quote.get("ask"),
-                    "previous_close": quote.get("previous_close"),
-                    "volume": quote.get("volume"),
+                    "http_status": quote.get("http_status"),
+                    "last": quote_row.get("Last"),
+                    "bid": quote_row.get("Bid"),
+                    "ask": quote_row.get("Ask"),
+                    "previous_close": quote_row.get("PreviousClose"),
+                    "volume": quote_row.get("Volume"),
+                    "trade_time": quote_row.get("TradeTime"),
                     "capture_status": "FORWARD_OUTCOME_CAPTURED",
                     "execution_enabled": False,
                     "order_placement_allowed": False,
