@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.services.decision_learning_engine import DecisionLearningEngine
+from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
 class DecisionLearningMemoryEngine:
@@ -36,6 +37,16 @@ class DecisionLearningMemoryEngine:
                     "order_placement_allowed": False,
                 }
                 f.write(json.dumps(event) + "\n")
+                ImmutableAuditLedgerEngine().record(
+                    "DECISION_LEARNING_EVENT",
+                    {
+                        "decision_timestamp": event.get("decision_timestamp"),
+                        "symbol": event.get("symbol"),
+                        "decision": event.get("decision"),
+                        "score_result": event.get("score_result"),
+                        "learning_adjustment": event.get("learning_adjustment"),
+                    },
+                )
                 recorded += 1
 
         return {
