@@ -83,3 +83,7 @@ app.include_router(learning_analytics.router)
 from app.routes import decision_feature_attribution
 
 app.include_router(decision_feature_attribution.router)
+
+from app.routes import decision_weight_recommendations
+
+app.include_router(decision_weight_recommendations.router)
