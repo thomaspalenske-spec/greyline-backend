@@ -95,3 +95,7 @@ app.include_router(adaptive_weight_governance.router)
 from app.routes import system_health
 
 app.include_router(system_health.router)
+
+from app.routes import startup_recovery
+
+app.include_router(startup_recovery.router)
