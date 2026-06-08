@@ -5,6 +5,7 @@ from pathlib import Path
 from app.services.decision_weight_recommendation_engine import (
     DecisionWeightRecommendationEngine,
 )
+from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
 class AdaptiveWeightGovernanceEngine:
@@ -39,6 +40,17 @@ class AdaptiveWeightGovernanceEngine:
         with self.proposal_file.open("a") as f:
             for proposal in proposals:
                 f.write(json.dumps(proposal) + "\n")
+
+                ImmutableAuditLedgerEngine().record(
+                    "GOVERNANCE_PROPOSAL",
+                    {
+                        "proposal_id": proposal.get("proposal_id"),
+                        "factor": proposal.get("factor"),
+                        "recommended_action": proposal.get("recommended_action"),
+                        "failures": proposal.get("failures"),
+                        "successes": proposal.get("successes"),
+                    },
+                )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
