@@ -124,6 +124,16 @@ class AdaptiveWeightGovernanceEngine:
         with self.approval_file.open("a") as f:
             f.write(json.dumps(approval) + "\n")
 
+        ImmutableAuditLedgerEngine().record(
+            "GOVERNANCE_APPROVAL",
+            {
+                "proposal_id": approval.get("proposal_id"),
+                "factor": approval.get("factor"),
+                "approved_action": approval.get("approved_action"),
+                "approver": approval.get("approver"),
+            },
+        )
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
