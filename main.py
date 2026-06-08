@@ -67,3 +67,7 @@ app.include_router(decision_outcome_scores.router)
 from app.routes import decision_accuracy_dashboard
 
 app.include_router(decision_accuracy_dashboard.router)
+
+from app.routes import decision_learning
+
+app.include_router(decision_learning.router)
