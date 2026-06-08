@@ -59,3 +59,7 @@ app.include_router(tradestation_auth_exchange.router)
 from app.routes import tradestation_auth_url
 
 app.include_router(tradestation_auth_url.router)
+
+from app.routes import decision_outcome_scores
+
+app.include_router(decision_outcome_scores.router)
