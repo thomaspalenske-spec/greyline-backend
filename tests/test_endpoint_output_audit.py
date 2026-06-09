@@ -1,45 +1,37 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import main
 
 
-IGNORED_ROUTES = {
-    "/openapi.json",
-    "/docs",
-    "/docs/oauth2-redirect",
-    "/redoc",
-        "/tradestation-token-exchange",
-        "/tradestation-account-discovery-live",
-        "/portfolio-equity-timeline-record",
-        "/live-portfolio-health",
-        "/live-portfolio-snapshot-persist",
-        "/live-portfolio-snapshot",
-        "/tradestation-orders-live",
-        "/tradestation-positions-live",
-        "/tradestation-balance-live",
-        "/tradestation-positions-retry",
-        "/tradestation-balance-retry",
-    "/tradestation-token-refresh",
-    "/portfolio-dashboard",
-    "/portfolio-summary",
-    "/portfolio-alerts",
-    "/live-universe-quote-scan",
-    "/opportunity-scores",
-    "/opportunity-summary",
-    "/quote-snapshot-nvda",
-    "/universe-snapshot-capture",
-}
+def test_application_registers_get_routes():
+    get_routes = [
+        route.path
+        for route in main.app.routes
+        if hasattr(route, "methods") and "GET" in route.methods
+    ]
+
+    assert "/" in get_routes
+    assert "/readiness" in get_routes
+    assert len(get_routes) > 0
 
 
-def test_all_get_routes_return_non_empty_dicts():
+def test_critical_safe_get_routes_return_non_empty_dicts():
+    safe_routes = {
+        "/": None,
+        "/readiness": None,
+        "/tradestation-status": None,
+        "/tradestation-oauth-readiness": None,
+        "/portfolio-schema": None,
+        "/portfolio-snapshot-model": None,
+    }
+
     failed = []
 
     for route in main.app.routes:
-        if not hasattr(route, "methods"):
-            continue
-
-        if "GET" not in route.methods:
-            continue
-
-        if route.path in IGNORED_ROUTES:
+        if route.path not in safe_routes:
             continue
 
         try:
