@@ -26,8 +26,34 @@ class LedgerEngine:
         with open(self.ledger_path, "w") as f:
             json.dump(data, f, indent=4)
 
+    def _existing_trade_ids(self, ledger):
+        return {
+            trade.get("trade_id")
+            for trade in ledger.get("trades", [])
+            if trade.get("trade_id")
+        }
+
     def add_trade(self, trade):
         ledger = self.load()
+
+        trade_id = trade.get("trade_id")
+
+        if not trade_id:
+            return {
+                "status": "trade_rejected",
+                "reason": "missing_trade_id",
+                "trade_saved": False,
+                "trade_count": len(ledger.get("trades", []))
+            }
+
+        if trade_id in self._existing_trade_ids(ledger):
+            return {
+                "status": "trade_rejected",
+                "reason": "duplicate_trade_id",
+                "trade_id": trade_id,
+                "trade_saved": False,
+                "trade_count": len(ledger.get("trades", []))
+            }
 
         trade["created_at"] = datetime.utcnow().isoformat()
 
@@ -37,6 +63,8 @@ class LedgerEngine:
 
         return {
             "status": "trade_saved",
+            "trade_id": trade_id,
+            "trade_saved": True,
             "trade_count": len(ledger["trades"])
         }
 
