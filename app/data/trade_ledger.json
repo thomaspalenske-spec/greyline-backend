@@ -14,20 +14,23 @@
             "symbol": "NVDA",
             "quantity": 1,
             "entry_price": 215.33,
-            "state": "ACTIVE"
-        },
-        {
-            "symbol": "NVDA",
-            "quantity": 1,
-            "entry_price": 215.33,
-            "state": "ACTIVE"
+            "state": "ACTIVE",
+            "trade_id": "GL-REPAIRED-0001"
         },
         {
             "symbol": "NVDA",
             "quantity": 1,
             "entry_price": 215.33,
             "state": "ACTIVE",
-            "created_at": "2026-05-30T12:48:58.583314"
+            "trade_id": "GL-REPAIRED-0002"
+        },
+        {
+            "symbol": "NVDA",
+            "quantity": 1,
+            "entry_price": 215.33,
+            "state": "ACTIVE",
+            "created_at": "2026-05-30T12:48:58.583314",
+            "trade_id": "GL-REPAIRED-0003"
         }
     ]
 }
