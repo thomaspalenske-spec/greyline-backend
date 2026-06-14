@@ -36,3 +36,6 @@ class ReadinessScoringEngine:
             "state": state,
             "raw": data
         }
+
+echo test
+print("hello")

@@ -107,3 +107,18 @@ app.include_router(background_scheduler.router)
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)
+
+from app.services.background_scheduler_service import BackgroundSchedulerService
+
+@app.on_event("startup")
+def auto_start_background_scheduler():
+    BackgroundSchedulerService.start()
+
+from app.routes import greyline_connection_watchdog
+app.include_router(greyline_connection_watchdog.router)
+
+from app.routes import pre_trade_risk_gate
+app.include_router(pre_trade_risk_gate.router)
+
+from app.routes import live_trade_authority_gate
+app.include_router(live_trade_authority_gate.router)

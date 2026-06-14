@@ -86,7 +86,7 @@ class BackgroundSchedulerService:
 
         token = TradeStationTokenMaintenanceEngine().evaluate()
         decision = DecisionSchedulerEngine().run_manual_cycle()
-        forward = ForwardOutcomeCaptureEngine().capture()
+        forward = ForwardOutcomeCaptureEngine().capture(limit=1)
         learning = DecisionLearningMemoryEngine().record_current_learning()
         health = SystemHealthDashboardEngine().status()
 

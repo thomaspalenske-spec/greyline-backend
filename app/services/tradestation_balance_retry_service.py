@@ -19,7 +19,7 @@ class TradeStationBalanceRetryService:
                 "status": "BALANCE_RETRY_NOT_REQUIRED"
             }
 
-        refresh_result = TradeStationTokenRefreshEngine().refresh_access_token()
+        refresh_result = TradeStationTokenRefreshEngine().refresh()
 
         if refresh_result.get("status") != "TOKEN_REFRESH_SUCCESS":
             return {

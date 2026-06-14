@@ -1,44 +1,40 @@
 import requests
 from datetime import datetime
 
-
 class GreyLineLiveBrokerClientEngine:
 
-    def __init__(self, api_key=None, base_url=None):
+    def __init__(self, api_key=None, base_url=None, access_token=None):
 
         self.api_key = api_key
-        self.base_url = base_url or "https://BROKER_API_NOT_CONFIGURED"
+        self.base_url = base_url or "https://api.tradestation.com/v3"
+        self.access_token = access_token
 
     def submit_order(self, symbol, quantity, side, price=None):
 
         # ----------------------------
-        # SAFETY BLOCK (HARD GUARD)
+        # HARD GATE: OAuth REQUIRED
         # ----------------------------
-        if not self.api_key:
+        if not self.access_token:
             return {
                 "timestamp": datetime.utcnow().isoformat(),
-                "status": "LIVE_BROKER_BLOCKED_NO_API_KEY",
-                "symbol": symbol,
-                "live": False
+                "status": "BLOCKED_NO_OAUTH_TOKEN",
+                "symbol": symbol
             }
 
         payload = {
-            "symbol": symbol,
-            "qty": quantity,
-            "side": side,
-            "type": "market" if price is None else "limit",
-            "price": price
+            "Symbol": symbol,
+            "Quantity": quantity,
+            "TradeAction": side,
+            "OrderType": "Market" if price is None else "Limit",
+            "LimitPrice": price
         }
 
-        # ----------------------------
-        # PLACEHOLDER LIVE REQUEST
-        # ----------------------------
         try:
             response = requests.post(
-                f"{self.base_url}/orders",
+                f"{self.base_url}/orderexecution/orders",
                 json=payload,
                 headers={
-                    "Authorization": f"Bearer {self.api_key}"
+                    "Authorization": f"Bearer {self.access_token}"
                 },
                 timeout=5
             )
