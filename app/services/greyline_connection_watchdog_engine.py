@@ -24,6 +24,16 @@ class GreyLineConnectionWatchdogEngine:
 
         if not scheduler_ok:
             BackgroundSchedulerService.start()
+
+            ImmutableAuditLedgerEngine().record(
+                "WATCHDOG_SCHEDULER_AUTO_RESTART",
+                {
+                    "scheduler_enabled": True,
+                    "execution_enabled": False,
+                    "order_placement_allowed": False,
+                },
+            )
+
             scheduler = BackgroundSchedulerService.status()
             scheduler_ok = scheduler.get("scheduler_enabled") is True and scheduler.get("thread_alive") is True
 
