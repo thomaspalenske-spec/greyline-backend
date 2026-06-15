@@ -6,7 +6,6 @@ from app.services.tradestation_token_maintenance_engine import TradeStationToken
 from app.services.decision_scheduler_engine import DecisionSchedulerEngine
 from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
-from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
@@ -100,6 +99,7 @@ class BackgroundSchedulerService:
         decision = DecisionSchedulerEngine().run_manual_cycle()
         forward = ForwardOutcomeCaptureEngine().capture(limit=1)
         learning = DecisionLearningMemoryEngine().record_current_learning()
+        from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
         health = SystemHealthDashboardEngine().status()
 
         cls._cycle_count += 1

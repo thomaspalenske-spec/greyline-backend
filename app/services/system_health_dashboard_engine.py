@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
-from app.services.decision_scheduler_engine import DecisionSchedulerEngine
+from app.services.background_scheduler_service import BackgroundSchedulerService
 from app.services.learning_analytics_engine import LearningAnalyticsEngine
 from app.services.adaptive_weight_governance_engine import AdaptiveWeightGovernanceEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
@@ -11,12 +11,12 @@ class SystemHealthDashboardEngine:
 
     def status(self):
         broker = TradeStationTokenMaintenanceEngine().evaluate()
-        scheduler = DecisionSchedulerEngine().status()
+        scheduler = BackgroundSchedulerService.status()
         learning = LearningAnalyticsEngine().summarize()
         governance = AdaptiveWeightGovernanceEngine().active_governance()
 
         broker_healthy = broker.get("status") == "TRADESTATION_TOKEN_MAINTENANCE_READY"
-        scheduler_healthy = scheduler.get("status") == "DECISION_SCHEDULER_READY"
+        scheduler_healthy = scheduler.get("thread_alive") is True
         learning_healthy = learning.get("status") == "LEARNING_ANALYTICS_READY"
         governance_healthy = governance.get("status") == "ACTIVE_WEIGHT_GOVERNANCE_READY"
 
