@@ -18,3 +18,8 @@ app/data/live_monitoring/live_monitoring_events.jsonl
 app/data/paper_account_snapshots.json
 logs/
 app/data/runtime/
+
+# GreyLine runtime-generated data logs
+app/data/audit/immutable_audit_ledger.jsonl
+app/data/learning/decision_learning_history.jsonl
+app/data/master_decisions/master_decision_events.jsonl
