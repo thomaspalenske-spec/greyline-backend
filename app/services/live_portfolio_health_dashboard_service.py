@@ -10,7 +10,11 @@ class LivePortfolioHealthDashboardService:
         snapshot = LivePortfolioSnapshotBuilder().build_snapshot()
         latest = LivePortfolioSnapshotRepository().load_latest_snapshot()
 
-        broker_healthy = snapshot.get("snapshot_healthy", False)
+        broker_healthy = (
+            snapshot.get("snapshot_healthy", False)
+            or snapshot.get("raw_snapshot", {}).get("snapshot_healthy", False)
+            or snapshot.get("normalized_snapshot", {}).get("snapshot_healthy", False)
+        )
         persistence_healthy = latest.get("found", False)
 
         overall_healthy = broker_healthy and persistence_healthy
