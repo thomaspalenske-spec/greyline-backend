@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.routes import ai_operator
 from app.routes import core
 from app.routes import paper_trading
 from app.routes import tradestation
@@ -122,3 +123,5 @@ app.include_router(pre_trade_risk_gate.router)
 
 from app.routes import live_trade_authority_gate
 app.include_router(live_trade_authority_gate.router)
+
+app.include_router(ai_operator.router)
