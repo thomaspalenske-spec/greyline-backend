@@ -1,6 +1,8 @@
+import json
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
 from app.services.decision_scheduler_engine import DecisionSchedulerEngine
@@ -10,12 +12,33 @@ from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngin
 
 
 class BackgroundSchedulerService:
+    _state_file = Path("app/data/runtime/background_scheduler_state.json")
     _thread = None
     _stop_event = threading.Event()
     _enabled = False
     _last_run = None
     _last_status = None
     _cycle_count = 0
+
+    @classmethod
+    def _load_state(cls):
+        try:
+            if cls._state_file.exists():
+                data = json.loads(cls._state_file.read_text())
+                cls._last_run = data.get("last_run")
+                cls._last_status = data.get("last_status")
+                cls._cycle_count = int(data.get("cycle_count", 0))
+        except Exception:
+            pass
+
+    @classmethod
+    def _save_state(cls):
+        cls._state_file.parent.mkdir(parents=True, exist_ok=True)
+        cls._state_file.write_text(json.dumps({
+            "last_run": cls._last_run,
+            "last_status": cls._last_status,
+            "cycle_count": cls._cycle_count,
+        }, indent=2))
 
     @classmethod
     def start(cls, interval_seconds=300):
@@ -56,6 +79,7 @@ class BackgroundSchedulerService:
 
     @classmethod
     def status(cls):
+        cls._load_state()
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "scheduler_enabled": cls._enabled,
@@ -81,6 +105,7 @@ class BackgroundSchedulerService:
             except Exception as exc:
                 cls._last_run = datetime.utcnow().isoformat()
                 cls._last_status = f"BACKGROUND_SCHEDULER_CYCLE_FAILED: {exc}"
+                cls._save_state()
                 ImmutableAuditLedgerEngine().record(
                     "BACKGROUND_SCHEDULER_CYCLE_FAILED",
                     {
@@ -105,6 +130,7 @@ class BackgroundSchedulerService:
         cls._cycle_count += 1
         cls._last_run = started
         cls._last_status = "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+        cls._save_state()
 
         ImmutableAuditLedgerEngine().record(
             "BACKGROUND_SCHEDULER_CYCLE",

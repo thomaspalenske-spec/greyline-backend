@@ -17,3 +17,4 @@ app/data/live_portfolio_snapshots/latest_live_portfolio_snapshot.json
 app/data/live_monitoring/live_monitoring_events.jsonl
 app/data/paper_account_snapshots.json
 logs/
+app/data/runtime/
