@@ -77,7 +77,19 @@ class BackgroundSchedulerService:
     @classmethod
     def _run_loop(cls, interval_seconds):
         while not cls._stop_event.is_set():
-            cls._run_cycle()
+            try:
+                cls._run_cycle()
+            except Exception as exc:
+                cls._last_run = datetime.utcnow().isoformat()
+                cls._last_status = f"BACKGROUND_SCHEDULER_CYCLE_FAILED: {exc}"
+                ImmutableAuditLedgerEngine().record(
+                    "BACKGROUND_SCHEDULER_CYCLE_FAILED",
+                    {
+                        "error": str(exc),
+                        "execution_enabled": False,
+                        "order_placement_allowed": False,
+                    },
+                )
             cls._stop_event.wait(interval_seconds)
 
     @classmethod
