@@ -22,6 +22,11 @@ class GreyLineConnectionWatchdogEngine:
         summary_ok = summary.get("status") == "LIVE_ACCOUNT_READY"
         scheduler_ok = scheduler.get("scheduler_enabled") is True and scheduler.get("thread_alive") is True
 
+        if not scheduler_ok:
+            BackgroundSchedulerService.start()
+            scheduler = BackgroundSchedulerService.status()
+            scheduler_ok = scheduler.get("scheduler_enabled") is True and scheduler.get("thread_alive") is True
+
         overall_ready = account_ok and summary_ok and scheduler_ok
 
         result = {
