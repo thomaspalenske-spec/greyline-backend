@@ -31,7 +31,7 @@ class TradeStationAuthUrlEngine:
             "client_id": api_key,
             "redirect_uri": callback_url,
             "audience": "https://api.tradestation.com",
-            "scope": "openid profile offline_access MarketData ReadAccount Trade",
+            "scope": "openid profile offline_access MarketData ReadAccount Trade OptionSpreads",
         })
 
         auth_url = f"https://signin.tradestation.com/authorize?{params}"

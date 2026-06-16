@@ -20,7 +20,7 @@ class TradeStationOAuthUrlEngine:
             "redirect_uri": redirect_uri,
             "audience": "https://api.tradestation.com",
             "state": "greyline_read_only",
-            "scope": "openid offline_access ReadAccount MarketData"
+            "scope": "openid offline_access ReadAccount MarketData OptionSpreads"
         }
 
         return {

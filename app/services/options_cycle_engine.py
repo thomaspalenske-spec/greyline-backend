@@ -1,0 +1,53 @@
+from datetime import datetime
+
+from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
+
+
+class OptionsCycleEngine:
+
+    def run(self):
+        symbol = "NVDA"
+        expiration = "2026-07-17"
+
+        chain = TradeStationOptionChainLiveEngine().get_chain_snapshot(
+            symbol=symbol,
+            expiration=expiration,
+            option_type="All",
+            max_contracts=50,
+        )
+
+        contracts = chain.get("contracts", [])
+
+        calls = [
+            c for c in contracts
+            if c.get("Side") == "Call"
+            and c.get("Legs")
+            and float(c.get("Mid") or 0) > 0
+        ]
+
+        ranked = sorted(
+            calls,
+            key=lambda c: (
+                int(c.get("DailyOpenInterest") or 0),
+                -abs(float(c.get("Delta") or 0) - 0.40),
+                -float(c.get("Mid") or 0),
+            ),
+            reverse=True,
+        )
+
+        top = ranked[0] if ranked else None
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "source": "OPTIONS_CYCLE_ENGINE",
+            "symbol": symbol,
+            "expiration": expiration,
+            "contracts_scanned": len(contracts),
+            "call_contracts_found": len(calls),
+            "top_candidate": top,
+            "paper_trade_recorded": False,
+            "execution_enabled": False,
+            "order_placement_allowed": False,
+            "status": "OPTIONS_CYCLE_READY" if top else "OPTIONS_CYCLE_NO_CANDIDATE",
+        }
