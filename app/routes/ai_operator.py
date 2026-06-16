@@ -9,6 +9,7 @@ from app.services.live_broker_summary_engine import LiveBrokerSummaryEngine
 from app.services.live_trade_authority_gate_engine import LiveTradeAuthorityGateEngine
 from app.services.pre_trade_risk_gate_engine import PreTradeRiskGateEngine
 from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
+from app.routes.paper_trade_executor import run_paper_trade_executor
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 router = APIRouter()
@@ -85,6 +86,7 @@ def ai_command(request: AICommandRequest):
     allowed = {
         "STATUS": lambda: ai_operator_brief(),
         "RUN_MASTER_DECISION": lambda: GreyLineMasterDecisionEngine().evaluate(),
+        "RUN_PAPER_TRADE_EXECUTOR": lambda: run_paper_trade_executor(),
         "RUN_PRE_TRADE_RISK_GATE": lambda: PreTradeRiskGateEngine().evaluate(),
         "RUN_LIVE_AUTHORITY_GATE": lambda: LiveTradeAuthorityGateEngine().evaluate(),
         "RUN_SANDBOX_READINESS": lambda: TradeStationSandboxReadinessEngine().evaluate(),
