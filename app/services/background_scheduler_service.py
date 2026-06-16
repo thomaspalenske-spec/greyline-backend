@@ -9,6 +9,7 @@ from app.services.decision_scheduler_engine import DecisionSchedulerEngine
 from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
+from app.routes.paper_trade_executor import run_paper_trade_executor
 
 
 class BackgroundSchedulerService:
@@ -124,6 +125,7 @@ class BackgroundSchedulerService:
         decision = DecisionSchedulerEngine().run_manual_cycle()
         forward = ForwardOutcomeCaptureEngine().capture(limit=1)
         learning = DecisionLearningMemoryEngine().record_current_learning()
+        paper_executor = run_paper_trade_executor()
         from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
         health = SystemHealthDashboardEngine().status()
 
@@ -140,6 +142,8 @@ class BackgroundSchedulerService:
                 "decision_status": decision.get("status"),
                 "forward_outcome_status": forward.get("status"),
                 "learning_memory_status": learning.get("status"),
+                "paper_executor_status": paper_executor.get("status"),
+                "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
                 "system_health_status": health.get("status"),
                 "overall_health": health.get("overall_health"),
             },
@@ -155,6 +159,8 @@ class BackgroundSchedulerService:
             "decision_status": decision.get("status"),
             "forward_outcome_status": forward.get("status"),
             "learning_memory_status": learning.get("status"),
+            "paper_executor_status": paper_executor.get("status"),
+            "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
             "system_health_status": health.get("status"),
             "overall_health": health.get("overall_health"),
             "execution_enabled": False,
