@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
 from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
 
 router = APIRouter()
@@ -54,12 +55,35 @@ def run_paper_trade_executor():
             "status": "PAPER_TRADE_EXECUTOR_DUPLICATE_BLOCKED",
         }
 
+    quote_result = TradeStationQuoteLiveEngine().get_quote(symbol)
+    quotes = (quote_result.get("response_json") or {}).get("Quotes") or []
+    quote_row = quotes[0] if quotes else {}
+
+    try:
+        entry_price = float(quote_row.get("Last") or 0)
+    except Exception:
+        entry_price = 0.0
+
+    if quote_result.get("http_status") != 200 or entry_price <= 0:
+        return {
+            "system": "GreyLine",
+            "source": "PAPER_TRADE_EXECUTOR",
+            "paper_trade_recorded": False,
+            "decision": decision_value,
+            "symbol": symbol,
+            "quote_status": quote_result.get("status"),
+            "http_status": quote_result.get("http_status"),
+            "entry_price": entry_price,
+            "reason": "LIVE_QUOTE_PRICE_REQUIRED",
+            "status": "PAPER_TRADE_EXECUTOR_PRICE_BLOCKED",
+        }
+
     trade = ledger_engine.record_trade(
         symbol=symbol,
         side="BUY",
         quantity=1,
-        entry_price=0.0,
-        source="PAPER_TRADE_EXECUTOR_FROM_MASTER_DECISION",
+        entry_price=entry_price,
+        source="PAPER_TRADE_EXECUTOR_FROM_MASTER_DECISION_LIVE_QUOTE",
     )
 
     return {
