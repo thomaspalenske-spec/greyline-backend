@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from app.services.tradestation_token_status_engine import TradeStationTokenStatusEngine
 from app.services.options_cycle_engine import OptionsCycleEngine
+from app.services.options_account_dashboard_engine import OptionsAccountDashboardEngine
 from app.services.tradestation_sandbox_readiness_engine import TradeStationSandboxReadinessEngine
 from app.services.live_broker_health_engine import LiveBrokerHealthEngine
 from app.services.live_broker_summary_engine import LiveBrokerSummaryEngine
@@ -89,6 +90,7 @@ def ai_command(request: AICommandRequest):
         "RUN_MASTER_DECISION": lambda: GreyLineMasterDecisionEngine().evaluate(),
         "RUN_PAPER_TRADE_EXECUTOR": lambda: run_paper_trade_executor(),
         "RUN_OPTIONS_CYCLE": lambda: OptionsCycleEngine().run(),
+        "RUN_OPTIONS_STATUS": lambda: OptionsAccountDashboardEngine().get_dashboard(),
         "RUN_PRE_TRADE_RISK_GATE": lambda: PreTradeRiskGateEngine().evaluate(),
         "RUN_LIVE_AUTHORITY_GATE": lambda: LiveTradeAuthorityGateEngine().evaluate(),
         "RUN_SANDBOX_READINESS": lambda: TradeStationSandboxReadinessEngine().evaluate(),
