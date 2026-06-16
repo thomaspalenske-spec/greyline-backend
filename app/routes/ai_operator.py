@@ -9,6 +9,7 @@ from app.services.live_broker_summary_engine import LiveBrokerSummaryEngine
 from app.services.live_trade_authority_gate_engine import LiveTradeAuthorityGateEngine
 from app.services.pre_trade_risk_gate_engine import PreTradeRiskGateEngine
 from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
+from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 router = APIRouter()
 
@@ -55,11 +56,10 @@ def ai_operator_brief():
             "greyline_master_decision",
             lambda: GreyLineMasterDecisionEngine().evaluate()
         ),
-        "audit_ledger_summary": {
-            "ok": False,
-            "name": "audit_ledger_summary",
-            "error": "Temporarily disabled until correct audit summary service is wired"
-        },
+        "audit_ledger_summary": safe_call(
+            "audit_ledger_summary",
+            lambda: ImmutableAuditLedgerEngine().summary()
+        ),
         "execution_policy": {
             "live_order_placement_allowed": False,
             "ai_direct_live_trading_allowed": False,
