@@ -8,6 +8,7 @@ from app.services.tradestation_token_maintenance_engine import TradeStationToken
 from app.services.decision_scheduler_engine import DecisionSchedulerEngine
 from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
+from app.services.paper_position_manager_engine import PaperPositionManagerEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.routes.paper_trade_executor import run_paper_trade_executor
 
@@ -126,6 +127,7 @@ class BackgroundSchedulerService:
         forward = ForwardOutcomeCaptureEngine().capture(limit=1)
         learning = DecisionLearningMemoryEngine().record_current_learning()
         paper_executor = run_paper_trade_executor()
+        paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
         from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
         health = SystemHealthDashboardEngine().status()
 
@@ -144,6 +146,9 @@ class BackgroundSchedulerService:
                 "learning_memory_status": learning.get("status"),
                 "paper_executor_status": paper_executor.get("status"),
                 "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
+            "paper_position_manager_status": paper_position_manager.get("status"),
+            "paper_positions_checked": paper_position_manager.get("positions_checked"),
+            "paper_positions_closed": paper_position_manager.get("positions_closed"),
                 "system_health_status": health.get("status"),
                 "overall_health": health.get("overall_health"),
             },
@@ -161,6 +166,9 @@ class BackgroundSchedulerService:
             "learning_memory_status": learning.get("status"),
             "paper_executor_status": paper_executor.get("status"),
             "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
+            "paper_position_manager_status": paper_position_manager.get("status"),
+            "paper_positions_checked": paper_position_manager.get("positions_checked"),
+            "paper_positions_closed": paper_position_manager.get("positions_closed"),
             "system_health_status": health.get("status"),
             "overall_health": health.get("overall_health"),
             "execution_enabled": False,
