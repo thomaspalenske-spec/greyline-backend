@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
+from app.services.options_paper_trade_ledger_engine import OptionsPaperTradeLedgerEngine
 
 
 class OptionsCycleEngine:
@@ -37,6 +38,13 @@ class OptionsCycleEngine:
 
         top = ranked[0] if ranked else None
 
+        paper_trade = None
+        paper_trade_recorded = False
+
+        if top:
+            paper_trade = OptionsPaperTradeLedgerEngine().record_trade(top)
+            paper_trade_recorded = paper_trade.get("paper_trade_recorded") is True
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
@@ -46,7 +54,8 @@ class OptionsCycleEngine:
             "contracts_scanned": len(contracts),
             "call_contracts_found": len(calls),
             "top_candidate": top,
-            "paper_trade_recorded": False,
+            "paper_trade_recorded": paper_trade_recorded,
+            "paper_trade": paper_trade,
             "execution_enabled": False,
             "order_placement_allowed": False,
             "status": "OPTIONS_CYCLE_READY" if top else "OPTIONS_CYCLE_NO_CANDIDATE",
