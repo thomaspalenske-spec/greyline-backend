@@ -41,9 +41,19 @@ class OptionsCycleEngine:
         paper_trade = None
         paper_trade_recorded = False
 
+        duplicate_blocked = False
+
         if top:
-            paper_trade = OptionsPaperTradeLedgerEngine().record_trade(top)
-            paper_trade_recorded = paper_trade.get("paper_trade_recorded") is True
+            leg = (top.get("Legs") or [{}])[0]
+            option_symbol = leg.get("Symbol")
+
+            ledger = OptionsPaperTradeLedgerEngine()
+
+            if ledger.open_position_exists(option_symbol):
+                duplicate_blocked = True
+            else:
+                paper_trade = ledger.record_trade(top)
+                paper_trade_recorded = paper_trade.get("paper_trade_recorded") is True
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
@@ -55,6 +65,7 @@ class OptionsCycleEngine:
             "call_contracts_found": len(calls),
             "top_candidate": top,
             "paper_trade_recorded": paper_trade_recorded,
+            "duplicate_blocked": duplicate_blocked,
             "paper_trade": paper_trade,
             "execution_enabled": False,
             "order_placement_allowed": False,

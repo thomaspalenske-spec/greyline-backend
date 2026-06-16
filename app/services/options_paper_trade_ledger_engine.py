@@ -53,6 +53,27 @@ class OptionsPaperTradeLedgerEngine:
             "status": "OPTIONS_PAPER_TRADE_RECORDED",
         }
 
+
+    def open_position_exists(self, option_symbol):
+        if not self.ledger_file.exists():
+            return False
+
+        lines = self.ledger_file.read_text().splitlines()
+
+        for line in lines:
+            if not line.strip():
+                continue
+
+            trade = json.loads(line)
+
+            if (
+                trade.get("option_symbol") == option_symbol
+                and trade.get("status") == "OPEN"
+            ):
+                return True
+
+        return False
+
     def history(self, limit=100):
         if not self.ledger_file.exists():
             return {
