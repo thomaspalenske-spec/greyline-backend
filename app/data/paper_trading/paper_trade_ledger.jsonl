@@ -1,1 +1,2 @@
 {"timestamp": "2026-06-16T01:33:09.886877", "symbol": "NVDA", "side": "BUY", "quantity": 1, "entry_price": 145.0, "source": "GREYLINE_MASTER_DECISION", "status": "OPEN"}
+{"timestamp": "2026-06-16T01:41:24.347440", "symbol": "NVDA", "side": "BUY", "quantity": 1, "entry_price": 0.0, "source": "PAPER_TRADE_EXECUTOR_FROM_MASTER_DECISION", "status": "OPEN"}
