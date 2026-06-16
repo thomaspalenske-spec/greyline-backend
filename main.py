@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.routes import ai_operator
+from app.routes import paper_trade_ledger
 from app.routes import core
 from app.routes import paper_trading
 from app.routes import tradestation
@@ -125,3 +126,4 @@ from app.routes import live_trade_authority_gate
 app.include_router(live_trade_authority_gate.router)
 
 app.include_router(ai_operator.router)
+app.include_router(paper_trade_ledger.router)
