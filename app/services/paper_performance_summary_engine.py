@@ -6,6 +6,7 @@ from app.services.paper_equity_timeline_engine import (
 from app.services.paper_drawdown_engine import (
     PaperDrawdownEngine
 )
+from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
 
 
 class PaperPerformanceSummaryEngine:
@@ -21,6 +22,12 @@ class PaperPerformanceSummaryEngine:
             PaperDrawdownEngine()
             .calculate()
         )
+
+        ledger = PaperTradeLedgerEngine().history(limit=10000)
+        trades = ledger.get("trades", [])
+        open_trades = [t for t in trades if t.get("status") == "OPEN"]
+        closed_trades = [t for t in trades if t.get("status") == "CLOSED"]
+        symbols = sorted(list(set(t.get("symbol") for t in trades if t.get("symbol"))))
 
         latest_equity = timeline.get(
             "latest_equity",
@@ -68,6 +75,13 @@ class PaperPerformanceSummaryEngine:
                     "snapshot_count",
                     0
                 ),
+            "paper_trade_count": len(trades),
+            "open_trade_count": len(open_trades),
+            "closed_trade_count": len(closed_trades),
+            "symbols_traded": symbols,
+            "win_count": 0,
+            "loss_count": 0,
+            "win_rate_pct": 0,
             "status":
                 "PERFORMANCE_SUMMARY_READY"
         }
