@@ -35,7 +35,26 @@ def run_paper_trade_executor():
             "status": "PAPER_TRADE_EXECUTOR_BLOCKED",
         }
 
-    trade = PaperTradeLedgerEngine().record_trade(
+    ledger_engine = PaperTradeLedgerEngine()
+    ledger = ledger_engine.history(limit=10000)
+    open_trades = [
+        trade for trade in ledger.get("trades", [])
+        if trade.get("symbol") == symbol and trade.get("status") == "OPEN"
+    ]
+
+    if open_trades:
+        return {
+            "system": "GreyLine",
+            "source": "PAPER_TRADE_EXECUTOR",
+            "paper_trade_recorded": False,
+            "decision": decision_value,
+            "symbol": symbol,
+            "open_trade_count_for_symbol": len(open_trades),
+            "reason": "OPEN_PAPER_POSITION_ALREADY_EXISTS",
+            "status": "PAPER_TRADE_EXECUTOR_DUPLICATE_BLOCKED",
+        }
+
+    trade = ledger_engine.record_trade(
         symbol=symbol,
         side="BUY",
         quantity=1,
