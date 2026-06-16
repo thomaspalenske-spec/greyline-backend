@@ -1,87 +1,52 @@
 from datetime import datetime
 
-from app.services.paper_equity_timeline_engine import (
-    PaperEquityTimelineEngine
-)
-from app.services.paper_drawdown_engine import (
-    PaperDrawdownEngine
-)
+from app.services.paper_drawdown_engine import PaperDrawdownEngine
 from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
 
 
 class PaperPerformanceSummaryEngine:
 
     def summarize(self):
-
-        timeline = (
-            PaperEquityTimelineEngine()
-            .build_timeline()
-        )
-
-        drawdown = (
-            PaperDrawdownEngine()
-            .calculate()
-        )
+        starting_equity = 10000.0
 
         ledger = PaperTradeLedgerEngine().history(limit=10000)
         trades = ledger.get("trades", [])
+
         open_trades = [t for t in trades if t.get("status") == "OPEN"]
         closed_trades = [t for t in trades if t.get("status") == "CLOSED"]
         symbols = sorted(list(set(t.get("symbol") for t in trades if t.get("symbol"))))
 
-        latest_equity = timeline.get(
-            "latest_equity",
-            0
-        )
+        realized_pnl = round(sum(float(t.get("realized_pnl") or 0) for t in closed_trades), 2)
+        unrealized_pnl = round(sum(float(t.get("unrealized_pnl") or 0) for t in open_trades), 2)
 
-        highest_equity = timeline.get(
-            "highest_equity",
-            0
-        )
+        latest_equity = round(starting_equity + realized_pnl + unrealized_pnl, 2)
+        highest_equity = max(starting_equity, latest_equity)
 
-        starting_equity = (
-            timeline["timeline"][0]["equity"]
-            if timeline.get("timeline")
-            else 0
-        )
+        total_return_pct = round(((latest_equity - starting_equity) / starting_equity) * 100, 2)
 
-        total_return_pct = 0
+        wins = [t for t in closed_trades if float(t.get("realized_pnl") or 0) > 0]
+        losses = [t for t in closed_trades if float(t.get("realized_pnl") or 0) < 0]
 
-        if starting_equity > 0:
-            total_return_pct = (
-                (
-                    latest_equity
-                    - starting_equity
-                )
-                / starting_equity
-            ) * 100
+        win_rate_pct = 0
+        if closed_trades:
+            win_rate_pct = round((len(wins) / len(closed_trades)) * 100, 2)
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "starting_equity": starting_equity,
             "latest_equity": latest_equity,
             "highest_equity": highest_equity,
-            "total_return_pct": round(
-                total_return_pct,
-                2
-            ),
-            "max_drawdown_pct":
-                drawdown.get(
-                    "max_drawdown_pct",
-                    0
-                ),
-            "snapshot_count":
-                timeline.get(
-                    "snapshot_count",
-                    0
-                ),
+            "realized_pnl": realized_pnl,
+            "unrealized_pnl": unrealized_pnl,
+            "total_return_pct": total_return_pct,
+            "max_drawdown_pct": PaperDrawdownEngine().calculate().get("max_drawdown_pct", 0),
+            "snapshot_count": 1,
             "paper_trade_count": len(trades),
             "open_trade_count": len(open_trades),
             "closed_trade_count": len(closed_trades),
             "symbols_traded": symbols,
-            "win_count": 0,
-            "loss_count": 0,
-            "win_rate_pct": 0,
-            "status":
-                "PERFORMANCE_SUMMARY_READY"
+            "win_count": len(wins),
+            "loss_count": len(losses),
+            "win_rate_pct": win_rate_pct,
+            "status": "PERFORMANCE_SUMMARY_READY"
         }
