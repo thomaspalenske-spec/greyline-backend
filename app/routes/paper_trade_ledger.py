@@ -1,29 +1,16 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
-
 from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
-
 
 router = APIRouter()
 
+@router.post("/paper-trade-ledger/open")
+def open_trade(symbol: str = "PLTR", side: str = "BUY", quantity: int = 1, entry_price: float = 0.0):
+    return PaperTradeLedgerEngine().open_trade(symbol, side, quantity, entry_price)
 
-class PaperTradeRequest(BaseModel):
-    symbol: str
-    side: str
-    quantity: int
-    entry_price: float
+@router.post("/paper-trade-ledger/close")
+def close_trade(symbol: str = "PLTR", exit_price: float = 0.0):
+    return PaperTradeLedgerEngine().close_latest(symbol, exit_price)
 
-
-@router.get("/paper-trade-ledger/history")
-def paper_trade_history():
+@router.get("/paper-trade-ledger")
+def history():
     return PaperTradeLedgerEngine().history()
-
-
-@router.post("/paper-trade-ledger/record")
-def paper_trade_record(request: PaperTradeRequest):
-    return PaperTradeLedgerEngine().record_trade(
-        symbol=request.symbol,
-        side=request.side,
-        quantity=request.quantity,
-        entry_price=request.entry_price,
-    )

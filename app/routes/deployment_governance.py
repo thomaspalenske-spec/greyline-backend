@@ -1,0 +1,8 @@
+from fastapi import APIRouter
+from app.services.deployment_governance_layer import DeploymentGovernanceLayer
+
+router = APIRouter()
+
+@router.get("/deployment-governance")
+def deployment_governance():
+    return DeploymentGovernanceLayer().score()

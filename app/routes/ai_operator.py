@@ -1,3 +1,6 @@
+from app.services.paper_trade_lifecycle_engine import PaperTradeLifecycleEngine
+from app.services.paper_trade_candidate_engine import PaperTradeCandidateEngine
+from app.services.deployment_governance_layer import DeploymentGovernanceLayer
 from datetime import datetime
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -88,7 +91,33 @@ def ai_command(request: AICommandRequest):
 
     allowed = {
         "STATUS": lambda: ai_operator_brief(),
-        "RUN_MASTER_DECISION": lambda: GreyLineMasterDecisionEngine().evaluate(),
+        "RUN_PAPER_TRADE_ENTRY": lambda: PaperTradeLifecycleEngine().entry(),
+        "RUN_PAPER_TRADE_MARK_TO_MARKET": lambda: PaperTradeLifecycleEngine().mark_to_market(),
+        "RUN_PAPER_TRADE_EXIT": lambda: PaperTradeLifecycleEngine().exit(),
+        "RUN_PAPER_TRADE_CANDIDATE": lambda: PaperTradeCandidateEngine().build_ticket(),
+        "RUN_MASTER_DECISION": lambda: (
+    lambda decision, dgl: {
+        **decision,
+        "deployment_governance": dgl,
+        "paper_trade_promotion": {
+            "eligible": (
+                decision.get("top_candidate", {}).get("result") == "WATCH"
+                and dgl.get("deployment_state") in ["READY", "EXECUTE", "EXECUTE_AGGRESSIVE"]
+                and decision.get("order_placement_allowed") is False
+            ),
+            "promoted_state": (
+                "READY_FOR_PAPER_TRADE"
+                if (
+                    decision.get("top_candidate", {}).get("result") == "WATCH"
+                    and dgl.get("deployment_state") in ["READY", "EXECUTE", "EXECUTE_AGGRESSIVE"]
+                    and decision.get("order_placement_allowed") is False
+                )
+                else "NO_PROMOTION"
+            ),
+            "reason": "Candidate is actionable at reduced size, but live order placement is disabled."
+        }
+    }
+)(GreyLineMasterDecisionEngine().evaluate(), DeploymentGovernanceLayer().score()),
         "RUN_PAPER_TRADE_EXECUTOR": lambda: run_paper_trade_executor(),
         "RUN_OPTIONS_CYCLE": lambda: OptionsCycleEngine().run(),
         "RUN_OPTIONS_STATUS": lambda: OptionsAccountDashboardEngine().get_dashboard(),

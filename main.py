@@ -126,6 +126,8 @@ from app.routes import pre_trade_risk_gate
 app.include_router(pre_trade_risk_gate.router)
 
 from app.routes import live_trade_authority_gate
+from app.routes import deployment_governance
+from app.routes import paper_trade_history
 app.include_router(live_trade_authority_gate.router)
 
 app.include_router(ai_operator.router)
@@ -133,3 +135,7 @@ app.include_router(paper_trade_ledger.router)
 app.include_router(paper_account_dashboard_route.router)
 app.include_router(options_account_dashboard.router)
 app.include_router(paper_trade_executor.router)
+
+app.include_router(deployment_governance.router)
+
+app.include_router(paper_trade_history.router)
