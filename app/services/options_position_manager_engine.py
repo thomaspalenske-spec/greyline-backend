@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, time
 from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
@@ -9,6 +9,53 @@ class OptionsPositionManagerEngine:
 
     def __init__(self):
         self.ledger_file = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
+
+    def _parse_expiration(self, expiration_value):
+        if not expiration_value:
+            return None
+
+        raw = str(expiration_value).replace("Z", "+00:00")
+
+        try:
+            return datetime.fromisoformat(raw).replace(tzinfo=None)
+        except Exception:
+            return None
+
+    def _last_market_opportunity(self, expiration_dt):
+        """
+        Assumes standard U.S. equity/options market close at 4:00 PM Eastern
+        on expiration date. This is a paper-trading safety rule.
+        """
+        if expiration_dt is None:
+            return None
+
+        return datetime.combine(expiration_dt.date(), time(16, 0))
+
+    def _maturity_liquidation_required(self, expiration_value):
+        expiration_dt = self._parse_expiration(expiration_value)
+        last_market_opportunity = self._last_market_opportunity(expiration_dt)
+
+        if last_market_opportunity is None:
+            return {
+                "required": False,
+                "reason": "EXPIRATION_UNAVAILABLE",
+                "last_market_opportunity": None,
+                "forced_liquidation_deadline": None,
+            }
+
+        forced_liquidation_deadline = last_market_opportunity - timedelta(hours=24)
+        now = datetime.utcnow()
+
+        return {
+            "required": now >= forced_liquidation_deadline,
+            "reason": (
+                "WITHIN_24_HOURS_OF_LAST_MARKET_OPPORTUNITY"
+                if now >= forced_liquidation_deadline
+                else "MATURITY_WINDOW_NOT_REACHED"
+            ),
+            "last_market_opportunity": last_market_opportunity.isoformat(),
+            "forced_liquidation_deadline": forced_liquidation_deadline.isoformat(),
+        }
 
     def manage_open_positions(self):
         if not self.ledger_file.exists():
@@ -49,6 +96,9 @@ class OptionsPositionManagerEngine:
                 or 0
             )
 
+            maturity_rule = self._maturity_liquidation_required(trade.get("expiration"))
+            trade["maturity_rule"] = maturity_rule
+
             if current_price <= 0 or entry_price <= 0:
                 trade["manager_status"] = "OPTION_PRICE_UNAVAILABLE"
                 trade["last_managed_at"] = datetime.utcnow().isoformat()
@@ -64,7 +114,16 @@ class OptionsPositionManagerEngine:
             trade["last_managed_at"] = datetime.utcnow().isoformat()
             trade["manager_status"] = "OPTION_POSITION_UPDATED"
 
-            if pnl_pct >= 50:
+            if maturity_rule.get("required") is True:
+                trade["status"] = "CLOSED"
+                trade["exit_price"] = current_price
+                trade["exit_timestamp"] = datetime.utcnow().isoformat()
+                trade["realized_pnl"] = pnl
+                trade["realized_pnl_pct"] = pnl_pct
+                trade["exit_reason"] = "OPTIONS_MATURITY_PROTECTION_24HR"
+                closed.append(trade)
+
+            elif pnl_pct >= 50:
                 trade["status"] = "CLOSED"
                 trade["exit_price"] = current_price
                 trade["exit_timestamp"] = datetime.utcnow().isoformat()
