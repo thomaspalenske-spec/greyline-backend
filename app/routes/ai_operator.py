@@ -17,6 +17,7 @@ from app.services.pre_trade_risk_gate_engine import PreTradeRiskGateEngine
 from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
 from app.routes.paper_trade_executor import run_paper_trade_executor
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
+from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
 
 router = APIRouter()
 
@@ -66,6 +67,10 @@ def ai_operator_brief():
         "audit_ledger_summary": safe_call(
             "audit_ledger_summary",
             lambda: ImmutableAuditLedgerEngine().summary()
+        ),
+        "fast_quote_heartbeat": safe_call(
+            "fast_quote_heartbeat",
+            lambda: FastQuoteHeartbeatService.status()
         ),
         "execution_policy": {
             "live_order_placement_allowed": False,

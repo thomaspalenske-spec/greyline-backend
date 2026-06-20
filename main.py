@@ -139,3 +139,29 @@ app.include_router(paper_trade_executor.router)
 app.include_router(deployment_governance.router)
 
 app.include_router(paper_trade_history.router)
+
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
+
+templates = Jinja2Templates(directory="app/templates")
+
+@app.get("/operator-dashboard", response_class=HTMLResponse)
+async def operator_dashboard(request: Request):
+    return templates.TemplateResponse("operator_dashboard.html", {"request": request})
+
+from app.routes import greyline_reliability_core
+app.include_router(greyline_reliability_core.router)
+
+from app.routes import fast_quote_heartbeat
+app.include_router(fast_quote_heartbeat.router)
+
+from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
+
+@app.on_event("startup")
+def auto_start_fast_quote_heartbeat():
+    FastQuoteHeartbeatService.start(
+        symbols=["AMD", "NVDA"],
+        interval_market_open_seconds=5,
+        interval_market_closed_seconds=300,
+    )
