@@ -2,6 +2,7 @@ from app.services.paper_trade_lifecycle_engine import PaperTradeLifecycleEngine
 from app.services.paper_trade_candidate_engine import PaperTradeCandidateEngine
 from app.services.deployment_governance_layer import DeploymentGovernanceLayer
 from datetime import datetime
+import threading
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -24,6 +25,47 @@ from app.routes.greyline_market_battlefield_summary import greyline_market_battl
 
 router = APIRouter()
 
+
+
+_battlefield_refresh_state = {
+    "running": False,
+    "last_started_at": None,
+    "last_completed_at": None,
+    "last_duration_seconds": None,
+    "last_status": "NEVER_RUN",
+    "last_error": None,
+}
+
+
+def _battlefield_refresh_status():
+    now = datetime.utcnow()
+    state = dict(_battlefield_refresh_state)
+
+    if state.get("running") is True and state.get("last_started_at"):
+        try:
+            started = datetime.fromisoformat(state["last_started_at"])
+            running_seconds = round((now - started).total_seconds(), 2)
+            state["running_seconds"] = running_seconds
+
+            if running_seconds > 600:
+                state["last_status"] = "STALE_RUNNING_REVIEW_REQUIRED"
+                state["stale_running"] = True
+                state["stale_threshold_seconds"] = 600
+            else:
+                state["stale_running"] = False
+                state["stale_threshold_seconds"] = 600
+        except Exception as e:
+            state["running_seconds"] = None
+            state["stale_running"] = None
+            state["last_error"] = str(e)
+
+    return {
+        "timestamp": now.isoformat(),
+        "system": "GreyLine",
+        "refresh_target": "MARKET_BATTLEFIELD_SUMMARY",
+        **state,
+        "status": "MARKET_BATTLEFIELD_REFRESH_STATUS_READY",
+    }
 
 def safe_call(name, fn):
     try:
@@ -126,6 +168,55 @@ def _run_master_decision_with_governance():
     }
     return decision
 
+
+def _run_battlefield_summary_refresh_background():
+    if _battlefield_refresh_state["running"] is True:
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "background_refresh_started": False,
+            "reason": "REFRESH_ALREADY_RUNNING",
+            "refresh_status": _battlefield_refresh_status(),
+            "status": "MARKET_BATTLEFIELD_BACKGROUND_REFRESH_ALREADY_RUNNING",
+        }
+
+    def worker():
+        started = datetime.utcnow()
+        _battlefield_refresh_state["running"] = True
+        _battlefield_refresh_state["last_started_at"] = started.isoformat()
+        _battlefield_refresh_state["last_completed_at"] = None
+        _battlefield_refresh_state["last_duration_seconds"] = None
+        _battlefield_refresh_state["last_status"] = "RUNNING"
+        _battlefield_refresh_state["last_error"] = None
+
+        try:
+            greyline_market_battlefield_summary(force_refresh=True)
+            completed = datetime.utcnow()
+            _battlefield_refresh_state["last_completed_at"] = completed.isoformat()
+            _battlefield_refresh_state["last_duration_seconds"] = round((completed - started).total_seconds(), 2)
+            _battlefield_refresh_state["last_status"] = "COMPLETED"
+        except Exception as e:
+            completed = datetime.utcnow()
+            _battlefield_refresh_state["last_completed_at"] = completed.isoformat()
+            _battlefield_refresh_state["last_duration_seconds"] = round((completed - started).total_seconds(), 2)
+            _battlefield_refresh_state["last_status"] = "FAILED"
+            _battlefield_refresh_state["last_error"] = str(e)
+        finally:
+            _battlefield_refresh_state["running"] = False
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "system": "GreyLine",
+        "background_refresh_started": True,
+        "refresh_target": "MARKET_BATTLEFIELD_SUMMARY",
+        "refresh_status": _battlefield_refresh_status(),
+        "status": "MARKET_BATTLEFIELD_BACKGROUND_REFRESH_STARTED"
+    }
+
+
 @router.post("/ai-command")
 
 
@@ -141,6 +232,9 @@ def ai_command(request: AICommandRequest):
         "RUN_MASTER_DECISION": lambda: _run_master_decision_with_governance(),
         "RUN_MARKET_BATTLEFIELD": lambda: greyline_market_battlefield(),
         "RUN_MARKET_BATTLEFIELD_SUMMARY": lambda: greyline_market_battlefield_summary(),
+        "RUN_MARKET_BATTLEFIELD_SUMMARY_REFRESH": lambda: greyline_market_battlefield_summary(force_refresh=True),
+        "RUN_MARKET_BATTLEFIELD_SUMMARY_REFRESH_BACKGROUND": lambda: _run_battlefield_summary_refresh_background(),
+        "RUN_MARKET_BATTLEFIELD_REFRESH_STATUS": lambda: _battlefield_refresh_status(),
         "RUN_MARKET_BATTLEFIELD_CACHE_CLEAR": lambda: MarketBattlefieldSnapshotCache.clear(),
         "RUN_PAPER_TRADE_EXECUTOR": lambda: run_paper_trade_executor(),
         "RUN_OPTIONS_CYCLE": lambda: OptionsCycleEngine().run(),
@@ -165,13 +259,24 @@ def ai_command(request: AICommandRequest):
             "status": "AI_COMMAND_REJECTED"
         }
 
+    command_started_at = datetime.utcnow()
+    result = allowed[command]()
+    command_completed_at = datetime.utcnow()
+    command_duration_seconds = round(
+        (command_completed_at - command_started_at).total_seconds(),
+        2
+    )
+
     return {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": command_completed_at.isoformat(),
+        "command_started_at": command_started_at.isoformat(),
+        "command_completed_at": command_completed_at.isoformat(),
+        "command_duration_seconds": command_duration_seconds,
         "system": "GreyLine",
         "source": "AI_COMMAND",
         "command": command,
         "accepted": True,
         "live_order_placement_allowed": False,
-        "result": allowed[command](),
+        "result": result,
         "status": "AI_COMMAND_COMPLETE"
     }

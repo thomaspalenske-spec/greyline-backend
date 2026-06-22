@@ -32,6 +32,7 @@ class OpportunitySummaryEngine:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "symbols_scored": len(rows),
+            "opportunity_scoring_timings": scoring.get("opportunity_scoring_timings"),
             "opportunities": rows,
             "execution_enabled": False,
             "status": "OPPORTUNITY_SUMMARY_READY"

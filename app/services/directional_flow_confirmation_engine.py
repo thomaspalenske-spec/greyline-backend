@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.institutional_premium_flow_engine import InstitutionalPremiumFlowEngine
 
 
 class DirectionalFlowConfirmationEngine:
@@ -27,6 +28,8 @@ class DirectionalFlowConfirmationEngine:
             aligned = False
             flow_strength = 0
 
+        premium_flow = InstitutionalPremiumFlowEngine().evaluate(candidate)
+
         if flow_strength >= 80 and aligned:
             confirmation = "STRONG_FLOW_CONFIRMATION"
         elif flow_strength >= 65 and aligned:
@@ -47,6 +50,7 @@ class DirectionalFlowConfirmationEngine:
             "flow_aligned": aligned,
             "flow_strength": flow_strength,
             "confirmation": confirmation,
+            "premium_flow": premium_flow,
             "direct_flow_feeds_connected": False,
             "flow_source": "INFERRED_FROM_DIRECTIONAL_SCORE_LIQUIDITY_SETUP_CONFIDENCE",
             "status": "DIRECTIONAL_FLOW_CONFIRMATION_READY",

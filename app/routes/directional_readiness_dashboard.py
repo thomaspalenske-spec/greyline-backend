@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from datetime import datetime
 
 from app.services.opportunity_summary_engine import OpportunitySummaryEngine
 from app.services.call_readiness_gate_engine import CallReadinessGateEngine
@@ -12,7 +13,14 @@ router = APIRouter()
 
 @router.get("/directional-readiness-dashboard")
 def directional_readiness_dashboard():
+    dashboard_started_at = datetime.utcnow()
+    timings = {}
+
+    t0 = datetime.utcnow()
     summary = OpportunitySummaryEngine().get_summary(limit=50)
+    t1 = datetime.utcnow()
+    timings["opportunity_summary_seconds"] = round((t1 - t0).total_seconds(), 2)
+
     opportunities = summary.get("opportunities", [])
 
     calls = sorted(
@@ -33,8 +41,15 @@ def directional_readiness_dashboard():
         reverse=True,
     )
 
+    t0 = datetime.utcnow()
     call_readiness = [CallReadinessGateEngine().evaluate(item) for item in calls[:10]]
+    t1 = datetime.utcnow()
+    timings["call_readiness_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+    t0 = datetime.utcnow()
     put_readiness = [PutReadinessGateEngine().evaluate(item) for item in puts[:10]]
+    t1 = datetime.utcnow()
+    timings["put_readiness_seconds"] = round((t1 - t0).total_seconds(), 2)
 
     ready_calls = [row for row in call_readiness if row.get("call_ready_for_execute") is True]
     ready_puts = [row for row in put_readiness if row.get("put_ready_for_execute") is True]
@@ -42,13 +57,55 @@ def directional_readiness_dashboard():
     closest_call = sorted(call_readiness, key=lambda x: len(x.get("blockers", [])))[0] if call_readiness else None
     closest_put = sorted(put_readiness, key=lambda x: len(x.get("blockers", [])))[0] if put_readiness else None
 
+    t0 = datetime.utcnow()
     symmetry = OpportunitySymmetryEngine().evaluate(opportunities)
+    t1 = datetime.utcnow()
+    timings["symmetry_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+    t0 = datetime.utcnow()
     flow_feed_readiness = flow_feed_readiness_report()
+    t1 = datetime.utcnow()
+    timings["flow_feed_readiness_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+    t0 = datetime.utcnow()
+    best_call_flow_confirmation = DirectionalFlowConfirmationEngine().evaluate(calls[0] if calls else None)
+    t1 = datetime.utcnow()
+    timings["best_call_flow_confirmation_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+    t0 = datetime.utcnow()
+    best_put_flow_confirmation = DirectionalFlowConfirmationEngine().evaluate(puts[0] if puts else None)
+    t1 = datetime.utcnow()
+    timings["best_put_flow_confirmation_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+    t0 = datetime.utcnow()
+    ready_call_flow_confirmations = [
+        DirectionalFlowConfirmationEngine().evaluate(calls[i])
+        for i, row in enumerate(call_readiness)
+        if row.get("call_ready_for_execute") is True and i < len(calls)
+    ]
+    t1 = datetime.utcnow()
+    timings["ready_call_flow_confirmations_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+    t0 = datetime.utcnow()
+    ready_put_flow_confirmations = [
+        DirectionalFlowConfirmationEngine().evaluate(puts[i])
+        for i, row in enumerate(put_readiness)
+        if row.get("put_ready_for_execute") is True and i < len(puts)
+    ]
+    t1 = datetime.utcnow()
+    timings["ready_put_flow_confirmations_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+    dashboard_completed_at = datetime.utcnow()
+    timings["total_directional_readiness_seconds"] = round((dashboard_completed_at - dashboard_started_at).total_seconds(), 2)
 
     return {
         "system": "GreyLine",
         "endpoint": "/directional-readiness-dashboard",
         "purpose": "Commander-level call versus put readiness display.",
+        "dashboard_started_at": dashboard_started_at.isoformat(),
+        "dashboard_completed_at": dashboard_completed_at.isoformat(),
+        "dashboard_timings": timings,
+        "opportunity_scoring_timings": summary.get("opportunity_scoring_timings"),
         "symbols_scored": summary.get("symbols_scored"),
         "opportunity_bias": symmetry.get("opportunity_bias"),
         "institutional_flow_warning": {
@@ -65,22 +122,14 @@ def directional_readiness_dashboard():
         "best_call": calls[0] if calls else None,
         "best_put": puts[0] if puts else None,
         "best_call_readiness": call_readiness[0] if call_readiness else None,
-        "best_call_flow_confirmation": DirectionalFlowConfirmationEngine().evaluate(calls[0] if calls else None),
+        "best_call_flow_confirmation": best_call_flow_confirmation,
         "best_put_readiness": put_readiness[0] if put_readiness else None,
-        "best_put_flow_confirmation": DirectionalFlowConfirmationEngine().evaluate(puts[0] if puts else None),
+        "best_put_flow_confirmation": best_put_flow_confirmation,
         "closest_call_to_ready": closest_call,
         "closest_put_to_ready": closest_put,
         "ready_calls": ready_calls,
         "ready_puts": ready_puts,
-        "ready_call_flow_confirmations": [
-            DirectionalFlowConfirmationEngine().evaluate(calls[i])
-            for i, row in enumerate(call_readiness)
-            if row.get("call_ready_for_execute") is True and i < len(calls)
-        ],
-        "ready_put_flow_confirmations": [
-            DirectionalFlowConfirmationEngine().evaluate(puts[i])
-            for i, row in enumerate(put_readiness)
-            if row.get("put_ready_for_execute") is True and i < len(puts)
-        ],
+        "ready_call_flow_confirmations": ready_call_flow_confirmations,
+        "ready_put_flow_confirmations": ready_put_flow_confirmations,
         "status": "DIRECTIONAL_READINESS_DASHBOARD_READY",
     }
