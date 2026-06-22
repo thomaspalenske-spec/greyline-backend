@@ -4,12 +4,14 @@ from datetime import datetime
 from app.routes.directional_readiness_dashboard import directional_readiness_dashboard
 from app.routes.flow_feed_readiness_report import flow_feed_readiness_report
 from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
+from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
 router = APIRouter()
 
 
 @router.get("/greyline-market-battlefield")
 def greyline_market_battlefield(include_master_decision: bool = False):
+    TradeStationQuoteLiveEngine.clear_cache()
     battlefield_started_at = datetime.utcnow()
     timings = {}
 
