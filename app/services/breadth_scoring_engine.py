@@ -4,6 +4,7 @@ from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEng
 
 
 class BreadthScoringEngine:
+    _quote_context_cache = {}
 
     def _float(self, value, default=0.0):
         try:
@@ -12,13 +13,19 @@ class BreadthScoringEngine:
             return default
 
     def _quote_context(self, symbol):
+        symbol = symbol.upper().strip()
+        if symbol in self._quote_context_cache:
+            return dict(self._quote_context_cache[symbol])
+
         result = TradeStationQuoteLiveEngine().get_quote(symbol)
 
         if result.get("http_status") != 200:
-            return {
+            context = {
                 "symbol": symbol,
                 "available": False
             }
+            self._quote_context_cache[symbol] = dict(context)
+            return context
 
         quotes = result.get("response_json", {}).get("Quotes", [])
         quote = quotes[0] if quotes else {}
@@ -34,7 +41,7 @@ class BreadthScoringEngine:
         above_vwap = bool(vwap and last > vwap)
         volume_confirming = bool(previous_volume and volume >= previous_volume * 0.7)
 
-        return {
+        context = {
             "symbol": symbol,
             "available": True,
             "last": last,
@@ -47,6 +54,8 @@ class BreadthScoringEngine:
             "above_vwap": above_vwap,
             "volume_confirming": volume_confirming
         }
+        self._quote_context_cache[symbol] = dict(context)
+        return context
 
     def score_symbol(self, symbol):
         symbol = symbol.upper().strip()

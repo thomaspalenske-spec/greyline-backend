@@ -4,6 +4,15 @@ from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEng
 
 
 class AsymmetryScoringEngine:
+    _quote_cache = {}
+
+    def _quote(self, symbol):
+        symbol = symbol.upper().strip()
+        if symbol in self._quote_cache:
+            return dict(self._quote_cache[symbol])
+        result = TradeStationQuoteLiveEngine().get_quote(symbol)
+        self._quote_cache[symbol] = dict(result)
+        return result
 
     def _float(self, value, default=0.0):
         try:
@@ -13,7 +22,7 @@ class AsymmetryScoringEngine:
 
     def score_symbol(self, symbol):
         symbol = symbol.upper().strip()
-        quote_result = TradeStationQuoteLiveEngine().get_quote(symbol)
+        quote_result = self._quote(symbol)
 
         if quote_result.get("http_status") != 200:
             return {

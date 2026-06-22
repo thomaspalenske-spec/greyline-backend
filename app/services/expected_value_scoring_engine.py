@@ -9,14 +9,14 @@ from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 
 class ExpectedValueScoringEngine:
 
-    def score_symbol(self, symbol):
+    def score_symbol(self, symbol, regime=None, risk=None, breadth=None, setup=None, asymmetry=None):
         symbol = symbol.upper().strip()
 
-        regime = RegimeScoringEngine().score_symbol(symbol)
-        risk = RiskStateScoringEngine().score_symbol(symbol)
-        breadth = BreadthScoringEngine().score_symbol(symbol)
-        setup = SetupScoringEngine().score_symbol(symbol)
-        asymmetry = AsymmetryScoringEngine().score_symbol(symbol)
+        regime = regime or RegimeScoringEngine().score_symbol(symbol)
+        risk = risk or RiskStateScoringEngine().score_symbol(symbol)
+        breadth = breadth or BreadthScoringEngine().score_symbol(symbol)
+        setup = setup or SetupScoringEngine().score_symbol(symbol)
+        asymmetry = asymmetry or AsymmetryScoringEngine().score_symbol(symbol)
 
         regime_score = regime.get("regime_score", 50)
         risk_score = risk.get("risk_state_score", 50)

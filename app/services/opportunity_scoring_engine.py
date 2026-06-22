@@ -17,7 +17,15 @@ from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 class OpportunityScoringEngine:
 
     def score_opportunities(self, limit=None):
+        scoring_started_at = datetime.utcnow()
+        timings = {
+            "per_symbol": []
+        }
+
+        t0 = datetime.utcnow()
         quote_scan = LiveUniverseQuoteScanner().scan_safe_subset()
+        t1 = datetime.utcnow()
+        timings["quote_scan_seconds"] = round((t1 - t0).total_seconds(), 2)
 
         opportunities = []
         symbols = quote_scan.get("symbols", [])
@@ -25,6 +33,9 @@ class OpportunityScoringEngine:
             symbols = symbols[:limit]
 
         for item in symbols:
+            symbol_started_at = datetime.utcnow()
+            symbol_timings = {}
+
             symbol = item.get("symbol")
             quote_status = item.get("quote_status")
             http_status = item.get("http_status")
@@ -37,26 +48,64 @@ class OpportunityScoringEngine:
                 market_data_score = 25
             else:
                 market_data_score = 0
+            t0 = datetime.utcnow()
             liquidity_score = LiquidityScoringEngine().score_symbol(symbol).get('liquidity_score', 50)
-            setup_score = SetupScoringEngine().score_symbol(symbol).get('setup_score', 50)
+            t1 = datetime.utcnow()
+            symbol_timings["liquidity_seconds"] = round((t1 - t0).total_seconds(), 2)
 
+            t0 = datetime.utcnow()
+            setup_score = SetupScoringEngine().score_symbol(symbol).get('setup_score', 50)
+            t1 = datetime.utcnow()
+            symbol_timings["setup_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+            t0 = datetime.utcnow()
             regime_result = RegimeScoringEngine().score_symbol(symbol)
+            t1 = datetime.utcnow()
+            symbol_timings["regime_seconds"] = round((t1 - t0).total_seconds(), 2)
             regime_score = regime_result.get("regime_score", 50)
 
+            t0 = datetime.utcnow()
             volatility_score = VolatilityScoringEngine().score_symbol(symbol).get("volatility_score", 50)
+            t1 = datetime.utcnow()
+            symbol_timings["volatility_seconds"] = round((t1 - t0).total_seconds(), 2)
 
-            expected_value_score = ExpectedValueScoringEngine().score_symbol(symbol).get("expected_value_score", 50)
-
+            t0 = datetime.utcnow()
             trend_persistence_score = TrendPersistenceScoringEngine().score_symbol(symbol).get("trend_persistence_score", 50)
+            t1 = datetime.utcnow()
+            symbol_timings["trend_persistence_seconds"] = round((t1 - t0).total_seconds(), 2)
 
+            t0 = datetime.utcnow()
             breadth_score = BreadthScoringEngine().score_symbol(symbol).get("breadth_score", 50)
+            t1 = datetime.utcnow()
+            symbol_timings["breadth_seconds"] = round((t1 - t0).total_seconds(), 2)
 
+            t0 = datetime.utcnow()
             institutional_sponsorship_score = InstitutionalSponsorshipScoringEngine().score_symbol(symbol).get("institutional_sponsorship_score", 50)
+            t1 = datetime.utcnow()
+            symbol_timings["institutional_sponsorship_seconds"] = round((t1 - t0).total_seconds(), 2)
 
+            t0 = datetime.utcnow()
             asymmetry_score = AsymmetryScoringEngine().score_symbol(symbol).get("asymmetry_score", 50)
+            t1 = datetime.utcnow()
+            symbol_timings["asymmetry_seconds"] = round((t1 - t0).total_seconds(), 2)
 
+            t0 = datetime.utcnow()
             risk_state_result = RiskStateScoringEngine().score_symbol(symbol)
+            t1 = datetime.utcnow()
+            symbol_timings["risk_state_seconds"] = round((t1 - t0).total_seconds(), 2)
             risk_state_score = risk_state_result.get("risk_state_score", 50)
+
+            t0 = datetime.utcnow()
+            expected_value_score = ExpectedValueScoringEngine().score_symbol(
+                symbol,
+                regime=regime_result,
+                risk=risk_state_result,
+                breadth={"breadth_score": breadth_score},
+                setup={"setup_score": setup_score},
+                asymmetry={"asymmetry_score": asymmetry_score},
+            ).get("expected_value_score", 50)
+            t1 = datetime.utcnow()
+            symbol_timings["expected_value_seconds"] = round((t1 - t0).total_seconds(), 2)
 
             bullish_score = round(
                 (
@@ -132,7 +181,15 @@ class OpportunityScoringEngine:
                 if result == "EXECUTE":
                     result = "WATCH"
 
+            t0 = datetime.utcnow()
             governor = ExecutionGovernor().evaluate_execution_permission(result)
+            t1 = datetime.utcnow()
+            symbol_timings["governor_seconds"] = round((t1 - t0).total_seconds(), 2)
+
+            symbol_completed_at = datetime.utcnow()
+            symbol_timings["symbol"] = symbol
+            symbol_timings["total_symbol_seconds"] = round((symbol_completed_at - symbol_started_at).total_seconds(), 2)
+            timings["per_symbol"].append(symbol_timings)
 
             opportunities.append({
                 "symbol": symbol,
@@ -182,9 +239,28 @@ class OpportunityScoringEngine:
                 "execution_enabled": False
             })
 
+        scoring_completed_at = datetime.utcnow()
+        timings["total_scoring_seconds"] = round((scoring_completed_at - scoring_started_at).total_seconds(), 2)
+
+        aggregate = {}
+        for row in timings["per_symbol"]:
+            for k, v in row.items():
+                if k.endswith("_seconds") and k != "total_symbol_seconds":
+                    aggregate[k] = round(aggregate.get(k, 0) + (v or 0), 2)
+
+        timings["aggregate_engine_seconds"] = aggregate
+        timings["slowest_symbols"] = sorted(
+            timings["per_symbol"],
+            key=lambda x: x.get("total_symbol_seconds") or 0,
+            reverse=True
+        )[:10]
+
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": scoring_completed_at.isoformat(),
+            "scoring_started_at": scoring_started_at.isoformat(),
+            "scoring_completed_at": scoring_completed_at.isoformat(),
             "symbols_scored": len(opportunities),
+            "opportunity_scoring_timings": timings,
             "opportunities": opportunities,
             "execution_enabled": False,
             "status": "OPPORTUNITY_SCORING_COMPLETE"
