@@ -4,6 +4,10 @@ from pathlib import Path
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.tp_state_tracking_engine import TPStateTrackingEngine
+from app.services.thesis_integrity_engine import ThesisIntegrityEngine
+from app.services.regime_scoring_engine import RegimeScoringEngine
+from app.services.risk_state_scoring_engine import RiskStateScoringEngine
+from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
 
 
 class PaperTradeLedgerEngine:
@@ -11,6 +15,28 @@ class PaperTradeLedgerEngine:
         self.ledger_dir = Path("app/data/paper_trading")
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_file = self.ledger_dir / "paper_trade_ledger.jsonl"
+
+    def _entry_thesis_snapshot(self, symbol):
+        symbol = (symbol or "").upper().strip()
+        if not symbol:
+            return {
+                "entry_thesis_capture_status": "NO_SYMBOL",
+            }
+
+        regime = RegimeScoringEngine().score_symbol(symbol)
+        risk = RiskStateScoringEngine().score_symbol(symbol)
+        ev = ExpectedValueScoringEngine().score_symbol(symbol, regime=regime, risk=risk)
+
+        return {
+            "entry_thesis_capture_status": "ENTRY_THESIS_CAPTURED",
+            "entry_expected_value_score": ev.get("expected_value_score"),
+            "entry_regime_score": regime.get("regime_score"),
+            "entry_risk_state_score": risk.get("risk_state_score"),
+            "entry_regime": regime.get("regime"),
+            "entry_risk_state": risk.get("risk_state"),
+            "entry_expected_value_tier": ev.get("expected_value_tier"),
+            "entry_thesis_captured_at": datetime.utcnow().isoformat(),
+        }
 
     def open_trade(
         self,
@@ -26,6 +52,8 @@ class PaperTradeLedgerEngine:
         opposing_score=None,
         direction_confidence=None,
     ):
+        entry_thesis = self._entry_thesis_snapshot(symbol)
+
         trade = {
             "trade_id": f"{symbol}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
             "timestamp": datetime.utcnow().isoformat(),
@@ -48,6 +76,8 @@ class PaperTradeLedgerEngine:
             "execution_mode": "PAPER_ONLY",
             "live_order_placement_attempted": False,
         }
+
+        trade.update(entry_thesis)
 
         with self.ledger_file.open("a") as f:
             f.write(json.dumps(trade) + "\n")
@@ -171,6 +201,7 @@ class PaperTradeLedgerEngine:
             trade.update(self._tp_ladder(trade))
             trade.update(DynamicTPManagementEngine().evaluate(trade))
             trade.update(TPStateTrackingEngine().evaluate(trade))
+            trade.update(ThesisIntegrityEngine().evaluate(trade))
 
         return {
             "timestamp": datetime.utcnow().isoformat(),

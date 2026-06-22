@@ -4,6 +4,7 @@ from pathlib import Path
 from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.tp_state_tracking_engine import TPStateTrackingEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.thesis_integrity_engine import ThesisIntegrityEngine
 
 
 class OptionsAccountDashboardEngine:
@@ -367,6 +368,7 @@ class OptionsAccountDashboardEngine:
                 enriched.update(DynamicTPManagementEngine().evaluate(enriched))
                 enriched.update(TPStateTrackingEngine().evaluate(enriched))
                 enriched.update(self._expiration_governor(enriched))
+                enriched.update(ThesisIntegrityEngine().evaluate(enriched))
                 enriched.update(self._commander_view(enriched))
                 open_trades.append(enriched)
         closed_trades = [t for t in trades if t.get("status") == "CLOSED"]

@@ -1,9 +1,34 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from app.services.regime_scoring_engine import RegimeScoringEngine
+from app.services.risk_state_scoring_engine import RiskStateScoringEngine
+from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
 
 
 class OptionsPaperTradeLedgerEngine:
+
+    def _entry_thesis_snapshot(self, symbol):
+        symbol = (symbol or "").upper().strip()
+        if not symbol:
+            return {
+                "entry_thesis_capture_status": "NO_SYMBOL",
+            }
+
+        regime = RegimeScoringEngine().score_symbol(symbol)
+        risk = RiskStateScoringEngine().score_symbol(symbol)
+        ev = ExpectedValueScoringEngine().score_symbol(symbol, regime=regime, risk=risk)
+
+        return {
+            "entry_thesis_capture_status": "ENTRY_THESIS_CAPTURED",
+            "entry_expected_value_score": ev.get("expected_value_score"),
+            "entry_regime_score": regime.get("regime_score"),
+            "entry_risk_state_score": risk.get("risk_state_score"),
+            "entry_regime": regime.get("regime"),
+            "entry_risk_state": risk.get("risk_state"),
+            "entry_expected_value_tier": ev.get("expected_value_tier"),
+            "entry_thesis_captured_at": datetime.utcnow().isoformat(),
+        }
 
     def __init__(self):
         self.data_dir = Path("app/data/options_paper_trading")
@@ -15,6 +40,8 @@ class OptionsPaperTradeLedgerEngine:
         leg = legs[0]
 
         now = datetime.utcnow()
+        underlying = candidate.get("underlying") or candidate.get("Underlying") or leg.get("Underlying") or "NVDA"
+        entry_thesis = self._entry_thesis_snapshot(underlying)
         expiration_raw = leg.get("Expiration")
         contract_metrics = self._contract_metrics(now.isoformat(), expiration_raw)
 
@@ -28,7 +55,7 @@ class OptionsPaperTradeLedgerEngine:
             "remaining_contract_days": contract_metrics.get("remaining_contract_days"),
             "contract_days_elapsed": contract_metrics.get("contract_days_elapsed"),
             "contract_status": contract_metrics.get("contract_status"),
-            "underlying": "NVDA",
+            "underlying": underlying,
             "option_symbol": leg.get("Symbol"),
             "side": "BUY_TO_OPEN",
             "contracts": 1,
@@ -49,6 +76,8 @@ class OptionsPaperTradeLedgerEngine:
             "source": source,
             "status": "OPEN",
         }
+
+        trade.update(entry_thesis)
 
         with self.ledger_file.open("a") as f:
             f.write(json.dumps(trade) + "\n")
