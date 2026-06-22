@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GreyLine Operator Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: #f9fafb;
+            margin: 0;
+            padding: 24px;
+        }
+        h1 { margin-bottom: 5px; }
+        .subtitle { color: #9ca3af; margin-bottom: 24px; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+        .card {
+            background: #1f2937;
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 0 0 1px #374151;
+        }
+        .wide { grid-column: span 3; }
+        .label { color: #9ca3af; font-size: 13px; }
+        .value { font-size: 26px; font-weight: bold; margin-top: 6px; }
+        .good { color: #22c55e; }
+        .bad { color: #ef4444; }
+        .warn { color: #f59e0b; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+        th, td {
+            border-bottom: 1px solid #374151;
+            padding: 10px;
+            text-align: left;
+        }
+        th { color: #9ca3af; }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-right: 8px;
+        }
+        pre {
+            background: #030712;
+            padding: 14px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+
+<h1>GreyLine Operator Dashboard</h1>
+<div class="subtitle">Single pane of glass for account status, simulated options, authority gates, and current risk.</div>
+
+<button onclick="refreshDashboard()">Refresh Dashboard</button>
+<button onclick="runOptionsManager()">Run Options Manager</button>
+
+<div class="grid" style="margin-top: 20px;">
+    <div class="card">
+        <div class="label">Current Options Equity</div>
+        <div id="current_equity" class="value">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Unrealized P/L</div>
+        <div id="unrealized_pnl" class="value">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Open Option Trades</div>
+        <div id="open_option_trade_count" class="value">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Execution Enabled</div>
+        <div id="execution_enabled" class="value">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Order Placement Allowed</div>
+        <div id="order_placement_allowed" class="value">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Total Return</div>
+        <div id="total_return_pct" class="value">Loading...</div>
+    </div>
+
+    <div class="card wide">
+        <h2>Plain-English Summary</h2>
+        <div id="plain_summary">Loading...</div>
+    </div>
+
+    <div class="card wide">
+        <h2>Open Simulated Option Positions</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Underlying</th>
+                    <th>Contract</th>
+                    <th>Side</th>
+                    <th>Contracts</th>
+                    <th>Entry</th>
+                    <th>Current</th>
+                    <th>P/L</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="positions_table"></tbody>
+        </table>
+    </div>
+
+    <div class="card wide">
+        <h2>Raw Dashboard JSON</h2>
+        <pre id="raw_json">Loading...</pre>
+    </div>
+</div>
+
+<script>
+async function refreshDashboard() {
+    const res = await fetch('/options-account-dashboard');
+    const data = await res.json();
+
+    document.getElementById('current_equity').textContent = '$' + Number(data.current_equity).toFixed(2);
+    document.getElementById('unrealized_pnl').textContent = '$' + Number(data.unrealized_pnl).toFixed(2);
+    document.getElementById('open_option_trade_count').textContent = data.open_option_trade_count;
+    document.getElementById('execution_enabled').textContent = data.execution_enabled ? 'YES' : 'NO';
+    document.getElementById('order_placement_allowed').textContent = data.order_placement_allowed ? 'YES' : 'NO';
+    document.getElementById('total_return_pct').textContent = Number(data.total_return_pct).toFixed(2) + '%';
+
+    document.getElementById('unrealized_pnl').className =
+        Number(data.unrealized_pnl) >= 0 ? 'value good' : 'value bad';
+
+    document.getElementById('execution_enabled').className =
+        data.execution_enabled ? 'value warn' : 'value good';
+
+    document.getElementById('order_placement_allowed').className =
+        data.order_placement_allowed ? 'value warn' : 'value good';
+
+    let summary = '';
+
+    if (data.open_option_trade_count > 0 && data.open_positions.length > 0) {
+        const p = data.open_positions[0];
+        summary = `GreyLine currently has ${data.open_option_trade_count} open simulated option trade. 
+        It owns ${p.contracts} simulated ${p.underlying} ${p.option_type} contract, 
+        ${p.option_symbol}, entered at $${p.entry_price}, currently marked at $${p.current_price}. 
+        The simulated unrealized P/L is $${p.unrealized_pnl}. 
+        Real order placement is ${data.order_placement_allowed ? 'allowed' : 'not allowed'}.`;
+    } else {
+        summary = 'GreyLine currently has no open simulated option positions.';
+    }
+
+    document.getElementById('plain_summary').textContent = summary;
+
+    const tbody = document.getElementById('positions_table');
+    tbody.innerHTML = '';
+
+    for (const p of data.open_positions || []) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${p.underlying}</td>
+            <td>${p.option_symbol}</td>
+            <td>${p.side}</td>
+            <td>${p.contracts}</td>
+            <td>$${p.entry_price}</td>
+            <td>$${p.current_price}</td>
+            <td>$${p.unrealized_pnl}</td>
+            <td>${p.status}</td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    document.getElementById('raw_json').textContent = JSON.stringify(data, null, 2);
+}
+
+async function runOptionsManager() {
+    await fetch('/ai-command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({command: 'RUN_OPTIONS_MANAGER'})
+    });
+    await refreshDashboard();
+}
+
+refreshDashboard();
+setInterval(refreshDashboard, 30000);
+</script>
+
+</body>
+</html>
