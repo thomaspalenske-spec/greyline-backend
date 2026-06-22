@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.tp_state_tracking_engine import TPStateTrackingEngine
+from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
 
 class OptionsAccountDashboardEngine:
@@ -11,6 +12,189 @@ class OptionsAccountDashboardEngine:
         self.starting_equity = 10000.0
         self.ledger_file = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
 
+
+
+    def _float(self, value, default=None):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _underlying_quote_price(self, symbol):
+        if not symbol:
+            return None
+
+        result = TradeStationQuoteLiveEngine().get_quote(symbol)
+        if result.get("http_status") != 200:
+            return None
+
+        quote = (result.get("response_json", {}).get("Quotes") or [{}])[0]
+        last = self._float(quote.get("Last"))
+        bid = self._float(quote.get("Bid"))
+        ask = self._float(quote.get("Ask"))
+
+        if last:
+            return round(last, 2)
+        if bid and ask:
+            return round((bid + ask) / 2, 2)
+        return None
+
+    def _estimated_underlying_for_option_price(self, trade, option_target_price, current_underlying):
+        current_option = self._float(trade.get("current_price"), 0)
+        delta = self._float(trade.get("delta"), 0)
+        option_type = str(trade.get("option_type") or "").upper()
+
+        if not current_underlying or not option_target_price or not delta:
+            return None
+
+        delta_abs = abs(delta)
+        if delta_abs <= 0:
+            return None
+
+        option_move = option_target_price - current_option
+
+        if option_type == "PUT":
+            estimated = current_underlying - (option_move / delta_abs)
+        else:
+            estimated = current_underlying + (option_move / delta_abs)
+
+        return round(estimated, 2)
+
+    def _commander_view(self, trade):
+        underlying = trade.get("underlying")
+        current_underlying = self._underlying_quote_price(underlying)
+
+        entry_contract = self._float(trade.get("entry_price"), 0)
+        current_contract = self._float(trade.get("current_price"), 0)
+        strike = self._float(trade.get("strike"), 0)
+        option_type = str(trade.get("option_type") or "").upper()
+
+        estimated_entry_underlying = self._estimated_underlying_for_option_price(
+            trade,
+            entry_contract,
+            current_underlying,
+        )
+
+        if strike and entry_contract:
+            if option_type == "PUT":
+                breakeven = round(strike - entry_contract, 2)
+            else:
+                breakeven = round(strike + entry_contract, 2)
+        else:
+            breakeven = None
+
+        tp_rows = []
+        for i in [1, 2, 3]:
+            contract_target = self._float(
+                trade.get(f"dynamic_tp{i}_price") or trade.get(f"tp{i}_price"),
+                None,
+            )
+            stock_target = self._estimated_underlying_for_option_price(
+                trade,
+                contract_target,
+                current_underlying,
+            )
+
+            if current_underlying and stock_target:
+                move_dollars = round(stock_target - current_underlying, 2)
+                move_pct = round((move_dollars / current_underlying) * 100, 2)
+            else:
+                move_dollars = None
+                move_pct = None
+
+            tp_rows.append({
+                "stage": f"TP{i}",
+                "contract_target_price": contract_target,
+                "estimated_underlying_target_price": stock_target,
+                "underlying_move_required_dollars": move_dollars,
+                "underlying_move_required_pct": move_pct,
+                "hit": trade.get(f"tp{i}_state_hit") or trade.get(f"tp{i}_hit") or False,
+            })
+
+        if trade.get("forced_liquidation_required"):
+            commander_action = "EXIT_REQUIRED"
+            commander_reason = "Expiration governor requires forced liquidation."
+        elif trade.get("expiration_governor_state") in ["WATCH", "ELEVATED"]:
+            commander_action = "HOLD_WITH_EXPIRATION_CAUTION"
+            commander_reason = "Expiration window is approaching; no TP can override the expiration governor."
+        elif float(trade.get("unrealized_pnl_pct") or 0) <= -25:
+            commander_action = "HOLD_UNDER_PRESSURE"
+            commander_reason = "Position is materially underwater, but expiration governor has not forced exit."
+        else:
+            commander_action = "HOLD"
+            commander_reason = "No forced exit condition detected."
+
+        stop_loss_pct = self._float(trade.get("stop_loss_pct"), None)
+        if stop_loss_pct is None:
+            stop_loss_pct = -50.0
+
+        stop_contract_price = round(current_contract * (1 - (abs(stop_loss_pct) / 100)), 2) if current_contract else None
+        stop_underlying = self._estimated_underlying_for_option_price(
+            trade,
+            stop_contract_price,
+            current_underlying,
+        )
+
+        if current_underlying and stop_underlying:
+            risk_dollars = abs(round(current_underlying - stop_underlying, 2))
+            risk_pct = round((risk_dollars / current_underlying) * 100, 2)
+        else:
+            risk_dollars = None
+            risk_pct = None
+
+        risk_box_tp_rows = []
+        for row in tp_rows:
+            target = row.get("estimated_underlying_target_price")
+            if current_underlying and target:
+                reward_dollars = abs(round(target - current_underlying, 2))
+                reward_pct = round((reward_dollars / current_underlying) * 100, 2)
+                rr = round(reward_dollars / risk_dollars, 2) if risk_dollars else None
+            else:
+                reward_dollars = None
+                reward_pct = None
+                rr = None
+
+            risk_box_tp_rows.append({
+                "stage": row.get("stage"),
+                "estimated_underlying_target_price": target,
+                "reward_dollars": reward_dollars,
+                "reward_pct": reward_pct,
+                "risk_reward_ratio": rr,
+            })
+
+        return {
+            "commander_view": {
+                "underlying": underlying,
+                "option_symbol": trade.get("option_symbol"),
+                "option_type": trade.get("option_type"),
+                "strike": strike,
+                "expiration": trade.get("expiration"),
+                "current_underlying_price": current_underlying,
+                "estimated_entry_underlying_price": estimated_entry_underlying,
+                "entry_contract_price": entry_contract,
+                "current_contract_price": current_contract,
+                "breakeven_at_expiration_underlying_price": breakeven,
+                "delta_used_for_underlying_estimates": self._float(trade.get("delta"), None),
+                "theta_per_contract_per_day": self._float(trade.get("theta"), None),
+                "implied_volatility": self._float(trade.get("implied_volatility"), None),
+                "days_remaining": trade.get("remaining_contract_days"),
+                "days_elapsed": trade.get("contract_days_elapsed"),
+                "tp_underlying_ladder": tp_rows,
+                "risk_box": {
+                    "current_underlying_price": current_underlying,
+                    "estimated_entry_underlying_price": estimated_entry_underlying,
+                    "estimated_stop_contract_price": stop_contract_price,
+                    "estimated_stop_underlying_price": stop_underlying,
+                    "underlying_risk_to_stop_dollars": risk_dollars,
+                    "underlying_risk_to_stop_pct": risk_pct,
+                    "tp_reward_risk": risk_box_tp_rows,
+                    "risk_box_note": "Stop underlying price is delta-estimated from the option contract stop price, not applied directly as a percentage of stock price.",
+                },
+                "commander_action": commander_action,
+                "commander_reason": commander_reason,
+                "estimation_note": "Underlying TP prices are delta-based estimates, not guarantees. Option value also changes with gamma, theta, vega, and implied volatility.",
+            }
+        }
 
     def _contract_metrics(self, trade):
         start_raw = trade.get("timestamp")
@@ -183,6 +367,7 @@ class OptionsAccountDashboardEngine:
                 enriched.update(DynamicTPManagementEngine().evaluate(enriched))
                 enriched.update(TPStateTrackingEngine().evaluate(enriched))
                 enriched.update(self._expiration_governor(enriched))
+                enriched.update(self._commander_view(enriched))
                 open_trades.append(enriched)
         closed_trades = [t for t in trades if t.get("status") == "CLOSED"]
 
