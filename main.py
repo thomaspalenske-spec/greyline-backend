@@ -186,3 +186,6 @@ app.include_router(greyline_market_battlefield_summary.router)
 
 from app.routes import market_battlefield_cache
 app.include_router(market_battlefield_cache.router)
+
+from app.routes import options_trade_forensics
+app.include_router(options_trade_forensics.router)

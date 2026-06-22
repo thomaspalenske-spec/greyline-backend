@@ -35,6 +35,58 @@ class OptionsPaperTradeLedgerEngine:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_file = self.data_dir / "options_paper_trade_ledger.jsonl"
 
+
+    def _contract_metrics(self, start_raw, expiration_raw):
+        from datetime import datetime, timezone
+
+        def parse_dt(value):
+            if not value:
+                return None
+            text = str(value).replace("Z", "+00:00")
+            try:
+                return datetime.fromisoformat(text)
+            except Exception:
+                try:
+                    return datetime.fromisoformat(text[:10])
+                except Exception:
+                    return None
+
+        start = parse_dt(start_raw) or datetime.utcnow()
+        expiration = parse_dt(expiration_raw)
+
+        if expiration is None:
+            return {
+                "initial_contract_days": None,
+                "remaining_contract_days": None,
+                "contract_days_elapsed": None,
+                "contract_status": "EXPIRATION_UNKNOWN",
+            }
+
+        now = datetime.utcnow()
+
+        if getattr(start, "tzinfo", None) is not None:
+            start = start.replace(tzinfo=None)
+        if getattr(expiration, "tzinfo", None) is not None:
+            expiration = expiration.replace(tzinfo=None)
+
+        initial = max((expiration.date() - start.date()).days, 0)
+        remaining = max((expiration.date() - now.date()).days, 0)
+        elapsed = max(initial - remaining, 0)
+
+        if remaining <= 0:
+            status = "EXPIRED_OR_EXPIRING"
+        elif remaining <= 7:
+            status = "MATURITY_WINDOW"
+        else:
+            status = "ACTIVE_CONTRACT"
+
+        return {
+            "initial_contract_days": initial,
+            "remaining_contract_days": remaining,
+            "contract_days_elapsed": elapsed,
+            "contract_status": status,
+        }
+
     def record_trade(self, candidate, source="OPTIONS_CYCLE_ENGINE"):
         legs = candidate.get("Legs") or [{}]
         leg = legs[0]
