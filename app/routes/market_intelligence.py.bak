@@ -36,8 +36,8 @@ def live_universe_quote_scan():
 
 
 @router.get("/opportunity-scores")
-def opportunity_scores(limit: int = None):
-    return OpportunityScoringEngine().score_opportunities(limit=limit)
+def opportunity_scores():
+    return OpportunityScoringEngine().score_opportunities()
 
 
 @router.get("/liquidity-score-nvda")
@@ -56,8 +56,8 @@ def execution_governor_execute():
 
 
 @router.get("/opportunity-summary")
-def opportunity_summary(limit: int = None):
-    return OpportunitySummaryEngine().get_summary(limit=limit)
+def opportunity_summary():
+    return OpportunitySummaryEngine().get_summary()
 
 
 @router.get("/regime-score-nvda")

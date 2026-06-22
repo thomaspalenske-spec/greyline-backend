@@ -12,7 +12,7 @@ class PaperTradeCandidateEngine:
 
     def build_ticket(self):
         decision = GreyLineMasterDecisionEngine().evaluate()
-        dgl = DeploymentGovernanceLayer().score(symbol=decision.get("top_candidate", {}).get("symbol"))
+        dgl = DeploymentGovernanceLayer().score()
 
         candidate = decision.get("top_candidate", {})
         eligible = (
@@ -42,13 +42,6 @@ class PaperTradeCandidateEngine:
             "ticket_type": "SIMULATED_PAPER_TRADE",
             "symbol": candidate.get("symbol"),
             "side": "BUY",
-            "directional_bias": candidate.get("directional_bias"),
-            "option_type": candidate.get("option_type"),
-            "trade_intent": "BUY_CALL" if candidate.get("option_type") == "CALL" else "BUY_PUT" if candidate.get("option_type") == "PUT" else "UNKNOWN",
-            "bullish_score": candidate.get("bullish_score"),
-            "bearish_score": candidate.get("bearish_score"),
-            "opposing_score": candidate.get("opposing_score"),
-            "direction_confidence": candidate.get("direction_confidence"),
             "candidate_original_state": candidate.get("result"),
             "promoted_state": "READY_FOR_PAPER_TRADE",
             "composite_score": candidate.get("composite_score"),

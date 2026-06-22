@@ -1,9 +1,5 @@
 from datetime import datetime
 
-from app.services.risk_state_scoring_engine import RiskStateScoringEngine
-from app.services.regime_scoring_engine import RegimeScoringEngine
-from app.services.volatility_scoring_engine import VolatilityScoringEngine
-
 
 class DeploymentGovernanceLayer:
     """
@@ -21,7 +17,7 @@ class DeploymentGovernanceLayer:
         "dppl": 0.05,
     }
 
-    def score(self, inputs=None, symbol=None):
+    def score(self, inputs=None):
         inputs = inputs or {}
 
         default_scores = {
@@ -33,26 +29,6 @@ class DeploymentGovernanceLayer:
             "portfolio": 85,
             "dppl": 80,
         }
-
-        live_context = {}
-
-        if symbol:
-            symbol = symbol.upper().strip()
-
-            risk_result = RiskStateScoringEngine().score_symbol(symbol)
-            regime_result = RegimeScoringEngine().score_symbol(symbol)
-            volatility_result = VolatilityScoringEngine().score_symbol(symbol)
-
-            inputs.setdefault("risk_state", risk_result.get("risk_state_score", default_scores["risk_state"]))
-            inputs.setdefault("regime", regime_result.get("regime_score", default_scores["regime"]))
-            inputs.setdefault("volatility", volatility_result.get("volatility_score", default_scores["volatility"]))
-
-            live_context = {
-                "symbol": symbol,
-                "risk_state": risk_result,
-                "regime": regime_result,
-                "volatility": volatility_result,
-            }
 
         scores = {**default_scores, **inputs}
 
@@ -72,8 +48,6 @@ class DeploymentGovernanceLayer:
             "recommended_position_size_pct": allocation,
             "scores": scores,
             "weights": self.WEIGHTS,
-            "symbol": symbol,
-            "live_context": live_context,
             "hard_safety_gates_preserved": True,
             "status": "DEPLOYMENT_GOVERNANCE_READY",
         }

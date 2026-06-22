@@ -9,7 +9,7 @@ class PaperPerformanceSummaryEngine:
     def summarize(self):
         starting_equity = 10000.0
 
-        ledger = PaperTradeLedgerEngine().history(limit=10000)
+        ledger = PaperTradeLedgerEngine().history()
         trades = ledger.get("trades", [])
 
         open_trades = [t for t in trades if t.get("status") == "OPEN"]

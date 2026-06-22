@@ -12,20 +12,7 @@ class PaperTradeLedgerEngine:
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_file = self.ledger_dir / "paper_trade_ledger.jsonl"
 
-    def open_trade(
-        self,
-        symbol="PLTR",
-        side="BUY",
-        quantity=1,
-        entry_price=0.0,
-        directional_bias=None,
-        option_type=None,
-        trade_intent=None,
-        bullish_score=None,
-        bearish_score=None,
-        opposing_score=None,
-        direction_confidence=None,
-    ):
+    def open_trade(self, symbol="PLTR", side="BUY", quantity=1, entry_price=0.0):
         trade = {
             "trade_id": f"{symbol}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
             "timestamp": datetime.utcnow().isoformat(),
@@ -33,13 +20,6 @@ class PaperTradeLedgerEngine:
             "engine": "PaperTradeLedgerEngine",
             "symbol": symbol,
             "side": side,
-            "directional_bias": directional_bias,
-            "option_type": option_type,
-            "trade_intent": trade_intent,
-            "bullish_score": bullish_score,
-            "bearish_score": bearish_score,
-            "opposing_score": opposing_score,
-            "direction_confidence": direction_confidence,
             "quantity": quantity,
             "entry_price": float(entry_price),
             "exit_price": None,
@@ -57,8 +37,6 @@ class PaperTradeLedgerEngine:
         trade["audit_logged"] = True
         trade["audit_result"] = audit
         return trade
-
-    record_trade = open_trade
 
     def close_latest(self, symbol="PLTR", exit_price=0.0):
         trades = self._read_all()
@@ -154,13 +132,6 @@ class PaperTradeLedgerEngine:
 
         for trade in trades:
             trade.setdefault("asset_type", "EQUITY")
-            trade.setdefault("directional_bias", None)
-            trade.setdefault("option_type", None)
-            trade.setdefault("trade_intent", None)
-            trade.setdefault("bullish_score", None)
-            trade.setdefault("bearish_score", None)
-            trade.setdefault("opposing_score", None)
-            trade.setdefault("direction_confidence", None)
             trade.setdefault("contract_type", "EQUITY")
             trade.setdefault("contract_start_date", trade.get("timestamp"))
             trade.setdefault("contract_expiration_date", None)

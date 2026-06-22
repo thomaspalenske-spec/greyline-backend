@@ -165,3 +165,24 @@ def auto_start_fast_quote_heartbeat():
         interval_market_open_seconds=5,
         interval_market_closed_seconds=300,
     )
+
+from app.routes import opportunity_balance
+app.include_router(opportunity_balance.router)
+
+from app.routes import directional_opportunity_report
+app.include_router(directional_opportunity_report.router)
+
+from app.routes import directional_readiness_dashboard
+app.include_router(directional_readiness_dashboard.router)
+
+from app.routes import flow_feed_readiness_report
+app.include_router(flow_feed_readiness_report.router)
+
+from app.routes import greyline_market_battlefield
+app.include_router(greyline_market_battlefield.router)
+
+from app.routes import greyline_market_battlefield_summary
+app.include_router(greyline_market_battlefield_summary.router)
+
+from app.routes import market_battlefield_cache
+app.include_router(market_battlefield_cache.router)

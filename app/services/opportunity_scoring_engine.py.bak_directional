@@ -58,60 +58,24 @@ class OpportunityScoringEngine:
             risk_state_result = RiskStateScoringEngine().score_symbol(symbol)
             risk_state_score = risk_state_result.get("risk_state_score", 50)
 
-            bullish_score = round(
+            composite_score = round(
                 (
-                    market_data_score * 0.08
-                    + liquidity_score * 0.11
+                    market_data_score * 0.09
+                    + liquidity_score * 0.12
                     + setup_score * 0.13
-                    + regime_score * 0.11
-                    + volatility_score * 0.07
+                    + regime_score * 0.10
+                    + volatility_score * 0.08
                     + expected_value_score * 0.10
-                    + trend_persistence_score * 0.09
-                    + breadth_score * 0.08
-                    + institutional_sponsorship_score * 0.08
-                    + asymmetry_score * 0.08
-                    + risk_state_score * 0.07
+                    + trend_persistence_score * 0.08
+                    + breadth_score * 0.07
+                    + institutional_sponsorship_score * 0.06
+                    + asymmetry_score * 0.09
+                    + risk_state_score * 0.08
                 ),
                 2
             )
 
-            bear_regime_score = 100 - regime_score
-            bear_breadth_score = 100 - breadth_score
-            bear_trend_score = 100 - trend_persistence_score
-            bear_sponsorship_score = 100 - institutional_sponsorship_score
-            bear_risk_score = risk_state_score
-
-            bearish_score = round(
-                (
-                    market_data_score * 0.08
-                    + liquidity_score * 0.11
-                    + setup_score * 0.08
-                    + bear_regime_score * 0.13
-                    + volatility_score * 0.12
-                    + expected_value_score * 0.09
-                    + bear_trend_score * 0.10
-                    + bear_breadth_score * 0.10
-                    + bear_sponsorship_score * 0.08
-                    + asymmetry_score * 0.06
-                    + bear_risk_score * 0.05
-                ),
-                2
-            )
-
-            if bullish_score >= bearish_score:
-                directional_bias = "BULLISH"
-                option_type = "CALL"
-                composite_score = bullish_score
-                opposing_score = bearish_score
-            else:
-                directional_bias = "BEARISH"
-                option_type = "PUT"
-                composite_score = bearish_score
-                opposing_score = bullish_score
-
-            direction_confidence = round(abs(bullish_score - bearish_score), 2)
-
-            if composite_score >= 85 and direction_confidence >= 5:
+            if composite_score >= 85:
                 result = "EXECUTE"
             elif composite_score >= 60:
                 result = "WATCH"
@@ -170,12 +134,6 @@ class OpportunityScoringEngine:
                     "previous_volume": risk_state_result.get("previous_volume"),
                 },
                 "composite_score": composite_score,
-                "bullish_score": bullish_score,
-                "bearish_score": bearish_score,
-                "opposing_score": opposing_score,
-                "directional_bias": directional_bias,
-                "option_type": option_type,
-                "direction_confidence": direction_confidence,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
                 "governor_status": governor.get("status"),

@@ -14,9 +14,20 @@ class OptionsPaperTradeLedgerEngine:
         legs = candidate.get("Legs") or [{}]
         leg = legs[0]
 
+        now = datetime.utcnow()
+        expiration_raw = leg.get("Expiration")
+        contract_metrics = self._contract_metrics(now.isoformat(), expiration_raw)
+
         trade = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": now.isoformat(),
             "asset_type": "OPTION",
+            "contract_type": "OPTION",
+            "contract_start_date": now.date().isoformat(),
+            "contract_expiration_date": expiration_raw,
+            "initial_contract_days": contract_metrics.get("initial_contract_days"),
+            "remaining_contract_days": contract_metrics.get("remaining_contract_days"),
+            "contract_days_elapsed": contract_metrics.get("contract_days_elapsed"),
+            "contract_status": contract_metrics.get("contract_status"),
             "underlying": "NVDA",
             "option_symbol": leg.get("Symbol"),
             "side": "BUY_TO_OPEN",
@@ -87,6 +98,19 @@ class OptionsPaperTradeLedgerEngine:
 
         lines = self.ledger_file.read_text().splitlines()
         trades = [json.loads(line) for line in lines[-limit:] if line.strip()]
+
+        for trade in trades:
+            metrics = self._contract_metrics(
+                trade.get("timestamp"),
+                trade.get("expiration") or trade.get("contract_expiration_date"),
+            )
+            trade["contract_type"] = "OPTION"
+            trade["contract_start_date"] = trade.get("contract_start_date") or str(trade.get("timestamp", ""))[:10]
+            trade["contract_expiration_date"] = trade.get("contract_expiration_date") or trade.get("expiration")
+            trade["initial_contract_days"] = metrics.get("initial_contract_days")
+            trade["remaining_contract_days"] = metrics.get("remaining_contract_days")
+            trade["contract_days_elapsed"] = metrics.get("contract_days_elapsed")
+            trade["contract_status"] = metrics.get("contract_status")
 
         return {
             "timestamp": datetime.utcnow().isoformat(),

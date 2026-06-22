@@ -120,13 +120,7 @@ def run_paper_trade_executor():
         side="BUY",
         quantity=1,
         entry_price=entry_price,
-        directional_bias=top_candidate.get("directional_bias"),
-        option_type=top_candidate.get("option_type"),
-        trade_intent="BUY_CALL" if top_candidate.get("option_type") == "CALL" else "BUY_PUT" if top_candidate.get("option_type") == "PUT" else "UNKNOWN",
-        bullish_score=top_candidate.get("bullish_score"),
-        bearish_score=top_candidate.get("bearish_score"),
-        opposing_score=top_candidate.get("opposing_score"),
-        direction_confidence=top_candidate.get("direction_confidence"),
+        source="PAPER_TRADE_EXECUTOR_FROM_MASTER_DECISION_LIVE_QUOTE",
     )
 
     if isinstance(trade, dict):

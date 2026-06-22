@@ -18,9 +18,6 @@ from app.services.greyline_master_decision_engine import GreyLineMasterDecisionE
 from app.routes.paper_trade_executor import run_paper_trade_executor
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
-from app.services.market_battlefield_snapshot_cache import MarketBattlefieldSnapshotCache
-from app.routes.greyline_market_battlefield import greyline_market_battlefield
-from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 
 router = APIRouter()
 
@@ -63,19 +60,10 @@ def ai_operator_brief():
             "live_trade_authority_gate",
             lambda: LiveTradeAuthorityGateEngine().evaluate()
         ),
-        "market_battlefield_summary": safe_call(
-            "market_battlefield_summary",
-            lambda: greyline_market_battlefield_summary()
+        "greyline_master_decision": safe_call(
+            "greyline_master_decision",
+            lambda: GreyLineMasterDecisionEngine().evaluate()
         ),
-        "greyline_master_decision": {
-            "ok": True,
-            "name": "greyline_master_decision",
-            "data": {
-                "status": "SKIPPED_IN_FAST_BRIEF",
-                "reason": "Master decision is intentionally excluded from /ai-operator-brief because it can take 60+ seconds.",
-                "run_full_check_with": "POST /ai-command {command: RUN_MASTER_DECISION}"
-            }
-        },
         "audit_ledger_summary": safe_call(
             "audit_ledger_summary",
             lambda: ImmutableAuditLedgerEngine().summary()
@@ -102,33 +90,7 @@ class AICommandRequest(BaseModel):
     command: str
 
 
-def _run_master_decision_with_governance():
-    decision = GreyLineMasterDecisionEngine().evaluate()
-    dgl = DeploymentGovernanceLayer().score(symbol=decision.get("top_candidate", {}).get("symbol"))
-
-    decision["deployment_governance"] = dgl
-    decision["paper_trade_promotion"] = {
-        "eligible": (
-            decision.get("top_candidate", {}).get("result") == "WATCH"
-            and dgl.get("deployment_state") in ["READY", "EXECUTE", "EXECUTE_AGGRESSIVE"]
-            and decision.get("order_placement_allowed") is False
-        ),
-        "promoted_state": (
-            "READY_FOR_PAPER_TRADE"
-            if (
-                decision.get("top_candidate", {}).get("result") == "WATCH"
-                and dgl.get("deployment_state") in ["READY", "EXECUTE", "EXECUTE_AGGRESSIVE"]
-                and decision.get("order_placement_allowed") is False
-            )
-            else "NO_PROMOTION"
-        ),
-        "reason": "Candidate is actionable at reduced size, but live order placement is disabled."
-    }
-    return decision
-
 @router.post("/ai-command")
-
-
 def ai_command(request: AICommandRequest):
     command = request.command.strip().upper()
 
@@ -138,10 +100,29 @@ def ai_command(request: AICommandRequest):
         "RUN_PAPER_TRADE_MARK_TO_MARKET": lambda: PaperTradeLifecycleEngine().mark_to_market(),
         "RUN_PAPER_TRADE_EXIT": lambda: PaperTradeLifecycleEngine().exit(),
         "RUN_PAPER_TRADE_CANDIDATE": lambda: PaperTradeCandidateEngine().build_ticket(),
-        "RUN_MASTER_DECISION": lambda: _run_master_decision_with_governance(),
-        "RUN_MARKET_BATTLEFIELD": lambda: greyline_market_battlefield(),
-        "RUN_MARKET_BATTLEFIELD_SUMMARY": lambda: greyline_market_battlefield_summary(),
-        "RUN_MARKET_BATTLEFIELD_CACHE_CLEAR": lambda: MarketBattlefieldSnapshotCache.clear(),
+        "RUN_MASTER_DECISION": lambda: (
+    lambda decision, dgl: {
+        **decision,
+        "deployment_governance": DeploymentGovernanceLayer().score(symbol=decision.get("top_candidate", {}).get("symbol")),
+        "paper_trade_promotion": {
+            "eligible": (
+                decision.get("top_candidate", {}).get("result") == "WATCH"
+                and dgl.get("deployment_state") in ["READY", "EXECUTE", "EXECUTE_AGGRESSIVE"]
+                and decision.get("order_placement_allowed") is False
+            ),
+            "promoted_state": (
+                "READY_FOR_PAPER_TRADE"
+                if (
+                    decision.get("top_candidate", {}).get("result") == "WATCH"
+                    and dgl.get("deployment_state") in ["READY", "EXECUTE", "EXECUTE_AGGRESSIVE"]
+                    and decision.get("order_placement_allowed") is False
+                )
+                else "NO_PROMOTION"
+            ),
+            "reason": "Candidate is actionable at reduced size, but live order placement is disabled."
+        }
+    }
+)(GreyLineMasterDecisionEngine().evaluate(), None),
         "RUN_PAPER_TRADE_EXECUTOR": lambda: run_paper_trade_executor(),
         "RUN_OPTIONS_CYCLE": lambda: OptionsCycleEngine().run(),
         "RUN_OPTIONS_STATUS": lambda: OptionsAccountDashboardEngine().get_dashboard(),

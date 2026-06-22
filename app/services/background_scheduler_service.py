@@ -12,6 +12,7 @@ from app.services.paper_position_manager_engine import PaperPositionManagerEngin
 from app.services.options_position_manager_engine import OptionsPositionManagerEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.routes.paper_trade_executor import run_paper_trade_executor
+from app.services.market_hours_engine import MarketHoursEngine
 
 
 class BackgroundSchedulerService:
@@ -121,8 +122,10 @@ class BackgroundSchedulerService:
 
     @classmethod
     def _run_cycle(cls):
+        cls._load_state()
         started = datetime.utcnow().isoformat()
 
+        market_hours = MarketHoursEngine().status()
         token = TradeStationTokenMaintenanceEngine().evaluate()
         decision = DecisionSchedulerEngine().run_manual_cycle()
         forward = ForwardOutcomeCaptureEngine().capture(limit=1)
@@ -142,6 +145,8 @@ class BackgroundSchedulerService:
             "BACKGROUND_SCHEDULER_CYCLE",
             {
                 "cycle_count": cls._cycle_count,
+                "market_state": market_hours.get("state"),
+                "market_open": market_hours.get("is_regular_session"),
                 "token_maintenance_status": token.get("status"),
                 "decision_status": decision.get("status"),
                 "forward_outcome_status": forward.get("status"),
@@ -151,6 +156,8 @@ class BackgroundSchedulerService:
             "paper_position_manager_status": paper_position_manager.get("status"),
             "paper_positions_checked": paper_position_manager.get("positions_checked"),
             "paper_positions_closed": paper_position_manager.get("positions_closed"),
+            "paper_stale_quote_blocked_count": paper_position_manager.get("stale_quote_blocked_count"),
+            "paper_stale_quote_blocked": paper_position_manager.get("stale_quote_blocked"),
             "options_position_manager_status": options_position_manager.get("status"),
             "options_positions_checked": options_position_manager.get("positions_checked"),
             "options_positions_closed": options_position_manager.get("positions_closed"),
@@ -165,6 +172,8 @@ class BackgroundSchedulerService:
             "source": "BACKGROUND_SCHEDULER",
             "cycle_started": started,
             "cycle_count": cls._cycle_count,
+            "market_state": market_hours.get("state"),
+            "market_open": market_hours.get("is_regular_session"),
             "token_maintenance_status": token.get("status"),
             "decision_status": decision.get("status"),
             "forward_outcome_status": forward.get("status"),
@@ -174,9 +183,13 @@ class BackgroundSchedulerService:
             "paper_position_manager_status": paper_position_manager.get("status"),
             "paper_positions_checked": paper_position_manager.get("positions_checked"),
             "paper_positions_closed": paper_position_manager.get("positions_closed"),
+            "paper_stale_quote_blocked_count": paper_position_manager.get("stale_quote_blocked_count"),
+            "paper_stale_quote_blocked": paper_position_manager.get("stale_quote_blocked"),
             "options_position_manager_status": options_position_manager.get("status"),
             "options_positions_checked": options_position_manager.get("positions_checked"),
             "options_positions_closed": options_position_manager.get("positions_closed"),
+            "options_stale_quote_blocked_count": options_position_manager.get("stale_quote_blocked_count"),
+            "options_stale_quote_blocked": options_position_manager.get("stale_quote_blocked"),
             "system_health_status": health.get("status"),
             "overall_health": health.get("overall_health"),
             "execution_enabled": False,

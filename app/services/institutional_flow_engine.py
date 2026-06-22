@@ -1,42 +1,64 @@
 from datetime import datetime
 
-from app.services.relative_strength_engine import RelativeStrengthEngine
-from app.services.volume_expansion_engine import VolumeExpansionEngine
-
 
 class InstitutionalFlowEngine:
+    def evaluate(self, context=None):
+        context = context or {}
 
-    def evaluate_symbol(self, symbol, benchmark="SPY"):
-        symbol = symbol.upper().strip()
+        buying = 0
+        selling = 0
+        evidence = []
 
-        relative_strength = RelativeStrengthEngine().compare_to_benchmark(symbol, benchmark)
-        volume = VolumeExpansionEngine().calculate_volume_expansion(symbol)
+        if context.get("symbols_scored", 0) > 0:
+            evidence.append("OPPORTUNITY_UNIVERSE_ACTIVE")
 
-        rs_score = relative_strength.get("relative_strength_score", 50)
-        volume_score = volume.get("volume_score", 50)
+        if context.get("top_candidate"):
+            buying += 20
+            evidence.append("TOP_CANDIDATE_PRESENT")
 
-        flow_score = round(
-            (rs_score * 0.55) + (volume_score * 0.45),
-            2
-        )
+        if context.get("risk_state") == "NORMAL":
+            buying += 15
+            evidence.append("RISK_STATE_NORMAL")
 
-        if flow_score >= 85:
-            flow_state = "INSTITUTIONAL_INFLOW_CONFIRMED"
-        elif flow_score >= 70:
-            flow_state = "INSTITUTIONAL_INFLOW_WATCH"
-        elif flow_score >= 50:
-            flow_state = "NEUTRAL_FLOW"
+        symmetry = context.get("symmetry", {})
+        bullish_execute = symmetry.get("bullish_execute", 0)
+        bearish_execute = symmetry.get("bearish_execute", 0)
+
+        if bullish_execute > bearish_execute:
+            buying += 25
+            evidence.append("BULLISH_EXECUTE_IMBALANCE")
+
+        if bearish_execute > bullish_execute:
+            selling += 25
+            evidence.append("BEARISH_EXECUTE_IMBALANCE")
+
+        if symmetry.get("opportunity_bias") == "BULLISH_BIAS_DETECTED":
+            buying += 20
+            evidence.append("BULLISH_OPPORTUNITY_BIAS")
+
+        if symmetry.get("opportunity_bias") == "BEARISH_BIAS_DETECTED":
+            selling += 20
+            evidence.append("BEARISH_OPPORTUNITY_BIAS")
+
+        buying = min(buying, 100)
+        selling = min(selling, 100)
+
+        if buying > selling:
+            net_flow = "BUYING_INFERRED"
+        elif selling > buying:
+            net_flow = "SELLING_INFERRED"
         else:
-            flow_state = "INSTITUTIONAL_OUTFLOW_RISK"
+            net_flow = "NEUTRAL_INFERRED"
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
-            "symbol": symbol,
-            "benchmark": benchmark,
-            "relative_strength_score": rs_score,
-            "volume_score": volume_score,
-            "institutional_flow_score": flow_score,
-            "institutional_flow_state": flow_state,
-            "execution_enabled": False,
-            "status": "INSTITUTIONAL_FLOW_READY"
+            "system": "GreyLine",
+            "engine": "InstitutionalFlowEngine",
+            "institutional_buying": buying,
+            "institutional_selling": selling,
+            "net_flow": net_flow,
+            "flow_source": "INFERRED_ONLY_DIRECT_FEEDS_NOT_CONNECTED",
+            "direct_flow_feeds_connected": False,
+            "evidence": evidence,
+            "status": "INSTITUTIONAL_FLOW_EVALUATED",
         }
