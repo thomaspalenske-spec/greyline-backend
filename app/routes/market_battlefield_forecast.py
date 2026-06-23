@@ -27,6 +27,7 @@ from app.services.battlefield_learning_ledger_engine import BattlefieldLearningL
 from app.services.learning_horizon_analysis_engine import LearningHorizonAnalysisEngine
 from app.services.signal_maturity_engine import SignalMaturityEngine
 from app.services.forward_outcome_horizon_tracker_engine import ForwardOutcomeHorizonTrackerEngine
+from app.services.horizon_readiness_gate_engine import HorizonReadinessGateEngine
 
 router = APIRouter()
 
@@ -61,6 +62,7 @@ def market_battlefield_forecast():
         learning_horizon_analysis = LearningHorizonAnalysisEngine().analyze()
         signal_maturity = SignalMaturityEngine().evaluate()
         forward_outcome_horizon_tracker = ForwardOutcomeHorizonTrackerEngine().evaluate()
+        horizon_readiness_gate = HorizonReadinessGateEngine().evaluate(forward_outcome_horizon_tracker)
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -102,6 +104,7 @@ def market_battlefield_forecast():
             "learning_horizon_analysis": learning_horizon_analysis,
             "signal_maturity": signal_maturity,
             "forward_outcome_horizon_tracker": forward_outcome_horizon_tracker,
+            "horizon_readiness_gate": horizon_readiness_gate,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
