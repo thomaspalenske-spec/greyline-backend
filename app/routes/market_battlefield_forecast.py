@@ -29,6 +29,7 @@ from app.services.signal_maturity_engine import SignalMaturityEngine
 from app.services.forward_outcome_horizon_tracker_engine import ForwardOutcomeHorizonTrackerEngine
 from app.services.horizon_readiness_gate_engine import HorizonReadinessGateEngine
 from app.services.horizon_one_hour_performance_engine import HorizonOneHourPerformanceEngine
+from app.services.horizon_one_hour_leaderboard_engine import HorizonOneHourLeaderboardEngine
 
 router = APIRouter()
 
@@ -65,6 +66,7 @@ def market_battlefield_forecast():
         forward_outcome_horizon_tracker = ForwardOutcomeHorizonTrackerEngine().evaluate()
         horizon_readiness_gate = HorizonReadinessGateEngine().evaluate(forward_outcome_horizon_tracker)
         horizon_one_hour_performance = HorizonOneHourPerformanceEngine().evaluate()
+        horizon_one_hour_leaderboard = HorizonOneHourLeaderboardEngine().evaluate(horizon_one_hour_performance)
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -108,6 +110,7 @@ def market_battlefield_forecast():
             "forward_outcome_horizon_tracker": forward_outcome_horizon_tracker,
             "horizon_readiness_gate": horizon_readiness_gate,
             "horizon_one_hour_performance": horizon_one_hour_performance,
+            "horizon_one_hour_leaderboard": horizon_one_hour_leaderboard,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
