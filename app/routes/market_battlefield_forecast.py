@@ -12,6 +12,7 @@ from app.services.battlefield_readiness_timer_engine import BattlefieldReadiness
 from app.services.readiness_acceleration_engine import ReadinessAccelerationEngine
 from app.services.why_not_ready_engine import WhyNotReadyEngine
 from app.services.opportunity_funnel_engine import OpportunityFunnelEngine
+from app.services.candidate_rejection_summary_engine import CandidateRejectionSummaryEngine
 
 router = APIRouter()
 
@@ -31,6 +32,7 @@ def market_battlefield_forecast():
         readiness_timer = BattlefieldReadinessTimerEngine().evaluate(opportunity_queue)
         why_not_ready = WhyNotReadyEngine().evaluate(opportunity_queue)
         opportunity_funnel = OpportunityFunnelEngine().evaluate(opportunity_queue.get('queue', []))
+        candidate_rejection_summary = CandidateRejectionSummaryEngine().evaluate(opportunity_queue.get('queue', []))
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -57,6 +59,7 @@ def market_battlefield_forecast():
             "readiness_timer": readiness_timer,
             "why_not_ready": why_not_ready,
             "opportunity_funnel": opportunity_funnel,
+            "candidate_rejection_summary": candidate_rejection_summary,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
