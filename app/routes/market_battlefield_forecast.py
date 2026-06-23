@@ -6,6 +6,7 @@ from app.services.battlefield_trend_engine import BattlefieldTrendEngine
 from app.services.battlefield_momentum_engine import BattlefieldMomentumEngine
 from app.services.battlefield_transition_engine import BattlefieldTransitionEngine
 from app.services.opportunity_queue_engine import OpportunityQueueEngine
+from app.services.opportunity_escalation_engine import OpportunityEscalationEngine
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ def market_battlefield_forecast():
     momentum = BattlefieldMomentumEngine().evaluate(recent_history)
     transition = BattlefieldTransitionEngine().evaluate(recent_history)
     opportunity_queue = OpportunityQueueEngine().build(battlefield)
+    opportunity_escalation = OpportunityEscalationEngine().evaluate(opportunity_queue)
     forecast = BattlefieldForecastEngine().forecast(battlefield)
 
     return {
@@ -33,6 +35,7 @@ def market_battlefield_forecast():
         "momentum": momentum,
         "transition": transition,
         "opportunity_queue": opportunity_queue,
+        "opportunity_escalation": opportunity_escalation,
         "forecast": forecast,
         "status": "MARKET_BATTLEFIELD_FORECAST_READY",
     }
