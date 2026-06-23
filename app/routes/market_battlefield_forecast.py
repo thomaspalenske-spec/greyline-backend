@@ -35,6 +35,7 @@ from app.services.regime_attribution_engine import RegimeAttributionEngine
 from app.services.regime_learning_engine import RegimeLearningEngine
 from app.services.regime_weight_advisor_engine import RegimeWeightAdvisorEngine
 from app.services.component_learning_engine import ComponentLearningEngine
+from app.services.component_weight_optimization_engine import ComponentWeightOptimizationEngine
 
 router = APIRouter()
 
@@ -77,6 +78,7 @@ def market_battlefield_forecast():
         regime_learning = RegimeLearningEngine().evaluate(horizon_one_hour_performance)
         regime_weight_advisor = RegimeWeightAdvisorEngine().evaluate(regime_learning)
         component_learning = ComponentLearningEngine().evaluate(horizon_one_hour_performance)
+        component_weight_optimization = ComponentWeightOptimizationEngine().evaluate(component_learning)
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -126,6 +128,7 @@ def market_battlefield_forecast():
             "regime_learning": regime_learning,
             "regime_weight_advisor": regime_weight_advisor,
             "component_learning": component_learning,
+            "component_weight_optimization": component_weight_optimization,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
