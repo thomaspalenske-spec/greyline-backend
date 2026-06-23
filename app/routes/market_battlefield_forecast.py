@@ -4,6 +4,7 @@ from app.services.battlefield_forecast_engine import BattlefieldForecastEngine
 from app.services.battlefield_history_engine import BattlefieldHistoryEngine
 from app.services.battlefield_trend_engine import BattlefieldTrendEngine
 from app.services.battlefield_momentum_engine import BattlefieldMomentumEngine
+from app.services.battlefield_transition_engine import BattlefieldTransitionEngine
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ def market_battlefield_forecast():
     recent_history = history_engine.history(limit=50)
     trend = BattlefieldTrendEngine().evaluate(recent_history)
     momentum = BattlefieldMomentumEngine().evaluate(recent_history)
+    transition = BattlefieldTransitionEngine().evaluate(recent_history)
     forecast = BattlefieldForecastEngine().forecast(battlefield)
 
     return {
@@ -27,6 +29,7 @@ def market_battlefield_forecast():
         "history_record": history_record,
         "trend": trend,
         "momentum": momentum,
+        "transition": transition,
         "forecast": forecast,
         "status": "MARKET_BATTLEFIELD_FORECAST_READY",
     }
