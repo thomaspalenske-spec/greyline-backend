@@ -11,7 +11,10 @@ class OpportunityQueueEngine:
                 continue
 
             score = float(item.get("composite_score") or item.get("score") or 0)
-            liquidity = float(item.get("liquidity_score") or 0)
+
+            raw_liquidity = item.get("liquidity_score")
+            liquidity_available = raw_liquidity is not None
+            liquidity = float(raw_liquidity) if liquidity_available else None
 
             rows.append({
                 "symbol": item.get("symbol"),
@@ -19,10 +22,11 @@ class OpportunityQueueEngine:
                 "result": item.get("result"),
                 "score": score,
                 "liquidity_score": liquidity,
+                "liquidity_status": "AVAILABLE" if liquidity_available else "UNAVAILABLE",
                 "execute_score_threshold": 85,
                 "execute_liquidity_threshold": 70,
                 "score_distance_to_execute": round(max(85 - score, 0), 2),
-                "liquidity_distance_to_execute": round(max(70 - liquidity, 0), 2),
+                "liquidity_distance_to_execute": round(max(70 - liquidity, 0), 2) if liquidity_available else None,
                 "directional_bias": item.get("directional_bias"),
                 "setup_score": item.get("setup_score"),
                 "direction_confidence": item.get("direction_confidence"),
@@ -32,7 +36,7 @@ class OpportunityQueueEngine:
             rows,
             key=lambda x: (
                 x["score_distance_to_execute"],
-                x["liquidity_distance_to_execute"],
+                x["liquidity_distance_to_execute"] if x["liquidity_distance_to_execute"] is not None else 999,
                 -x["score"],
             )
         )

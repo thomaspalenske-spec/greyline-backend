@@ -10,8 +10,16 @@ class BattlefieldForecastEngine:
         best_call = battlefield.get("best_call", {}) or {}
         best_put = battlefield.get("best_put", {}) or {}
 
-        call_score = float(best_call.get("score", 0))
-        put_score = float(best_put.get("score", 0))
+        def safe_float(value, default=0.0):
+            try:
+                if value is None:
+                    return default
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        call_score = safe_float(best_call.get("score", 0))
+        put_score = safe_float(best_put.get("score", 0))
 
         strongest_score = max(call_score, put_score)
 
