@@ -4,21 +4,9 @@ from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEng
 
 
 class RegimeScoringEngine:
-    _quote_cache = {}
 
     def _quote(self, symbol):
-        symbol = symbol.upper().strip()
-        if symbol in self._quote_cache:
-            return dict(self._quote_cache[symbol])
-        result = TradeStationQuoteLiveEngine().get_quote(symbol)
-        self._quote_cache[symbol] = dict(result)
-        return result
-
-    def _float(self, value, default=0.0):
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        return TradeStationQuoteLiveEngine().get_quote(symbol)
 
     def score_symbol(self, symbol):
         symbol = symbol.upper().strip()
@@ -103,3 +91,11 @@ class RegimeScoringEngine:
             "execution_enabled": False,
             "status": "REGIME_SCORE_READY"
         }
+
+
+    @staticmethod
+    def _float(value):
+        try:
+            return float(value)
+        except Exception:
+            return 0.0

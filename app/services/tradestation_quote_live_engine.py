@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from os import getenv
 from pathlib import Path
 from dotenv import load_dotenv
@@ -9,6 +10,7 @@ from app.services.tradestation_token_maintenance_engine import TradeStationToken
 
 class TradeStationQuoteLiveEngine:
     _quote_cache = {}
+    CACHE_TTL_SECONDS = 60
 
     @classmethod
     def clear_cache(cls):
@@ -25,8 +27,16 @@ class TradeStationQuoteLiveEngine:
 
         if symbol in self._quote_cache:
             cached = dict(self._quote_cache[symbol])
-            cached["cache_hit"] = True
-            return cached
+
+            cache_timestamp = cached.get("_cache_timestamp", 0)
+            cache_age_seconds = round(time.time() - cache_timestamp, 2)
+
+            if cache_age_seconds <= self.CACHE_TTL_SECONDS:
+                cached["cache_hit"] = True
+                cached["cache_age_seconds"] = cache_age_seconds
+                return cached
+
+            del self._quote_cache[symbol]
 
         if not access_token or not symbol:
             return {
@@ -80,6 +90,8 @@ class TradeStationQuoteLiveEngine:
         }
 
         if response.status_code == 200:
+            result["_cache_timestamp"] = time.time()
+            result["cache_age_seconds"] = 0
             self._quote_cache[symbol] = dict(result)
 
         return result

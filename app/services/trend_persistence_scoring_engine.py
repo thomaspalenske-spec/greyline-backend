@@ -4,15 +4,10 @@ from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEng
 
 
 class TrendPersistenceScoringEngine:
-    _quote_cache = {}
-
     def _quote(self, symbol):
-        symbol = symbol.upper().strip()
-        if symbol in self._quote_cache:
-            return dict(self._quote_cache[symbol])
-        result = TradeStationQuoteLiveEngine().get_quote(symbol)
-        self._quote_cache[symbol] = dict(result)
-        return result
+        return TradeStationQuoteLiveEngine().get_quote(
+            symbol.upper().strip()
+        )
 
     def _float(self, value, default=0.0):
         try:
