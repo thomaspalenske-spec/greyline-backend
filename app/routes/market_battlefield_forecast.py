@@ -23,6 +23,7 @@ from app.services.forward_outcome_grading_engine import ForwardOutcomeGradingEng
 from app.services.battlefield_learning_engine import BattlefieldLearningEngine
 from app.services.battlefield_adaptive_weight_advisor_engine import BattlefieldAdaptiveWeightAdvisorEngine
 from app.services.learning_sample_quality_gate_engine import LearningSampleQualityGateEngine
+from app.services.battlefield_learning_ledger_engine import BattlefieldLearningLedgerEngine
 
 router = APIRouter()
 
@@ -53,6 +54,7 @@ def market_battlefield_forecast():
         battlefield_learning = BattlefieldLearningEngine().evaluate(forward_outcome_grading.get('grades', []))
         learning_sample_quality_gate = LearningSampleQualityGateEngine().evaluate(battlefield_learning, forward_outcome_grading)
         battlefield_adaptive_weight_advisor = BattlefieldAdaptiveWeightAdvisorEngine().evaluate(battlefield_learning)
+        battlefield_learning_ledger = BattlefieldLearningLedgerEngine().record(battlefield_learning, learning_sample_quality_gate, battlefield_adaptive_weight_advisor)
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -90,6 +92,7 @@ def market_battlefield_forecast():
             "battlefield_learning": battlefield_learning,
             "learning_sample_quality_gate": learning_sample_quality_gate,
             "battlefield_adaptive_weight_advisor": battlefield_adaptive_weight_advisor,
+            "battlefield_learning_ledger": battlefield_learning_ledger,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
