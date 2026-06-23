@@ -189,3 +189,6 @@ app.include_router(market_battlefield_cache.router)
 
 from app.routes import options_trade_forensics
 app.include_router(options_trade_forensics.router)
+
+from app.routes import market_battlefield_forecast
+app.include_router(market_battlefield_forecast.router)
