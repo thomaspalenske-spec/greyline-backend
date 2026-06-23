@@ -18,6 +18,7 @@ from app.services.opportunity_autopsy_engine import OpportunityAutopsyEngine
 from app.services.opportunity_outcome_tracker_engine import OpportunityOutcomeTrackerEngine
 from app.services.forward_outcome_analyzer_engine import ForwardOutcomeAnalyzerEngine
 from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
+from app.services.battlefield_prediction_accuracy_engine import BattlefieldPredictionAccuracyEngine
 
 router = APIRouter()
 
@@ -43,6 +44,7 @@ def market_battlefield_forecast():
         opportunity_outcome_tracker = OpportunityOutcomeTrackerEngine().record(opportunity_queue.get('queue', []))
         forward_outcome_analyzer = ForwardOutcomeAnalyzerEngine().analyze()
         forward_outcome_capture = ForwardOutcomeCaptureEngine().capture()
+        battlefield_prediction_accuracy = BattlefieldPredictionAccuracyEngine().evaluate(forward_outcome_capture.get('outcomes', []))
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -75,6 +77,7 @@ def market_battlefield_forecast():
             "opportunity_outcome_tracker": opportunity_outcome_tracker,
             "forward_outcome_analyzer": forward_outcome_analyzer,
             "forward_outcome_capture": forward_outcome_capture,
+            "battlefield_prediction_accuracy": battlefield_prediction_accuracy,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",

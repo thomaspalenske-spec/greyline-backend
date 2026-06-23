@@ -61,6 +61,7 @@ class ForwardOutcomeCaptureEngine:
                 "candidate_result": r.get("result"),
                 "candidate_score": r.get("score"),
                 "candidate_rank": r.get("rank"),
+                "snapshot_price": r.get("snapshot_price"),
                 "current_price": current_price,
                 "quote_trade_time": price.get("trade_time"),
                 "quote_is_delayed": price.get("is_delayed"),
