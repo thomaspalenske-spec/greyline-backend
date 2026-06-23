@@ -20,3 +20,8 @@ def options_trade_forensics():
         "forensics": analyses,
         "status": "OPTIONS_TRADE_FORENSICS_REPORT_READY",
     }
+
+@router.get("/options-paper-trade-ledger")
+def options_paper_trade_ledger():
+    return OptionsPaperTradeLedgerEngine().history(limit=1000)
+
