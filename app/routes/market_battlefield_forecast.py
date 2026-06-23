@@ -22,6 +22,7 @@ from app.services.battlefield_prediction_accuracy_engine import BattlefieldPredi
 from app.services.forward_outcome_grading_engine import ForwardOutcomeGradingEngine
 from app.services.battlefield_learning_engine import BattlefieldLearningEngine
 from app.services.battlefield_adaptive_weight_advisor_engine import BattlefieldAdaptiveWeightAdvisorEngine
+from app.services.learning_sample_quality_gate_engine import LearningSampleQualityGateEngine
 
 router = APIRouter()
 
@@ -50,6 +51,7 @@ def market_battlefield_forecast():
         battlefield_prediction_accuracy = BattlefieldPredictionAccuracyEngine().evaluate(forward_outcome_capture.get('outcomes', []))
         forward_outcome_grading = ForwardOutcomeGradingEngine().grade(forward_outcome_capture.get('outcomes', []))
         battlefield_learning = BattlefieldLearningEngine().evaluate(forward_outcome_grading.get('grades', []))
+        learning_sample_quality_gate = LearningSampleQualityGateEngine().evaluate(battlefield_learning, forward_outcome_grading)
         battlefield_adaptive_weight_advisor = BattlefieldAdaptiveWeightAdvisorEngine().evaluate(battlefield_learning)
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
@@ -86,6 +88,7 @@ def market_battlefield_forecast():
             "battlefield_prediction_accuracy": battlefield_prediction_accuracy,
             "forward_outcome_grading": forward_outcome_grading,
             "battlefield_learning": battlefield_learning,
+            "learning_sample_quality_gate": learning_sample_quality_gate,
             "battlefield_adaptive_weight_advisor": battlefield_adaptive_weight_advisor,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
