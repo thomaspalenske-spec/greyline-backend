@@ -15,6 +15,7 @@ from app.services.opportunity_funnel_engine import OpportunityFunnelEngine
 from app.services.candidate_rejection_summary_engine import CandidateRejectionSummaryEngine
 from app.services.readiness_heatmap_engine import ReadinessHeatmapEngine
 from app.services.opportunity_autopsy_engine import OpportunityAutopsyEngine
+from app.services.opportunity_outcome_tracker_engine import OpportunityOutcomeTrackerEngine
 
 router = APIRouter()
 
@@ -37,6 +38,7 @@ def market_battlefield_forecast():
         candidate_rejection_summary = CandidateRejectionSummaryEngine().evaluate(opportunity_queue.get('queue', []))
         readiness_heatmap = ReadinessHeatmapEngine().evaluate(opportunity_queue.get('queue', []))
         opportunity_autopsy = OpportunityAutopsyEngine().evaluate(opportunity_queue.get('queue', []))
+        opportunity_outcome_tracker = OpportunityOutcomeTrackerEngine().record(opportunity_queue.get('queue', []))
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -66,6 +68,7 @@ def market_battlefield_forecast():
             "candidate_rejection_summary": candidate_rejection_summary,
             "readiness_heatmap": readiness_heatmap,
             "opportunity_autopsy": opportunity_autopsy,
+            "opportunity_outcome_tracker": opportunity_outcome_tracker,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
