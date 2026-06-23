@@ -20,6 +20,7 @@ from app.services.forward_outcome_analyzer_engine import ForwardOutcomeAnalyzerE
 from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
 from app.services.battlefield_prediction_accuracy_engine import BattlefieldPredictionAccuracyEngine
 from app.services.forward_outcome_grading_engine import ForwardOutcomeGradingEngine
+from app.services.battlefield_learning_engine import BattlefieldLearningEngine
 
 router = APIRouter()
 
@@ -47,6 +48,7 @@ def market_battlefield_forecast():
         forward_outcome_capture = ForwardOutcomeCaptureEngine().capture()
         battlefield_prediction_accuracy = BattlefieldPredictionAccuracyEngine().evaluate(forward_outcome_capture.get('outcomes', []))
         forward_outcome_grading = ForwardOutcomeGradingEngine().grade(forward_outcome_capture.get('outcomes', []))
+        battlefield_learning = BattlefieldLearningEngine().evaluate(forward_outcome_grading.get('grades', []))
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -81,6 +83,7 @@ def market_battlefield_forecast():
             "forward_outcome_capture": forward_outcome_capture,
             "battlefield_prediction_accuracy": battlefield_prediction_accuracy,
             "forward_outcome_grading": forward_outcome_grading,
+            "battlefield_learning": battlefield_learning,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
