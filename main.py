@@ -192,3 +192,6 @@ app.include_router(options_trade_forensics.router)
 
 from app.routes import market_battlefield_forecast
 app.include_router(market_battlefield_forecast.router)
+
+from app.routes import battlefield_learning
+app.include_router(battlefield_learning.router)
