@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.routes.greyline_market_battlefield import greyline_market_battlefield
 from app.services.market_battlefield_snapshot_cache import MarketBattlefieldSnapshotCache
+from app.services.battlefield_history_engine import BattlefieldHistoryEngine
 
 router = APIRouter()
 
@@ -94,7 +95,12 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
             "symbol": best_call.get("symbol"),
             "result": best_call.get("result"),
             "score": best_call.get("composite_score"),
+            "composite_score": best_call.get("composite_score"),
             "option_type": best_call.get("option_type"),
+            "directional_bias": best_call.get("directional_bias"),
+            "direction_confidence": best_call.get("direction_confidence"),
+            "liquidity_score": best_call.get("liquidity_score"),
+            "setup_score": best_call.get("setup_score"),
             "flow_confirmation": call_flow.get("confirmation"),
             "flow_strength": call_flow.get("flow_strength"),
             "premium_flow": call_flow.get("premium_flow"),
@@ -103,7 +109,12 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
             "symbol": best_put.get("symbol"),
             "result": best_put.get("result"),
             "score": best_put.get("composite_score"),
+            "composite_score": best_put.get("composite_score"),
             "option_type": best_put.get("option_type"),
+            "directional_bias": best_put.get("directional_bias"),
+            "direction_confidence": best_put.get("direction_confidence"),
+            "liquidity_score": best_put.get("liquidity_score"),
+            "setup_score": best_put.get("setup_score"),
             "flow_confirmation": put_flow.get("confirmation"),
             "flow_strength": put_flow.get("flow_strength"),
             "premium_flow": put_flow.get("premium_flow"),
@@ -116,5 +127,10 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
         "summary_mode": "FORCE_REFRESH" if force_refresh else "CACHE_MISS_REFRESH",
         "status": "GREYLINE_MARKET_BATTLEFIELD_SUMMARY_READY",
     }
+
+    try:
+        BattlefieldHistoryEngine.record(snapshot)
+    except Exception:
+        pass
 
     return MarketBattlefieldSnapshotCache.set(snapshot)
