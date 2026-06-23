@@ -77,6 +77,18 @@ class HorizonOneHourPerformanceEngine:
                 "raw_return_pct": raw_return,
                 "directional_return_pct": directional_return,
                 "prediction_correct": directional_return > 0,
+                "regime_score": r.get("regime_score"),
+                "regime": r.get("regime"),
+                "risk_state_score": r.get("risk_state_score"),
+                "risk_state": r.get("risk_state"),
+                "breadth_score": r.get("breadth_score"),
+                "breadth_state": r.get("breadth_state"),
+                "setup_score_context": r.get("setup_score_context"),
+                "setup_state": r.get("setup_state"),
+                "asymmetry_score": r.get("asymmetry_score"),
+                "asymmetry_state": r.get("asymmetry_state"),
+                "volatility_score": r.get("volatility_score"),
+                "volatility_state": r.get("volatility_state"),
             })
 
         correct = len([x for x in scored if x.get("prediction_correct")])

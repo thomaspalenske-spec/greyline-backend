@@ -3,6 +3,12 @@ from datetime import datetime
 from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.regime_scoring_engine import RegimeScoringEngine
+from app.services.risk_state_scoring_engine import RiskStateScoringEngine
+from app.services.breadth_scoring_engine import BreadthScoringEngine
+from app.services.setup_scoring_engine import SetupScoringEngine
+from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
+from app.services.volatility_scoring_engine import VolatilityScoringEngine
 
 
 class OpportunityOutcomeTrackerEngine:
@@ -21,11 +27,61 @@ class OpportunityOutcomeTrackerEngine:
         except Exception:
             return 0.0
 
+
+    def _score_context(self, symbol):
+        symbol = (symbol or "").upper().strip()
+
+        try:
+            regime = RegimeScoringEngine().score_symbol(symbol)
+        except Exception:
+            regime = {}
+
+        try:
+            risk = RiskStateScoringEngine().score_symbol(symbol)
+        except Exception:
+            risk = {}
+
+        try:
+            breadth = BreadthScoringEngine().score_symbol(symbol)
+        except Exception:
+            breadth = {}
+
+        try:
+            setup = SetupScoringEngine().score_symbol(symbol)
+        except Exception:
+            setup = {}
+
+        try:
+            asymmetry = AsymmetryScoringEngine().score_symbol(symbol)
+        except Exception:
+            asymmetry = {}
+
+        try:
+            volatility = VolatilityScoringEngine().score_symbol(symbol)
+        except Exception:
+            volatility = {}
+
+        return {
+            "regime_score": regime.get("regime_score"),
+            "regime": regime.get("regime"),
+            "risk_state_score": risk.get("risk_state_score"),
+            "risk_state": risk.get("risk_state"),
+            "breadth_score": breadth.get("breadth_score"),
+            "breadth_state": breadth.get("breadth_state"),
+            "setup_score_context": setup.get("setup_score"),
+            "setup_state": setup.get("setup_state"),
+            "asymmetry_score": asymmetry.get("asymmetry_score"),
+            "asymmetry_state": asymmetry.get("asymmetry_state"),
+            "volatility_score": volatility.get("volatility_score"),
+            "volatility_state": volatility.get("volatility_state"),
+        }
+
     def record(self, candidates):
         rows = []
 
         for item in candidates or []:
-            rows.append({
+            context = self._score_context(item.get("symbol"))
+            row = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "symbol": item.get("symbol"),
                 "option_type": item.get("option_type"),
@@ -37,7 +93,9 @@ class OpportunityOutcomeTrackerEngine:
                 "rank": item.get("rank"),
                 "snapshot_price": self._last_price(item.get("symbol")),
                 "outcome_status": "PENDING_FORWARD_OUTCOME"
-            })
+            }
+            row.update(context)
+            rows.append(row)
 
         if rows:
             with self.ledger_file.open("a") as f:

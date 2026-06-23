@@ -32,6 +32,7 @@ from app.services.horizon_one_hour_performance_engine import HorizonOneHourPerfo
 from app.services.horizon_one_hour_leaderboard_engine import HorizonOneHourLeaderboardEngine
 from app.services.horizon_attribution_engine import HorizonAttributionEngine
 from app.services.regime_attribution_engine import RegimeAttributionEngine
+from app.services.regime_learning_engine import RegimeLearningEngine
 
 router = APIRouter()
 
@@ -71,6 +72,7 @@ def market_battlefield_forecast():
         horizon_one_hour_leaderboard = HorizonOneHourLeaderboardEngine().evaluate(horizon_one_hour_performance)
         horizon_attribution = HorizonAttributionEngine().evaluate(horizon_one_hour_performance)
         regime_attribution = RegimeAttributionEngine().evaluate(horizon_attribution)
+        regime_learning = RegimeLearningEngine().evaluate(horizon_one_hour_performance)
         top_candidate = opportunity_queue.get("top_candidate")
         if top_candidate:
             readiness_acceleration = ReadinessAccelerationEngine().evaluate(top_candidate.get("symbol"))
@@ -117,6 +119,7 @@ def market_battlefield_forecast():
             "horizon_one_hour_leaderboard": horizon_one_hour_leaderboard,
             "horizon_attribution": horizon_attribution,
             "regime_attribution": regime_attribution,
+            "regime_learning": regime_learning,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
