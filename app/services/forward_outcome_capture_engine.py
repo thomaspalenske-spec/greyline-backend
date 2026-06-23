@@ -1,85 +1,78 @@
+import json
 from datetime import datetime
+from pathlib import Path
 
-from app.services.decision_replay_engine import DecisionReplayEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
 
 class ForwardOutcomeCaptureEngine:
+    def __init__(self):
+        self.ledger_file = Path("app/data/opportunity_memory/opportunity_outcome_ledger.jsonl")
 
-    def capture(self, limit=50):
-        replay = DecisionReplayEngine().replay_recent_decisions(limit=limit)
-        decisions = replay.get("replayed_decisions", [])
+    def _last_price(self, symbol):
+        quote_result = TradeStationQuoteLiveEngine().get_quote(symbol)
+        quotes = (quote_result.get("response_json") or {}).get("Quotes") or []
+        row = quotes[0] if quotes else {}
 
-        captures = []
-        captured_count = 0
-        skipped_count = 0
+        try:
+            price = float(row.get("Last") or 0)
+        except Exception:
+            price = 0.0
 
-        for item in decisions:
-            symbol = item.get("symbol")
+        return {
+            "symbol": symbol,
+            "price": price,
+            "quote_status": quote_result.get("status"),
+            "trade_time": row.get("TradeTime"),
+            "is_delayed": bool((row.get("MarketFlags") or {}).get("IsDelayed")),
+        }
 
-            if not symbol:
-                skipped_count += 1
-                captures.append({
-                    "decision_timestamp": item.get("original_timestamp"),
-                    "decision": item.get("decision"),
-                    "symbol": None,
-                    "capture_status": "SKIPPED_NO_SYMBOL",
-                    "capture_reason": "Decision event has no symbol attached",
-                    "execution_enabled": False,
-                    "order_placement_allowed": False,
-                })
-                continue
+    def capture(self, limit=25):
+        if not self.ledger_file.exists():
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "records_checked": 0,
+                "status": "NO_FORWARD_OUTCOME_LEDGER",
+            }
 
-            try:
-                quote = TradeStationQuoteLiveEngine().get_quote(symbol)
-                captured_count += 1
+        lines = self.ledger_file.read_text().splitlines()
+        records = [json.loads(x) for x in lines[-limit:] if x.strip()]
 
-                quote_row = {}
-                response_json = quote.get("response_json") or {}
-                quotes = response_json.get("Quotes") or []
-                if quotes:
-                    quote_row = quotes[0]
+        symbols = sorted(set(r.get("symbol") for r in records if r.get("symbol")))
+        prices = {symbol: self._last_price(symbol) for symbol in symbols}
 
-                captures.append({
-                    "decision_timestamp": item.get("original_timestamp"),
-                    "capture_timestamp": datetime.utcnow().isoformat(),
-                    "decision": item.get("decision"),
-                    "symbol": symbol,
-                    "replay_state": item.get("replay_state"),
-                    "quote_status": quote.get("status"),
-                    "http_status": quote.get("http_status"),
-                    "last": quote_row.get("Last"),
-                    "bid": quote_row.get("Bid"),
-                    "ask": quote_row.get("Ask"),
-                    "previous_close": quote_row.get("PreviousClose"),
-                    "volume": quote_row.get("Volume"),
-                    "trade_time": quote_row.get("TradeTime"),
-                    "capture_status": "FORWARD_OUTCOME_CAPTURED",
-                    "execution_enabled": False,
-                    "order_placement_allowed": False,
-                })
+        outcomes = []
+        for r in records:
+            symbol = r.get("symbol")
+            price = prices.get(symbol, {})
+            current_price = price.get("price") or 0
 
-            except Exception as exc:
-                skipped_count += 1
-                captures.append({
-                    "decision_timestamp": item.get("original_timestamp"),
-                    "decision": item.get("decision"),
-                    "symbol": symbol,
-                    "capture_status": "CAPTURE_FAILED",
-                    "capture_reason": str(exc),
-                    "execution_enabled": False,
-                    "order_placement_allowed": False,
-                })
+            if current_price <= 0:
+                outcome_state = "PRICE_UNAVAILABLE"
+            else:
+                outcome_state = "PRICE_CAPTURED"
+
+            outcomes.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "candidate_timestamp": r.get("timestamp"),
+                "symbol": symbol,
+                "option_type": r.get("option_type"),
+                "directional_bias": r.get("directional_bias"),
+                "candidate_result": r.get("result"),
+                "candidate_score": r.get("score"),
+                "candidate_rank": r.get("rank"),
+                "current_price": current_price,
+                "quote_trade_time": price.get("trade_time"),
+                "quote_is_delayed": price.get("is_delayed"),
+                "outcome_state": outcome_state,
+            })
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
-            "source": "FORWARD_OUTCOME_CAPTURE",
-            "events_analyzed": len(decisions),
-            "captured_count": captured_count,
-            "skipped_count": skipped_count,
-            "captures": captures,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "engine": "ForwardOutcomeCaptureEngine",
+            "records_checked": len(records),
+            "symbols_checked": symbols,
+            "outcomes": outcomes,
             "status": "FORWARD_OUTCOME_CAPTURE_READY",
         }
