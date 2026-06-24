@@ -5,7 +5,9 @@ from app.services.portfolio_concentration_engine import PortfolioConcentrationEn
 from app.services.portfolio_correlation_engine import PortfolioCorrelationEngine
 from app.services.portfolio_capacity_engine import PortfolioCapacityEngine
 from app.services.portfolio_heat_engine import PortfolioHeatEngine
+from app.services.portfolio_directional_exposure_engine import PortfolioDirectionalExposureEngine
 from app.services.portfolio_heat_engine import PortfolioHeatEngine
+from app.services.portfolio_directional_exposure_engine import PortfolioDirectionalExposureEngine
 
 
 class PortfolioAllocationEngine:
@@ -17,6 +19,7 @@ class PortfolioAllocationEngine:
         correlation = PortfolioCorrelationEngine().evaluate()
         capacity = PortfolioCapacityEngine().evaluate()
         heat = PortfolioHeatEngine().evaluate()
+        directional = PortfolioDirectionalExposureEngine().evaluate()
 
         base_allocation = 0
 
@@ -66,6 +69,14 @@ class PortfolioAllocationEngine:
             allocation *= 0.75
             adjustments.append("MODERATE_HEAT_REDUCTION")
 
+        directional_risk = directional.get("directional_risk")
+        if directional_risk == "HIGH":
+            allocation *= 0.50
+            adjustments.append("DIRECTIONAL_EXPOSURE_REDUCTION")
+        elif directional_risk == "ELEVATED":
+            allocation *= 0.75
+            adjustments.append("MODERATE_DIRECTIONAL_EXPOSURE_REDUCTION")
+
         allocation = round(allocation, 2)
 
         if allocation >= 60:
@@ -90,5 +101,6 @@ class PortfolioAllocationEngine:
             "correlation": correlation,
             "capacity": capacity,
             "heat": heat,
+            "directional_exposure": directional,
             "status": "PORTFOLIO_ALLOCATION_READY",
         }
