@@ -22,6 +22,7 @@ from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
 from app.services.market_battlefield_snapshot_cache import MarketBattlefieldSnapshotCache
 from app.routes.greyline_market_battlefield import greyline_market_battlefield
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
+from app.services.opportunity_queue_engine import OpportunityQueueEngine
 from app.routes.market_battlefield_forecast import market_battlefield_forecast
 
 router = APIRouter()
@@ -79,14 +80,9 @@ def safe_call(name, fn):
 @router.get("/operator-quick-brief")
 def operator_quick_brief():
     battlefield_summary = greyline_market_battlefield_summary(force_refresh=True)
-    best_call = battlefield_summary.get("best_call", {}) or {}
-    best_put = battlefield_summary.get("best_put", {}) or {}
-
-    top_candidate = (
-        best_call
-        if (best_call.get("score") or 0) >= (best_put.get("score") or 0)
-        else best_put
-    )
+    opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
+    top_candidates = opportunity_queue.get("queue", [])[:3]
+    top_candidate = top_candidates[0] if top_candidates else {}
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -95,6 +91,8 @@ def operator_quick_brief():
         "battlefield_health": battlefield_summary.get("battlefield_health"),
         "battlefield_health_reason": battlefield_summary.get("battlefield_health_reason"),
         "top_candidate": top_candidate,
+        "top_candidates": top_candidates,
+        "opportunity_queue_status": opportunity_queue.get("status"),
         "token_status": safe_call(
             "tradestation_token_status",
             lambda: TradeStationTokenStatusEngine().evaluate()
@@ -114,14 +112,9 @@ def operator_quick_brief():
 def ai_operator_brief():
     battlefield_summary = greyline_market_battlefield_summary()
 
-    best_call = battlefield_summary.get("best_call", {}) or {}
-    best_put = battlefield_summary.get("best_put", {}) or {}
-
-    top_candidate = (
-        best_call
-        if (best_call.get("score") or 0) >= (best_put.get("score") or 0)
-        else best_put
-    )
+    opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
+    top_candidates = opportunity_queue.get("queue", [])[:3]
+    top_candidate = top_candidates[0] if top_candidates else {}
 
     forecast_result = safe_call(
         "market_battlefield_forecast",

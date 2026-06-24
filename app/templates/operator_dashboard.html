@@ -124,16 +124,21 @@
     </div>
 
     <div class="card half">
-        <h2>Top Candidate</h2>
+        <h2>Top 3 Candidates</h2>
         <table>
-            <tbody>
-                <tr><th>Symbol</th><td id="top_symbol">Loading...</td></tr>
-                <tr><th>Direction</th><td id="top_direction">Loading...</td></tr>
-                <tr><th>Option Type</th><td id="top_option_type">Loading...</td></tr>
-                <tr><th>Raw Score</th><td id="top_score">Loading...</td></tr>
-                <tr><th>Adjusted Score</th><td id="top_adjusted_score">Loading...</td></tr>
-                <tr><th>Signal Age</th><td id="top_signal_age">Loading...</td></tr>
-                <tr><th>Decay Penalty</th><td id="top_decay_penalty">Loading...</td></tr>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Symbol</th>
+                    <th>Type</th>
+                    <th>Bias</th>
+                    <th>Raw</th>
+                    <th>Adj</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody id="top_candidates_table">
+                <tr><td colspan="7">Loading...</td></tr>
             </tbody>
         </table>
     </div>
@@ -208,6 +213,7 @@ async function refreshDashboard() {
 
     const operatorSummary = operator || {};
     const top = operator.top_candidate || {};
+    const topCandidates = operator.top_candidates || [];
     const token = operator.token_status?.data || {};
     const broker = operator.live_broker_health?.data || {};
     const authority = operator.live_trade_authority_gate?.data || {};
@@ -234,6 +240,27 @@ async function refreshDashboard() {
     document.getElementById('top_accuracy').textContent = fmt(top.historical_accuracy_pct) + '%';
     document.getElementById('top_win_rate').textContent = fmt(top.historical_win_rate_pct) + '%';
     document.getElementById('top_decay_reason').textContent = top.signal_decay_reason || 'NONE';
+
+    const topBody = document.getElementById('top_candidates_table');
+    if (topBody) {
+        topBody.innerHTML = '';
+        for (const c of topCandidates) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${c.rank ?? ''}</td>
+                <td>${c.symbol ?? 'NONE'}</td>
+                <td>${c.option_type ?? 'UNKNOWN'}</td>
+                <td>${c.directional_bias ?? 'UNKNOWN'}</td>
+                <td>${fmt(c.score)}</td>
+                <td>${fmt(c.adjusted_score)}</td>
+                <td>${c.result ?? 'UNKNOWN'}</td>
+            `;
+            topBody.appendChild(row);
+        }
+        if (topCandidates.length === 0) {
+            topBody.innerHTML = '<tr><td colspan="7">No candidates available</td></tr>';
+        }
+    }
 
     document.getElementById('current_equity').textContent = '$' + fmt(data.current_equity);
     document.getElementById('unrealized_pnl').textContent = '$' + fmt(data.unrealized_pnl);
