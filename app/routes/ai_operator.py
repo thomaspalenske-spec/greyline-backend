@@ -76,6 +76,17 @@ def safe_call(name, fn):
 
 @router.get("/ai-operator-brief")
 def ai_operator_brief():
+    battlefield_summary = greyline_market_battlefield_summary()
+
+    best_call = battlefield_summary.get("best_call", {}) or {}
+    best_put = battlefield_summary.get("best_put", {}) or {}
+
+    top_candidate = (
+        best_call
+        if (best_call.get("score") or 0) >= (best_put.get("score") or 0)
+        else best_put
+    )
+
     return {
         "timestamp": datetime.utcnow().isoformat(),
         "system": "GreyLine",
@@ -109,6 +120,14 @@ def ai_operator_brief():
             "market_battlefield_summary",
             lambda: greyline_market_battlefield_summary()
         ),
+
+        "operator_top_candidate": {
+            "symbol": top_candidate.get("symbol"),
+            "score": top_candidate.get("score"),
+            "signal_age_days": top_candidate.get("signal_age_days"),
+            "option_type": top_candidate.get("option_type"),
+            "directional_bias": top_candidate.get("directional_bias"),
+        },
         "greyline_master_decision": {
             "ok": True,
             "name": "greyline_master_decision",
