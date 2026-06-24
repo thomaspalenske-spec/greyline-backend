@@ -184,6 +184,7 @@
 
 <script>
 async function refreshDashboard() {
+    try {
     const optionsRes = await fetch('/options-account-dashboard');
     const data = await optionsRes.json();
 
@@ -234,12 +235,12 @@ async function refreshDashboard() {
     document.getElementById('top_win_rate').textContent = fmt(top.historical_win_rate_pct) + '%';
     document.getElementById('top_decay_reason').textContent = top.signal_decay_reason || 'NONE';
 
-    document.getElementById('current_equity').textContent = '$' + Number(data.current_equity).toFixed(2);
-    document.getElementById('unrealized_pnl').textContent = '$' + Number(data.unrealized_pnl).toFixed(2);
-    document.getElementById('open_option_trade_count').textContent = data.open_option_trade_count;
+    document.getElementById('current_equity').textContent = '$' + fmt(data.current_equity);
+    document.getElementById('unrealized_pnl').textContent = '$' + fmt(data.unrealized_pnl);
+    document.getElementById('open_option_trade_count').textContent = data.open_option_trade_count ?? 0;
     document.getElementById('execution_enabled').textContent = data.execution_enabled ? 'YES' : 'NO';
     document.getElementById('order_placement_allowed').textContent = data.order_placement_allowed ? 'YES' : 'NO';
-    document.getElementById('total_return_pct').textContent = Number(data.total_return_pct).toFixed(2) + '%';
+    document.getElementById('total_return_pct').textContent = fmt(data.total_return_pct) + '%';
 
     document.getElementById('unrealized_pnl').className =
         Number(data.unrealized_pnl) >= 0 ? 'value good' : 'value bad';
@@ -285,8 +286,12 @@ async function refreshDashboard() {
 
     document.getElementById('raw_json').textContent = JSON.stringify({
         options_account_dashboard: data,
-        ai_operator_brief: operator
+        operator_quick_brief: operator
     }, null, 2);
+    } catch (e) {
+        document.getElementById('plain_summary').textContent = 'Dashboard refresh error: ' + e.message;
+        document.getElementById('raw_json').textContent = String(e.stack || e);
+    }
 }
 
 function fmt(value) {
