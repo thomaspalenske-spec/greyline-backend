@@ -4,6 +4,7 @@ from pathlib import Path
 from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
+from app.services.options_position_sizing_engine import OptionsPositionSizingEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
 
@@ -129,6 +130,12 @@ class OptionsPaperTradeLedgerEngine:
         expiration_raw = leg.get("Expiration")
         contract_metrics = self._contract_metrics(now.isoformat(), expiration_raw)
 
+        sizing = OptionsPositionSizingEngine().evaluate(
+            account_equity=10000,
+            option_ask=float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0),
+            max_position_pct=0.05,
+        )
+
         trade = {
             "timestamp": now.isoformat(),
             "asset_type": "OPTION",
@@ -142,7 +149,7 @@ class OptionsPaperTradeLedgerEngine:
             "underlying": underlying,
             "option_symbol": leg.get("Symbol"),
             "side": "BUY_TO_OPEN",
-            "contracts": 1,
+            "contracts": sizing.get("recommended_contracts", 1),
             "entry_price": float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0),
             "entry_mid": float(candidate.get("Mid") or 0),
             "bid": float(candidate.get("Bid") or 0),
@@ -156,7 +163,8 @@ class OptionsPaperTradeLedgerEngine:
             "vega": float(candidate.get("Vega") or 0),
             "implied_volatility": float(candidate.get("ImpliedVolatility") or 0),
             "open_interest": int(candidate.get("DailyOpenInterest") or 0),
-            "estimated_cost": round(float(candidate.get("Ask") or candidate.get("Mid") or 0) * 100, 2),
+            "estimated_cost": sizing.get("estimated_position_cost"),
+            "position_sizing": sizing,
             "source": source,
             "status": "OPEN",
         }
