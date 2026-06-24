@@ -141,6 +141,7 @@
                     <th>Adj</th>
                     <th>Result</th>
                     <th>Action State</th>
+                    <th>Paper Fill Status</th>
                 </tr>
             </thead>
             <tbody id="top_candidates_table">
@@ -241,6 +242,19 @@ async function refreshDashboard() {
     const top = operator.top_candidate || {};
     const topCandidates = operator.top_candidates || [];
     const token = operator.token_status?.data || {};
+
+    let paperLedger = {};
+    let optionsLedger = {};
+    try {
+        paperLedger = await (await fetch('/paper-trade-ledger')).json();
+    } catch (e) {
+        paperLedger = {};
+    }
+    try {
+        optionsLedger = await (await fetch('/options-paper-trade-ledger')).json();
+    } catch (e) {
+        optionsLedger = {};
+    }
     const broker = operator.live_broker_health?.data || {};
     const authority = operator.live_trade_authority_gate?.data || {};
 
@@ -259,6 +273,14 @@ async function refreshDashboard() {
     if (topBody) {
         topBody.innerHTML = '';
         for (const c of topCandidates) {
+            const paperTrades = paperLedger.open_trades || paperLedger.trades || [];
+            const optionTrades = optionsLedger.open_trades || optionsLedger.trades || [];
+            const paperMatch = paperTrades.find(t => (t.symbol || t.underlying) === c.symbol);
+            const optionMatch = optionTrades.find(t => (t.symbol || t.underlying) === c.symbol);
+            const fillStatus = optionMatch ? `OPTIONS PAPER ${optionMatch.status || 'OPEN'}`
+                : paperMatch ? `EQUITY PAPER ${paperMatch.status || 'OPEN'}`
+                : c.result === 'EXECUTE' ? 'NO PAPER FILL FOUND'
+                : 'NO FILL';
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${c.rank ?? ''}</td>
@@ -269,6 +291,7 @@ async function refreshDashboard() {
                 <td>${fmt(c.adjusted_score)}</td>
                 <td>${c.result ?? 'UNKNOWN'}</td>
                 <td>${c.result === 'EXECUTE' ? 'SIGNAL ONLY / NOT FILLED' : 'WATCHING'}</td>
+                <td>${fillStatus}</td>
             `;
             topBody.appendChild(row);
         }
@@ -363,7 +386,9 @@ async function refreshDashboard() {
 
     document.getElementById('raw_json').textContent = JSON.stringify({
         options_account_dashboard: data,
-        operator_quick_brief: operator
+        operator_quick_brief: operator,
+        paper_trade_ledger: paperLedger,
+        options_paper_trade_ledger: optionsLedger
     }, null, 2);
     } catch (e) {
         document.getElementById('plain_summary').textContent = 'Dashboard refresh error: ' + e.message;
