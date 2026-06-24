@@ -178,7 +178,7 @@
                     <th>Contract</th>
                     <th>Side</th>
                     <th>Contracts</th>
-                    <th>Entry</th>
+                    <th>Underlying Entry</th>
                     <th>Current</th>
                     <th>P/L</th>
                     <th>Status</th>
@@ -368,9 +368,9 @@ async function refreshDashboard() {
             <td>${p.option_symbol}</td>
             <td>${p.side}</td>
             <td>${p.contracts}</td>
-            <td>$${p.entry_price}</td>
-            <td>$${p.current_price}</td>
-            <td>$${p.unrealized_pnl}</td>
+            <td>$${fmt(p.underlying_entry_price || p.current_underlying_price || p.entry_price)}</td>
+            <td>$${fmt(p.current_underlying_price || p.current_price)}</td>
+            <td>$${fmt(p.unrealized_pnl)}</td>
             <td>${p.status}</td>
         `;
         tbody.appendChild(row);
