@@ -205,6 +205,33 @@
     </div>
 
     <div class="card wide">
+        <h2>Open Trade Detail Report</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Asset</th>
+                    <th>Symbol</th>
+                    <th>Contract</th>
+                    <th>Side</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Current</th>
+                    <th>Unrealized P/L</th>
+                    <th>P/L %</th>
+                    <th>Strike</th>
+                    <th>Expiration</th>
+                    <th>Days Left</th>
+                    <th>Status</th>
+                    <th>Entry Thesis</th>
+                </tr>
+            </thead>
+            <tbody id="open_trade_detail_table">
+                <tr><td colspan="14">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card wide">
         <h2>Raw Dashboard JSON</h2>
         <pre id="raw_json">Loading...</pre>
     </div>
@@ -347,6 +374,49 @@ async function refreshDashboard() {
             <td>${p.status}</td>
         `;
         tbody.appendChild(row);
+    }
+
+    const openDetailBody = document.getElementById('open_trade_detail_table');
+    if (openDetailBody) {
+        const optionTrades = (optionsLedger.trades || []).filter(t => t.status === 'OPEN');
+        const equityTrades = (paperLedger.trades || []).filter(t => t.status === 'OPEN');
+        const allOpenTrades = [
+            ...optionTrades.map(t => ({...t, display_asset: 'OPTION'})),
+            ...equityTrades.map(t => ({...t, display_asset: 'EQUITY'}))
+        ];
+
+        openDetailBody.innerHTML = '';
+
+        for (const t of allOpenTrades) {
+            const row = document.createElement('tr');
+            const thesis = [
+                t.entry_regime ? `Regime: ${t.entry_regime}` : null,
+                t.entry_risk_state ? `Risk: ${t.entry_risk_state}` : null,
+                t.entry_expected_value_tier ? `EV: ${t.entry_expected_value_tier}` : null
+            ].filter(Boolean).join(' | ');
+
+            row.innerHTML = `
+                <td>${t.display_asset}</td>
+                <td>${t.underlying || t.symbol || 'UNKNOWN'}</td>
+                <td>${t.option_symbol || 'N/A'}</td>
+                <td>${t.side || 'UNKNOWN'}</td>
+                <td>${t.contracts ?? t.quantity ?? 'N/A'}</td>
+                <td>$${fmt(t.entry_price)}</td>
+                <td>$${fmt(t.current_price)}</td>
+                <td>$${fmt(t.unrealized_pnl)}</td>
+                <td>${fmt(t.unrealized_pnl_pct)}%</td>
+                <td>${t.strike ?? 'N/A'}</td>
+                <td>${t.contract_expiration_date || t.expiration || 'N/A'}</td>
+                <td>${t.remaining_contract_days ?? 'N/A'}</td>
+                <td>${t.status || 'UNKNOWN'}</td>
+                <td>${thesis || 'N/A'}</td>
+            `;
+            openDetailBody.appendChild(row);
+        }
+
+        if (allOpenTrades.length === 0) {
+            openDetailBody.innerHTML = '<tr><td colspan="14">No open paper trades found</td></tr>';
+        }
     }
 
     document.getElementById('last_update').textContent = new Date().toLocaleTimeString();
