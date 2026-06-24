@@ -376,7 +376,13 @@ class OptionsAccountDashboardEngine:
         realized_pnl = round(sum(float(t.get("realized_pnl") or 0) for t in closed_trades), 2)
         unrealized_pnl = round(sum(float(t.get("unrealized_pnl") or 0) for t in open_trades), 2)
 
-        current_equity = round(self.starting_equity + realized_pnl + unrealized_pnl, 2)
+        deployed_capital = round(sum(float(t.get("estimated_cost") or 0) for t in open_trades), 2)
+        open_position_value = round(deployed_capital + unrealized_pnl, 2)
+        cash_on_hand = round(self.starting_equity + realized_pnl - deployed_capital, 2)
+        buying_power_remaining = cash_on_hand
+        capital_deployed_pct = round((deployed_capital / self.starting_equity) * 100, 2) if self.starting_equity else 0
+
+        current_equity = round(cash_on_hand + open_position_value, 2)
 
         wins = [t for t in closed_trades if float(t.get("realized_pnl") or 0) > 0]
         losses = [t for t in closed_trades if float(t.get("realized_pnl") or 0) < 0]
@@ -389,6 +395,11 @@ class OptionsAccountDashboardEngine:
             "account_type": "OPTIONS_PAPER_TRADING",
             "starting_equity": self.starting_equity,
             "current_equity": current_equity,
+            "cash_on_hand": cash_on_hand,
+            "open_position_value": open_position_value,
+            "deployed_capital": deployed_capital,
+            "buying_power_remaining": buying_power_remaining,
+            "capital_deployed_pct": capital_deployed_pct,
             "realized_pnl": realized_pnl,
             "unrealized_pnl": unrealized_pnl,
             "total_return_pct": round(((current_equity - self.starting_equity) / self.starting_equity) * 100, 2),
