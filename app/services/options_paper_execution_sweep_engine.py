@@ -39,6 +39,8 @@ class OptionsPaperExecutionSweepEngine:
                 continue
 
             r = OptionsCycleEngine().run(symbol=symbol, option_type=option_type)
+            ledger_result = r.get("paper_trade") or {}
+
             results.append({
                 "symbol": symbol,
                 "option_type": option_type,
@@ -47,6 +49,8 @@ class OptionsPaperExecutionSweepEngine:
                 "paper_trade_recorded": r.get("paper_trade_recorded"),
                 "duplicate_blocked": r.get("duplicate_blocked"),
                 "selected_option_symbol": (((r.get("top_candidate") or {}).get("Legs") or [{}])[0]).get("Symbol"),
+                "block_reason": ledger_result.get("reason"),
+                "position_sizing": ledger_result.get("position_sizing"),
                 "engine_status": r.get("status"),
                 "status": "OPTIONS_PAPER_SWEEP_EVALUATED",
             })
