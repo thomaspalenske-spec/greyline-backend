@@ -1,3 +1,4 @@
+from app.routes import portfolio_governor
 from fastapi import FastAPI
 from app.routes import ai_operator
 from app.routes import paper_trade_ledger
@@ -199,3 +200,5 @@ from app.routes import forecast_reliability_dashboard
 app.include_router(battlefield_learning.router)
 app.include_router(forecast_accuracy_dashboard.router)
 app.include_router(forecast_reliability_dashboard.router)
+
+app.include_router(portfolio_governor.router)
