@@ -88,7 +88,11 @@ def ai_operator_brief():
         else best_put
     )
 
-    forecast = market_battlefield_forecast()
+    forecast_result = safe_call(
+        "market_battlefield_forecast",
+        lambda: market_battlefield_forecast()
+    )
+    forecast = forecast_result.get("data", {}) if forecast_result.get("ok") else {}
     queue_top = (forecast.get("opportunity_queue", {}) or {}).get("top_candidate", {}) or {}
     prediction_accuracy = forecast.get("battlefield_prediction_accuracy", {}) or {}
     confidence_calibration = forecast.get("confidence_calibration", {}) or {}
@@ -126,6 +130,7 @@ def ai_operator_brief():
             "market_battlefield_summary",
             lambda: greyline_market_battlefield_summary()
         ),
+        "market_battlefield_forecast": forecast_result,
 
         "operator_top_candidate": {
             "symbol": queue_top.get("symbol") or top_candidate.get("symbol"),
