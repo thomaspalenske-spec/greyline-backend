@@ -210,6 +210,10 @@
 
 <script>
 async function refreshDashboard() {
+    if (dashboardRefreshInProgress) {
+        return;
+    }
+    dashboardRefreshInProgress = true;
     try {
     const optionsRes = await fetch('/options-account-dashboard');
     const data = await optionsRes.json();
@@ -217,7 +221,7 @@ async function refreshDashboard() {
     let operator = {};
     try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
+        const timeout = setTimeout(() => controller.abort(), 10000);
         const operatorRes = await fetch('/operator-quick-brief', {signal: controller.signal});
         clearTimeout(timeout);
         operator = await operatorRes.json();
@@ -374,6 +378,8 @@ async function refreshDashboard() {
     } catch (e) {
         document.getElementById('plain_summary').textContent = 'Dashboard refresh error: ' + e.message;
         document.getElementById('raw_json').textContent = String(e.stack || e);
+    } finally {
+        dashboardRefreshInProgress = false;
     }
 }
 
@@ -402,11 +408,13 @@ async function runOptionsManager() {
 
 let refreshSeconds = 30;
 
+let dashboardRefreshInProgress = false;
+
 refreshDashboard();
 
 setInterval(() => {
     refreshSeconds -= 1;
-    if (refreshSeconds <= 0) {
+    if (refreshSeconds <= 0 && !dashboardRefreshInProgress) {
         refreshSeconds = 30;
         refreshDashboard();
     }
