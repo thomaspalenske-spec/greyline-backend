@@ -2,6 +2,8 @@ from datetime import datetime
 import json
 from pathlib import Path
 
+from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+
 
 class ForecastOutcomeGraderEngine:
     def __init__(self):
@@ -24,17 +26,73 @@ class ForecastOutcomeGraderEngine:
                     continue
         return rows
 
+    def _last_price(self, symbol):
+        if not symbol:
+            return {
+                "price": None,
+                "quote_status": "NO_SYMBOL",
+                "trade_time": None,
+            }
+
+        quote_result = TradeStationQuoteLiveEngine().get_quote(symbol)
+        quotes = (quote_result.get("response_json") or {}).get("Quotes") or []
+        row = quotes[0] if quotes else {}
+
+        try:
+            price = float(row.get("Last") or 0)
+        except Exception:
+            price = 0.0
+
+        return {
+            "price": price if price > 0 else None,
+            "quote_status": quote_result.get("status"),
+            "trade_time": row.get("TradeTime"),
+        }
+
     def grade_pending(self, market_prices=None):
         market_prices = market_prices or {}
         outcomes = self._read_outcomes()
         graded = []
+        price_cache = {}
 
         for record in outcomes[-25:]:
             symbol = record.get("symbol")
             predicted_direction = record.get("predicted_direction")
             predicted_score = record.get("predicted_score")
 
-            current_price = market_prices.get(symbol)
+            if symbol in market_prices:
+                price_info = {
+                    "price": market_prices.get(symbol),
+                    "quote_status": "SUPPLIED_MARKET_PRICE",
+                    "trade_time": None,
+                }
+            else:
+                if symbol not in price_cache:
+                    price_cache[symbol] = self._last_price(symbol)
+                price_info = price_cache.get(symbol, {})
+
+            current_price = price_info.get("price")
+            snapshot_price = record.get("snapshot_price")
+            forecast_correct = None
+            forecast_grade = "PENDING_MARKET_PRICE"
+            return_pct = None
+
+            try:
+                snapshot_price = float(snapshot_price or 0)
+                current = float(current_price or 0)
+            except Exception:
+                snapshot_price = 0
+                current = 0
+
+            if snapshot_price > 0 and current > 0 and predicted_direction:
+                raw_return_pct = round(((current - snapshot_price) / snapshot_price) * 100, 4)
+                return_pct = raw_return_pct
+                directional_return_pct = raw_return_pct
+                if predicted_direction == "BEARISH":
+                    directional_return_pct = round(-raw_return_pct, 4)
+
+                forecast_correct = directional_return_pct > 0
+                forecast_grade = "A" if directional_return_pct >= 1 else "B" if directional_return_pct > 0 else "F"
 
             grade_record = {
                 "timestamp": datetime.utcnow().isoformat(),
@@ -42,10 +100,14 @@ class ForecastOutcomeGraderEngine:
                 "symbol": symbol,
                 "predicted_direction": predicted_direction,
                 "predicted_score": predicted_score,
+                "snapshot_price": snapshot_price if snapshot_price > 0 else None,
                 "current_price": current_price,
-                "forecast_grade": "PENDING_MARKET_PRICE",
-                "forecast_correct": None,
-                "status": "FORECAST_OUTCOME_GRADE_PENDING",
+                "return_pct": return_pct,
+                "forecast_grade": forecast_grade,
+                "forecast_correct": forecast_correct,
+                "quote_status": price_info.get("quote_status"),
+                "quote_trade_time": price_info.get("trade_time"),
+                "status": "FORECAST_OUTCOME_GRADED" if forecast_correct is not None else "FORECAST_OUTCOME_GRADE_PENDING",
             }
 
             graded.append(grade_record)
