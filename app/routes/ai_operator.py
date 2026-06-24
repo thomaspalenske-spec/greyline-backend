@@ -22,6 +22,7 @@ from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
 from app.services.market_battlefield_snapshot_cache import MarketBattlefieldSnapshotCache
 from app.routes.greyline_market_battlefield import greyline_market_battlefield
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
+from app.routes.market_battlefield_forecast import market_battlefield_forecast
 
 router = APIRouter()
 
@@ -58,6 +59,11 @@ def _battlefield_refresh_status():
             state["running_seconds"] = None
             state["stale_running"] = None
             state["last_error"] = str(e)
+
+    forecast = market_battlefield_forecast()
+    queue_top = (forecast.get("opportunity_queue", {}) or {}).get("top_candidate", {}) or {}
+    prediction_accuracy = forecast.get("battlefield_prediction_accuracy", {}) or {}
+    confidence_calibration = forecast.get("confidence_calibration", {}) or {}
 
     return {
         "timestamp": now.isoformat(),
@@ -122,11 +128,19 @@ def ai_operator_brief():
         ),
 
         "operator_top_candidate": {
-            "symbol": top_candidate.get("symbol"),
-            "score": top_candidate.get("score"),
-            "signal_age_days": top_candidate.get("signal_age_days"),
-            "option_type": top_candidate.get("option_type"),
-            "directional_bias": top_candidate.get("directional_bias"),
+            "symbol": queue_top.get("symbol") or top_candidate.get("symbol"),
+            "score": queue_top.get("score") or top_candidate.get("score"),
+            "adjusted_score": queue_top.get("adjusted_score"),
+            "signal_age_days": (queue_top.get("signal_decay", {}) or {}).get("signal_age_days") or top_candidate.get("signal_age_days"),
+            "signal_strength_score": (queue_top.get("signal_decay", {}) or {}).get("signal_strength_score"),
+            "signal_state": (queue_top.get("signal_decay", {}) or {}).get("signal_state"),
+            "signal_decay_penalty": queue_top.get("signal_decay_penalty"),
+            "signal_decay_reason": queue_top.get("signal_decay_reason"),
+            "option_type": queue_top.get("option_type") or top_candidate.get("option_type"),
+            "directional_bias": queue_top.get("directional_bias") or top_candidate.get("directional_bias"),
+            "historical_accuracy_pct": prediction_accuracy.get("accuracy_pct") or prediction_accuracy.get("overall_accuracy_pct"),
+            "confidence_level": confidence_calibration.get("confidence_level"),
+            "historical_win_rate_pct": confidence_calibration.get("historical_win_rate_pct"),
         },
         "greyline_master_decision": {
             "ok": True,
