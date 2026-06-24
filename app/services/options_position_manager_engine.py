@@ -179,12 +179,22 @@ class OptionsPositionManagerEngine:
                 trade["exit_reason"] = "OPTIONS_TAKE_PROFIT_50_PCT"
                 closed.append(trade)
             elif pnl_pct <= -35:
+                stop_loss_threshold_pct = -35
+                stop_loss_breach_pct = round(abs(pnl_pct - stop_loss_threshold_pct), 2)
+
                 trade["status"] = "CLOSED"
                 trade["exit_price"] = current_price
                 trade["exit_timestamp"] = datetime.utcnow().isoformat()
                 trade["realized_pnl"] = pnl
                 trade["realized_pnl_pct"] = pnl_pct
                 trade["exit_reason"] = "OPTIONS_STOP_LOSS_35_PCT"
+                trade["stop_loss_threshold_pct"] = stop_loss_threshold_pct
+                trade["stop_loss_breach_pct"] = stop_loss_breach_pct
+                trade["stop_loss_execution_quality"] = (
+                    "LATE_STOP_LOSS_EXECUTION"
+                    if stop_loss_breach_pct >= 10
+                    else "NORMAL_STOP_LOSS_EXECUTION"
+                )
                 closed.append(trade)
 
             updated.append(trade)
