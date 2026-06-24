@@ -4,6 +4,8 @@ from app.services.portfolio_exposure_engine import PortfolioExposureEngine
 from app.services.portfolio_concentration_engine import PortfolioConcentrationEngine
 from app.services.portfolio_correlation_engine import PortfolioCorrelationEngine
 from app.services.portfolio_capacity_engine import PortfolioCapacityEngine
+from app.services.portfolio_heat_engine import PortfolioHeatEngine
+from app.services.portfolio_heat_engine import PortfolioHeatEngine
 
 
 class PortfolioAllocationEngine:
@@ -14,6 +16,7 @@ class PortfolioAllocationEngine:
         concentration = PortfolioConcentrationEngine().evaluate()
         correlation = PortfolioCorrelationEngine().evaluate()
         capacity = PortfolioCapacityEngine().evaluate()
+        heat = PortfolioHeatEngine().evaluate()
 
         base_allocation = 0
 
@@ -52,6 +55,17 @@ class PortfolioAllocationEngine:
             allocation *= capacity_multiplier
             adjustments.append("CAPACITY_REDUCTION")
 
+        heat_state = heat.get("heat_state")
+        if heat_state == "CRITICAL":
+            allocation = 0
+            adjustments.append("HEAT_BLOCK")
+        elif heat_state == "ELEVATED":
+            allocation *= 0.50
+            adjustments.append("HEAT_REDUCTION")
+        elif heat_state == "MODERATE":
+            allocation *= 0.75
+            adjustments.append("MODERATE_HEAT_REDUCTION")
+
         allocation = round(allocation, 2)
 
         if allocation >= 60:
@@ -75,5 +89,6 @@ class PortfolioAllocationEngine:
             "concentration": concentration,
             "correlation": correlation,
             "capacity": capacity,
+            "heat": heat,
             "status": "PORTFOLIO_ALLOCATION_READY",
         }
