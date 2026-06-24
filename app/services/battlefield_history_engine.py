@@ -45,6 +45,40 @@ class BattlefieldHistoryEngine:
             "status": "BATTLEFIELD_HISTORY_RECORDED",
         }
 
+
+    @classmethod
+    def _signal_age_days(cls, symbol, option_type):
+        if not symbol or not cls._path.exists():
+            return 0
+
+        first_seen = None
+        now = datetime.utcnow()
+
+        with open(cls._path) as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+
+                for key in ["best_call", "best_put"]:
+                    item = row.get(key) or {}
+                    if item.get("symbol") == symbol and item.get("option_type") == option_type:
+                        first_seen = row.get("timestamp")
+                        break
+
+                if first_seen:
+                    break
+
+        if not first_seen:
+            return 0
+
+        try:
+            first_dt = datetime.fromisoformat(first_seen)
+            return round(max((now - first_dt).total_seconds(), 0) / 86400, 4)
+        except Exception:
+            return 0
+
     @staticmethod
     def _normalize(item):
         return {
@@ -56,6 +90,10 @@ class BattlefieldHistoryEngine:
             "liquidity_score": item.get("liquidity_score"),
             "setup_score": item.get("setup_score"),
             "option_type": item.get("option_type"),
+            "signal_age_days": BattlefieldHistoryEngine._signal_age_days(
+                item.get("symbol"),
+                item.get("option_type"),
+            ),
         }
 
     @classmethod
