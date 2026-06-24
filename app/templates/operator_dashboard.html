@@ -395,16 +395,44 @@ async function refreshDashboard() {
                 t.entry_expected_value_tier ? `EV: ${t.entry_expected_value_tier}` : null
             ].filter(Boolean).join(' | ');
 
+            const matchingEquity = paperTrades.find(e =>
+                String(e.symbol || '').toUpperCase() === String(t.underlying || t.symbol || '').toUpperCase()
+                && String(e.status || '').toUpperCase() === 'OPEN'
+            ) || {};
+
+            const isOption = String(t.asset_type || t.contract_type || '').toUpperCase().includes('OPTION');
+            const eqEntry = Number(matchingEquity.entry_price);
+            const eqCurrent = Number(matchingEquity.current_price);
+
+            const ledgerEntry = Number(t.underlying_entry_price ?? t.entry_underlying_price ?? t.entry_price);
+            const ledgerCurrent = Number(t.current_underlying_price ?? t.underlying_current_price ?? t.current_price);
+
+            const displayEntryUnderlying =
+                isOption && Number.isFinite(eqEntry) ? eqEntry : ledgerEntry;
+
+            const displayCurrentUnderlying =
+                isOption && Number.isFinite(eqCurrent) ? eqCurrent : ledgerCurrent;
+
+            const displayUnderlyingPnl =
+                Number.isFinite(displayEntryUnderlying) && Number.isFinite(displayCurrentUnderlying)
+                    ? displayCurrentUnderlying - displayEntryUnderlying
+                    : Number(t.underlying_change_dollars ?? t.unrealized_pnl);
+
+            const displayUnderlyingPnlPct =
+                Number.isFinite(displayEntryUnderlying) && displayEntryUnderlying !== 0 && Number.isFinite(displayCurrentUnderlying)
+                    ? ((displayCurrentUnderlying / displayEntryUnderlying) - 1) * 100
+                    : Number(t.underlying_change_pct ?? t.unrealized_pnl_pct);
+
             row.innerHTML = `
                 <td>${t.display_asset}</td>
                 <td>${t.underlying || t.symbol || 'UNKNOWN'}</td>
                 <td>${t.option_symbol || 'N/A'}</td>
                 <td>${t.side || 'UNKNOWN'}</td>
                 <td>${t.contracts ?? t.quantity ?? 'N/A'}</td>
-                <td>$${fmt(t.underlying_entry_price || t.entry_price)}</td>
-                <td>$${fmt(t.current_underlying_price || t.current_price)}</td>
-                <td>$${fmt(t.underlying_change_dollars ?? t.unrealized_pnl)}</td>
-                <td>${fmt(t.underlying_change_pct ?? t.unrealized_pnl_pct)}%</td>
+                <td>$${fmt(displayEntryUnderlying)}</td>
+                <td>$${fmt(displayCurrentUnderlying)}</td>
+                <td>$${fmt(displayUnderlyingPnl)}</td>
+                <td>${fmt(displayUnderlyingPnlPct)}%</td>
                 <td>${t.strike ?? 'N/A'}</td>
                 <td>${t.contract_expiration_date || t.expiration || 'N/A'}</td>
                 <td>${t.remaining_contract_days ?? 'N/A'}</td>
