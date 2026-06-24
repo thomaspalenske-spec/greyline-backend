@@ -14,7 +14,7 @@
         .subtitle { color: #9ca3af; margin-bottom: 24px; }
         .grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 16px;
         }
         .card {
@@ -23,7 +23,13 @@
             padding: 18px;
             box-shadow: 0 0 0 1px #374151;
         }
-        .wide { grid-column: span 3; }
+        .wide { grid-column: span 4; }
+        .half { grid-column: span 2; }
+        .small { font-size: 18px; }
+        @media (max-width: 1000px) {
+            .grid { grid-template-columns: repeat(1, 1fr); }
+            .wide, .half { grid-column: span 1; }
+        }
         .label { color: #9ca3af; font-size: 13px; }
         .value { font-size: 26px; font-weight: bold; margin-top: 6px; }
         .good { color: #22c55e; }
@@ -64,6 +70,7 @@
 
 <button onclick="refreshDashboard()">Refresh Dashboard</button>
 <button onclick="runOptionsManager()">Run Options Manager</button>
+<button onclick="refreshBattlefield()">Refresh Battlefield</button>
 
 <div class="grid" style="margin-top: 20px;">
     <div class="card">
@@ -94,6 +101,55 @@
     <div class="card">
         <div class="label">Total Return</div>
         <div id="total_return_pct" class="value">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Battlefield Health</div>
+        <div id="battlefield_health" class="value">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Token Status</div>
+        <div id="token_status" class="value small">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Broker Health</div>
+        <div id="broker_health" class="value small">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Live Authority</div>
+        <div id="live_authority" class="value small">Loading...</div>
+    </div>
+
+    <div class="card half">
+        <h2>Top Candidate</h2>
+        <table>
+            <tbody>
+                <tr><th>Symbol</th><td id="top_symbol">Loading...</td></tr>
+                <tr><th>Direction</th><td id="top_direction">Loading...</td></tr>
+                <tr><th>Option Type</th><td id="top_option_type">Loading...</td></tr>
+                <tr><th>Raw Score</th><td id="top_score">Loading...</td></tr>
+                <tr><th>Adjusted Score</th><td id="top_adjusted_score">Loading...</td></tr>
+                <tr><th>Signal Age</th><td id="top_signal_age">Loading...</td></tr>
+                <tr><th>Decay Penalty</th><td id="top_decay_penalty">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card half">
+        <h2>Learning Confidence</h2>
+        <table>
+            <tbody>
+                <tr><th>Signal State</th><td id="top_signal_state">Loading...</td></tr>
+                <tr><th>Signal Strength</th><td id="top_signal_strength">Loading...</td></tr>
+                <tr><th>Confidence Level</th><td id="top_confidence">Loading...</td></tr>
+                <tr><th>Historical Accuracy</th><td id="top_accuracy">Loading...</td></tr>
+                <tr><th>Historical Win Rate</th><td id="top_win_rate">Loading...</td></tr>
+                <tr><th>Decay Reason</th><td id="top_decay_reason">Loading...</td></tr>
+            </tbody>
+        </table>
     </div>
 
     <div class="card wide">
@@ -128,8 +184,55 @@
 
 <script>
 async function refreshDashboard() {
-    const res = await fetch('/options-account-dashboard');
-    const data = await res.json();
+    const optionsRes = await fetch('/options-account-dashboard');
+    const data = await optionsRes.json();
+
+    let operator = {};
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const operatorRes = await fetch('/ai-operator-brief', {signal: controller.signal});
+        clearTimeout(timeout);
+        operator = await operatorRes.json();
+    } catch (e) {
+        operator = {
+            status: "AI_OPERATOR_BRIEF_TIMEOUT_OR_ERROR",
+            operator_top_candidate: {},
+            market_battlefield_summary: {data: {battlefield_health: "UNKNOWN"}},
+            tradestation_token_status: {data: {status: "UNKNOWN"}},
+            live_broker_health: {data: {status: "UNKNOWN"}},
+            live_trade_authority_gate: {data: {status: "UNKNOWN"}}
+        };
+    }
+
+    const summary = operator.market_battlefield_summary?.data || {};
+    const top = operator.operator_top_candidate || {};
+    const token = operator.tradestation_token_status?.data || {};
+    const broker = operator.live_broker_health?.data || {};
+    const authority = operator.live_trade_authority_gate?.data || {};
+
+    document.getElementById('battlefield_health').textContent = summary.battlefield_health || 'UNKNOWN';
+    document.getElementById('battlefield_health').className =
+        summary.battlefield_health === 'GREEN' ? 'value good' :
+        summary.battlefield_health === 'YELLOW' ? 'value warn' : 'value bad';
+
+    document.getElementById('token_status').textContent = token.status || 'UNKNOWN';
+    document.getElementById('broker_health').textContent = broker.status || 'UNKNOWN';
+    document.getElementById('live_authority').textContent = authority.status || 'UNKNOWN';
+
+    document.getElementById('top_symbol').textContent = top.symbol || 'NONE';
+    document.getElementById('top_direction').textContent = top.directional_bias || 'UNKNOWN';
+    document.getElementById('top_option_type').textContent = top.option_type || 'UNKNOWN';
+    document.getElementById('top_score').textContent = fmt(top.score);
+    document.getElementById('top_adjusted_score').textContent = fmt(top.adjusted_score);
+    document.getElementById('top_signal_age').textContent = fmt(top.signal_age_days) + ' days';
+    document.getElementById('top_decay_penalty').textContent = fmt(top.signal_decay_penalty);
+    document.getElementById('top_signal_state').textContent = top.signal_state || 'UNKNOWN';
+    document.getElementById('top_signal_strength').textContent = fmt(top.signal_strength_score);
+    document.getElementById('top_confidence').textContent = top.confidence_level || 'UNKNOWN';
+    document.getElementById('top_accuracy').textContent = fmt(top.historical_accuracy_pct) + '%';
+    document.getElementById('top_win_rate').textContent = fmt(top.historical_win_rate_pct) + '%';
+    document.getElementById('top_decay_reason').textContent = top.signal_decay_reason || 'NONE';
 
     document.getElementById('current_equity').textContent = '$' + Number(data.current_equity).toFixed(2);
     document.getElementById('unrealized_pnl').textContent = '$' + Number(data.unrealized_pnl).toFixed(2);
@@ -180,7 +283,24 @@ async function refreshDashboard() {
         tbody.appendChild(row);
     }
 
-    document.getElementById('raw_json').textContent = JSON.stringify(data, null, 2);
+    document.getElementById('raw_json').textContent = JSON.stringify({
+        options_account_dashboard: data,
+        ai_operator_brief: operator
+    }, null, 2);
+}
+
+function fmt(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toFixed(2) : 'N/A';
+}
+
+async function refreshBattlefield() {
+    await fetch('/ai-command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({command: 'RUN_MARKET_BATTLEFIELD_SUMMARY_REFRESH_BACKGROUND'})
+    });
+    await refreshDashboard();
 }
 
 async function runOptionsManager() {
