@@ -80,9 +80,21 @@ def safe_call(name, fn):
 @router.get("/operator-quick-brief")
 def operator_quick_brief():
     battlefield_summary = greyline_market_battlefield_summary()
-    opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
-    top_candidates = opportunity_queue.get("queue", [])[:10]
-    top_candidate = top_candidates[0] if top_candidates else {}
+    summary_candidates = battlefield_summary.get("top_candidates") or []
+    if summary_candidates:
+        top_candidates = []
+        for i, c in enumerate(summary_candidates[:10], start=1):
+            row = dict(c)
+            row["rank"] = i
+            row["score"] = row.get("score") or row.get("composite_score")
+            row["adjusted_score"] = row.get("adjusted_score") or row.get("score") or row.get("composite_score")
+            top_candidates.append(row)
+        top_candidate = top_candidates[0] if top_candidates else {}
+        opportunity_queue = {"status": "OPPORTUNITY_QUEUE_FROM_BATTLEFIELD_SUMMARY"}
+    else:
+        opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
+        top_candidates = opportunity_queue.get("queue", [])[:10]
+        top_candidate = top_candidates[0] if top_candidates else {}
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
