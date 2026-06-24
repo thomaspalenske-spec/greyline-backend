@@ -81,7 +81,7 @@ def safe_call(name, fn):
 def operator_quick_brief():
     battlefield_summary = greyline_market_battlefield_summary()
     opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
-    top_candidates = opportunity_queue.get("queue", [])[:3]
+    top_candidates = opportunity_queue.get("queue", [])[:10]
     top_candidate = top_candidates[0] if top_candidates else {}
 
     return {
@@ -113,7 +113,7 @@ def ai_operator_brief():
     battlefield_summary = greyline_market_battlefield_summary()
 
     opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
-    top_candidates = opportunity_queue.get("queue", [])[:3]
+    top_candidates = opportunity_queue.get("queue", [])[:10]
     top_candidate = top_candidates[0] if top_candidates else {}
 
     forecast_result = safe_call(
