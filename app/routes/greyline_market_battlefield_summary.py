@@ -104,6 +104,10 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
             "flow_confirmation": call_flow.get("confirmation"),
             "flow_strength": call_flow.get("flow_strength"),
             "premium_flow": call_flow.get("premium_flow"),
+            "signal_age_days": BattlefieldHistoryEngine._signal_age_days(
+                best_call.get("symbol"),
+                best_call.get("option_type"),
+            ),
         },
         "best_put": {
             "symbol": best_put.get("symbol"),
@@ -118,6 +122,10 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
             "flow_confirmation": put_flow.get("confirmation"),
             "flow_strength": put_flow.get("flow_strength"),
             "premium_flow": put_flow.get("premium_flow"),
+            "signal_age_days": BattlefieldHistoryEngine._signal_age_days(
+                best_put.get("symbol"),
+                best_put.get("option_type"),
+            ),
         },
         "institutional_flow_mode": flow.get("mode"),
         "direct_institutional_flow_ready": flow.get("direct_ready"),
