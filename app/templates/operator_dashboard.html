@@ -333,16 +333,16 @@ async function refreshDashboard() {
         }
     }
 
-    document.getElementById('current_equity').textContent = '$' + fmt(data.current_equity);
-    document.getElementById('cash_on_hand').textContent = '$' + fmt(data.cash_on_hand);
-    document.getElementById('deployed_capital').textContent = '$' + fmt(data.deployed_capital);
-    document.getElementById('capital_deployed_pct').textContent = fmt(data.capital_deployed_pct) + '%';
-    document.getElementById('buying_power_remaining').textContent = '$' + fmt(data.buying_power_remaining);
-    document.getElementById('unrealized_pnl').textContent = '$' + fmt(data.unrealized_pnl);
-    document.getElementById('open_option_trade_count').textContent = data.open_option_trade_count ?? 0;
-    document.getElementById('execution_enabled').textContent = data.execution_enabled ? 'YES' : 'NO';
-    document.getElementById('order_placement_allowed').textContent = data.order_placement_allowed ? 'YES' : 'NO';
-    document.getElementById('total_return_pct').textContent = fmt(data.total_return_pct) + '%';
+    safeText('current_equity', '$' + fmt(data.current_equity));
+    safeText('cash_on_hand', '$' + fmt(data.cash_on_hand));
+    safeText('deployed_capital', '$' + fmt(data.deployed_capital));
+    safeText('capital_deployed_pct', fmt(data.capital_deployed_pct) + '%');
+    safeText('buying_power_remaining', '$' + fmt(data.buying_power_remaining));
+    safeText('unrealized_pnl', '$' + fmt(data.unrealized_pnl));
+    safeText('open_option_trade_count', data.open_option_trade_count ?? 0);
+    safeText('execution_enabled', data.execution_enabled ? 'YES' : 'NO');
+    safeText('order_placement_allowed', data.order_placement_allowed ? 'YES' : 'NO');
+    safeText('total_return_pct', fmt(data.total_return_pct) + '%');
 
     document.getElementById('unrealized_pnl').className =
         Number(data.unrealized_pnl) >= 0 ? 'value good' : 'value bad';
@@ -540,6 +540,11 @@ async function refreshDashboard() {
     } finally {
         dashboardRefreshInProgress = false;
     }
+}
+
+function safeText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
 }
 
 function fmt(value) {
