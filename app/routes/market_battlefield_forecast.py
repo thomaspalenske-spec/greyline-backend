@@ -38,6 +38,8 @@ from app.services.regime_learning_engine import RegimeLearningEngine
 from app.services.regime_weight_advisor_engine import RegimeWeightAdvisorEngine
 from app.services.component_learning_engine import ComponentLearningEngine
 from app.services.component_weight_optimization_engine import ComponentWeightOptimizationEngine
+from app.services.forward_outcome_attribution_engine import ForwardOutcomeAttributionEngine
+from app.services.confidence_calibration_engine import ConfidenceCalibrationEngine
 
 router = APIRouter()
 
@@ -64,6 +66,8 @@ def market_battlefield_forecast():
         forward_outcome_analyzer = ForwardOutcomeAnalyzerEngine().analyze()
         forward_outcome_capture = ForwardOutcomeCaptureEngine().capture()
         battlefield_prediction_accuracy = BattlefieldPredictionAccuracyEngine().evaluate(forward_outcome_capture.get('outcomes', []))
+        forward_outcome_attribution = ForwardOutcomeAttributionEngine().evaluate(forward_outcome_capture.get('outcomes', []))
+        confidence_calibration = ConfidenceCalibrationEngine().evaluate(forward_outcome_capture.get('outcomes', []))
         forward_outcome_grading = ForwardOutcomeGradingEngine().grade(forward_outcome_capture.get('outcomes', []))
         battlefield_learning = BattlefieldLearningEngine().evaluate(forward_outcome_grading.get('grades', []))
         learning_sample_quality_gate = LearningSampleQualityGateEngine().evaluate(battlefield_learning, forward_outcome_grading)
@@ -119,6 +123,8 @@ def market_battlefield_forecast():
             "forward_outcome_analyzer": forward_outcome_analyzer,
             "forward_outcome_capture": forward_outcome_capture,
             "battlefield_prediction_accuracy": battlefield_prediction_accuracy,
+            "forward_outcome_attribution": forward_outcome_attribution,
+            "confidence_calibration": confidence_calibration,
             "forward_outcome_grading": forward_outcome_grading,
             "battlefield_learning": battlefield_learning,
             "learning_sample_quality_gate": learning_sample_quality_gate,
