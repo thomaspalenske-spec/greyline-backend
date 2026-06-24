@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.signal_decay_engine import SignalDecayEngine
 
 
 class OpportunityQueueEngine:
@@ -11,6 +12,9 @@ class OpportunityQueueEngine:
                 continue
 
             score = float(item.get("composite_score") or item.get("score") or 0)
+            signal_age_days = float(item.get("signal_age_days") or item.get("age_days") or 0)
+            signal_decay = SignalDecayEngine().evaluate(signal_age_days)
+            adjusted_score = round(score * (signal_decay.get("signal_strength_score", 100) / 100), 2)
 
             raw_liquidity = item.get("liquidity_score")
             liquidity_available = raw_liquidity is not None
@@ -21,11 +25,13 @@ class OpportunityQueueEngine:
                 "option_type": option_type,
                 "result": item.get("result"),
                 "score": score,
+                "adjusted_score": adjusted_score,
+                "signal_decay": signal_decay,
                 "liquidity_score": liquidity,
                 "liquidity_status": "AVAILABLE" if liquidity_available else "UNAVAILABLE",
                 "execute_score_threshold": 85,
                 "execute_liquidity_threshold": 70,
-                "score_distance_to_execute": round(max(85 - score, 0), 2),
+                "score_distance_to_execute": round(max(85 - adjusted_score, 0), 2),
                 "liquidity_distance_to_execute": round(max(70 - liquidity, 0), 2) if liquidity_available else None,
                 "directional_bias": item.get("directional_bias"),
                 "setup_score": item.get("setup_score"),
@@ -37,7 +43,7 @@ class OpportunityQueueEngine:
             key=lambda x: (
                 x["score_distance_to_execute"],
                 x["liquidity_distance_to_execute"] if x["liquidity_distance_to_execute"] is not None else 999,
-                -x["score"],
+                -x["adjusted_score"],
             )
         )
 
