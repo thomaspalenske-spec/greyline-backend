@@ -3,6 +3,7 @@ import traceback
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 from app.services.battlefield_forecast_engine import BattlefieldForecastEngine
 from app.services.forecast_outcome_capture_engine import ForecastOutcomeCaptureEngine
+from app.services.forecast_confidence_calibration_engine import ForecastConfidenceCalibrationEngine
 from app.services.battlefield_history_engine import BattlefieldHistoryEngine
 from app.services.battlefield_trend_engine import BattlefieldTrendEngine
 from app.services.battlefield_momentum_engine import BattlefieldMomentumEngine
@@ -90,6 +91,10 @@ def market_battlefield_forecast():
                 "reason": "NO_CANDIDATE",
             }
         forecast = BattlefieldForecastEngine().forecast(battlefield)
+        forecast_confidence = ForecastConfidenceCalibrationEngine().calibrate(
+            forecast.get("score") or 0
+        )
+        forecast["forecast_confidence"] = forecast_confidence
         forecast_outcome_capture = ForecastOutcomeCaptureEngine().capture(forecast)
 
         return {
