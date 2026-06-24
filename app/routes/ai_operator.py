@@ -60,11 +60,6 @@ def _battlefield_refresh_status():
             state["stale_running"] = None
             state["last_error"] = str(e)
 
-    forecast = market_battlefield_forecast()
-    queue_top = (forecast.get("opportunity_queue", {}) or {}).get("top_candidate", {}) or {}
-    prediction_accuracy = forecast.get("battlefield_prediction_accuracy", {}) or {}
-    confidence_calibration = forecast.get("confidence_calibration", {}) or {}
-
     return {
         "timestamp": now.isoformat(),
         "system": "GreyLine",
@@ -92,6 +87,11 @@ def ai_operator_brief():
         if (best_call.get("score") or 0) >= (best_put.get("score") or 0)
         else best_put
     )
+
+    forecast = market_battlefield_forecast()
+    queue_top = (forecast.get("opportunity_queue", {}) or {}).get("top_candidate", {}) or {}
+    prediction_accuracy = forecast.get("battlefield_prediction_accuracy", {}) or {}
+    confidence_calibration = forecast.get("confidence_calibration", {}) or {}
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
