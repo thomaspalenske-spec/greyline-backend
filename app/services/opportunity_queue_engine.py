@@ -15,6 +15,12 @@ class OpportunityQueueEngine:
             signal_age_days = float(item.get("signal_age_days") or item.get("age_days") or 0)
             signal_decay = SignalDecayEngine().evaluate(signal_age_days)
             adjusted_score = round(score * (signal_decay.get("signal_strength_score", 100) / 100), 2)
+            signal_decay_penalty = round(score - adjusted_score, 2)
+            signal_decay_reason = (
+                "NO_SIGNAL_DECAY_PENALTY"
+                if signal_decay_penalty <= 0
+                else f"SIGNAL_DECAY_REDUCED_SCORE_BY_{signal_decay_penalty}"
+            )
 
             raw_liquidity = item.get("liquidity_score")
             liquidity_available = raw_liquidity is not None
@@ -27,6 +33,8 @@ class OpportunityQueueEngine:
                 "score": score,
                 "adjusted_score": adjusted_score,
                 "signal_decay": signal_decay,
+                "signal_decay_penalty": signal_decay_penalty,
+                "signal_decay_reason": signal_decay_reason,
                 "liquidity_score": liquidity,
                 "liquidity_status": "AVAILABLE" if liquidity_available else "UNAVAILABLE",
                 "execute_score_threshold": 85,
