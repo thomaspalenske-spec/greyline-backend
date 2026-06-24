@@ -49,7 +49,32 @@ class ForecastOutcomeGraderEngine:
             "trade_time": row.get("TradeTime"),
         }
 
-    def grade_pending(self, market_prices=None):
+    def _parse_dt(self, value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception:
+            return None
+
+    def _maturity(self, record, min_age_minutes=60):
+        forecast_time = self._parse_dt(record.get("forecast_timestamp") or record.get("timestamp"))
+        if not forecast_time:
+            return {
+                "forecast_age_minutes": None,
+                "eligible_for_grading": False,
+                "maturity_status": "FORECAST_TIMESTAMP_UNAVAILABLE",
+            }
+
+        age_minutes = round((datetime.utcnow() - forecast_time).total_seconds() / 60, 2)
+
+        return {
+            "forecast_age_minutes": age_minutes,
+            "eligible_for_grading": age_minutes >= min_age_minutes,
+            "maturity_status": "FORECAST_MATURED" if age_minutes >= min_age_minutes else "FORECAST_NOT_MATURED",
+        }
+
+    def grade_pending(self, market_prices=None, min_age_minutes=60):
         market_prices = market_prices or {}
         outcomes = self._read_outcomes()
         graded = []
@@ -59,6 +84,28 @@ class ForecastOutcomeGraderEngine:
             symbol = record.get("symbol")
             predicted_direction = record.get("predicted_direction")
             predicted_score = record.get("predicted_score")
+
+            maturity = self._maturity(record, min_age_minutes=min_age_minutes)
+
+            if not maturity.get("eligible_for_grading"):
+                grade_record = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "forecast_id": record.get("forecast_id"),
+                    "symbol": symbol,
+                    "predicted_direction": predicted_direction,
+                    "predicted_score": predicted_score,
+                    "snapshot_price": record.get("snapshot_price"),
+                    "current_price": None,
+                    "return_pct": None,
+                    "forecast_grade": "PENDING_FORECAST_MATURITY",
+                    "forecast_correct": None,
+                    "forecast_age_minutes": maturity.get("forecast_age_minutes"),
+                    "eligible_for_grading": maturity.get("eligible_for_grading"),
+                    "maturity_status": maturity.get("maturity_status"),
+                    "status": "FORECAST_OUTCOME_GRADE_PENDING_MATURITY",
+                }
+                graded.append(grade_record)
+                continue
 
             if symbol in market_prices:
                 price_info = {
@@ -107,6 +154,9 @@ class ForecastOutcomeGraderEngine:
                 "forecast_correct": forecast_correct,
                 "quote_status": price_info.get("quote_status"),
                 "quote_trade_time": price_info.get("trade_time"),
+                "forecast_age_minutes": maturity.get("forecast_age_minutes"),
+                "eligible_for_grading": maturity.get("eligible_for_grading"),
+                "maturity_status": maturity.get("maturity_status"),
                 "status": "FORECAST_OUTCOME_GRADED" if forecast_correct is not None else "FORECAST_OUTCOME_GRADE_PENDING",
             }
 
