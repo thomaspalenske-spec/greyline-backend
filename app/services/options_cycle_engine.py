@@ -28,12 +28,21 @@ class OptionsCycleEngine:
             and float(c.get("Mid") or 0) > 0
         ]
 
+        account_equity = 10000.0
+        max_position_dollars = account_equity * float(max_position_pct or 0.05)
+
+        affordable_candidates = [
+            c for c in candidates
+            if float(c.get("Ask") or c.get("Mid") or c.get("Last") or 0) > 0
+            and float(c.get("Ask") or c.get("Mid") or c.get("Last") or 0) * 100 <= max_position_dollars
+        ]
+
         ranked = sorted(
-            candidates,
+            affordable_candidates,
             key=lambda c: (
                 int(c.get("DailyOpenInterest") or 0),
                 -abs(float(c.get("Delta") or 0) - 0.40),
-                -float(c.get("Mid") or 0),
+                -float(c.get("Ask") or c.get("Mid") or c.get("Last") or 0),
             ),
             reverse=True,
         )
@@ -74,6 +83,9 @@ class OptionsCycleEngine:
             "option_type": option_type,
             "side": side,
             "contracts_matching_side_found": len(candidates),
+            "affordable_contracts_found": len(affordable_candidates),
+            "max_position_pct": max_position_pct,
+            "max_position_dollars": round(max_position_dollars, 2),
             "top_candidate": top,
             "paper_trade_recorded": paper_trade_recorded,
             "duplicate_blocked": duplicate_blocked,
