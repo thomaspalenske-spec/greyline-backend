@@ -179,7 +179,7 @@
                     <th>Side</th>
                     <th>Contracts</th>
                     <th>Underlying Entry</th>
-                    <th>Current</th>
+                    <th>Current Underlying</th>
                     <th>P/L</th>
                     <th>Status</th>
                 </tr>
@@ -214,10 +214,10 @@
                     <th>Contract</th>
                     <th>Side</th>
                     <th>Qty</th>
-                    <th>Entry</th>
-                    <th>Current</th>
-                    <th>Unrealized P/L</th>
-                    <th>P/L %</th>
+                    <th>Underlying Entry</th>
+                    <th>Current Underlying</th>
+                    <th>Underlying P/L</th>
+                    <th>Underlying P/L %</th>
                     <th>Strike</th>
                     <th>Expiration</th>
                     <th>Days Left</th>
@@ -401,10 +401,10 @@ async function refreshDashboard() {
                 <td>${t.option_symbol || 'N/A'}</td>
                 <td>${t.side || 'UNKNOWN'}</td>
                 <td>${t.contracts ?? t.quantity ?? 'N/A'}</td>
-                <td>$${fmt(t.entry_price)}</td>
-                <td>$${fmt(t.current_price)}</td>
-                <td>$${fmt(t.unrealized_pnl)}</td>
-                <td>${fmt(t.unrealized_pnl_pct)}%</td>
+                <td>$${fmt(t.underlying_entry_price || t.entry_price)}</td>
+                <td>$${fmt(t.current_underlying_price || t.current_price)}</td>
+                <td>$${fmt(t.underlying_change_dollars ?? t.unrealized_pnl)}</td>
+                <td>${fmt(t.underlying_change_pct ?? t.unrealized_pnl_pct)}%</td>
                 <td>${t.strike ?? 'N/A'}</td>
                 <td>${t.contract_expiration_date || t.expiration || 'N/A'}</td>
                 <td>${t.remaining_contract_days ?? 'N/A'}</td>
