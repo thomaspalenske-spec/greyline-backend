@@ -282,6 +282,9 @@ async function refreshDashboard() {
     } catch (e) {
         optionsLedger = {};
     }
+    const paperTrades = paperLedger.open_trades || paperLedger.trades || [];
+    const optionTradesAll = optionsLedger.open_trades || optionsLedger.trades || [];
+
     const broker = operator.live_broker_health?.data || {};
     const authority = operator.live_trade_authority_gate?.data || {};
 
@@ -300,10 +303,8 @@ async function refreshDashboard() {
     if (topBody) {
         topBody.innerHTML = '';
         for (const c of topCandidates) {
-            const paperTrades = paperLedger.open_trades || paperLedger.trades || [];
-            const optionTrades = optionsLedger.open_trades || optionsLedger.trades || [];
             const paperMatch = paperTrades.find(t => (t.symbol || t.underlying) === c.symbol);
-            const optionMatch = optionTrades.find(t => (t.symbol || t.underlying) === c.symbol);
+            const optionMatch = optionTradesAll.find(t => (t.symbol || t.underlying) === c.symbol);
             const fillStatus = optionMatch ? `OPTIONS PAPER ${optionMatch.status || 'OPEN'}`
                 : paperMatch ? `EQUITY PAPER ${paperMatch.status || 'OPEN'}`
                 : c.result === 'EXECUTE' ? 'NO PAPER FILL FOUND'
@@ -378,7 +379,7 @@ async function refreshDashboard() {
 
     const openDetailBody = document.getElementById('open_trade_detail_table');
     if (openDetailBody) {
-        const optionTrades = (optionsLedger.trades || []).filter(t => t.status === 'OPEN');
+        const optionTrades = optionTradesAll.filter(t => t.status === 'OPEN');
         const equityTrades = (paperLedger.trades || []).filter(t => t.status === 'OPEN');
         const allOpenTrades = [
             ...optionTrades.map(t => ({...t, display_asset: 'OPTION'})),
