@@ -334,6 +334,10 @@ async function refreshDashboard() {
     }
 
     document.getElementById('current_equity').textContent = '$' + fmt(data.current_equity);
+    document.getElementById('cash_on_hand').textContent = '$' + fmt(data.cash_on_hand);
+    document.getElementById('deployed_capital').textContent = '$' + fmt(data.deployed_capital);
+    document.getElementById('capital_deployed_pct').textContent = fmt(data.capital_deployed_pct) + '%';
+    document.getElementById('buying_power_remaining').textContent = '$' + fmt(data.buying_power_remaining);
     document.getElementById('unrealized_pnl').textContent = '$' + fmt(data.unrealized_pnl);
     document.getElementById('open_option_trade_count').textContent = data.open_option_trade_count ?? 0;
     document.getElementById('execution_enabled').textContent = data.execution_enabled ? 'YES' : 'NO';
@@ -516,6 +520,15 @@ async function refreshDashboard() {
     }
 
     document.getElementById('raw_json').textContent = JSON.stringify({
+        account_summary: {
+            starting_equity: data.starting_equity,
+            cash_on_hand: data.cash_on_hand,
+            deployed_capital: data.deployed_capital,
+            open_position_value: data.open_position_value,
+            buying_power_remaining: data.buying_power_remaining,
+            capital_deployed_pct: data.capital_deployed_pct,
+            current_equity: data.current_equity
+        },
         options_account_dashboard: data,
         operator_quick_brief: operator,
         paper_trade_ledger: paperLedger,
