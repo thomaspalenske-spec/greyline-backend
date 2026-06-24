@@ -191,7 +191,7 @@ async function refreshDashboard() {
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const operatorRes = await fetch('/ai-operator-brief', {signal: controller.signal});
+        const operatorRes = await fetch('/operator-quick-brief', {signal: controller.signal});
         clearTimeout(timeout);
         operator = await operatorRes.json();
     } catch (e) {
@@ -205,9 +205,9 @@ async function refreshDashboard() {
         };
     }
 
-    const summary = operator.market_battlefield_summary?.data || {};
-    const top = operator.operator_top_candidate || {};
-    const token = operator.tradestation_token_status?.data || {};
+    const summary = operator || {};
+    const top = operator.top_candidate || {};
+    const token = operator.token_status?.data || {};
     const broker = operator.live_broker_health?.data || {};
     const authority = operator.live_trade_authority_gate?.data || {};
 

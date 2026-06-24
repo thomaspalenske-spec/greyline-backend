@@ -75,6 +75,41 @@ def safe_call(name, fn):
         return {"ok": False, "name": name, "error": str(e)}
 
 
+
+@router.get("/operator-quick-brief")
+def operator_quick_brief():
+    battlefield_summary = greyline_market_battlefield_summary()
+    best_call = battlefield_summary.get("best_call", {}) or {}
+    best_put = battlefield_summary.get("best_put", {}) or {}
+
+    top_candidate = (
+        best_call
+        if (best_call.get("score") or 0) >= (best_put.get("score") or 0)
+        else best_put
+    )
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "system": "GreyLine",
+        "source": "OPERATOR_QUICK_BRIEF",
+        "battlefield_health": battlefield_summary.get("battlefield_health"),
+        "battlefield_health_reason": battlefield_summary.get("battlefield_health_reason"),
+        "top_candidate": top_candidate,
+        "token_status": safe_call(
+            "tradestation_token_status",
+            lambda: TradeStationTokenStatusEngine().evaluate()
+        ),
+        "live_broker_health": safe_call(
+            "live_broker_health",
+            lambda: LiveBrokerHealthEngine().evaluate()
+        ),
+        "live_trade_authority_gate": safe_call(
+            "live_trade_authority_gate",
+            lambda: LiveTradeAuthorityGateEngine().evaluate()
+        ),
+        "status": "OPERATOR_QUICK_BRIEF_READY",
+    }
+
 @router.get("/ai-operator-brief")
 def ai_operator_brief():
     battlefield_summary = greyline_market_battlefield_summary()
