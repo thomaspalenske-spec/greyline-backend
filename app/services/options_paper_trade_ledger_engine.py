@@ -136,6 +136,19 @@ class OptionsPaperTradeLedgerEngine:
             max_position_pct=0.05,
         )
 
+        if int(sizing.get("recommended_contracts") or 0) <= 0:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_TRADE_LEDGER",
+                "paper_trade_recorded": False,
+                "reason": sizing.get("sizing_action") or "POSITION_SIZE_ZERO",
+                "position_sizing": sizing,
+                "execution_enabled": False,
+                "order_placement_allowed": False,
+                "status": "OPTIONS_PAPER_TRADE_SIZE_BLOCKED",
+            }
+
         trade = {
             "timestamp": now.isoformat(),
             "asset_type": "OPTION",
