@@ -39,6 +39,9 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
 
     best_call = calls.get("best") or {}
     best_put = puts.get("best") or {}
+    top_calls = battlefield.get("top_calls") or []
+    top_puts = battlefield.get("top_puts") or []
+    top_candidates = battlefield.get("top_candidates") or []
     call_flow = calls.get("best_flow_confirmation") or {}
     put_flow = puts.get("best_flow_confirmation") or {}
 
@@ -127,6 +130,9 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
                 best_put.get("option_type"),
             ),
         },
+        "top_calls": top_calls,
+        "top_puts": top_puts,
+        "top_candidates": top_candidates,
         "institutional_flow_mode": flow.get("mode"),
         "direct_institutional_flow_ready": flow.get("direct_ready"),
         "missing_high_priority_flow_feeds": flow.get("missing_high_priority_feeds"),
