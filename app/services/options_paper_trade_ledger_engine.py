@@ -4,6 +4,7 @@ from pathlib import Path
 from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
+from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
 
 class OptionsPaperTradeLedgerEngine:
@@ -35,6 +36,36 @@ class OptionsPaperTradeLedgerEngine:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_file = self.data_dir / "options_paper_trade_ledger.jsonl"
 
+
+
+    def _underlying_quote_snapshot(self, symbol):
+        symbol = (symbol or "").upper().strip()
+        if not symbol:
+            return {
+                "underlying_quote_status": "NO_UNDERLYING_SYMBOL",
+                "underlying_entry_price": None,
+                "underlying_entry_quote_time": None,
+            }
+
+        try:
+            quote = TradeStationQuoteLiveEngine().get_quote(symbol)
+            row = ((quote.get("response_json") or {}).get("Quotes") or [{}])[0]
+            price = float(row.get("Last") or row.get("Mid") or row.get("Bid") or row.get("Ask") or 0)
+            return {
+                "underlying_quote_status": quote.get("status"),
+                "underlying_entry_price": price if price > 0 else None,
+                "underlying_entry_quote_time": row.get("TradeTime"),
+                "underlying_entry_bid": row.get("Bid"),
+                "underlying_entry_ask": row.get("Ask"),
+                "underlying_entry_last": row.get("Last"),
+            }
+        except Exception as e:
+            return {
+                "underlying_quote_status": "UNDERLYING_QUOTE_ERROR",
+                "underlying_quote_error": str(e),
+                "underlying_entry_price": None,
+                "underlying_entry_quote_time": None,
+            }
 
     def _contract_metrics(self, start_raw, expiration_raw):
         from datetime import datetime, timezone
@@ -94,6 +125,7 @@ class OptionsPaperTradeLedgerEngine:
         now = datetime.utcnow()
         underlying = candidate.get("underlying") or candidate.get("Underlying") or leg.get("Underlying") or "NVDA"
         entry_thesis = self._entry_thesis_snapshot(underlying)
+        underlying_quote = self._underlying_quote_snapshot(underlying)
         expiration_raw = leg.get("Expiration")
         contract_metrics = self._contract_metrics(now.isoformat(), expiration_raw)
 
@@ -129,6 +161,7 @@ class OptionsPaperTradeLedgerEngine:
             "status": "OPEN",
         }
 
+        trade.update(underlying_quote)
         trade.update(entry_thesis)
 
         with self.ledger_file.open("a") as f:
