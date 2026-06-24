@@ -3,6 +3,7 @@ from datetime import datetime
 from app.services.portfolio_exposure_engine import PortfolioExposureEngine
 from app.services.portfolio_concentration_engine import PortfolioConcentrationEngine
 from app.services.portfolio_correlation_engine import PortfolioCorrelationEngine
+from app.services.portfolio_capacity_engine import PortfolioCapacityEngine
 
 
 class PortfolioAllocationEngine:
@@ -12,6 +13,7 @@ class PortfolioAllocationEngine:
         exposure = PortfolioExposureEngine().evaluate()
         concentration = PortfolioConcentrationEngine().evaluate()
         correlation = PortfolioCorrelationEngine().evaluate()
+        capacity = PortfolioCapacityEngine().evaluate()
 
         base_allocation = 0
 
@@ -45,6 +47,11 @@ class PortfolioAllocationEngine:
             allocation *= 0.75
             adjustments.append("CORRELATION_REDUCTION")
 
+        capacity_multiplier = float(capacity.get("allocation_multiplier") or 1.0)
+        if capacity_multiplier < 1.0:
+            allocation *= capacity_multiplier
+            adjustments.append("CAPACITY_REDUCTION")
+
         allocation = round(allocation, 2)
 
         if allocation >= 60:
@@ -67,5 +74,6 @@ class PortfolioAllocationEngine:
             "exposure": exposure,
             "concentration": concentration,
             "correlation": correlation,
+            "capacity": capacity,
             "status": "PORTFOLIO_ALLOCATION_READY",
         }
