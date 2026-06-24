@@ -289,6 +289,15 @@ def _run_options_cycle_for_battlefield_top_candidate():
     opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
     top_candidate = opportunity_queue.get("top_candidate") or {}
 
+    if not top_candidate:
+        best_call = battlefield_summary.get("best_call", {}) or {}
+        best_put = battlefield_summary.get("best_put", {}) or {}
+        top_candidate = (
+            best_call
+            if (best_call.get("score") or 0) >= (best_put.get("score") or 0)
+            else best_put
+        )
+
     symbol = top_candidate.get("symbol")
     option_type = top_candidate.get("option_type") or "CALL"
 
