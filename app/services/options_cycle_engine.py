@@ -46,7 +46,10 @@ class OptionsCycleEngine:
         duplicate_blocked = False
 
         if top:
+            top["underlying"] = symbol
+            top["Underlying"] = symbol
             leg = (top.get("Legs") or [{}])[0]
+            leg["Underlying"] = symbol
             option_symbol = leg.get("Symbol")
 
             ledger = OptionsPaperTradeLedgerEngine()
