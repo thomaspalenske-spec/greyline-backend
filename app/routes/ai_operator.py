@@ -79,6 +79,9 @@ def safe_call(name, fn):
 @router.get("/operator-quick-brief")
 def operator_quick_brief():
     battlefield_summary = greyline_market_battlefield_summary()
+
+    if battlefield_summary.get("status") == "GREYLINE_MARKET_BATTLEFIELD_SUMMARY_CACHE_EMPTY":
+        battlefield_summary = greyline_market_battlefield_summary(force_refresh=True)
     best_call = battlefield_summary.get("best_call", {}) or {}
     best_put = battlefield_summary.get("best_put", {}) or {}
 
