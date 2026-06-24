@@ -195,5 +195,7 @@ app.include_router(market_battlefield_forecast.router)
 
 from app.routes import battlefield_learning
 from app.routes import forecast_accuracy_dashboard
+from app.routes import forecast_reliability_dashboard
 app.include_router(battlefield_learning.router)
 app.include_router(forecast_accuracy_dashboard.router)
+app.include_router(forecast_reliability_dashboard.router)
