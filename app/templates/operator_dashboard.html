@@ -252,19 +252,7 @@ async function refreshDashboard() {
     document.getElementById('broker_health').textContent = broker.status || 'UNKNOWN';
     document.getElementById('live_authority').textContent = authority.status || 'UNKNOWN';
 
-    document.getElementById('top_symbol').textContent = top.symbol || 'NONE';
-    document.getElementById('top_direction').textContent = top.directional_bias || 'UNKNOWN';
-    document.getElementById('top_option_type').textContent = top.option_type || 'UNKNOWN';
-    document.getElementById('top_score').textContent = fmt(top.score);
-    document.getElementById('top_adjusted_score').textContent = fmt(top.adjusted_score);
-    document.getElementById('top_signal_age').textContent = fmt(top.signal_age_days) + ' days';
-    document.getElementById('top_decay_penalty').textContent = fmt(top.signal_decay_penalty);
-    document.getElementById('top_signal_state').textContent = top.signal_state || 'UNKNOWN';
-    document.getElementById('top_signal_strength').textContent = fmt(top.signal_strength_score);
-    document.getElementById('top_confidence').textContent = top.confidence_level || 'UNKNOWN';
-    document.getElementById('top_accuracy').textContent = fmt(top.historical_accuracy_pct) + '%';
-    document.getElementById('top_win_rate').textContent = fmt(top.historical_win_rate_pct) + '%';
-    document.getElementById('top_decay_reason').textContent = top.signal_decay_reason || 'NONE';
+    // Top 3 candidates are rendered below in the top_candidates_table.
 
     const topBody = document.getElementById('top_candidates_table');
     if (topBody) {
