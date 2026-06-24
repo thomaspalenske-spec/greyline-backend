@@ -4,7 +4,7 @@ from app.services.background_scheduler_service import BackgroundSchedulerService
 router = APIRouter()
 
 @router.post("/background-scheduler/start")
-def background_scheduler_start(interval_seconds: int = Query(300)):
+def background_scheduler_start(interval_seconds: int = Query(30)):
     return BackgroundSchedulerService.start(interval_seconds=interval_seconds)
 
 @router.post("/background-scheduler/stop")
