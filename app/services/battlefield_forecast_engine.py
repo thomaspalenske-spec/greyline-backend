@@ -23,6 +23,15 @@ class BattlefieldForecastEngine:
 
         strongest_score = max(call_score, put_score)
 
+        if call_score >= put_score:
+            strongest_setup = best_call
+            directional_bias = "BULLISH"
+        else:
+            strongest_setup = best_put
+            directional_bias = "BEARISH"
+
+        symbol = strongest_setup.get("symbol")
+
         if strongest_score >= 90:
             green = 55
             yellow = 35
@@ -68,6 +77,9 @@ class BattlefieldForecastEngine:
             "system": "GreyLine",
             "engine": "BattlefieldForecastEngine",
             "current_battlefield_health": health,
+            "symbol": symbol,
+            "directional_bias": directional_bias,
+            "score": strongest_score,
             "forecast_24h": {
                 "red": red,
                 "yellow": yellow,

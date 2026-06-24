@@ -2,6 +2,7 @@ from fastapi import APIRouter
 import traceback
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 from app.services.battlefield_forecast_engine import BattlefieldForecastEngine
+from app.services.forecast_outcome_capture_engine import ForecastOutcomeCaptureEngine
 from app.services.battlefield_history_engine import BattlefieldHistoryEngine
 from app.services.battlefield_trend_engine import BattlefieldTrendEngine
 from app.services.battlefield_momentum_engine import BattlefieldMomentumEngine
@@ -89,6 +90,7 @@ def market_battlefield_forecast():
                 "reason": "NO_CANDIDATE",
             }
         forecast = BattlefieldForecastEngine().forecast(battlefield)
+        forecast_outcome_capture = ForecastOutcomeCaptureEngine().capture(forecast)
 
         return {
             "system": "GreyLine",
@@ -131,6 +133,7 @@ def market_battlefield_forecast():
             "component_weight_optimization": component_weight_optimization,
             "readiness_acceleration": readiness_acceleration,
             "forecast": forecast,
+            "forecast_outcome_capture": forecast_outcome_capture,
             "status": "MARKET_BATTLEFIELD_FORECAST_READY",
         }
     except Exception as e:

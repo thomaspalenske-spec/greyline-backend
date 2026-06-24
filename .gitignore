@@ -38,3 +38,5 @@ app/data/battlefield_learning/
 # GreyLine paper trading runtime ledgers
 app/data/paper_trading/paper_trade_ledger.jsonl
 app/data/options_paper_trading/options_paper_trade_ledger.jsonl
+
+app/data/forecast_outcomes.jsonl
