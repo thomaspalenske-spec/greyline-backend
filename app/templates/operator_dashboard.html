@@ -140,6 +140,7 @@
                     <th>Raw</th>
                     <th>Adj</th>
                     <th>Result</th>
+                    <th>Action State</th>
                 </tr>
             </thead>
             <tbody id="top_candidates_table">
@@ -267,6 +268,7 @@ async function refreshDashboard() {
                 <td>${fmt(c.score)}</td>
                 <td>${fmt(c.adjusted_score)}</td>
                 <td>${c.result ?? 'UNKNOWN'}</td>
+                <td>${c.result === 'EXECUTE' ? 'SIGNAL ONLY / NOT FILLED' : 'WATCHING'}</td>
             `;
             topBody.appendChild(row);
         }
