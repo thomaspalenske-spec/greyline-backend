@@ -79,7 +79,7 @@ def safe_call(name, fn):
 
 @router.get("/operator-quick-brief")
 def operator_quick_brief():
-    battlefield_summary = greyline_market_battlefield_summary(force_refresh=True)
+    battlefield_summary = greyline_market_battlefield_summary()
     opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
     top_candidates = opportunity_queue.get("queue", [])[:3]
     top_candidate = top_candidates[0] if top_candidates else {}
