@@ -4,6 +4,7 @@ from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.volatility_scoring_engine import VolatilityScoringEngine
 from app.services.forecast_influence_engine import ForecastInfluenceEngine
+from app.services.portfolio_governor_engine import PortfolioGovernorEngine
 
 
 class DeploymentGovernanceLayer:
@@ -73,10 +74,27 @@ class DeploymentGovernanceLayer:
             forecast_influence.get("influence_multiplier") or 1.0
         )
 
-        allocation = min(
+        forecast_adjusted_allocation = min(
             100,
             max(0, round(base_allocation * influence_multiplier, 2))
         )
+
+        portfolio_governor = PortfolioGovernorEngine().evaluate(
+            deployment_score=deployment_score,
+            candidate_symbol=symbol,
+        )
+
+        portfolio_max_deployment = float(
+            portfolio_governor.get("max_deployment_pct") or 0
+        )
+
+        allocation = min(forecast_adjusted_allocation, portfolio_max_deployment)
+
+        if not portfolio_governor.get("new_trade_allowed", False):
+            state = "PORTFOLIO_BLOCKED"
+            allocation = 0
+        elif portfolio_governor.get("portfolio_decision") == "REDUCE" and state in ["EXECUTE", "EXECUTE_AGGRESSIVE"]:
+            state = "EXECUTE_REDUCED_BY_PORTFOLIO"
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
@@ -86,6 +104,11 @@ class DeploymentGovernanceLayer:
             "deployment_state": state,
             "recommended_position_size_pct": allocation,
             "base_recommended_position_size_pct": base_allocation,
+            "forecast_adjusted_position_size_pct": forecast_adjusted_allocation,
+            "portfolio_governor": portfolio_governor,
+            "portfolio_decision": portfolio_governor.get("portfolio_decision"),
+            "portfolio_warnings": portfolio_governor.get("warnings", []),
+            "portfolio_blockers": portfolio_governor.get("blockers", []),
             "forecast_influence_multiplier": influence_multiplier,
             "forecast_influence": forecast_influence,
             "scores": scores,
