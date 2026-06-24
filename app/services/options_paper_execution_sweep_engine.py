@@ -2,6 +2,7 @@ from datetime import datetime
 
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 from app.services.options_cycle_engine import OptionsCycleEngine
+from app.services.options_dynamic_position_sizing_engine import OptionsDynamicPositionSizingEngine
 
 
 class OptionsPaperExecutionSweepEngine:
@@ -38,7 +39,14 @@ class OptionsPaperExecutionSweepEngine:
                 })
                 continue
 
-            r = OptionsCycleEngine().run(symbol=symbol, option_type=option_type)
+            score = c.get("score") or c.get("composite_score")
+            max_position_pct = OptionsDynamicPositionSizingEngine().max_position_pct(score)
+            r = OptionsCycleEngine().run(
+                symbol=symbol,
+                option_type=option_type,
+                max_position_pct=max_position_pct,
+                candidate_score=score,
+            )
             ledger_result = r.get("paper_trade") or {}
 
             results.append({

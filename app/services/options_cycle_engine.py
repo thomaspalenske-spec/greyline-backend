@@ -6,7 +6,7 @@ from app.services.options_paper_trade_ledger_engine import OptionsPaperTradeLedg
 
 class OptionsCycleEngine:
 
-    def run(self, symbol="NVDA", option_type="CALL", expiration="2026-07-17"):
+    def run(self, symbol="NVDA", option_type="CALL", expiration="2026-07-17", max_position_pct=0.05, candidate_score=None):
         symbol = (symbol or "NVDA").upper().strip()
         option_type = (option_type or "CALL").upper().strip()
 
@@ -57,7 +57,11 @@ class OptionsCycleEngine:
             if ledger.open_position_exists(option_symbol):
                 duplicate_blocked = True
             else:
-                paper_trade = ledger.record_trade(top)
+                paper_trade = ledger.record_trade(
+                    top,
+                    max_position_pct=max_position_pct,
+                    candidate_score=candidate_score,
+                )
                 paper_trade_recorded = paper_trade.get("paper_trade_recorded") is True
 
         return {

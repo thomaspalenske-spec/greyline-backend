@@ -119,7 +119,7 @@ class OptionsPaperTradeLedgerEngine:
             "contract_status": status,
         }
 
-    def record_trade(self, candidate, source="OPTIONS_CYCLE_ENGINE"):
+    def record_trade(self, candidate, source="OPTIONS_CYCLE_ENGINE", max_position_pct=0.05, candidate_score=None):
         legs = candidate.get("Legs") or [{}]
         leg = legs[0]
 
@@ -133,7 +133,7 @@ class OptionsPaperTradeLedgerEngine:
         sizing = OptionsPositionSizingEngine().evaluate(
             account_equity=10000,
             option_ask=float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0),
-            max_position_pct=0.05,
+            max_position_pct=max_position_pct,
         )
 
         if int(sizing.get("recommended_contracts") or 0) <= 0:
@@ -143,7 +143,9 @@ class OptionsPaperTradeLedgerEngine:
                 "source": "OPTIONS_PAPER_TRADE_LEDGER",
                 "paper_trade_recorded": False,
                 "reason": sizing.get("sizing_action") or "POSITION_SIZE_ZERO",
-                "position_sizing": sizing,
+                "candidate_score": candidate_score,
+            "max_position_pct_used": max_position_pct,
+            "position_sizing": sizing,
                 "execution_enabled": False,
                 "order_placement_allowed": False,
                 "status": "OPTIONS_PAPER_TRADE_SIZE_BLOCKED",
@@ -177,6 +179,8 @@ class OptionsPaperTradeLedgerEngine:
             "implied_volatility": float(candidate.get("ImpliedVolatility") or 0),
             "open_interest": int(candidate.get("DailyOpenInterest") or 0),
             "estimated_cost": sizing.get("estimated_position_cost"),
+            "candidate_score": candidate_score,
+            "max_position_pct_used": max_position_pct,
             "position_sizing": sizing,
             "source": source,
             "status": "OPEN",
