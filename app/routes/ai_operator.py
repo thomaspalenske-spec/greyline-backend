@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.services.tradestation_token_status_engine import TradeStationTokenStatusEngine
 from app.services.options_cycle_engine import OptionsCycleEngine
+from app.services.options_paper_execution_sweep_engine import OptionsPaperExecutionSweepEngine
 from app.services.options_account_dashboard_engine import OptionsAccountDashboardEngine
 from app.services.options_position_manager_engine import OptionsPositionManagerEngine
 from app.services.tradestation_sandbox_readiness_engine import TradeStationSandboxReadinessEngine
@@ -366,6 +367,7 @@ def ai_command(request: AICommandRequest):
         "RUN_MARKET_BATTLEFIELD_CACHE_CLEAR": lambda: MarketBattlefieldSnapshotCache.clear(),
         "RUN_PAPER_TRADE_EXECUTOR": lambda: run_paper_trade_executor(),
         "RUN_OPTIONS_CYCLE": lambda: _run_options_cycle_for_battlefield_top_candidate(),
+        "RUN_OPTIONS_PAPER_EXECUTION_SWEEP": lambda: OptionsPaperExecutionSweepEngine().run(limit=10),
         "RUN_OPTIONS_STATUS": lambda: OptionsAccountDashboardEngine().get_dashboard(),
         "RUN_OPTIONS_MANAGER": lambda: OptionsPositionManagerEngine().manage_open_positions(),
         "RUN_PRE_TRADE_RISK_GATE": lambda: PreTradeRiskGateEngine().evaluate(),
