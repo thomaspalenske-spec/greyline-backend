@@ -285,7 +285,7 @@ def _run_battlefield_summary_refresh_background():
 
 
 def _run_options_cycle_for_battlefield_top_candidate():
-    battlefield_summary = greyline_market_battlefield_summary()
+    battlefield_summary = greyline_market_battlefield_summary(force_refresh=True)
     opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
     top_candidate = opportunity_queue.get("top_candidate") or {}
 
