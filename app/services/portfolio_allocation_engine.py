@@ -6,8 +6,10 @@ from app.services.portfolio_correlation_engine import PortfolioCorrelationEngine
 from app.services.portfolio_capacity_engine import PortfolioCapacityEngine
 from app.services.portfolio_heat_engine import PortfolioHeatEngine
 from app.services.portfolio_directional_exposure_engine import PortfolioDirectionalExposureEngine
+from app.services.portfolio_conflict_engine import PortfolioConflictEngine
 from app.services.portfolio_heat_engine import PortfolioHeatEngine
 from app.services.portfolio_directional_exposure_engine import PortfolioDirectionalExposureEngine
+from app.services.portfolio_conflict_engine import PortfolioConflictEngine
 
 
 class PortfolioAllocationEngine:
@@ -20,6 +22,7 @@ class PortfolioAllocationEngine:
         capacity = PortfolioCapacityEngine().evaluate()
         heat = PortfolioHeatEngine().evaluate()
         directional = PortfolioDirectionalExposureEngine().evaluate()
+        conflict = PortfolioConflictEngine().evaluate()
 
         base_allocation = 0
 
@@ -102,5 +105,6 @@ class PortfolioAllocationEngine:
             "capacity": capacity,
             "heat": heat,
             "directional_exposure": directional,
+            "conflict": conflict,
             "status": "PORTFOLIO_ALLOCATION_READY",
         }
