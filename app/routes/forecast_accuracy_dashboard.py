@@ -10,6 +10,8 @@ from app.services.forecast_regime_attribution_engine import ForecastRegimeAttrib
 from app.services.forecast_component_attribution_engine import ForecastComponentAttributionEngine
 from app.services.forecast_deployment_governance_engine import ForecastDeploymentGovernanceEngine
 from app.services.forecast_meta_learning_engine import ForecastMetaLearningEngine
+from app.services.forecast_quality_gate_engine import ForecastQualityGateEngine
+from app.services.forecast_auto_tuning_engine import ForecastAutoTuningEngine
 
 router = APIRouter()
 
@@ -27,6 +29,8 @@ def forecast_accuracy_dashboard():
     component_attribution = ForecastComponentAttributionEngine().evaluate()
     deployment_governance = ForecastDeploymentGovernanceEngine().evaluate()
     meta_learning = ForecastMetaLearningEngine().evaluate()
+    quality_gate = ForecastQualityGateEngine().evaluate()
+    auto_tuning = ForecastAutoTuningEngine().evaluate()
 
     return {
         "system": "GreyLine",
@@ -42,5 +46,7 @@ def forecast_accuracy_dashboard():
         "component_attribution": component_attribution,
         "deployment_governance": deployment_governance,
         "meta_learning": meta_learning,
+        "quality_gate": quality_gate,
+        "auto_tuning": auto_tuning,
         "status": "FORECAST_ACCURACY_DASHBOARD_ROUTE_READY",
     }
