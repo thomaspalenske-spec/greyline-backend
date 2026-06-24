@@ -71,6 +71,11 @@
 <button onclick="refreshDashboard()">Refresh Dashboard</button>
 <button onclick="runOptionsManager()">Run Options Manager</button>
 <button onclick="refreshBattlefield()">Refresh Battlefield</button>
+<span class="subtitle" style="margin-left:12px;">
+    Last update: <span id="last_update">Never</span> |
+    Next refresh: <span id="next_refresh">30</span>s |
+    Mode: LIVE AUTO
+</span>
 
 <div class="grid" style="margin-top: 20px;">
     <div class="card">
@@ -178,6 +183,22 @@
                 </tr>
             </thead>
             <tbody id="positions_table"></tbody>
+        </table>
+    </div>
+
+    <div class="card wide">
+        <h2>Live Event Feed</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Event</th>
+                    <th>Detail</th>
+                </tr>
+            </thead>
+            <tbody id="live_event_feed">
+                <tr><td colspan="3">Loading...</td></tr>
+            </tbody>
         </table>
     </div>
 
@@ -311,6 +332,41 @@ async function refreshDashboard() {
         tbody.appendChild(row);
     }
 
+    document.getElementById('last_update').textContent = new Date().toLocaleTimeString();
+
+    const feed = document.getElementById('live_event_feed');
+    if (feed) {
+        const events = [
+            {
+                time: new Date().toLocaleTimeString(),
+                event: 'DASHBOARD_REFRESH',
+                detail: 'Dashboard refreshed successfully'
+            },
+            {
+                time: operator.timestamp || 'N/A',
+                event: 'BATTLEFIELD',
+                detail: `${operator.battlefield_health || 'UNKNOWN'} - ${(operator.top_candidate || {}).symbol || 'NO_CANDIDATE'}`
+            },
+            {
+                time: new Date().toLocaleTimeString(),
+                event: 'OPTIONS_ACCOUNT',
+                detail: `Open options: ${data.open_option_trade_count ?? 0}, Equity: $${fmt(data.current_equity)}`
+            },
+            {
+                time: new Date().toLocaleTimeString(),
+                event: 'AUTHORITY',
+                detail: authority.status || 'UNKNOWN'
+            }
+        ];
+
+        feed.innerHTML = '';
+        for (const e of events) {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${e.time}</td><td>${e.event}</td><td>${e.detail}</td>`;
+            feed.appendChild(row);
+        }
+    }
+
     document.getElementById('raw_json').textContent = JSON.stringify({
         options_account_dashboard: data,
         operator_quick_brief: operator
@@ -344,8 +400,21 @@ async function runOptionsManager() {
     await refreshDashboard();
 }
 
+let refreshSeconds = 30;
+
 refreshDashboard();
-setInterval(refreshDashboard, 30000);
+
+setInterval(() => {
+    refreshSeconds -= 1;
+    if (refreshSeconds <= 0) {
+        refreshSeconds = 30;
+        refreshDashboard();
+    }
+    const next = document.getElementById('next_refresh');
+    if (next) {
+        next.textContent = refreshSeconds;
+    }
+}, 1000);
 </script>
 
 </body>
