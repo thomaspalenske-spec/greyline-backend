@@ -283,6 +283,47 @@ def _run_battlefield_summary_refresh_background():
     }
 
 
+
+def _run_options_cycle_for_battlefield_top_candidate():
+    battlefield_summary = greyline_market_battlefield_summary()
+    opportunity_queue = OpportunityQueueEngine().build(battlefield_summary)
+    top_candidate = opportunity_queue.get("top_candidate") or {}
+
+    symbol = top_candidate.get("symbol")
+    option_type = top_candidate.get("option_type") or "CALL"
+
+    if not symbol:
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "source": "OPTIONS_CYCLE_BATTLEFIELD",
+            "paper_trade_recorded": False,
+            "reason": "NO_BATTLEFIELD_TOP_CANDIDATE",
+            "status": "OPTIONS_CYCLE_BATTLEFIELD_NO_ACTION",
+        }
+
+    if top_candidate.get("result") != "EXECUTE":
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "source": "OPTIONS_CYCLE_BATTLEFIELD",
+            "paper_trade_recorded": False,
+            "symbol": symbol,
+            "option_type": option_type,
+            "candidate_result": top_candidate.get("result"),
+            "reason": "TOP_CANDIDATE_NOT_EXECUTE",
+            "status": "OPTIONS_CYCLE_BATTLEFIELD_NOT_READY",
+        }
+
+    result = OptionsCycleEngine().run(
+        symbol=symbol,
+        option_type=option_type,
+    )
+
+    result["battlefield_top_candidate"] = top_candidate
+    result["source"] = "OPTIONS_CYCLE_BATTLEFIELD"
+    return result
+
 @router.post("/ai-command")
 
 
@@ -303,7 +344,7 @@ def ai_command(request: AICommandRequest):
         "RUN_MARKET_BATTLEFIELD_REFRESH_STATUS": lambda: _battlefield_refresh_status(),
         "RUN_MARKET_BATTLEFIELD_CACHE_CLEAR": lambda: MarketBattlefieldSnapshotCache.clear(),
         "RUN_PAPER_TRADE_EXECUTOR": lambda: run_paper_trade_executor(),
-        "RUN_OPTIONS_CYCLE": lambda: OptionsCycleEngine().run(),
+        "RUN_OPTIONS_CYCLE": lambda: _run_options_cycle_for_battlefield_top_candidate(),
         "RUN_OPTIONS_STATUS": lambda: OptionsAccountDashboardEngine().get_dashboard(),
         "RUN_OPTIONS_MANAGER": lambda: OptionsPositionManagerEngine().manage_open_positions(),
         "RUN_PRE_TRADE_RISK_GATE": lambda: PreTradeRiskGateEngine().evaluate(),
