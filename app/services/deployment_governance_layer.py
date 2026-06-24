@@ -3,6 +3,7 @@ from datetime import datetime
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.volatility_scoring_engine import VolatilityScoringEngine
+from app.services.forecast_influence_engine import ForecastInfluenceEngine
 
 
 class DeploymentGovernanceLayer:
@@ -61,7 +62,21 @@ class DeploymentGovernanceLayer:
         )
 
         state = self._state(deployment_score)
-        allocation = self._allocation(deployment_score)
+        base_allocation = self._allocation(deployment_score)
+
+        forecast_influence = ForecastInfluenceEngine().evaluate(
+            forecast_score=deployment_score,
+            confidence=state,
+        )
+
+        influence_multiplier = float(
+            forecast_influence.get("influence_multiplier") or 1.0
+        )
+
+        allocation = min(
+            100,
+            max(0, round(base_allocation * influence_multiplier, 2))
+        )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
@@ -70,6 +85,9 @@ class DeploymentGovernanceLayer:
             "deployment_score": deployment_score,
             "deployment_state": state,
             "recommended_position_size_pct": allocation,
+            "base_recommended_position_size_pct": base_allocation,
+            "forecast_influence_multiplier": influence_multiplier,
+            "forecast_influence": forecast_influence,
             "scores": scores,
             "weights": self.WEIGHTS,
             "symbol": symbol,
