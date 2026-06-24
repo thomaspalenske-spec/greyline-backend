@@ -315,28 +315,6 @@ async function refreshDashboard() {
                 : c.result === 'EXECUTE' ? 'NO PAPER FILL FOUND'
                 : 'NO FILL';
             const row = document.createElement('tr');
-            const stopLoss = Number.isFinite(Number(t.stop_loss_price ?? t.stop_price ?? t.dynamic_stop_loss))
-                ? Number(t.stop_loss_price ?? t.stop_price ?? t.dynamic_stop_loss)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 0.98 : NaN;
-
-            const tp1 = Number.isFinite(Number(t.tp1_price ?? t.take_profit_1_price))
-                ? Number(t.tp1_price ?? t.take_profit_1_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.01 : NaN;
-            const tp2 = Number.isFinite(Number(t.tp2_price ?? t.take_profit_2_price))
-                ? Number(t.tp2_price ?? t.take_profit_2_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.02 : NaN;
-            const tp3 = Number.isFinite(Number(t.tp3_price ?? t.take_profit_3_price))
-                ? Number(t.tp3_price ?? t.take_profit_3_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.03 : NaN;
-            const tp4 = Number.isFinite(Number(t.tp4_price ?? t.take_profit_4_price))
-                ? Number(t.tp4_price ?? t.take_profit_4_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.04 : NaN;
-
-            const tpStatus = (price) =>
-                Number.isFinite(price) && Number.isFinite(displayCurrentUnderlying)
-                    ? (displayCurrentUnderlying >= price ? 'HIT' : 'PENDING')
-                    : 'N/A';
-
             row.innerHTML = `
                 <td>${c.rank ?? ''}</td>
                 <td>${c.symbol ?? 'NONE'}</td>
@@ -450,6 +428,28 @@ async function refreshDashboard() {
                 Number.isFinite(displayEntryUnderlying) && displayEntryUnderlying !== 0 && Number.isFinite(displayCurrentUnderlying)
                     ? ((displayCurrentUnderlying / displayEntryUnderlying) - 1) * 100
                     : Number(t.underlying_change_pct ?? t.unrealized_pnl_pct);
+
+            const stopLoss = Number.isFinite(Number(t.stop_loss_price ?? t.stop_price ?? t.dynamic_stop_loss))
+                ? Number(t.stop_loss_price ?? t.stop_price ?? t.dynamic_stop_loss)
+                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 0.98 : NaN;
+
+            const tp1 = Number.isFinite(Number(t.tp1_price ?? t.take_profit_1_price))
+                ? Number(t.tp1_price ?? t.take_profit_1_price)
+                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.01 : NaN;
+            const tp2 = Number.isFinite(Number(t.tp2_price ?? t.take_profit_2_price))
+                ? Number(t.tp2_price ?? t.take_profit_2_price)
+                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.02 : NaN;
+            const tp3 = Number.isFinite(Number(t.tp3_price ?? t.take_profit_3_price))
+                ? Number(t.tp3_price ?? t.take_profit_3_price)
+                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.03 : NaN;
+            const tp4 = Number.isFinite(Number(t.tp4_price ?? t.take_profit_4_price))
+                ? Number(t.tp4_price ?? t.take_profit_4_price)
+                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.04 : NaN;
+
+            const tpStatus = (price) =>
+                Number.isFinite(price) && Number.isFinite(displayCurrentUnderlying)
+                    ? (displayCurrentUnderlying >= price ? 'HIT' : 'PENDING')
+                    : 'N/A';
 
             row.innerHTML = `
                 <td>${t.display_asset}</td>
