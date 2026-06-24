@@ -2,7 +2,8 @@ from datetime import datetime
 
 
 class BattlefieldPredictionAccuracyEngine:
-    def evaluate(self, outcomes):
+    def evaluate(self, outcomes=None):
+        outcomes = outcomes or []
         scored = []
 
         for item in outcomes or []:
