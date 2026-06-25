@@ -1,5 +1,6 @@
 from app.routes import portfolio_governor
 from fastapi import FastAPI
+from app.routes.walk_forward_simulation import router as walk_forward_simulation_router
 from app.routes.institutional_flow import router as institutional_flow_router
 from app.routes import ai_operator
 from app.routes import paper_trade_ledger
@@ -21,6 +22,7 @@ from app.routes import decision_outcomes
 from app.routes import decision_self_audit
 
 app = FastAPI(title="GreyLine Backend Server")
+app.include_router(walk_forward_simulation_router)
 app.include_router(institutional_flow_router)
 app.include_router(core.router)
 app.include_router(paper_trading.router)
