@@ -193,6 +193,10 @@
         <div style="background:#222;border-radius:8px;overflow:hidden;margin:8px 0;height:18px;">
             <div id="explain_readiness_bar" style="height:18px;width:0%;background:#f0b429;"></div>
         </div>
+        <div><b>Institutional Money:</b> <span id="institutional_money_score">Loading...</span></div>
+        <div><b>Accumulation:</b> <span id="institutional_accumulation">Loading...</span></div>
+        <div><b>Distribution Risk:</b> <span id="institutional_distribution">Loading...</span></div>
+        <div><b>Flow Mode:</b> <span id="institutional_flow_mode">Loading...</span></div>
         <div><b>Primary Blocker:</b> <span id="explain_blocker">Loading...</span></div>
         <div><b>Next Event Needed:</b> <span id="explain_next_event">Loading...</span></div>
         <h3>Passed</h3>
@@ -342,6 +346,12 @@ async function refreshDashboard() {
         readinessBar.style.width = readiness + '%';
         readinessBar.style.background = readiness >= 85 ? '#2ecc71' : readiness >= 70 ? '#f0b429' : '#e74c3c';
     }
+    const institutionalMoney = operator.institutional_money || {};
+    safeText('institutional_money_score', fmt(institutionalMoney.institutional_money_score) + ' / 100');
+    safeText('institutional_accumulation', institutionalMoney.accumulation_state || 'UNKNOWN');
+    safeText('institutional_distribution', institutionalMoney.distribution_risk || 'UNKNOWN');
+    safeText('institutional_flow_mode', institutionalMoney.flow_mode || 'UNKNOWN');
+
     safeText('explain_blocker', explain.primary_blocker || 'UNKNOWN');
     safeText('explain_next_event', explain.next_event_needed || 'UNKNOWN');
 
