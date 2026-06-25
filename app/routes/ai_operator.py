@@ -435,6 +435,14 @@ def operator_decision_summary():
     ranked = governor.get("ranked_candidates") or []
 
     top = ranked[0] if ranked else (queue[0] if queue else None)
+    top_detail = next(
+        (
+            q for q in queue
+            if q.get("symbol") == (top or {}).get("symbol")
+            and q.get("option_type") == (top or {}).get("option_type")
+        ),
+        top or {}
+    )
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -450,13 +458,13 @@ def operator_decision_summary():
             "liquidity_score": (top or {}).get("liquidity_score"),
             "signal_reliability_score": (top or {}).get("signal_reliability_score"),
             "signal_reliability_grade": (top or {}).get("signal_reliability_grade"),
-            "signal_state": ((top or {}).get("signal_decay") or {}).get("signal_state"),
-            "signal_strength_score": ((top or {}).get("signal_decay") or {}).get("signal_strength_score"),
-            "signal_decay_penalty": (top or {}).get("signal_decay_penalty"),
-            "signal_decay_reason": (top or {}).get("signal_decay_reason"),
-            "direction_confidence": (top or {}).get("direction_confidence"),
-            "score_distance_to_execute": (top or {}).get("score_distance_to_execute"),
-            "liquidity_distance_to_execute": (top or {}).get("liquidity_distance_to_execute"),
+            "signal_state": ((top_detail or {}).get("signal_decay") or {}).get("signal_state"),
+            "signal_strength_score": ((top_detail or {}).get("signal_decay") or {}).get("signal_strength_score"),
+            "signal_decay_penalty": (top_detail or {}).get("signal_decay_penalty"),
+            "signal_decay_reason": (top_detail or {}).get("signal_decay_reason"),
+            "direction_confidence": (top_detail or {}).get("direction_confidence"),
+            "score_distance_to_execute": (top_detail or {}).get("score_distance_to_execute"),
+            "liquidity_distance_to_execute": (top_detail or {}).get("liquidity_distance_to_execute"),
             "portfolio_allocation_score": (top or {}).get("portfolio_allocation_score"),
             "portfolio_allocation_decision": (top or {}).get("portfolio_allocation_decision"),
             "portfolio_rank": (top or {}).get("portfolio_allocation_rank"),
