@@ -435,14 +435,7 @@ def operator_decision_summary():
     ranked = governor.get("ranked_candidates") or []
 
     top = ranked[0] if ranked else (queue[0] if queue else None)
-    top_detail = next(
-        (
-            q for q in queue
-            if q.get("symbol") == (top or {}).get("symbol")
-            and q.get("option_type") == (top or {}).get("option_type")
-        ),
-        top or {}
-    )
+    top_detail = queue[0] if queue else (top or {})
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
