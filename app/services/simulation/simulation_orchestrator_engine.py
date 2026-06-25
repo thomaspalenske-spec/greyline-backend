@@ -116,11 +116,19 @@ class SimulationOrchestratorEngine:
                 )
                 capital = round(capital + cash_returned, 2)
 
+                open_position_value = round(sum(
+                    float(pos.get("shares") or 0) * float(pos.get("current_price") or 0)
+                    for pos in open_positions
+                ), 2)
+                equity_value = round(capital + open_position_value, 2)
+
                 decision["execution"] = execution
                 decision["position_update"] = position_update
                 decision["exit_update"] = exit_update
                 decision["realized_pnl"] = round(realized_pnl, 2)
                 decision["cash_returned"] = round(cash_returned, 2)
+                decision["open_position_value"] = open_position_value
+                decision["equity_value"] = equity_value
 
                 outcome_reveal = SimulationOutcomeRevealEngine().evaluate(
                     decision=decision,
