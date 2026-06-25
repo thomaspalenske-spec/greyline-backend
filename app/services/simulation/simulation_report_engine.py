@@ -82,6 +82,8 @@ class SimulationReportEngine:
             "return_pct": return_pct,
             "max_drawdown": max_drawdown,
             "max_drawdown_pct": max_drawdown_pct,
+            "equity_curve_length": len(equity_curve_rows),
+            "final_equity": equity_curve_rows[-1]["equity_value"] if equity_curve_rows else None,
             "equity_curve": equity_curve_rows,
             "execute_count": execute_count,
             "closed_trade_count": closed_trade_count,
