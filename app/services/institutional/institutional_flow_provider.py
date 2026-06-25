@@ -1,27 +1,39 @@
 from datetime import datetime
 
+from app.services.institutional.institutional_feed_aggregator import InstitutionalFeedAggregator
+
 
 class InstitutionalFlowProvider:
     """
-    Adapter skeleton for future direct institutional feeds.
-    Current status: no direct vendor feed connected.
+    Provider layer for direct institutional feeds.
+
+    Current mode:
+    - Uses InstitutionalFeedAggregator.
+    - Synthetic adapter is active.
+    - Direct vendor feeds are not yet connected.
     """
 
     def evaluate(self, symbol=None):
         symbol = (symbol or "").upper().strip()
+        aggregate = InstitutionalFeedAggregator().evaluate(symbol)
+
+        direct_connected = aggregate.get("direct_feed_connected") is True
+
+        feeds = {
+            "options_flow": None,
+            "dark_pool": None,
+            "dealer_gamma": None,
+            "order_flow": None,
+            "vwap": None,
+        }
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "InstitutionalFlowProvider",
             "symbol": symbol,
-            "direct_feed_connected": False,
-            "feeds": {
-                "options_flow": None,
-                "dark_pool": None,
-                "dealer_gamma": None,
-                "order_flow": None,
-                "vwap": None,
-            },
+            "direct_feed_connected": direct_connected,
+            "aggregate": aggregate,
+            "feeds": feeds,
             "missing_feeds": [
                 "options_flow",
                 "dark_pool",
@@ -29,5 +41,5 @@ class InstitutionalFlowProvider:
                 "order_flow",
                 "vwap",
             ],
-            "status": "INSTITUTIONAL_FLOW_PROVIDER_NO_DIRECT_FEEDS",
+            "status": "INSTITUTIONAL_FLOW_PROVIDER_READY",
         }
