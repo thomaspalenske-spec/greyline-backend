@@ -7,6 +7,7 @@ from app.services.simulation.simulation_outcome_reveal_engine import SimulationO
 from app.services.simulation.simulation_outcome_ledger_engine import SimulationOutcomeLedgerEngine
 from app.services.simulation.simulation_execution_engine import SimulationExecutionEngine
 from app.services.simulation.simulation_position_engine import SimulationPositionEngine
+from app.services.simulation.simulation_exit_engine import SimulationExitEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.simulation.simulation_signal_engine import SimulationSignalEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
@@ -100,8 +101,21 @@ class SimulationOrchestratorEngine:
                 )
                 open_positions = position_update.get("open_positions", [])
 
+                exit_update = SimulationExitEngine().evaluate(
+                    open_positions,
+                    snapshot.get("market_data"),
+                )
+                open_positions = exit_update.get("remaining_open_positions", open_positions)
+                realized_pnl = sum(
+                    float(x.get("realized_pnl") or 0)
+                    for x in exit_update.get("closed_positions", [])
+                )
+                capital = round(capital + realized_pnl, 2)
+
                 decision["execution"] = execution
                 decision["position_update"] = position_update
+                decision["exit_update"] = exit_update
+                decision["realized_pnl"] = round(realized_pnl, 2)
 
                 outcome_reveal = SimulationOutcomeRevealEngine().evaluate(
                     decision=decision,
