@@ -157,16 +157,16 @@
                     <th>Rank</th>
                     <th>Symbol</th>
                     <th>Type</th>
-                    <th>Bias</th>
-                    <th>Raw</th>
+                    <th>Reliability Grade</th>
+                    <th>Reliability Score</th>
                     <th>Adj</th>
                     <th>Result</th>
-                    <th>Action State</th>
+                    <th>Allocation Decision</th>
                     <th>Paper Fill Status</th>
                 </tr>
             </thead>
             <tbody id="top_candidates_table">
-                <tr><td colspan="7">Loading...</td></tr>
+                <tr><td colspan="9">Loading...</td></tr>
             </tbody>
         </table>
     </div>
@@ -350,7 +350,7 @@ async function refreshDashboard() {
             topBody.appendChild(row);
         }
         if (topCandidates.length === 0) {
-            topBody.innerHTML = '<tr><td colspan="7">No candidates available</td></tr>';
+            topBody.innerHTML = '<tr><td colspan="9">No candidates available</td></tr>';
         }
     }
 
