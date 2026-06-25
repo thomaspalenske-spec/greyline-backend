@@ -3,6 +3,7 @@ from datetime import datetime
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 from app.services.options_cycle_engine import OptionsCycleEngine
 from app.services.options_dynamic_position_sizing_engine import OptionsDynamicPositionSizingEngine
+from app.services.signal_reliability_engine import SignalReliabilityEngine
 
 
 class OptionsPaperExecutionSweepEngine:
@@ -40,6 +41,7 @@ class OptionsPaperExecutionSweepEngine:
                 continue
 
             score = c.get("score") or c.get("composite_score")
+            reliability = SignalReliabilityEngine().evaluate(c)
             max_position_pct = OptionsDynamicPositionSizingEngine().max_position_pct(score)
             r = OptionsCycleEngine().run(
                 symbol=symbol,
@@ -54,6 +56,9 @@ class OptionsPaperExecutionSweepEngine:
                 "option_type": option_type,
                 "candidate_result": result,
                 "candidate_score": c.get("score") or c.get("composite_score"),
+                "signal_reliability_score": reliability.get("signal_reliability_score"),
+                "signal_reliability_grade": reliability.get("signal_reliability_grade"),
+                "signal_reliability": reliability,
                 "paper_trade_recorded": r.get("paper_trade_recorded"),
                 "duplicate_blocked": r.get("duplicate_blocked"),
                 "selected_option_symbol": (((r.get("top_candidate") or {}).get("Legs") or [{}])[0]).get("Symbol"),
