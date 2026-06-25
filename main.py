@@ -1,5 +1,6 @@
 from app.routes import portfolio_governor
 from fastapi import FastAPI
+from app.routes.simulation_outcomes import router as simulation_outcomes_router
 from app.routes.simulation_report import router as simulation_report_router
 from app.routes.simulation_ledger import router as simulation_ledger_router
 from app.routes.walk_forward_simulation import router as walk_forward_simulation_router
@@ -24,6 +25,7 @@ from app.routes import decision_outcomes
 from app.routes import decision_self_audit
 
 app = FastAPI(title="GreyLine Backend Server")
+app.include_router(simulation_outcomes_router)
 app.include_router(simulation_report_router)
 app.include_router(simulation_ledger_router)
 app.include_router(walk_forward_simulation_router)
