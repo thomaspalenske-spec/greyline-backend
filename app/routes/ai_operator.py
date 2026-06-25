@@ -24,6 +24,7 @@ from app.services.market_battlefield_snapshot_cache import MarketBattlefieldSnap
 from app.routes.greyline_market_battlefield import greyline_market_battlefield
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 from app.services.opportunity_queue_engine import OpportunityQueueEngine
+from app.services.decision_explainability_engine import DecisionExplainabilityEngine
 from app.routes.market_battlefield_forecast import market_battlefield_forecast
 
 router = APIRouter()
@@ -436,6 +437,29 @@ def operator_decision_summary():
 
     top = ranked[0] if ranked else (queue[0] if queue else None)
     top_detail = queue[0] if queue else (top or {})
+    top_candidate_summary = {
+        "symbol": (top or {}).get("symbol"),
+        "option_type": (top or {}).get("option_type"),
+        "result": (top or {}).get("result"),
+        "adjusted_score": (top or {}).get("adjusted_score"),
+        "liquidity_score": (top or {}).get("liquidity_score"),
+        "signal_reliability_score": (top or {}).get("signal_reliability_score"),
+        "signal_reliability_grade": (top or {}).get("signal_reliability_grade"),
+        "signal_state": ((top_detail or {}).get("signal_decay") or {}).get("signal_state"),
+        "signal_strength_score": ((top_detail or {}).get("signal_decay") or {}).get("signal_strength_score"),
+        "signal_decay_penalty": (top_detail or {}).get("signal_decay_penalty"),
+        "signal_decay_reason": (top_detail or {}).get("signal_decay_reason"),
+        "direction_confidence": (top_detail or {}).get("direction_confidence"),
+        "score_distance_to_execute": (top_detail or {}).get("score_distance_to_execute"),
+        "liquidity_distance_to_execute": (top_detail or {}).get("liquidity_distance_to_execute"),
+        "portfolio_allocation_score": (top or {}).get("portfolio_allocation_score"),
+        "portfolio_allocation_decision": (top or {}).get("portfolio_allocation_decision"),
+        "portfolio_rank": (top or {}).get("portfolio_allocation_rank"),
+    }
+    explainability = DecisionExplainabilityEngine().evaluate({
+        "decision": (top or {}).get("portfolio_allocation_decision") or "NO_CANDIDATE",
+        "top_candidate": top_candidate_summary,
+    })
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -443,27 +467,10 @@ def operator_decision_summary():
         "engine": "OperatorDecisionSummary",
         "battlefield_health": forecast.get("current_battlefield_health"),
         "decision": (top or {}).get("portfolio_allocation_decision") or "NO_CANDIDATE",
-        "top_candidate": {
-            "symbol": (top or {}).get("symbol"),
-            "option_type": (top or {}).get("option_type"),
-            "result": (top or {}).get("result"),
-            "adjusted_score": (top or {}).get("adjusted_score"),
-            "liquidity_score": (top or {}).get("liquidity_score"),
-            "signal_reliability_score": (top or {}).get("signal_reliability_score"),
-            "signal_reliability_grade": (top or {}).get("signal_reliability_grade"),
-            "signal_state": ((top_detail or {}).get("signal_decay") or {}).get("signal_state"),
-            "signal_strength_score": ((top_detail or {}).get("signal_decay") or {}).get("signal_strength_score"),
-            "signal_decay_penalty": (top_detail or {}).get("signal_decay_penalty"),
-            "signal_decay_reason": (top_detail or {}).get("signal_decay_reason"),
-            "direction_confidence": (top_detail or {}).get("direction_confidence"),
-            "score_distance_to_execute": (top_detail or {}).get("score_distance_to_execute"),
-            "liquidity_distance_to_execute": (top_detail or {}).get("liquidity_distance_to_execute"),
-            "portfolio_allocation_score": (top or {}).get("portfolio_allocation_score"),
-            "portfolio_allocation_decision": (top or {}).get("portfolio_allocation_decision"),
-            "portfolio_rank": (top or {}).get("portfolio_allocation_rank"),
-        },
+        "top_candidate": top_candidate_summary,
         "candidate_count": len(queue),
         "deploy_count": governor.get("deploy_count"),
+        "decision_explainability": explainability,
         "ranked_candidates": [
             {
                 "rank": c.get("portfolio_allocation_rank", c.get("rank")),
