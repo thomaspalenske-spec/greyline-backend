@@ -3,6 +3,7 @@ from datetime import datetime
 from app.services.simulation.simulation_clock import SimulationClock
 from app.services.simulation.simulation_ledger_engine import SimulationLedgerEngine
 from app.services.simulation.simulation_learning_engine import SimulationLearningEngine
+from app.services.simulation.simulation_outcome_reveal_engine import SimulationOutcomeRevealEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 
@@ -63,10 +64,15 @@ class SimulationOrchestratorEngine:
                     "institutional_flow_mode": institutional.get("flow_mode"),
                     "capital": capital,
                 }
+                outcome_reveal = SimulationOutcomeRevealEngine().evaluate(
+                    decision=decision,
+                    current_simulated_time=SimulationClock.isoformat(),
+                )
                 learning = SimulationLearningEngine().evaluate(
                     decision=decision,
-                    outcome=None,
+                    outcome=outcome_reveal.get("outcome"),
                 )
+                decision["outcome_reveal"] = outcome_reveal
                 decision["learning"] = learning
 
                 decisions.append(decision)
