@@ -76,7 +76,11 @@ class SimulationOrchestratorEngine:
                     "symbol": symbol.upper(),
                     "market_data": snapshot.get("market_data"),
                     "future_visible": False,
-                    "decision": "WATCH" if candidate.get("adjusted_score", 0) >= 55 else "OBSERVE",
+                    "decision": (
+                        "EXECUTE" if candidate.get("adjusted_score", 0) >= 85
+                        else "WATCH" if candidate.get("adjusted_score", 0) >= 55
+                        else "OBSERVE"
+                    ),
                     "reason": "Replay OHLCV signal evaluated with no future data.",
                     "candidate": candidate,
                     "institutional_money_score": institutional.get("institutional_money_score"),
