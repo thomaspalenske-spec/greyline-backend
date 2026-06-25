@@ -5,6 +5,10 @@ class DecisionExplainabilityEngine:
     def evaluate(self, summary):
         top = summary.get("top_candidate") or {}
 
+        # Treat placeholder candidate summaries with no symbol as no candidate.
+        if not top.get("symbol"):
+            top = {}
+
         decision = summary.get("decision") or "NO_CANDIDATE"
         score = float(top.get("adjusted_score") or 0)
         liquidity = float(top.get("liquidity_score") or 0)
