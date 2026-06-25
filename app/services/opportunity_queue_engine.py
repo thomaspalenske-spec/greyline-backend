@@ -32,9 +32,6 @@ class OpportunityQueueEngine:
                 "option_type": option_type,
                 "score": adjusted_score,
                 "liquidity_score": liquidity,
-                "signal_reliability_score": reliability.get("signal_reliability_score"),
-                "signal_reliability_grade": reliability.get("signal_reliability_grade"),
-                "signal_reliability": reliability,
                 "confidence": item.get("direction_confidence") or item.get("confidence") or adjusted_score,
             })
 
@@ -48,9 +45,6 @@ class OpportunityQueueEngine:
                 "signal_decay_penalty": signal_decay_penalty,
                 "signal_decay_reason": signal_decay_reason,
                 "liquidity_score": liquidity,
-                "signal_reliability_score": reliability.get("signal_reliability_score"),
-                "signal_reliability_grade": reliability.get("signal_reliability_grade"),
-                "signal_reliability": reliability,
                 "liquidity_status": "AVAILABLE" if liquidity_available else "UNAVAILABLE",
                 "execute_score_threshold": 85,
                 "execute_liquidity_threshold": 70,
