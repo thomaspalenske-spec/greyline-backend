@@ -40,6 +40,7 @@ from app.services.component_learning_engine import ComponentLearningEngine
 from app.services.component_weight_optimization_engine import ComponentWeightOptimizationEngine
 from app.services.forward_outcome_attribution_engine import ForwardOutcomeAttributionEngine
 from app.services.confidence_calibration_engine import ConfidenceCalibrationEngine
+from app.services.portfolio_allocation_governor_engine import PortfolioAllocationGovernorEngine
 
 router = APIRouter()
 
@@ -62,6 +63,7 @@ def market_battlefield_forecast():
         candidate_rejection_summary = CandidateRejectionSummaryEngine().evaluate(opportunity_queue.get('queue', []))
         readiness_heatmap = ReadinessHeatmapEngine().evaluate(opportunity_queue.get('queue', []))
         opportunity_autopsy = OpportunityAutopsyEngine().evaluate(opportunity_queue.get('queue', []))
+        portfolio_allocation_governor = PortfolioAllocationGovernorEngine().evaluate(opportunity_queue.get('queue', []))
         opportunity_outcome_tracker = OpportunityOutcomeTrackerEngine().record(opportunity_queue.get('queue', []))
         forward_outcome_analyzer = ForwardOutcomeAnalyzerEngine().analyze()
         forward_outcome_capture = ForwardOutcomeCaptureEngine().capture()
@@ -119,6 +121,7 @@ def market_battlefield_forecast():
             "candidate_rejection_summary": candidate_rejection_summary,
             "readiness_heatmap": readiness_heatmap,
             "opportunity_autopsy": opportunity_autopsy,
+            "portfolio_allocation_governor": portfolio_allocation_governor,
             "opportunity_outcome_tracker": opportunity_outcome_tracker,
             "forward_outcome_analyzer": forward_outcome_analyzer,
             "forward_outcome_capture": forward_outcome_capture,
