@@ -110,12 +110,17 @@ class SimulationOrchestratorEngine:
                     float(x.get("realized_pnl") or 0)
                     for x in exit_update.get("closed_positions", [])
                 )
-                capital = round(capital + realized_pnl, 2)
+                cash_returned = sum(
+                    float(x.get("total_cash_returned") or 0)
+                    for x in exit_update.get("closed_positions", [])
+                )
+                capital = round(capital + cash_returned, 2)
 
                 decision["execution"] = execution
                 decision["position_update"] = position_update
                 decision["exit_update"] = exit_update
                 decision["realized_pnl"] = round(realized_pnl, 2)
+                decision["cash_returned"] = round(cash_returned, 2)
 
                 outcome_reveal = SimulationOutcomeRevealEngine().evaluate(
                     decision=decision,

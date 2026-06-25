@@ -40,10 +40,14 @@ class SimulationExitEngine:
                     if direction == "BEARISH":
                         realized_pnl = (entry - current_close) * shares
 
+                capital_returned = self._num(pos.get("capital_deployed")) or 0
+
                 closed.append({
                     **pos,
                     "exit_price": current_close,
                     "realized_pnl": round(realized_pnl, 2),
+                    "capital_returned": round(capital_returned, 2),
+                    "total_cash_returned": round(capital_returned + realized_pnl, 2),
                     "exit_reason": exit_reason,
                     "status": "CLOSED",
                     "future_data_used": False,
