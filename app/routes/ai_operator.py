@@ -437,6 +437,13 @@ def operator_decision_summary():
 
     top = ranked[0] if ranked else (queue[0] if queue else None)
     top_detail = queue[0] if queue else (top or {})
+    trend = forecast.get("trend") or {}
+    top_option_type = ((top or {}).get("option_type") or "").upper()
+    readiness_trend_value = (
+        trend.get("best_put_score_change")
+        if top_option_type == "PUT"
+        else trend.get("best_call_score_change")
+    )
     top_candidate_summary = {
         "symbol": (top or {}).get("symbol"),
         "option_type": (top or {}).get("option_type"),
@@ -470,6 +477,11 @@ def operator_decision_summary():
         "top_candidate": top_candidate_summary,
         "candidate_count": len(queue),
         "deploy_count": governor.get("deploy_count"),
+        "readiness_trend": {
+            "value": readiness_trend_value,
+            "direction": "UP" if (readiness_trend_value or 0) > 0 else "DOWN" if (readiness_trend_value or 0) < 0 else "FLAT",
+            "source": "best_put_score_change" if top_option_type == "PUT" else "best_call_score_change",
+        },
         "decision_explainability": explainability,
         "token_status": safe_call(
             "tradestation_token_status",
