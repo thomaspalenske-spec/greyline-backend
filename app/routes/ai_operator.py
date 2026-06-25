@@ -25,6 +25,7 @@ from app.routes.greyline_market_battlefield import greyline_market_battlefield
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 from app.services.opportunity_queue_engine import OpportunityQueueEngine
 from app.services.decision_explainability_engine import DecisionExplainabilityEngine
+from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 from app.routes.market_battlefield_forecast import market_battlefield_forecast
 
 router = APIRouter()
@@ -467,6 +468,7 @@ def operator_decision_summary():
         "decision": (top or {}).get("portfolio_allocation_decision") or "NO_CANDIDATE",
         "top_candidate": top_candidate_summary,
     })
+    institutional_money = InstitutionalMoneyScoreEngine().evaluate(top_candidate_summary)
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -482,6 +484,7 @@ def operator_decision_summary():
             "direction": "UP" if (readiness_trend_value or 0) > 0 else "DOWN" if (readiness_trend_value or 0) < 0 else "FLAT",
             "source": "best_put_score_change" if top_option_type == "PUT" else "best_call_score_change",
         },
+        "institutional_money": institutional_money,
         "decision_explainability": explainability,
         "token_status": safe_call(
             "tradestation_token_status",
