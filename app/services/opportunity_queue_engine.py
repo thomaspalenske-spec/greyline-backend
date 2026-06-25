@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.services.signal_decay_engine import SignalDecayEngine
+from app.services.signal_reliability_engine import SignalReliabilityEngine
 
 
 class OpportunityQueueEngine:
@@ -26,6 +27,17 @@ class OpportunityQueueEngine:
             liquidity_available = raw_liquidity is not None
             liquidity = float(raw_liquidity) if liquidity_available else None
 
+            reliability = SignalReliabilityEngine().evaluate({
+                **item,
+                "option_type": option_type,
+                "score": adjusted_score,
+                "liquidity_score": liquidity,
+                "signal_reliability_score": reliability.get("signal_reliability_score"),
+                "signal_reliability_grade": reliability.get("signal_reliability_grade"),
+                "signal_reliability": reliability,
+                "confidence": item.get("direction_confidence") or item.get("confidence") or adjusted_score,
+            })
+
             rows.append({
                 "symbol": item.get("symbol"),
                 "option_type": option_type,
@@ -36,6 +48,9 @@ class OpportunityQueueEngine:
                 "signal_decay_penalty": signal_decay_penalty,
                 "signal_decay_reason": signal_decay_reason,
                 "liquidity_score": liquidity,
+                "signal_reliability_score": reliability.get("signal_reliability_score"),
+                "signal_reliability_grade": reliability.get("signal_reliability_grade"),
+                "signal_reliability": reliability,
                 "liquidity_status": "AVAILABLE" if liquidity_available else "UNAVAILABLE",
                 "execute_score_threshold": 85,
                 "execute_liquidity_threshold": 70,
