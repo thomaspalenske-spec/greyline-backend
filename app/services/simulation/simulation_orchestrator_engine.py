@@ -58,6 +58,7 @@ class SimulationOrchestratorEngine:
                 decision = {
                     "simulated_time": SimulationClock.isoformat(),
                     "symbol": symbol.upper(),
+                    "market_data": snapshot.get("market_data"),
                     "future_visible": False,
                     "decision": "OBSERVE",
                     "reason": "Production replay scaffold active; historical market state not connected yet.",
