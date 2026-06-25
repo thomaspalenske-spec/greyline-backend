@@ -187,6 +187,7 @@
 
     <div class="card wide">
         <h2>Decision Explainability</h2>
+        <div><b>Battlefield Cache:</b> <span id="battlefield_cache_status">Loading...</span></div>
         <div><b>Decision:</b> <span id="explain_decision">Loading...</span></div>
         <div><b>Readiness:</b> <span id="explain_readiness">Loading...</span></div>
         <div style="background:#222;border-radius:8px;overflow:hidden;margin:8px 0;height:18px;">
@@ -327,6 +328,11 @@ async function refreshDashboard() {
     const optionTradesAll = optionsLedger.open_trades || optionsLedger.trades || [];
 
     const explain = operator.decision_explainability || {};
+    const battlefieldCache = operator.battlefield_cache || {};
+    const cacheMode = battlefieldCache.cache_mode || 'UNKNOWN';
+    const cacheAge = battlefieldCache.cache_age_seconds ?? 'N/A';
+    const cacheLabel = `${cacheMode} — age ${cacheAge}s`;
+    safeText('battlefield_cache_status', cacheLabel);
 
     safeText('explain_decision', explain.decision || 'UNKNOWN');
     safeText('explain_readiness', fmt(explain.estimated_readiness) + '%');
