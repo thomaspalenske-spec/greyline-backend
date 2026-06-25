@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.services.simulation.walk_forward_simulation_engine import WalkForwardSimulationEngine
+from app.services.simulation.simulation_orchestrator_engine import SimulationOrchestratorEngine
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ def walk_forward_simulation(
     step_days: int = 1,
     starting_capital: float = 10000,
 ):
-    return WalkForwardSimulationEngine().run(
+    return SimulationOrchestratorEngine().run(
         symbol=symbol,
         start_date=start_date,
         end_date=end_date,
