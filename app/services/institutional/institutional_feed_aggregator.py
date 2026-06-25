@@ -15,13 +15,17 @@ class InstitutionalFeedAggregator:
             TradeStationInstitutionalAdapter(),
         ]
 
-    def evaluate(self, symbol=None):
+    def evaluate(self, symbol=None, candidate=None):
         symbol = (symbol or "").upper().strip()
+        candidate = candidate or {}
         provider_results = []
 
         for adapter in self.adapters:
             try:
-                provider_results.append(adapter.evaluate(symbol))
+                try:
+                    provider_results.append(adapter.evaluate(symbol, candidate))
+                except TypeError:
+                    provider_results.append(adapter.evaluate(symbol))
             except Exception as e:
                 provider_results.append({
                     "timestamp": datetime.utcnow().isoformat(),
