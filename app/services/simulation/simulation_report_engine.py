@@ -33,6 +33,8 @@ class SimulationReportEngine:
         gross_profit = round(sum(float(p.get("realized_pnl") or 0) for p in closed_positions if float(p.get("realized_pnl") or 0) > 0), 2)
         gross_loss = round(abs(sum(float(p.get("realized_pnl") or 0) for p in closed_positions if float(p.get("realized_pnl") or 0) < 0)), 2)
         profit_factor = round(gross_profit / gross_loss, 2) if gross_loss else None
+        average_win = round(gross_profit / winning_trades, 2) if winning_trades else None
+        average_loss = round(gross_loss / losing_trades, 2) if losing_trades else None
 
         starting_capital = first.get("capital") if first else None
         latest_capital = latest.get("capital") if latest else None
@@ -61,5 +63,7 @@ class SimulationReportEngine:
             "gross_profit": gross_profit,
             "gross_loss": gross_loss,
             "profit_factor": profit_factor,
+            "average_win": average_win,
+            "average_loss": average_loss,
             "status": "SIMULATION_REPORT_READY",
         }
