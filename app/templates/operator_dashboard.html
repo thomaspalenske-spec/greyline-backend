@@ -186,6 +186,18 @@
     </div>
 
     <div class="card wide">
+        <h2>Decision Explainability</h2>
+        <div><b>Decision:</b> <span id="explain_decision">Loading...</span></div>
+        <div><b>Readiness:</b> <span id="explain_readiness">Loading...</span></div>
+        <div><b>Primary Blocker:</b> <span id="explain_blocker">Loading...</span></div>
+        <div><b>Next Event Needed:</b> <span id="explain_next_event">Loading...</span></div>
+        <h3>Passed</h3>
+        <ul id="explain_passed"><li>Loading...</li></ul>
+        <h3>Failed</h3>
+        <ul id="explain_failed"><li>Loading...</li></ul>
+    </div>
+
+    <div class="card wide">
         <h2>Plain-English Summary</h2>
         <div id="plain_summary">Loading...</div>
     </div>
@@ -310,6 +322,23 @@ async function refreshDashboard() {
     }
     const paperTrades = paperLedger.open_trades || paperLedger.trades || [];
     const optionTradesAll = optionsLedger.open_trades || optionsLedger.trades || [];
+
+    const explain = operator.decision_explainability || {};
+
+    safeText('explain_decision', explain.decision || 'UNKNOWN');
+    safeText('explain_readiness', fmt(explain.estimated_readiness) + '%');
+    safeText('explain_blocker', explain.primary_blocker || 'UNKNOWN');
+    safeText('explain_next_event', explain.next_event_needed || 'UNKNOWN');
+
+    const passedList = document.getElementById('explain_passed');
+    if (passedList) {
+        passedList.innerHTML = (explain.passed || []).map(x => `<li>${x}</li>`).join('') || '<li>None</li>';
+    }
+
+    const failedList = document.getElementById('explain_failed');
+    if (failedList) {
+        failedList.innerHTML = (explain.failed || []).map(x => `<li>${x}</li>`).join('') || '<li>None</li>';
+    }
 
     const broker = operator.live_broker_health?.data || {};
     const authority = operator.live_trade_authority_gate?.data || {};
