@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from app.services.simulation.historical_market_data_provider import HistoricalMarketDataProvider
+
 
 class MarketReplayEngine:
     """
@@ -26,9 +28,15 @@ class MarketReplayEngine:
         if not self.has_next():
             return None
 
+        market_data = HistoricalMarketDataProvider().get_snapshot(
+            self.symbol,
+            self.current.isoformat(),
+        )
+
         snapshot = {
             "symbol": self.symbol,
             "timestamp": self.current.isoformat(),
+            "market_data": market_data,
             "future_visible": False,
             "status": "MARKET_REPLAY_SNAPSHOT_READY",
         }
