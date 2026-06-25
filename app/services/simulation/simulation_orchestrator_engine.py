@@ -6,6 +6,7 @@ from app.services.simulation.simulation_learning_engine import SimulationLearnin
 from app.services.simulation.simulation_outcome_reveal_engine import SimulationOutcomeRevealEngine
 from app.services.simulation.simulation_outcome_ledger_engine import SimulationOutcomeLedgerEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
+from app.services.simulation.simulation_signal_engine import SimulationSignalEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 
 
@@ -43,15 +44,17 @@ class SimulationOrchestratorEngine:
                 snapshot = replay.next()
                 SimulationClock.enable_simulation(snapshot["timestamp"])
 
-                candidate = {
-                    "symbol": symbol.upper(),
-                    "option_type": "CALL",
-                    "adjusted_score": 0,
-                    "liquidity_score": 0,
-                    "signal_reliability_score": 0,
-                    "direction_confidence": 0,
-                    "setup_score": 0,
-                }
+                candidate = SimulationSignalEngine().evaluate(snapshot.get("market_data"))
+                if not candidate.get("candidate_available"):
+                    candidate = {
+                        "symbol": symbol.upper(),
+                        "option_type": "UNKNOWN",
+                        "adjusted_score": 0,
+                        "liquidity_score": 0,
+                        "signal_reliability_score": 0,
+                        "direction_confidence": 0,
+                        "setup_score": 0,
+                    }
 
                 institutional = InstitutionalMoneyScoreEngine().evaluate(candidate)
 
@@ -60,8 +63,9 @@ class SimulationOrchestratorEngine:
                     "symbol": symbol.upper(),
                     "market_data": snapshot.get("market_data"),
                     "future_visible": False,
-                    "decision": "OBSERVE",
-                    "reason": "Production replay scaffold active; historical market state not connected yet.",
+                    "decision": "WATCH" if candidate.get("adjusted_score", 0) >= 55 else "OBSERVE",
+                    "reason": "Replay OHLCV signal evaluated with no future data.",
+                    "candidate": candidate,
                     "institutional_money_score": institutional.get("institutional_money_score"),
                     "institutional_flow_mode": institutional.get("flow_mode"),
                     "capital": capital,
