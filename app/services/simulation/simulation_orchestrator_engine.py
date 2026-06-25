@@ -2,6 +2,7 @@ from datetime import datetime
 
 from app.services.simulation.simulation_clock import SimulationClock
 from app.services.simulation.simulation_ledger_engine import SimulationLedgerEngine
+from app.services.simulation.simulation_learning_engine import SimulationLearningEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 
@@ -62,6 +63,12 @@ class SimulationOrchestratorEngine:
                     "institutional_flow_mode": institutional.get("flow_mode"),
                     "capital": capital,
                 }
+                learning = SimulationLearningEngine().evaluate(
+                    decision=decision,
+                    outcome=None,
+                )
+                decision["learning"] = learning
+
                 decisions.append(decision)
                 SimulationLedgerEngine().record(decision)
         finally:
