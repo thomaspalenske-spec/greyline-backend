@@ -56,7 +56,20 @@ class SimulationOrchestratorEngine:
                         "setup_score": 0,
                     }
 
-                institutional = InstitutionalMoneyScoreEngine().evaluate(candidate)
+                institutional = InstitutionalMoneyScoreEngine().evaluate(
+                    candidate,
+                    feeds={
+                        "options_flow": {
+                            "score": candidate.get("adjusted_score"),
+                        },
+                        "order_flow": {
+                            "score": candidate.get("liquidity_score"),
+                        },
+                        "institutional_sponsorship": {
+                            "score": candidate.get("signal_reliability_score"),
+                        },
+                    },
+                )
 
                 decision = {
                     "simulated_time": SimulationClock.isoformat(),
