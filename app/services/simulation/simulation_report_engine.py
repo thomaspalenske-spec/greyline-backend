@@ -42,6 +42,23 @@ class SimulationReportEngine:
         if starting_capital:
             return_pct = round((realized_pnl / float(starting_capital)) * 100, 2)
 
+        equity_curve = [float(r.get("capital") or 0) for r in rows if r.get("capital") is not None]
+        peak = None
+        max_drawdown = 0
+        max_drawdown_pct = 0
+
+        for equity in equity_curve:
+            peak = equity if peak is None else max(peak, equity)
+            drawdown = peak - equity
+            drawdown_pct = (drawdown / peak) * 100 if peak else 0
+
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+                max_drawdown_pct = drawdown_pct
+
+        max_drawdown = round(max_drawdown, 2)
+        max_drawdown_pct = round(max_drawdown_pct, 2)
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "SimulationReportEngine",
@@ -55,6 +72,8 @@ class SimulationReportEngine:
             "latest_capital": latest_capital,
             "realized_pnl": realized_pnl,
             "return_pct": return_pct,
+            "max_drawdown": max_drawdown,
+            "max_drawdown_pct": max_drawdown_pct,
             "execute_count": execute_count,
             "closed_trade_count": closed_trade_count,
             "winning_trades": winning_trades,
