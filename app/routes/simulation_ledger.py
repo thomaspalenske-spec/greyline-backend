@@ -18,3 +18,9 @@ def simulation_ledger(limit: int = 100):
         "records": SimulationLedgerEngine().load(limit=limit),
         "status": "SIMULATION_LEDGER_READY",
     }
+
+
+@router.post("/simulation-ledger/clear")
+def clear_simulation_ledger():
+    return SimulationLedgerEngine().clear()
+

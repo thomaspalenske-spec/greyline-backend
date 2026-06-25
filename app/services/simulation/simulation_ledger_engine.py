@@ -47,3 +47,19 @@ class SimulationLedgerEngine:
             "path": str(self._path),
             "status": "SIMULATION_LEDGER_SUMMARY_READY",
         }
+
+    def clear(self):
+        try:
+            self._path.unlink(missing_ok=True)
+        except TypeError:
+            if self._path.exists():
+                self._path.unlink()
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "engine": "SimulationLedgerEngine",
+            "cleared": True,
+            "path": str(self._path),
+            "status": "SIMULATION_LEDGER_CLEARED",
+        }
+
