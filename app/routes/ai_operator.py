@@ -471,6 +471,18 @@ def operator_decision_summary():
         "candidate_count": len(queue),
         "deploy_count": governor.get("deploy_count"),
         "decision_explainability": explainability,
+        "token_status": safe_call(
+            "tradestation_token_status",
+            lambda: TradeStationTokenStatusEngine().evaluate()
+        ),
+        "live_broker_health": safe_call(
+            "live_broker_health",
+            lambda: LiveBrokerHealthEngine().evaluate()
+        ),
+        "live_trade_authority_gate": safe_call(
+            "live_trade_authority_gate",
+            lambda: LiveTradeAuthorityGateEngine().evaluate()
+        ),
         "ranked_candidates": [
             {
                 "rank": c.get("portfolio_allocation_rank", c.get("rank")),
