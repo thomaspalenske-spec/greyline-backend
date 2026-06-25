@@ -49,3 +49,6 @@ app/data/forecast_learning_ledger.jsonl
 
 # Local ledger backups
 app/data/archive/
+
+# GreyLine simulation runtime data
+app/data/simulation/
