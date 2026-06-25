@@ -189,6 +189,9 @@
         <h2>Decision Explainability</h2>
         <div><b>Decision:</b> <span id="explain_decision">Loading...</span></div>
         <div><b>Readiness:</b> <span id="explain_readiness">Loading...</span></div>
+        <div style="background:#222;border-radius:8px;overflow:hidden;margin:8px 0;height:18px;">
+            <div id="explain_readiness_bar" style="height:18px;width:0%;background:#f0b429;"></div>
+        </div>
         <div><b>Primary Blocker:</b> <span id="explain_blocker">Loading...</span></div>
         <div><b>Next Event Needed:</b> <span id="explain_next_event">Loading...</span></div>
         <h3>Passed</h3>
@@ -327,6 +330,12 @@ async function refreshDashboard() {
 
     safeText('explain_decision', explain.decision || 'UNKNOWN');
     safeText('explain_readiness', fmt(explain.estimated_readiness) + '%');
+    const readinessBar = document.getElementById('explain_readiness_bar');
+    if (readinessBar) {
+        const readiness = Math.max(0, Math.min(100, Number(explain.estimated_readiness || 0)));
+        readinessBar.style.width = readiness + '%';
+        readinessBar.style.background = readiness >= 85 ? '#2ecc71' : readiness >= 70 ? '#f0b429' : '#e74c3c';
+    }
     safeText('explain_blocker', explain.primary_blocker || 'UNKNOWN');
     safeText('explain_next_event', explain.next_event_needed || 'UNKNOWN');
 
