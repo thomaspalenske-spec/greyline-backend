@@ -1,12 +1,18 @@
 from datetime import datetime
 
 from app.services.institutional.feed_adapters.synthetic_adapter import SyntheticInstitutionalFeedAdapter
+from app.services.institutional.feed_adapters.unusual_whales_adapter import UnusualWhalesAdapter
+from app.services.institutional.feed_adapters.blackboxstocks_adapter import BlackBoxStocksAdapter
+from app.services.institutional.feed_adapters.tradestation_adapter import TradeStationInstitutionalAdapter
 
 
 class InstitutionalFeedAggregator:
     def __init__(self):
         self.adapters = [
             SyntheticInstitutionalFeedAdapter(),
+            UnusualWhalesAdapter(),
+            BlackBoxStocksAdapter(),
+            TradeStationInstitutionalAdapter(),
         ]
 
     def evaluate(self, symbol=None):
@@ -44,12 +50,11 @@ class InstitutionalFeedAggregator:
         bullish_votes = len([r for r in available if r.get("direction") == "BULLISH"])
         bearish_votes = len([r for r in available if r.get("direction") == "BEARISH"])
 
-        if bullish_votes > bearish_votes:
-            consensus_direction = "BULLISH"
-        elif bearish_votes > bullish_votes:
-            consensus_direction = "BEARISH"
-        else:
-            consensus_direction = "UNKNOWN"
+        consensus_direction = (
+            "BULLISH" if bullish_votes > bearish_votes
+            else "BEARISH" if bearish_votes > bullish_votes
+            else "UNKNOWN"
+        )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
