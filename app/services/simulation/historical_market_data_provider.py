@@ -1,29 +1,27 @@
-from datetime import datetime
 
+from datetime import datetime
 
 class HistoricalMarketDataProvider:
     """
-    Historical market data provider for walk-forward simulation.
+    Placeholder provider.
 
-    Current version:
-    - no external data feed required
-    - returns a no-lookahead placeholder bar
-    - designed to later read CSV/API/historical bars
+    Next implementation will read historical OHLCV bars from disk or an API.
+    This interface is intentionally production-compatible.
     """
 
-    def get_snapshot(self, symbol, simulated_time):
-        if isinstance(simulated_time, str):
-            simulated_time = datetime.fromisoformat(simulated_time)
+    def get_snapshot(self, symbol, timestamp):
 
         return {
-            "timestamp": simulated_time.isoformat(),
-            "symbol": (symbol or "").upper().strip(),
+            "timestamp": timestamp,
+            "symbol": symbol.upper(),
             "open": None,
             "high": None,
             "low": None,
             "close": None,
             "volume": None,
+            "options_chain": None,
+            "volatility": None,
             "source": "PLACEHOLDER_NO_LOOKAHEAD",
             "future_visible": False,
-            "status": "HISTORICAL_MARKET_DATA_PLACEHOLDER_READY",
+            "status": "HISTORICAL_MARKET_DATA_PROVIDER_READY",
         }
