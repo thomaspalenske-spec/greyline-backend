@@ -51,12 +51,13 @@ class MarketBattlefieldSnapshotCache:
                 "status": "MARKET_BATTLEFIELD_CACHE_REJECTED",
             }
 
-        if age_seconds > cls._ttl_seconds:
-            return None
-
         snapshot = dict(cls._snapshot)
+        cache_stale = age_seconds > cls._ttl_seconds
         cache = {
-            "cache_hit": True,
+            "cache_hit": not cache_stale,
+            "cache_available": True,
+            "cache_stale": cache_stale,
+            "cache_mode": "STALE_BUT_AVAILABLE" if cache_stale else "CACHE_FAST",
             "cached_at": cls._created_at.isoformat(),
             "server_now": now.isoformat(),
             "cache_age_seconds": round(age_seconds, 2),
