@@ -4,6 +4,7 @@ from app.services.simulation.simulation_clock import SimulationClock
 from app.services.simulation.simulation_ledger_engine import SimulationLedgerEngine
 from app.services.simulation.simulation_learning_engine import SimulationLearningEngine
 from app.services.simulation.simulation_outcome_reveal_engine import SimulationOutcomeRevealEngine
+from app.services.simulation.simulation_outcome_ledger_engine import SimulationOutcomeLedgerEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 
@@ -72,6 +73,7 @@ class SimulationOrchestratorEngine:
                     decision=decision,
                     outcome=outcome_reveal.get("outcome"),
                 )
+                SimulationOutcomeLedgerEngine().record(outcome_reveal)
                 decision["outcome_reveal"] = outcome_reveal
                 decision["learning"] = learning
 
