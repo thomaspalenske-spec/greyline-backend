@@ -455,7 +455,21 @@ def operator_decision_summary():
         },
         "candidate_count": len(queue),
         "deploy_count": governor.get("deploy_count"),
-        "ranked_candidates": ranked[:5],
+        "ranked_candidates": [
+            {
+                "rank": c.get("portfolio_allocation_rank", c.get("rank")),
+                "symbol": c.get("symbol"),
+                "option_type": c.get("option_type"),
+                "result": c.get("result"),
+                "adjusted_score": c.get("adjusted_score"),
+                "liquidity_score": c.get("liquidity_score"),
+                "signal_reliability_score": c.get("signal_reliability_score"),
+                "signal_reliability_grade": c.get("signal_reliability_grade"),
+                "portfolio_allocation_score": c.get("portfolio_allocation_score"),
+                "portfolio_allocation_decision": c.get("portfolio_allocation_decision"),
+            }
+            for c in ranked[:5]
+        ],
         "execution_enabled": False,
         "live_order_placement_allowed": False,
         "status": "OPERATOR_DECISION_SUMMARY_READY",
