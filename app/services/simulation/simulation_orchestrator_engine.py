@@ -5,6 +5,7 @@ from app.services.simulation.simulation_ledger_engine import SimulationLedgerEng
 from app.services.simulation.simulation_learning_engine import SimulationLearningEngine
 from app.services.simulation.simulation_outcome_reveal_engine import SimulationOutcomeRevealEngine
 from app.services.simulation.simulation_outcome_ledger_engine import SimulationOutcomeLedgerEngine
+from app.services.simulation.simulation_execution_engine import SimulationExecutionEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.simulation.simulation_signal_engine import SimulationSignalEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
@@ -87,6 +88,10 @@ class SimulationOrchestratorEngine:
                     "institutional_flow_mode": institutional.get("flow_mode"),
                     "capital": capital,
                 }
+                execution = SimulationExecutionEngine().evaluate(decision, capital)
+                capital = execution.get("capital_after", capital)
+                decision["execution"] = execution
+
                 outcome_reveal = SimulationOutcomeRevealEngine().evaluate(
                     decision=decision,
                     current_simulated_time=SimulationClock.isoformat(),
