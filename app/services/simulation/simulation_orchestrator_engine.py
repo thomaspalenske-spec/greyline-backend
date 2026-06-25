@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.services.simulation.simulation_clock import SimulationClock
+from app.services.simulation.simulation_ledger_engine import SimulationLedgerEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 
@@ -51,7 +52,7 @@ class SimulationOrchestratorEngine:
 
                 institutional = InstitutionalMoneyScoreEngine().evaluate(candidate)
 
-                decisions.append({
+                decision = {
                     "simulated_time": SimulationClock.isoformat(),
                     "symbol": symbol.upper(),
                     "future_visible": False,
@@ -60,7 +61,9 @@ class SimulationOrchestratorEngine:
                     "institutional_money_score": institutional.get("institutional_money_score"),
                     "institutional_flow_mode": institutional.get("flow_mode"),
                     "capital": capital,
-                })
+                }
+                decisions.append(decision)
+                SimulationLedgerEngine().record(decision)
         finally:
             SimulationClock.disable_simulation()
 
