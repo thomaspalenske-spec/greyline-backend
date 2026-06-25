@@ -42,7 +42,7 @@ class OptionsPaperExecutionSweepEngine:
 
             score = c.get("score") or c.get("composite_score")
             reliability = SignalReliabilityEngine().evaluate(c)
-            max_position_pct = OptionsDynamicPositionSizingEngine().max_position_pct(score)
+            max_position_pct = OptionsDynamicPositionSizingEngine().max_position_pct(score, reliability.get('signal_reliability_score'))
             r = OptionsCycleEngine().run(
                 symbol=symbol,
                 option_type=option_type,
