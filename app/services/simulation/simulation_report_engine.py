@@ -20,12 +20,19 @@ class SimulationReportEngine:
         first = rows[0] if rows else None
         latest = rows[-1] if rows else None
 
+        closed_positions = []
+        for r in rows:
+            closed_positions.extend((r.get("exit_update") or {}).get("closed_positions") or [])
+
         realized_pnl = round(sum(float(r.get("realized_pnl") or 0) for r in rows), 2)
         execute_count = decisions.get("EXECUTE", 0)
-        closed_trade_count = sum(
-            int(((r.get("exit_update") or {}).get("closed_count")) or 0)
-            for r in rows
-        )
+        closed_trade_count = len(closed_positions)
+        winning_trades = len([p for p in closed_positions if float(p.get("realized_pnl") or 0) > 0])
+        losing_trades = len([p for p in closed_positions if float(p.get("realized_pnl") or 0) < 0])
+        win_rate = round((winning_trades / closed_trade_count) * 100, 2) if closed_trade_count else None
+        gross_profit = round(sum(float(p.get("realized_pnl") or 0) for p in closed_positions if float(p.get("realized_pnl") or 0) > 0), 2)
+        gross_loss = round(abs(sum(float(p.get("realized_pnl") or 0) for p in closed_positions if float(p.get("realized_pnl") or 0) < 0)), 2)
+        profit_factor = round(gross_profit / gross_loss, 2) if gross_loss else None
 
         starting_capital = first.get("capital") if first else None
         latest_capital = latest.get("capital") if latest else None
@@ -48,5 +55,11 @@ class SimulationReportEngine:
             "return_pct": return_pct,
             "execute_count": execute_count,
             "closed_trade_count": closed_trade_count,
+            "winning_trades": winning_trades,
+            "losing_trades": losing_trades,
+            "win_rate": win_rate,
+            "gross_profit": gross_profit,
+            "gross_loss": gross_loss,
+            "profit_factor": profit_factor,
             "status": "SIMULATION_REPORT_READY",
         }
