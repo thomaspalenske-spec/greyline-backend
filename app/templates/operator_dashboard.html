@@ -277,7 +277,7 @@ async function refreshDashboard() {
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
-        const operatorRes = await fetch('/operator-quick-brief', {signal: controller.signal});
+        const operatorRes = await fetch('/operator-decision-summary', {signal: controller.signal});
         clearTimeout(timeout);
         operator = await operatorRes.json();
     } catch (e) {
@@ -293,7 +293,7 @@ async function refreshDashboard() {
 
     const operatorSummary = operator || {};
     const top = operator.top_candidate || {};
-    const topCandidates = operator.top_candidates || [];
+    const topCandidates = operator.ranked_candidates || operator.top_candidates || [];
     const token = operator.token_status?.data || {};
 
     let paperLedger = {};
@@ -340,11 +340,11 @@ async function refreshDashboard() {
                 <td>${c.rank ?? ''}</td>
                 <td>${c.symbol ?? 'NONE'}</td>
                 <td>${c.option_type ?? 'UNKNOWN'}</td>
-                <td>${c.directional_bias ?? 'UNKNOWN'}</td>
-                <td>${fmt(c.score)}</td>
+                <td>${c.signal_reliability_grade ?? c.directional_bias ?? 'UNKNOWN'}</td>
+                <td>${fmt(c.signal_reliability_score ?? c.score)}</td>
                 <td>${fmt(c.adjusted_score)}</td>
                 <td>${c.result ?? 'UNKNOWN'}</td>
-                <td>${c.result === 'EXECUTE' ? 'SIGNAL ONLY / NOT FILLED' : 'WATCHING'}</td>
+                <td>${c.portfolio_allocation_decision ?? (c.result === 'EXECUTE' ? 'SIGNAL ONLY / NOT FILLED' : 'WATCHING')}</td>
                 <td>${fillStatus}</td>
             `;
             topBody.appendChild(row);
