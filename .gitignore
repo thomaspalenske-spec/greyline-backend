@@ -46,3 +46,6 @@ app/data/forecast_outcome_grades.jsonl
 app/data/forecast_learning_ledger.jsonl
 
 app/data/forecast_learning_ledger.jsonl
+
+# Local ledger backups
+app/data/archive/
