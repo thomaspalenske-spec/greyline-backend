@@ -48,7 +48,7 @@ router = APIRouter()
 @router.get("/market-battlefield-forecast")
 def market_battlefield_forecast():
     try:
-        battlefield = greyline_market_battlefield_summary(force_refresh=True)
+        battlefield = greyline_market_battlefield_summary(force_refresh=False)
         history_engine = BattlefieldHistoryEngine()
         history_record = history_engine.record(battlefield)
         recent_history = history_engine.history(limit=50)
