@@ -6,6 +6,7 @@ from app.services.simulation.simulation_learning_engine import SimulationLearnin
 from app.services.simulation.simulation_outcome_reveal_engine import SimulationOutcomeRevealEngine
 from app.services.simulation.simulation_outcome_ledger_engine import SimulationOutcomeLedgerEngine
 from app.services.simulation.simulation_execution_engine import SimulationExecutionEngine
+from app.services.simulation.simulation_position_engine import SimulationPositionEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.simulation.simulation_signal_engine import SimulationSignalEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
@@ -38,6 +39,7 @@ class SimulationOrchestratorEngine:
         )
 
         decisions = []
+        open_positions = []
         capital = float(starting_capital)
 
         try:
@@ -90,7 +92,16 @@ class SimulationOrchestratorEngine:
                 }
                 execution = SimulationExecutionEngine().evaluate(decision, capital)
                 capital = execution.get("capital_after", capital)
+
+                position_update = SimulationPositionEngine().update(
+                    open_positions,
+                    execution,
+                    snapshot.get("market_data"),
+                )
+                open_positions = position_update.get("open_positions", [])
+
                 decision["execution"] = execution
+                decision["position_update"] = position_update
 
                 outcome_reveal = SimulationOutcomeRevealEngine().evaluate(
                     decision=decision,
@@ -119,6 +130,8 @@ class SimulationOrchestratorEngine:
             "step_days": step_days,
             "starting_capital": float(starting_capital),
             "ending_capital": capital,
+            "open_position_count": len(open_positions),
+            "open_positions": open_positions,
             "decision_count": len(decisions),
             "sample_decisions": decisions[:5],
             "final_decision": decisions[-1] if decisions else None,
