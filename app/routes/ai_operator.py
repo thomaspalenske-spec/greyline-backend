@@ -410,3 +410,53 @@ def ai_command(request: AICommandRequest):
         "result": result,
         "status": "AI_COMMAND_COMPLETE"
     }
+
+
+@router.get("/operator-decision-summary")
+def operator_decision_summary():
+    from datetime import datetime
+    from app.routes.market_battlefield_forecast import market_battlefield_forecast
+
+    forecast = market_battlefield_forecast()
+
+    if forecast.get("status") != "MARKET_BATTLEFIELD_FORECAST_READY":
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "engine": "OperatorDecisionSummary",
+            "ready": False,
+            "status": "OPERATOR_DECISION_SUMMARY_ERROR",
+            "source_status": forecast.get("status"),
+            "error": forecast.get("error"),
+        }
+
+    queue = (forecast.get("opportunity_queue") or {}).get("queue", [])
+    governor = forecast.get("portfolio_allocation_governor") or {}
+    ranked = governor.get("ranked_candidates") or []
+
+    top = ranked[0] if ranked else (queue[0] if queue else None)
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "system": "GreyLine",
+        "engine": "OperatorDecisionSummary",
+        "battlefield_health": forecast.get("current_battlefield_health"),
+        "decision": (top or {}).get("portfolio_allocation_decision") or "NO_CANDIDATE",
+        "top_candidate": {
+            "symbol": (top or {}).get("symbol"),
+            "option_type": (top or {}).get("option_type"),
+            "result": (top or {}).get("result"),
+            "adjusted_score": (top or {}).get("adjusted_score"),
+            "liquidity_score": (top or {}).get("liquidity_score"),
+            "signal_reliability_score": (top or {}).get("signal_reliability_score"),
+            "signal_reliability_grade": (top or {}).get("signal_reliability_grade"),
+            "portfolio_allocation_score": (top or {}).get("portfolio_allocation_score"),
+            "portfolio_allocation_decision": (top or {}).get("portfolio_allocation_decision"),
+        },
+        "candidate_count": len(queue),
+        "deploy_count": governor.get("deploy_count"),
+        "ranked_candidates": ranked[:5],
+        "execution_enabled": False,
+        "live_order_placement_allowed": False,
+        "status": "OPERATOR_DECISION_SUMMARY_READY",
+    }
