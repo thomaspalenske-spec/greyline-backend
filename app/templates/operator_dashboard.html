@@ -323,12 +323,12 @@ async function refreshDashboard() {
     document.getElementById('broker_health').textContent = broker.status || 'UNKNOWN';
     document.getElementById('live_authority').textContent = authority.status || 'UNKNOWN';
 
-    safeText('top_signal_state', top.signal_reliability_grade || 'UNKNOWN');
-    safeText('top_signal_strength', fmt(top.signal_reliability_score));
-    safeText('top_confidence', top.portfolio_allocation_decision || 'UNKNOWN');
-    safeText('top_accuracy', fmt(top.portfolio_allocation_score));
-    safeText('top_win_rate', 'N/A');
-    safeText('top_decay_reason', top.result || 'UNKNOWN');
+    safeText('top_signal_state', top.signal_state || top.signal_reliability_grade || 'UNKNOWN');
+    safeText('top_signal_strength', fmt(top.signal_strength_score ?? top.signal_reliability_score));
+    safeText('top_confidence', fmt(top.direction_confidence) + '%');
+    safeText('top_accuracy', fmt(top.score_distance_to_execute));
+    safeText('top_win_rate', top.portfolio_rank ?? 'N/A');
+    safeText('top_decay_reason', top.signal_decay_reason || top.result || 'UNKNOWN');
 
     // Top 3 candidates are rendered below in the top_candidates_table.
 
