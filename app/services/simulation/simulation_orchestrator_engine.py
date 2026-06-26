@@ -1,4 +1,5 @@
 from datetime import datetime
+import copy
 
 from app.services.simulation.simulation_clock import SimulationClock
 from app.services.simulation.simulation_ledger_engine import SimulationLedgerEngine
@@ -142,8 +143,8 @@ class SimulationOrchestratorEngine:
                 decision["outcome_reveal"] = outcome_reveal
                 decision["learning"] = learning
 
-                decisions.append(decision)
-                SimulationLedgerEngine().record(decision)
+                decisions.append(copy.deepcopy(decision))
+                SimulationLedgerEngine().record(copy.deepcopy(decision))
         finally:
             SimulationClock.disable_simulation()
 
