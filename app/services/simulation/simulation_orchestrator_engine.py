@@ -11,6 +11,7 @@ from app.services.simulation.simulation_position_engine import SimulationPositio
 from app.services.simulation.simulation_exit_engine import SimulationExitEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.simulation.greyline_simulation_decision_adapter import GreyLineSimulationDecisionAdapter
+from app.services.simulation.historical_component_builder import HistoricalComponentBuilder
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 
 
@@ -49,7 +50,7 @@ class SimulationOrchestratorEngine:
                 snapshot = replay.next()
                 SimulationClock.enable_simulation(snapshot["timestamp"])
 
-                candidate = GreyLineSimulationDecisionAdapter().evaluate(snapshot.get("market_data"))
+                candidate = GreyLineSimulationDecisionAdapter().evaluate(snapshot.get("market_data"), HistoricalComponentBuilder().build(snapshot.get("market_data")))
                 if not candidate.get("candidate_available"):
                     candidate = {
                         "symbol": symbol.upper(),
