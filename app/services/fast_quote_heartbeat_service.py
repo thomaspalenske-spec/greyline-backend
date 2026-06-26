@@ -1,7 +1,7 @@
 import json
 import threading
-from datetime import datetime
-from app.services.execution_governor import ExecutionGovernor, timezone
+from datetime import datetime, timezone, timezone
+from app.services.execution_governor import ExecutionGovernor
 from pathlib import Path
 
 from app.services.market_hours_engine import MarketHoursEngine
