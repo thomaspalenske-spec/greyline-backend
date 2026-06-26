@@ -272,12 +272,14 @@ class OptionsAccountDashboardEngine:
         tp_pcts = [0.25, 0.50, 0.75, 1.00]
 
         ladder = {
-            "tp_model": "FOUR_STAGE_DYNAMIC_TP_LADDER",
-            "tp1_exit_pct": 25,
-            "tp2_exit_pct": 25,
-            "tp3_exit_pct": 25,
-            "tp4_exit_pct": 25,
+            "tp_model": "FOUR_STAGE_DYNAMIC_TP_LADDER_WITH_DYNAMIC_DIVESTMENT_ADVISORY",
+            "tp1_exit_pct": "DYNAMIC",
+            "tp2_exit_pct": "DYNAMIC",
+            "tp3_exit_pct": "DYNAMIC",
+            "tp4_exit_pct": "RUNNER_REMAINDER",
             "tp4_runner": True,
+            "fixed_25pct_exit_model_replaced": True,
+            "divestment_model": "DYNAMIC_DIVESTMENT_ADVISORY",
         }
 
         for i, pct in enumerate(tp_pcts, start=1):
