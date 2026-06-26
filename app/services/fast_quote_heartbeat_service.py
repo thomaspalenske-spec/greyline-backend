@@ -1,6 +1,7 @@
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
+from app.services.execution_governor import ExecutionGovernor, timezone
 from pathlib import Path
 
 from app.services.market_hours_engine import MarketHoursEngine
@@ -91,8 +92,8 @@ class FastQuoteHeartbeatService:
             "symbols": cls._symbols,
             "interval_market_open_seconds": cls._interval_market_open_seconds,
             "interval_market_closed_seconds": cls._interval_market_closed_seconds,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "FAST_QUOTE_HEARTBEAT_STARTED",
         }
 
@@ -104,8 +105,8 @@ class FastQuoteHeartbeatService:
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
             "source": "FAST_QUOTE_HEARTBEAT",
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "FAST_QUOTE_HEARTBEAT_STOPPED",
         }
 
@@ -122,8 +123,8 @@ class FastQuoteHeartbeatService:
             "interval_market_open_seconds": cls._interval_market_open_seconds,
             "interval_market_closed_seconds": cls._interval_market_closed_seconds,
             "state": state,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "FAST_QUOTE_HEARTBEAT_STATUS_READY",
         }
 
@@ -198,8 +199,8 @@ class FastQuoteHeartbeatService:
             "max_quote_age_seconds": max_quote_age_seconds,
             "market_data_health": market_data_health,
             "cycle_latency_ms": latency_ms,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "FAST_QUOTE_HEARTBEAT_CYCLE_COMPLETE",
         }
 
