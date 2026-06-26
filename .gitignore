@@ -57,3 +57,6 @@ app/data/simulation/
 app/data/runtime/
 app/data/imports/
 app/data/historical/*.csv
+
+# Simulation run outputs
+app/data/simulation_runs/
