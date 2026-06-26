@@ -172,6 +172,7 @@ class HistoricalDynamicTPPerformanceEngine:
 
         exit_reason = "TIME_EXIT"
         final_exit_date = forward_dates[-1]
+        active_stop_pct = stop_loss_pct
 
         def ret_from_close(close):
             if direction == "BEARISH" or option_type == "PUT":
@@ -188,13 +189,28 @@ class HistoricalDynamicTPPerformanceEngine:
             max_favorable_pct = max(max_favorable_pct, ret_pct)
             max_adverse_pct = min(max_adverse_pct, ret_pct)
 
-            if ret_pct <= stop_loss_pct:
+            if ret_pct <= active_stop_pct:
                 if remaining > 0:
                     realized_return += remaining * ret_pct
-                    exits.append({"date": d, "stage": "STOP", "weight": round(remaining, 2), "return_pct": round(ret_pct, 2)})
+
+                    if active_stop_pct >= tp2_pct:
+                        stop_stage = "TP2_PROTECTIVE_STOP"
+                    elif active_stop_pct >= 0:
+                        stop_stage = "BREAKEVEN_STOP"
+                    else:
+                        stop_stage = "INITIAL_STOP"
+
+                    exits.append({
+                        "date": d,
+                        "stage": stop_stage,
+                        "weight": round(remaining, 2),
+                        "return_pct": round(ret_pct, 2),
+                        "active_stop_pct": round(active_stop_pct, 2),
+                    })
                     runner_return_pct = ret_pct if remaining <= 0.25 else 0
                     remaining = 0
-                exit_reason = "STOP_LOSS"
+
+                exit_reason = stop_stage
                 final_exit_date = d
                 break
 
@@ -202,19 +218,40 @@ class HistoricalDynamicTPPerformanceEngine:
                 realized_return += 0.25 * ret_pct
                 remaining -= 0.25
                 tp1_hit = True
-                exits.append({"date": d, "stage": "TP1", "weight": 0.25, "return_pct": round(ret_pct, 2)})
+                active_stop_pct = max(active_stop_pct, 0.0)
+                exits.append({
+                    "date": d,
+                    "stage": "TP1",
+                    "weight": 0.25,
+                    "return_pct": round(ret_pct, 2),
+                    "new_stop_pct": round(active_stop_pct, 2),
+                })
 
             if not tp2_hit and ret_pct >= tp2_pct and remaining >= 0.50:
                 realized_return += 0.25 * ret_pct
                 remaining -= 0.25
                 tp2_hit = True
-                exits.append({"date": d, "stage": "TP2", "weight": 0.25, "return_pct": round(ret_pct, 2)})
+                active_stop_pct = max(active_stop_pct, tp1_pct)
+                exits.append({
+                    "date": d,
+                    "stage": "TP2",
+                    "weight": 0.25,
+                    "return_pct": round(ret_pct, 2),
+                    "new_stop_pct": round(active_stop_pct, 2),
+                })
 
             if not tp3_hit and ret_pct >= tp3_pct and remaining >= 0.25:
                 realized_return += 0.25 * ret_pct
                 remaining -= 0.25
                 tp3_hit = True
-                exits.append({"date": d, "stage": "TP3", "weight": 0.25, "return_pct": round(ret_pct, 2)})
+                active_stop_pct = max(active_stop_pct, tp2_pct)
+                exits.append({
+                    "date": d,
+                    "stage": "TP3",
+                    "weight": 0.25,
+                    "return_pct": round(ret_pct, 2),
+                    "new_stop_pct": round(active_stop_pct, 2),
+                })
 
             if tp3_hit and remaining > 0:
                 trail_stop = high_water_return + runner_trail_pct
