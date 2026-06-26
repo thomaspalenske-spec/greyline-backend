@@ -1,675 +1,574 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>GreyLine Operator Dashboard</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #111827;
-            color: #f9fafb;
-            margin: 0;
-            padding: 24px;
-        }
-        h1 { margin-bottom: 5px; }
-        .subtitle { color: #9ca3af; margin-bottom: 24px; }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-        }
-        .card {
-            min-width: 0;
-            background: #1f2937;
-            border-radius: 12px;
-            padding: 18px;
-            box-shadow: 0 0 0 1px #374151;
-        }
-        .wide { grid-column: span 4; }
-        .half { grid-column: span 2; }
-        .small { font-size: 18px; }
-        @media (max-width: 1000px) {
-            .grid { grid-template-columns: repeat(1, 1fr); }
-            .wide, .half { grid-column: span 1; }
-        }
-        .label { color: #9ca3af; font-size: 13px; }
-        .value { font-size: 26px; font-weight: bold; margin-top: 6px; }
-        .good { color: #22c55e; }
-        .bad { color: #ef4444; }
-        .warn { color: #f59e0b; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 12px;
-        }
-        th, td {
-            border-bottom: 1px solid #374151;
-            padding: 10px;
-            text-align: left;
-        }
-        th { color: #9ca3af; }
-        button {
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 10px 14px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-right: 8px;
-        }
-        pre {
-            background: #030712;
-            padding: 14px;
-            border-radius: 8px;
-            overflow-x: auto;
-        }
-    </style>
+<meta charset="UTF-8" />
+<title>GreyLine Operator Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+:root {
+  --bg: #08111f;
+  --panel: #111c2b;
+  --panel2: #172334;
+  --border: #2b3a4e;
+  --text: #f3f6fb;
+  --muted: #9aa7b8;
+  --blue: #2f6df6;
+  --green: #35d06f;
+  --red: #ff4d57;
+  --yellow: #ffb32c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #07101d;
+  border-right: 1px solid var(--border);
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: .5px;
+}
+
+.brand small {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.nav a {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  padding: 13px 16px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.nav a.active,
+.nav a:hover {
+  background: linear-gradient(135deg, #1e3f8f, #213460);
+}
+
+.system-card {
+  margin-top: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.system-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.main {
+  padding: 22px;
+  overflow-x: hidden;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 22px;
+  gap: 16px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--green);
+}
+
+.dot {
+  width: 11px;
+  height: 11px;
+  background: var(--green);
+  border-radius: 999px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 10px 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.grid {
+  display: grid;
+  gap: 14px;
+}
+
+.metrics {
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
+}
+
+.health {
+  grid-template-columns: repeat(5, 1fr);
+  margin-top: 14px;
+}
+
+.card {
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 18px;
+  min-width: 0;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.value {
+  font-size: 26px;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.green { color: var(--green); }
+.red { color: var(--red); }
+.yellow { color: var(--yellow); }
+.blue { color: #6ea0ff; }
+
+.content {
+  display: grid;
+  grid-template-columns: 1.2fr 1.8fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .4px;
+  margin-bottom: 14px;
+}
+
+.battlefield {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: 14px;
+}
+
+.big-symbol {
+  font-size: 30px;
+  font-weight: 950;
+  color: var(--green);
+}
+
+.badge {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: rgba(53, 208, 111, .12);
+  color: var(--green);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.badge.blocked {
+  background: rgba(255, 179, 44, .12);
+  color: var(--yellow);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 800;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 12px 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  white-space: nowrap;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.alertbar {
+  margin-top: 14px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 15px 18px;
+}
+
+.alert {
+  color: var(--red);
+  font-weight: 800;
+}
+
+@media (max-width: 1200px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .health { grid-template-columns: repeat(2, 1fr); }
+  .content, .two-col, .battlefield { grid-template-columns: 1fr; }
+}
+</style>
 </head>
+
 <body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">GREYLINE<small>OPERATOR DASHBOARD</small></div>
 
-<h1>GreyLine Operator Dashboard</h1>
-<div class="subtitle">Single pane of glass for account status, simulated options, authority gates, and current risk.</div>
+    <nav class="nav">
+      <a class="active" href="#">Overview</a>
+      <a href="/greyline-market-battlefield-summary">Battlefield</a>
+      <a href="/paper-trade-ledger">Positions</a>
+      <a href="/options-paper-trade-ledger">Options Manager</a>
+      <a href="/background-scheduler/status">Risk & Health</a>
+    </nav>
 
-<button onclick="refreshDashboard()">Refresh Dashboard</button>
-<button onclick="runOptionsManager()">Run Options Manager</button>
-<button onclick="refreshBattlefield()">Refresh Battlefield</button>
-<span class="subtitle" style="margin-left:12px;">
-    Last update: <span id="last_update">Never</span> |
-    Next refresh: <span id="next_refresh">30</span>s |
-    Mode: LIVE AUTO
-</span>
+    <div class="system-card">
+      <div class="section-title green">System Status</div>
+      <div class="system-row"><span>Mode</span><strong id="side_mode">LIVE AUTO</strong></div>
+      <div class="system-row"><span>Execution</span><strong id="side_execution" class="red">DISABLED</strong></div>
+      <div class="system-row"><span>Order Placement</span><strong id="side_orders" class="red">DISABLED</strong></div>
+      <div class="system-row"><span>Token</span><strong id="side_token">READY</strong></div>
+    </div>
+  </aside>
 
-<div class="grid" style="margin-top: 20px;">
-    <div class="card">
-        <div class="label">Current Options Equity</div>
-        <div id="current_equity" class="value">Loading...</div>
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <span class="status-pill"><span class="dot"></span> LIVE AUTO</span>
+        <span class="sub" id="last_update">Last Update: --</span>
+      </div>
+      <div class="actions">
+        <button onclick="refreshAll()">Refresh Now</button>
+        <button class="primary" onclick="runOptionsManager()">Run Options Manager</button>
+      </div>
     </div>
 
-    <div class="card">
-        <div class="label">Cash On Hand</div>
-        <div id="cash_on_hand" class="value">Loading...</div>
-    </div>
+    <section class="grid metrics">
+      <div class="card"><div class="label">Current Options Equity</div><div class="value" id="equity">$--</div></div>
+      <div class="card"><div class="label">Cash On Hand</div><div class="value" id="cash">$--</div></div>
+      <div class="card"><div class="label">Buying Power</div><div class="value" id="buying_power">$--</div></div>
+      <div class="card"><div class="label">Deployed Capital</div><div class="value" id="deployed">$--</div><div class="sub" id="deployed_pct">--</div></div>
+      <div class="card"><div class="label">Unrealized P/L</div><div class="value" id="unrealized">$--</div></div>
+      <div class="card"><div class="label">Total Return</div><div class="value" id="total_return">--</div></div>
+    </section>
 
-    <div class="card">
-        <div class="label">Deployed Capital</div>
-        <div id="deployed_capital" class="value">Loading...</div>
-    </div>
+    <section class="grid health">
+      <div class="card"><div class="label">Open Option Trades</div><div class="value yellow" id="open_trades">--</div></div>
+      <div class="card"><div class="label">Execution Enabled</div><div class="value red" id="execution_enabled">NO</div></div>
+      <div class="card"><div class="label">Order Placement Allowed</div><div class="value red" id="orders_allowed">NO</div></div>
+      <div class="card"><div class="label">Battlefield Health</div><div class="value yellow" id="battlefield_health">--</div></div>
+      <div class="card"><div class="label">Token Status</div><div class="value green" id="token_status">READY</div></div>
+    </section>
 
-    <div class="card">
-        <div class="label">Buying Power</div>
-        <div id="buying_power_remaining" class="value">Loading...</div>
-    </div>
+    <section class="content">
+      <div class="card">
+        <div class="section-title">BATTLEFIELD SUMMARY</div>
+        <div class="battlefield">
+          <div class="card">
+            <div class="label">Top Candidate</div>
+            <div class="big-symbol" id="top_symbol">--</div>
+            <div class="badge" id="top_result">--</div>
+            <div class="sub" id="top_type">--</div>
+            <div class="value" id="top_score">--</div>
+            <div class="sub">Composite Score</div>
+            <br>
+            <div class="label">Flow Confirmation</div>
+            <strong id="flow_confirmation" class="green">--</strong>
+            <div class="label" style="margin-top:12px;">Signal Age</div>
+            <strong id="signal_age" class="yellow">--</strong>
+          </div>
 
-    <div class="card">
-        <div class="label">Capital Deployed</div>
-        <div id="capital_deployed_pct" class="value">Loading...</div>
-    </div>
+          <div>
+            <div class="card">
+              <div class="label">Market Bias</div>
+              <div class="value green" id="market_bias">--</div>
+              <div class="grid" style="grid-template-columns:repeat(4,1fr); margin-top:14px;">
+                <div><div class="label">Call Count</div><strong id="call_count">--</strong></div>
+                <div><div class="label">Put Count</div><strong id="put_count">--</strong></div>
+                <div><div class="label">Ready Calls</div><strong id="ready_calls">--</strong></div>
+                <div><div class="label">Ready Puts</div><strong id="ready_puts">--</strong></div>
+              </div>
+            </div>
 
-    <div class="card">
-        <div class="label">Unrealized P/L</div>
-        <div id="unrealized_pnl" class="value">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Open Option Trades</div>
-        <div id="open_option_trade_count" class="value">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Execution Enabled</div>
-        <div id="execution_enabled" class="value">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Order Placement Allowed</div>
-        <div id="order_placement_allowed" class="value">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Total Return</div>
-        <div id="total_return_pct" class="value">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Battlefield Health</div>
-        <div id="battlefield_health" class="value">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Token Status</div>
-        <div id="token_status" class="value small">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Broker Health</div>
-        <div id="broker_health" class="value small">Loading...</div>
-    </div>
-
-    <div class="card">
-        <div class="label">Live Authority</div>
-        <div id="live_authority" class="value small">Loading...</div>
-    </div>
-
-    <div class="card half">
-        <h2>Top 10 Candidates</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>Symbol</th>
-                    <th>Type</th>
-                    <th>Reliability Grade</th>
-                    <th>Reliability Score</th>
-                    <th>Adj</th>
-                    <th>Result</th>
-                    <th>Allocation Decision</th>
-                    <th>Paper Fill Status</th>
-                </tr>
-            </thead>
-            <tbody id="top_candidates_table">
-                <tr><td colspan="9">Loading...</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <div class="card half">
-        <h2>Learning Confidence</h2>
-        <table>
-            <tbody>
-                <tr><th>Signal State</th><td id="top_signal_state">Loading...</td></tr>
-                <tr><th>Signal Strength</th><td id="top_signal_strength">Loading...</td></tr>
-                <tr><th>Confidence Level</th><td id="top_confidence">Loading...</td></tr>
-                <tr><th>Historical Accuracy</th><td id="top_accuracy">Loading...</td></tr>
-                <tr><th>Historical Win Rate</th><td id="top_win_rate">Loading...</td></tr>
-                <tr><th>Decay Reason</th><td id="top_decay_reason">Loading...</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <div class="card wide">
-        <h2>Decision Explainability</h2>
-        <div><b>Battlefield Cache:</b> <span id="battlefield_cache_status">Loading...</span></div>
-        <div><b>Decision:</b> <span id="explain_decision">Loading...</span></div>
-        <div><b>Readiness:</b> <span id="explain_readiness">Loading...</span></div>
-        <div style="background:#222;border-radius:8px;overflow:hidden;margin:8px 0;height:18px;">
-            <div id="explain_readiness_bar" style="height:18px;width:0%;background:#f0b429;"></div>
+            <div class="card" style="margin-top:14px;">
+              <div class="section-title">Top 5 Calls</div>
+              <table>
+                <thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Result</th><th>Status</th></tr></thead>
+                <tbody id="top_calls"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <div><b>Institutional Money:</b> <span id="institutional_money_score">Loading...</span></div>
-        <div><b>Accumulation:</b> <span id="institutional_accumulation">Loading...</span></div>
-        <div><b>Distribution Risk:</b> <span id="institutional_distribution">Loading...</span></div>
-        <div><b>Flow Mode:</b> <span id="institutional_flow_mode">Loading...</span></div>
-        <div><b>Primary Blocker:</b> <span id="explain_blocker">Loading...</span></div>
-        <div><b>Next Event Needed:</b> <span id="explain_next_event">Loading...</span></div>
-        <h3>Passed</h3>
-        <ul id="explain_passed"><li>Loading...</li></ul>
-        <h3>Failed</h3>
-        <ul id="explain_failed"><li>Loading...</li></ul>
-    </div>
+      </div>
 
-    <div class="card wide">
-        <h2>Plain-English Summary</h2>
-        <div id="plain_summary">Loading...</div>
-    </div>
-
-    <div class="card wide">
-        <h2>Open Simulated Option Positions</h2>
+      <div class="card">
+        <div class="section-title">OPEN POSITIONS</div>
         <table>
-            <thead>
-                <tr>
-                    <th>Underlying</th>
-                    <th>Contract</th>
-                    <th>Side</th>
-                    <th>Contracts</th>
-                    <th>Underlying Entry</th>
-                    <th>Current Underlying</th>
-                    <th>P/L</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody id="positions_table"></tbody>
+          <thead>
+            <tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L</th><th>P/L %</th><th>Status</th><th>Stage</th></tr>
+          </thead>
+          <tbody id="positions"></tbody>
         </table>
-    </div>
+      </div>
+    </section>
 
-    <div class="card wide">
-        <h2>Live Event Feed</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Event</th>
-                    <th>Detail</th>
-                </tr>
-            </thead>
-            <tbody id="live_event_feed">
-                <tr><td colspan="3">Loading...</td></tr>
-            </tbody>
-        </table>
-    </div>
+    <section class="two-col">
+      <div class="card">
+        <div class="section-title">PERFORMANCE OVERVIEW</div>
+        <svg id="equity_curve" viewBox="0 0 700 220" width="100%" height="220"></svg>
+      </div>
 
-    <div class="card wide">
-        <h2>Open Trade Detail Report</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Asset</th>
-                    <th>Symbol</th>
-                    <th>Contract</th>
-                    <th>Side</th>
-                    <th>Qty</th>
-                    <th>Underlying Entry</th>
-                    <th>Current Underlying</th>
-                    <th>Underlying P/L</th>
-                    <th>Underlying P/L %</th>
-                    <th>Strike</th>
-                    <th>Expiration</th>
-                    <th>Days Left</th>
-                    <th>Status</th>
-                    <th>Stop Loss</th>
-                    <th>TP1</th>
-                    <th>TP2</th>
-                    <th>TP3</th>
-                    <th>TP4</th>
-                    <th>Entry Thesis</th>
-                </tr>
-            </thead>
-            <tbody id="open_trade_detail_table">
-                <tr><td colspan="14">Loading...</td></tr>
-            </tbody>
-        </table>
-    </div>
+      <div class="card">
+        <div class="section-title">PERFORMANCE STATS</div>
+        <div class="system-row"><span>Total Trades</span><strong id="total_trades">--</strong></div>
+        <div class="system-row"><span>Open Trades</span><strong id="open_trade_count">--</strong></div>
+        <div class="system-row"><span>Closed Trades</span><strong id="closed_trade_count">--</strong></div>
+        <div class="system-row"><span>Realized P/L</span><strong id="realized_pnl">--</strong></div>
+      </div>
+    </section>
 
-    <div class="card wide">
-        <h2>Raw Dashboard JSON</h2>
-        <pre id="raw_json">Loading...</pre>
+    <div class="alertbar">
+      <strong>Alerts</strong>
+      <span class="alert" id="alert_execution">Execution status loading...</span>
+      <span class="alert" id="alert_orders">Order status loading...</span>
     </div>
+  </main>
 </div>
 
 <script>
-async function refreshDashboard() {
-    if (dashboardRefreshInProgress) {
-        return;
-    }
-    dashboardRefreshInProgress = true;
-    try {
-    const optionsRes = await fetch('/options-account-dashboard');
-    const data = await optionsRes.json();
+const fmtMoney = n => Number(n || 0).toLocaleString("en-US", {style:"currency", currency:"USD"});
+const fmtPct = n => `${Number(n || 0).toFixed(2)}%`;
 
-    let operator = {};
-    try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const operatorRes = await fetch('/operator-decision-summary', {signal: controller.signal});
-        clearTimeout(timeout);
-        operator = await operatorRes.json();
-    } catch (e) {
-        operator = {
-            status: "AI_OPERATOR_BRIEF_TIMEOUT_OR_ERROR",
-            operator_top_candidate: {},
-            market_battlefield_summary: {data: {battlefield_health: "UNKNOWN"}},
-            tradestation_token_status: {data: {status: "UNKNOWN"}},
-            live_broker_health: {data: {status: "UNKNOWN"}},
-            live_trade_authority_gate: {data: {status: "UNKNOWN"}}
-        };
-    }
-
-    const operatorSummary = operator || {};
-    const top = operator.top_candidate || {};
-    const topCandidates = operator.ranked_candidates || operator.top_candidates || [];
-    const token = operator.token_status?.data || {};
-
-    let paperLedger = {};
-    let optionsLedger = {};
-    try {
-        paperLedger = await (await fetch('/paper-trade-ledger')).json();
-    } catch (e) {
-        paperLedger = {};
-    }
-    try {
-        optionsLedger = await (await fetch('/options-paper-trade-ledger')).json();
-    } catch (e) {
-        optionsLedger = {};
-    }
-    const paperTrades = paperLedger.open_trades || paperLedger.trades || [];
-    const optionTradesAll = optionsLedger.open_trades || optionsLedger.trades || [];
-
-    const explain = operator.decision_explainability || {};
-    const battlefieldCache = operator.battlefield_cache || {};
-    const cacheMode = battlefieldCache.cache_mode || 'UNKNOWN';
-    const cacheAge = battlefieldCache.cache_age_seconds ?? 'N/A';
-    const cacheLabel = `${cacheMode} — age ${cacheAge}s`;
-    safeText('battlefield_cache_status', cacheLabel);
-
-    safeText('explain_decision', explain.decision || 'UNKNOWN');
-    safeText('explain_readiness', fmt(explain.estimated_readiness) + '%');
-    const readinessBar = document.getElementById('explain_readiness_bar');
-    if (readinessBar) {
-        const readiness = Math.max(0, Math.min(100, Number(explain.estimated_readiness || 0)));
-        readinessBar.style.width = readiness + '%';
-        readinessBar.style.background = readiness >= 85 ? '#2ecc71' : readiness >= 70 ? '#f0b429' : '#e74c3c';
-    }
-    const institutionalMoney = operator.institutional_money || {};
-    safeText('institutional_money_score', fmt(institutionalMoney.institutional_money_score) + ' / 100');
-    safeText('institutional_accumulation', institutionalMoney.accumulation_state || 'UNKNOWN');
-    safeText('institutional_distribution', institutionalMoney.distribution_risk || 'UNKNOWN');
-    safeText('institutional_flow_mode', institutionalMoney.flow_mode || 'UNKNOWN');
-
-    safeText('explain_blocker', explain.primary_blocker || 'UNKNOWN');
-    safeText('explain_next_event', explain.next_event_needed || 'UNKNOWN');
-
-    const passedList = document.getElementById('explain_passed');
-    if (passedList) {
-        passedList.innerHTML = (explain.passed || []).map(x => `<li>${x}</li>`).join('') || '<li>None</li>';
-    }
-
-    const failedList = document.getElementById('explain_failed');
-    if (failedList) {
-        failedList.innerHTML = (explain.failed || []).map(x => `<li>${x}</li>`).join('') || '<li>None</li>';
-    }
-
-    const broker = operator.live_broker_health?.data || {};
-    const authority = operator.live_trade_authority_gate?.data || {};
-
-    document.getElementById('battlefield_health').textContent = operatorSummary.battlefield_health || 'UNKNOWN';
-    document.getElementById('battlefield_health').className =
-        operatorSummary.battlefield_health === 'GREEN' ? 'value good' :
-        operatorSummary.battlefield_health === 'YELLOW' ? 'value warn' : 'value bad';
-
-    document.getElementById('token_status').textContent = token.status || 'UNKNOWN';
-    document.getElementById('broker_health').textContent = broker.status || 'UNKNOWN';
-    document.getElementById('live_authority').textContent = authority.status || 'UNKNOWN';
-
-    safeText('top_signal_state', top.signal_state || top.signal_reliability_grade || 'UNKNOWN');
-    safeText('top_signal_strength', fmt(top.signal_strength_score ?? top.signal_reliability_score));
-    safeText('top_confidence', fmt(top.direction_confidence) + '%');
-    safeText('top_accuracy', fmt(top.score_distance_to_execute));
-    safeText('top_win_rate', top.portfolio_rank ?? 'N/A');
-    safeText('top_decay_reason', top.signal_decay_reason || top.result || 'UNKNOWN');
-
-    // Top 3 candidates are rendered below in the top_candidates_table.
-
-    const topBody = document.getElementById('top_candidates_table');
-    if (topBody) {
-        topBody.innerHTML = '';
-        for (const c of topCandidates) {
-            const paperMatch = paperTrades.find(t => (t.symbol || t.underlying) === c.symbol);
-            const optionMatch = optionTradesAll.find(t => (t.symbol || t.underlying) === c.symbol);
-            const fillStatus = optionMatch ? `OPTIONS PAPER ${optionMatch.status || 'OPEN'}`
-                : paperMatch ? `EQUITY PAPER ${paperMatch.status || 'OPEN'}`
-                : c.result === 'EXECUTE' ? 'NO PAPER FILL FOUND'
-                : 'NO FILL';
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${c.rank ?? ''}</td>
-                <td>${c.symbol ?? 'NONE'}</td>
-                <td>${c.option_type ?? 'UNKNOWN'}</td>
-                <td>${c.signal_reliability_grade ?? c.directional_bias ?? 'UNKNOWN'}</td>
-                <td>${fmt(c.signal_reliability_score ?? c.score)}</td>
-                <td>${fmt(c.adjusted_score)}</td>
-                <td>${c.result ?? 'UNKNOWN'}</td>
-                <td>${c.portfolio_allocation_decision ?? (c.result === 'EXECUTE' ? 'SIGNAL ONLY / NOT FILLED' : 'WATCHING')}</td>
-                <td>${fillStatus}</td>
-            `;
-            topBody.appendChild(row);
-        }
-        if (topCandidates.length === 0) {
-            topBody.innerHTML = '<tr><td colspan="9">No candidates available</td></tr>';
-        }
-    }
-
-    safeText('current_equity', '$' + fmt(data.current_equity));
-    safeText('cash_on_hand', '$' + fmt(data.cash_on_hand));
-    safeText('deployed_capital', '$' + fmt(data.deployed_capital));
-    safeText('capital_deployed_pct', fmt(data.capital_deployed_pct) + '%');
-    safeText('buying_power_remaining', '$' + fmt(data.buying_power_remaining));
-    safeText('unrealized_pnl', '$' + fmt(data.unrealized_pnl));
-    safeText('open_option_trade_count', data.open_option_trade_count ?? 0);
-    safeText('execution_enabled', data.execution_enabled ? 'YES' : 'NO');
-    safeText('order_placement_allowed', data.order_placement_allowed ? 'YES' : 'NO');
-    safeText('total_return_pct', fmt(data.total_return_pct) + '%');
-
-    document.getElementById('unrealized_pnl').className =
-        Number(data.unrealized_pnl) >= 0 ? 'value good' : 'value bad';
-
-    document.getElementById('execution_enabled').className =
-        data.execution_enabled ? 'value warn' : 'value good';
-
-    document.getElementById('order_placement_allowed').className =
-        data.order_placement_allowed ? 'value warn' : 'value good';
-
-    let summary = '';
-
-    if (data.open_option_trade_count > 0 && data.open_positions.length > 0) {
-        const p = data.open_positions[0];
-        summary = `GreyLine currently has ${data.open_option_trade_count} open simulated option trade. 
-        It owns ${p.contracts} simulated ${p.underlying} ${p.option_type} contract, 
-        ${p.option_symbol}, entered at $${p.entry_price}, currently marked at $${p.current_price}. 
-        The simulated unrealized P/L is $${p.unrealized_pnl}. 
-        Real order placement is ${data.order_placement_allowed ? 'allowed' : 'not allowed'}.`;
-    } else {
-        summary = 'GreyLine currently has no open simulated option positions.';
-    }
-
-    document.getElementById('plain_summary').textContent = summary;
-
-    const tbody = document.getElementById('positions_table');
-    tbody.innerHTML = '';
-
-    for (const p of data.open_positions || []) {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${p.underlying}</td>
-            <td>${p.option_symbol}</td>
-            <td>${p.side}</td>
-            <td>${p.contracts}</td>
-            <td>$${fmt(p.underlying_entry_price || p.current_underlying_price || p.entry_price)}</td>
-            <td>$${fmt(p.current_underlying_price || p.current_price)}</td>
-            <td>$${fmt(p.unrealized_pnl)}</td>
-            <td>${p.status}</td>
-        `;
-        tbody.appendChild(row);
-    }
-
-    const openDetailBody = document.getElementById('open_trade_detail_table');
-    if (openDetailBody) {
-        const optionTrades = optionTradesAll.filter(t => t.status === 'OPEN');
-        const equityTrades = (paperLedger.trades || []).filter(t => t.status === 'OPEN');
-        const allOpenTrades = [
-            ...optionTrades.map(t => ({...t, display_asset: 'OPTION'})),
-            ...equityTrades.map(t => ({...t, display_asset: 'EQUITY'}))
-        ];
-
-        openDetailBody.innerHTML = '';
-
-        for (const t of allOpenTrades) {
-            const row = document.createElement('tr');
-            const thesis = [
-                t.entry_regime ? `Regime: ${t.entry_regime}` : null,
-                t.entry_risk_state ? `Risk: ${t.entry_risk_state}` : null,
-                t.entry_expected_value_tier ? `EV: ${t.entry_expected_value_tier}` : null
-            ].filter(Boolean).join(' | ');
-
-            const matchingEquity = paperTrades.find(e =>
-                String(e.symbol || '').toUpperCase() === String(t.underlying || t.symbol || '').toUpperCase()
-                && String(e.status || '').toUpperCase() === 'OPEN'
-            ) || {};
-
-            const isOption = String(t.asset_type || t.contract_type || '').toUpperCase().includes('OPTION');
-            const eqEntry = Number(matchingEquity.entry_price);
-            const eqCurrent = Number(matchingEquity.current_price);
-
-            const ledgerEntry = Number(t.underlying_entry_price ?? t.entry_underlying_price ?? t.entry_price);
-            const ledgerCurrent = Number(t.current_underlying_price ?? t.underlying_current_price ?? t.current_price);
-
-            const displayEntryUnderlying =
-                isOption && Number.isFinite(eqEntry) ? eqEntry : ledgerEntry;
-
-            const displayCurrentUnderlying =
-                isOption && Number.isFinite(eqCurrent) ? eqCurrent : ledgerCurrent;
-
-            const displayUnderlyingPnl =
-                Number.isFinite(displayEntryUnderlying) && Number.isFinite(displayCurrentUnderlying)
-                    ? displayCurrentUnderlying - displayEntryUnderlying
-                    : Number(t.underlying_change_dollars ?? t.unrealized_pnl);
-
-            const displayUnderlyingPnlPct =
-                Number.isFinite(displayEntryUnderlying) && displayEntryUnderlying !== 0 && Number.isFinite(displayCurrentUnderlying)
-                    ? ((displayCurrentUnderlying / displayEntryUnderlying) - 1) * 100
-                    : Number(t.underlying_change_pct ?? t.unrealized_pnl_pct);
-
-            const stopLoss = Number.isFinite(Number(t.stop_loss_price ?? t.stop_price ?? t.dynamic_stop_loss))
-                ? Number(t.stop_loss_price ?? t.stop_price ?? t.dynamic_stop_loss)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 0.98 : NaN;
-
-            const tp1 = Number.isFinite(Number(t.tp1_price ?? t.take_profit_1_price))
-                ? Number(t.tp1_price ?? t.take_profit_1_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.01 : NaN;
-            const tp2 = Number.isFinite(Number(t.tp2_price ?? t.take_profit_2_price))
-                ? Number(t.tp2_price ?? t.take_profit_2_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.02 : NaN;
-            const tp3 = Number.isFinite(Number(t.tp3_price ?? t.take_profit_3_price))
-                ? Number(t.tp3_price ?? t.take_profit_3_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.03 : NaN;
-            const tp4 = Number.isFinite(Number(t.tp4_price ?? t.take_profit_4_price))
-                ? Number(t.tp4_price ?? t.take_profit_4_price)
-                : Number.isFinite(displayEntryUnderlying) ? displayEntryUnderlying * 1.04 : NaN;
-
-            const tpStatus = (price) =>
-                Number.isFinite(price) && Number.isFinite(displayCurrentUnderlying)
-                    ? (displayCurrentUnderlying >= price ? 'HIT' : 'PENDING')
-                    : 'N/A';
-
-            row.innerHTML = `
-                <td>${t.display_asset}</td>
-                <td>${t.underlying || t.symbol || 'UNKNOWN'}</td>
-                <td>${t.option_symbol || 'N/A'}</td>
-                <td>${t.side || 'UNKNOWN'}</td>
-                <td>${t.contracts ?? t.quantity ?? 'N/A'}</td>
-                <td>$${fmt(displayEntryUnderlying)}</td>
-                <td>$${fmt(displayCurrentUnderlying)}</td>
-                <td>$${fmt(displayUnderlyingPnl)}</td>
-                <td>${fmt(displayUnderlyingPnlPct)}%</td>
-                <td>${t.strike ?? 'N/A'}</td>
-                <td>${t.contract_expiration_date || t.expiration || 'N/A'}</td>
-                <td>${t.remaining_contract_days ?? 'N/A'}</td>
-                <td>${t.status || 'UNKNOWN'}</td>
-                <td>$${fmt(stopLoss)}</td>
-                <td>$${fmt(tp1)} / ${tpStatus(tp1)}</td>
-                <td>$${fmt(tp2)} / ${tpStatus(tp2)}</td>
-                <td>$${fmt(tp3)} / ${tpStatus(tp3)}</td>
-                <td>$${fmt(tp4)} / ${tpStatus(tp4)}</td>
-                <td>${thesis || 'N/A'}</td>
-            `;
-            openDetailBody.appendChild(row);
-        }
-
-        if (allOpenTrades.length === 0) {
-            openDetailBody.innerHTML = '<tr><td colspan="14">No open paper trades found</td></tr>';
-        }
-    }
-
-    document.getElementById('last_update').textContent = new Date().toLocaleTimeString();
-
-    const feed = document.getElementById('live_event_feed');
-    if (feed) {
-        const events = [
-            {
-                time: new Date().toLocaleTimeString(),
-                event: 'DASHBOARD_REFRESH',
-                detail: 'Dashboard refreshed successfully'
-            },
-            {
-                time: operator.timestamp || 'N/A',
-                event: 'BATTLEFIELD',
-                detail: `${operator.battlefield_health || 'UNKNOWN'} - ${(operator.top_candidate || {}).symbol || 'NO_CANDIDATE'}`
-            },
-            {
-                time: new Date().toLocaleTimeString(),
-                event: 'OPTIONS_ACCOUNT',
-                detail: `Open options: ${data.open_option_trade_count ?? 0}, Equity: $${fmt(data.current_equity)}`
-            },
-            {
-                time: new Date().toLocaleTimeString(),
-                event: 'AUTHORITY',
-                detail: authority.status || 'UNKNOWN'
-            }
-        ];
-
-        feed.innerHTML = '';
-        for (const e of events) {
-            const row = document.createElement('tr');
-            row.innerHTML = `<td>${e.time}</td><td>${e.event}</td><td>${e.detail}</td>`;
-            feed.appendChild(row);
-        }
-    }
-
-    document.getElementById('raw_json').textContent = JSON.stringify({
-        account_summary: {
-            starting_equity: data.starting_equity,
-            cash_on_hand: data.cash_on_hand,
-            deployed_capital: data.deployed_capital,
-            open_position_value: data.open_position_value,
-            buying_power_remaining: data.buying_power_remaining,
-            capital_deployed_pct: data.capital_deployed_pct,
-            current_equity: data.current_equity
-        },
-        options_account_dashboard: data,
-        operator_quick_brief: operator,
-        paper_trade_ledger: paperLedger,
-        options_paper_trade_ledger: optionsLedger
-    }, null, 2);
-    } catch (e) {
-        document.getElementById('plain_summary').textContent = 'Dashboard refresh error: ' + e.message;
-        document.getElementById('raw_json').textContent = String(e.stack || e);
-    } finally {
-        dashboardRefreshInProgress = false;
-    }
+async function getJSON(url) {
+  const res = await fetch(url + "?refresh=" + Date.now());
+  if (!res.ok) throw new Error(url);
+  return await res.json();
 }
 
-function safeText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
-
-function fmt(value) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n.toFixed(2) : 'N/A';
-}
-
-async function refreshBattlefield() {
-    await fetch('/ai-command', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({command: 'RUN_MARKET_BATTLEFIELD_SUMMARY_REFRESH_BACKGROUND'})
-    });
-    await refreshDashboard();
+async function postCommand(command) {
+  return fetch("/ai-command", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({command})
+  });
 }
 
 async function runOptionsManager() {
-    await fetch('/ai-command', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({command: 'RUN_OPTIONS_MANAGER'})
-    });
-    await refreshDashboard();
+  await postCommand("RUN_OPTIONS_PAPER_TRADE_MANAGER");
+  setTimeout(refreshAll, 1200);
 }
 
-let refreshSeconds = 30;
+async function refreshBattlefield() {
+  await postCommand("RUN_MARKET_BATTLEFIELD_CACHE_CLEAR");
+  await postCommand("RUN_MARKET_BATTLEFIELD_SUMMARY_REFRESH_BACKGROUND");
+  setTimeout(refreshAll, 2500);
+}
 
-let dashboardRefreshInProgress = false;
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
 
-refreshDashboard();
+function setClassBySign(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove("green", "red", "yellow");
+  el.classList.add(Number(value || 0) >= 0 ? "green" : "red");
+}
 
-setInterval(() => {
-    refreshSeconds -= 1;
-    if (refreshSeconds <= 0 && !dashboardRefreshInProgress) {
-        refreshSeconds = 30;
-        refreshDashboard();
-    }
-    const next = document.getElementById('next_refresh');
-    if (next) {
-        next.textContent = refreshSeconds;
-    }
-}, 1000);
+function drawCurve(trades) {
+  const svg = document.getElementById("equity_curve");
+  svg.innerHTML = "";
+  let points = [0];
+  let running = 0;
+  trades.forEach(t => {
+    running += Number(t.realized_pnl || t.unrealized_pnl || 0);
+    points.push(running);
+  });
+
+  const w = 700, h = 220, pad = 24;
+  const min = Math.min(...points, -1);
+  const max = Math.max(...points, 1);
+  const x = i => pad + i * ((w - pad*2) / Math.max(points.length - 1, 1));
+  const y = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
+
+  for (let i = 0; i < 5; i++) {
+    const yy = pad + i * ((h-pad*2)/4);
+    svg.innerHTML += `<line x1="${pad}" y1="${yy}" x2="${w-pad}" y2="${yy}" stroke="rgba(255,255,255,.12)" />`;
+  }
+
+  const d = points.map((p,i) => `${i===0 ? "M" : "L"} ${x(i)} ${y(p)}`).join(" ");
+  svg.innerHTML += `<path d="${d}" fill="none" stroke="#ff4d57" stroke-width="4" />`;
+}
+
+async function refreshAll() {
+  setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
+
+  const [battlefield, ledger, scheduler] = await Promise.allSettled([
+    getJSON("/greyline-market-battlefield-summary"),
+    getJSON("/paper-trade-ledger"),
+    getJSON("/background-scheduler/status")
+  ]);
+
+  if (scheduler.status === "fulfilled") {
+    const s = scheduler.value;
+    const ex = !!s.execution_enabled;
+    const ord = !!s.order_placement_allowed;
+
+    setText("execution_enabled", ex ? "YES" : "NO");
+    setText("orders_allowed", ord ? "YES" : "NO");
+    setText("side_execution", ex ? "ENABLED" : "DISABLED");
+    setText("side_orders", ord ? "ENABLED" : "DISABLED");
+    setText("alert_execution", ex ? "Execution is ENABLED" : "Execution is DISABLED");
+    setText("alert_orders", ord ? "Order placement is ENABLED" : "Order placement is DISABLED");
+
+    document.getElementById("execution_enabled").className = "value " + (ex ? "green" : "red");
+    document.getElementById("orders_allowed").className = "value " + (ord ? "green" : "red");
+  }
+
+  if (battlefield.status === "fulfilled") {
+    const b = battlefield.value;
+    const top = b.best_call || b.top_candidates?.[0] || {};
+
+    setText("battlefield_health", b.battlefield_health || "--");
+    setText("market_bias", String(b.market_bias || "--").replaceAll("_", " "));
+    setText("top_symbol", top.symbol || "--");
+    setText("top_result", top.result || "--");
+    setText("top_type", `${top.option_type || "--"} • ${top.directional_bias || "--"}`);
+    setText("top_score", top.composite_score || top.score || "--");
+    setText("flow_confirmation", String(top.flow_confirmation || "--").replaceAll("_", " "));
+    setText("signal_age", top.signal_age_days ? `${(top.signal_age_days * 24).toFixed(1)}h` : "--");
+    setText("call_count", b.call_count ?? "--");
+    setText("put_count", b.put_count ?? "--");
+    setText("ready_calls", b.ready_call_count ?? "--");
+    setText("ready_puts", b.ready_put_count ?? "--");
+
+    const rows = (b.top_calls || []).slice(0, 5).map((c, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td><strong>${c.symbol}</strong></td>
+        <td>${c.composite_score}</td>
+        <td>${c.result}</td>
+        <td><span class="badge blocked">${c.order_placement_allowed ? "ALLOWED" : "BLOCKED"}</span></td>
+      </tr>
+    `).join("");
+    document.getElementById("top_calls").innerHTML = rows || `<tr><td colspan="5">No candidates</td></tr>`;
+  }
+
+  if (ledger.status === "fulfilled") {
+    const l = ledger.value;
+    const trades = l.trades || [];
+    const open = trades.filter(t => t.status === "OPEN");
+    const unrealized = open.reduce((a,t) => a + Number(t.unrealized_pnl || 0), 0);
+    const deployed = open.reduce((a,t) => a + Number(t.entry_price || 0) * Number(t.quantity || 1), 0);
+    const starting = 10000;
+    const equity = starting + Number(l.total_realized_pnl || 0) + unrealized;
+    const cash = starting - deployed + Number(l.total_realized_pnl || 0);
+    const totalReturn = ((equity - starting) / starting) * 100;
+
+    setText("equity", fmtMoney(equity));
+    setText("cash", fmtMoney(cash));
+    setText("buying_power", fmtMoney(cash));
+    setText("deployed", fmtMoney(deployed));
+    setText("deployed_pct", `${fmtPct((deployed / Math.max(equity, 1)) * 100)} of Equity`);
+    setText("unrealized", fmtMoney(unrealized));
+    setText("total_return", fmtPct(totalReturn));
+    setText("open_trades", open.length);
+    setText("total_trades", l.trade_count ?? trades.length);
+    setText("open_trade_count", l.open_trade_count ?? open.length);
+    setText("closed_trade_count", l.closed_trade_count ?? trades.filter(t => t.status === "CLOSED").length);
+    setText("realized_pnl", fmtMoney(l.total_realized_pnl || 0));
+
+    setClassBySign("unrealized", unrealized);
+    setClassBySign("total_return", totalReturn);
+    setClassBySign("realized_pnl", l.total_realized_pnl || 0);
+
+    document.getElementById("positions").innerHTML = open.map(t => `
+      <tr>
+        <td><strong>${t.symbol}</strong><br><span class="green">${t.option_type || ""}</span></td>
+        <td class="green">${t.side || "--"}</td>
+        <td>${fmtMoney(t.entry_price)}</td>
+        <td>${fmtMoney(t.current_price)}</td>
+        <td class="${Number(t.unrealized_pnl || 0) >= 0 ? "green" : "red"}">${fmtMoney(t.unrealized_pnl)}</td>
+        <td class="${Number(t.unrealized_pnl_pct || 0) >= 0 ? "green" : "red"}">${fmtPct(t.unrealized_pnl_pct)}</td>
+        <td><span class="badge">${t.position_action || t.status}</span></td>
+        <td>${String(t.tp_state_stage || t.position_stage || "--").replaceAll("_", " ")}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="8">No open positions</td></tr>`;
+
+    drawCurve(trades);
+  }
+}
+
+refreshAll();
+setInterval(refreshAll, 15000);
 </script>
-
 </body>
 </html>
