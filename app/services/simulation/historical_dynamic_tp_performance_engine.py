@@ -125,6 +125,8 @@ class HistoricalDynamicTPPerformanceEngine:
             "max_trades_per_day": max_trades_per_day,
             "top_25_trades": sorted(trades, key=lambda x: x["return_pct"], reverse=True)[:25],
             "worst_25_trades": sorted(trades, key=lambda x: x["return_pct"])[:25],
+            "trades": trades,
+            "full_trade_export_enabled": True,
             "status": "HISTORICAL_DYNAMIC_TP_PERFORMANCE_READY",
         }
 
