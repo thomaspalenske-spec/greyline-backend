@@ -17,30 +17,22 @@ class HistoricalMarketDataProvider:
     """
 
     _base_path = Path("app/data/historical")
+    _row_cache = {}
+    _date_cache = {}
 
 
     def available_dates(self, symbol, start_date=None, end_date=None):
         symbol = (symbol or "").upper().strip()
-        path = self._base_path / f"{symbol}_daily.csv"
-        if not path.exists():
-            return []
+        self._load_symbol(symbol)
 
         start = str(start_date)[:10] if start_date else None
         end = str(end_date)[:10] if end_date else None
 
-        dates = []
-        with open(path, newline="") as f:
-            for row in csv.DictReader(f):
-                d = row.get("date")
-                if not d:
-                    continue
-                if start and d < start:
-                    continue
-                if end and d > end:
-                    continue
-                dates.append(d)
-
-        return dates
+        dates = self._date_cache.get(symbol, [])
+        return [
+            d for d in dates
+            if (not start or d >= start) and (not end or d <= end)
+        ]
 
     def get_snapshot(self, symbol, timestamp):
         symbol = (symbol or "").upper().strip()
@@ -83,17 +75,31 @@ class HistoricalMarketDataProvider:
             "status": "HISTORICAL_MARKET_DATA_PROVIDER_READY",
         }
 
-    def _load_daily_row(self, symbol, date_string):
+    def _load_symbol(self, symbol):
+        symbol = (symbol or "").upper().strip()
+        if symbol in self._row_cache:
+            return
+
         path = self._base_path / f"{symbol}_daily.csv"
-        if not path.exists():
-            return None
+        rows = {}
+        dates = []
 
-        with open(path, newline="") as f:
-            for row in csv.DictReader(f):
-                if row.get("date") == date_string:
-                    return row
+        if path.exists():
+            with open(path, newline="") as f:
+                for row in csv.DictReader(f):
+                    d = row.get("date")
+                    if not d:
+                        continue
+                    rows[d] = row
+                    dates.append(d)
 
-        return None
+        self._row_cache[symbol] = rows
+        self._date_cache[symbol] = dates
+
+    def _load_daily_row(self, symbol, date_string):
+        symbol = (symbol or "").upper().strip()
+        self._load_symbol(symbol)
+        return self._row_cache.get(symbol, {}).get(date_string)
 
     @staticmethod
     def _num(value):
