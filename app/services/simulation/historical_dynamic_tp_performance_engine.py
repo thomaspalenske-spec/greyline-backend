@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.services.simulation.historical_market_data_provider import HistoricalMarketDataProvider
 from app.services.simulation.historical_opportunity_scoring_engine import HistoricalOpportunityScoringEngine
+from app.services.simulation.dynamic_divestment_engine import DynamicDivestmentEngine
 
 
 class HistoricalDynamicTPPerformanceEngine:
@@ -215,42 +216,57 @@ class HistoricalDynamicTPPerformanceEngine:
                 break
 
             if not tp1_hit and ret_pct >= tp1_pct and remaining >= 0.75:
-                realized_return += 0.25 * ret_pct
-                remaining -= 0.25
+                divest = DynamicDivestmentEngine().evaluate(
+                    "TP1", signal, ret_pct, high_water_return, remaining
+                )
+                weight = divest.get("divestment_pct", 0.25)
+                realized_return += weight * ret_pct
+                remaining -= weight
                 tp1_hit = True
                 active_stop_pct = max(active_stop_pct, 0.0)
                 exits.append({
                     "date": d,
                     "stage": "TP1",
-                    "weight": 0.25,
+                    "weight": round(weight, 4),
                     "return_pct": round(ret_pct, 2),
                     "new_stop_pct": round(active_stop_pct, 2),
+                    "divestment": divest,
                 })
 
             if not tp2_hit and ret_pct >= tp2_pct and remaining >= 0.50:
-                realized_return += 0.25 * ret_pct
-                remaining -= 0.25
+                divest = DynamicDivestmentEngine().evaluate(
+                    "TP2", signal, ret_pct, high_water_return, remaining
+                )
+                weight = divest.get("divestment_pct", 0.25)
+                realized_return += weight * ret_pct
+                remaining -= weight
                 tp2_hit = True
                 active_stop_pct = max(active_stop_pct, tp1_pct)
                 exits.append({
                     "date": d,
                     "stage": "TP2",
-                    "weight": 0.25,
+                    "weight": round(weight, 4),
                     "return_pct": round(ret_pct, 2),
                     "new_stop_pct": round(active_stop_pct, 2),
+                    "divestment": divest,
                 })
 
             if not tp3_hit and ret_pct >= tp3_pct and remaining >= 0.25:
-                realized_return += 0.25 * ret_pct
-                remaining -= 0.25
+                divest = DynamicDivestmentEngine().evaluate(
+                    "TP3", signal, ret_pct, high_water_return, remaining
+                )
+                weight = divest.get("divestment_pct", 0.25)
+                realized_return += weight * ret_pct
+                remaining -= weight
                 tp3_hit = True
                 active_stop_pct = max(active_stop_pct, tp2_pct)
                 exits.append({
                     "date": d,
                     "stage": "TP3",
-                    "weight": 0.25,
+                    "weight": round(weight, 4),
                     "return_pct": round(ret_pct, 2),
                     "new_stop_pct": round(active_stop_pct, 2),
+                    "divestment": divest,
                 })
 
             if tp3_hit and remaining > 0:
