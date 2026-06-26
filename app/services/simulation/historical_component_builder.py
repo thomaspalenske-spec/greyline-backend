@@ -44,7 +44,25 @@ class HistoricalComponentBuilder:
         liquidity_score = 90 if volume and volume > 0 else 50
 
         regime_score = min(100, max(0, 50 + day_return_pct * 6))
-        risk_state_score = min(100, max(0, 85 - intraday_range_pct * 5))
+
+        # Simulator-only risk model:
+        # Do not treat all high range / high momentum days as automatically stressed.
+        # Penalize true instability: wide range, downside close, weak close location.
+        # Reward constructive upside closes and real liquidity.
+        close_location_pct = ((close - low) / (high - low)) * 100 if high != low else 50
+        downside_penalty = abs(min(day_return_pct, 0)) * 6
+        upside_credit = max(day_return_pct, 0) * 2
+        liquidity_credit = 5 if volume and volume > 0 else -15
+
+        risk_state_score = min(100, max(0,
+            65
+            - intraday_range_pct * 2.0
+            - downside_penalty
+            + upside_credit
+            + (close_location_pct - 50) * 0.25
+            + liquidity_credit
+        ))
+
         breadth_score = min(100, max(0, 50 + day_return_pct * 4))
         institutional_sponsorship_score = min(100, max(0, 50 + day_return_pct * 5))
 
