@@ -14,12 +14,26 @@ class BacktestEvaluationEngine:
         candidate_events = [e for e in events if e.get("candidate_available")]
         no_candidate_events = [e for e in events if not e.get("candidate_available")]
 
-        execute_events = [e for e in events if str(e.get("result", "")).upper() == "EXECUTE"]
-        watch_events = [e for e in events if str(e.get("result", "")).upper() == "WATCH"]
-        reject_events = [e for e in events if str(e.get("result", "")).upper() == "REJECT"]
+        def _result(e):
+            existing = str(e.get("result", "")).upper()
+            if existing:
+                return existing
+
+            score = float(e.get("score") or e.get("composite_score") or e.get("adjusted_score") or 0)
+            liquidity = float(e.get("liquidity_score") or 0)
+
+            if score >= 85 and liquidity >= 70:
+                return "EXECUTE"
+            if score >= 70:
+                return "WATCH"
+            return "REJECT"
+
+        execute_events = [e for e in candidate_events if _result(e) == "EXECUTE"]
+        watch_events = [e for e in candidate_events if _result(e) == "WATCH"]
+        reject_events = [e for e in candidate_events if _result(e) == "REJECT"]
 
         scores = [
-            float(e.get("score") or e.get("composite_score") or 0)
+            float(e.get("score") or e.get("composite_score") or e.get("adjusted_score") or 0)
             for e in candidate_events
         ]
 
