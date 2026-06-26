@@ -18,6 +18,30 @@ class HistoricalMarketDataProvider:
 
     _base_path = Path("app/data/historical")
 
+
+    def available_dates(self, symbol, start_date=None, end_date=None):
+        symbol = (symbol or "").upper().strip()
+        path = self._base_path / f"{symbol}_daily.csv"
+        if not path.exists():
+            return []
+
+        start = str(start_date)[:10] if start_date else None
+        end = str(end_date)[:10] if end_date else None
+
+        dates = []
+        with open(path, newline="") as f:
+            for row in csv.DictReader(f):
+                d = row.get("date")
+                if not d:
+                    continue
+                if start and d < start:
+                    continue
+                if end and d > end:
+                    continue
+                dates.append(d)
+
+        return dates
+
     def get_snapshot(self, symbol, timestamp):
         symbol = (symbol or "").upper().strip()
 
