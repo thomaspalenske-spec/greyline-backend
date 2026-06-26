@@ -1,0 +1,160 @@
+from datetime import datetime
+
+from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
+from app.services.execution_governor import ExecutionGovernor
+
+
+class GreyLineSimulationDecisionAdapter:
+    """
+    Simulator-side adapter that emulates GreyLine opportunity scoring.
+
+    Rule:
+      Simulator adapts to GreyLine.
+      Production GreyLine engines are not modified for simulation.
+
+    This mirrors OpportunityScoringEngine's scoring formula while accepting
+    replay/historical component inputs instead of live quote scans.
+    """
+
+    def evaluate(self, market_data, component_overrides=None):
+        component_overrides = component_overrides or {}
+        market_data = market_data or {}
+
+        symbol = str(market_data.get("symbol") or "").upper().strip()
+
+        if not symbol or not market_data.get("close"):
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "engine": "GreyLineSimulationDecisionAdapter",
+                "candidate_available": False,
+                "reason": "NO_REPLAY_MARKET_DATA",
+                "status": "SIMULATION_GREYLINE_ADAPTER_NO_DATA",
+            }
+
+        market_data_score = component_overrides.get("market_data_score", 100)
+        liquidity_score = component_overrides.get("liquidity_score", 90)
+        setup_score = component_overrides.get("setup_score", 50)
+        regime_result = component_overrides.get("regime") or {
+            "regime": "SIMULATION_NEUTRAL",
+            "regime_score": component_overrides.get("regime_score", 50),
+        }
+        risk_state_result = component_overrides.get("risk") or {
+            "risk_state": "NORMAL",
+            "risk_state_score": component_overrides.get("risk_state_score", 75),
+        }
+        volatility_score = component_overrides.get("volatility_score", 50)
+        trend_persistence_score = component_overrides.get("trend_persistence_score", 50)
+        breadth_score = component_overrides.get("breadth_score", 50)
+        institutional_sponsorship_score = component_overrides.get("institutional_sponsorship_score", 50)
+        asymmetry_score = component_overrides.get("asymmetry_score", 50)
+
+        expected_value_score = ExpectedValueScoringEngine().score_symbol(
+            symbol,
+            regime=regime_result,
+            risk=risk_state_result,
+            breadth={"breadth_score": breadth_score},
+            setup={"setup_score": setup_score},
+            asymmetry={"asymmetry_score": asymmetry_score},
+        ).get("expected_value_score", 50)
+
+        bullish_score = round(
+            (
+                market_data_score * 0.08
+                + liquidity_score * 0.11
+                + setup_score * 0.13
+                + regime_result.get("regime_score", 50) * 0.11
+                + volatility_score * 0.07
+                + expected_value_score * 0.10
+                + trend_persistence_score * 0.09
+                + breadth_score * 0.08
+                + institutional_sponsorship_score * 0.08
+                + asymmetry_score * 0.08
+                + risk_state_result.get("risk_state_score", 50) * 0.07
+            ),
+            2,
+        )
+
+        bear_regime_score = 100 - regime_result.get("regime_score", 50)
+        bear_breadth_score = 100 - breadth_score
+        bear_trend_score = 100 - trend_persistence_score
+        bear_sponsorship_score = 100 - institutional_sponsorship_score
+        bear_risk_score = risk_state_result.get("risk_state_score", 50)
+
+        bearish_score = round(
+            (
+                market_data_score * 0.08
+                + liquidity_score * 0.11
+                + setup_score * 0.08
+                + bear_regime_score * 0.13
+                + volatility_score * 0.12
+                + expected_value_score * 0.09
+                + bear_trend_score * 0.10
+                + bear_breadth_score * 0.10
+                + bear_sponsorship_score * 0.08
+                + asymmetry_score * 0.06
+                + bear_risk_score * 0.05
+            ),
+            2,
+        )
+
+        if bullish_score >= bearish_score:
+            directional_bias = "BULLISH"
+            option_type = "CALL"
+            composite_score = bullish_score
+            opposing_score = bearish_score
+        else:
+            directional_bias = "BEARISH"
+            option_type = "PUT"
+            composite_score = bearish_score
+            opposing_score = bullish_score
+
+        direction_confidence = round(abs(bullish_score - bearish_score), 2)
+
+        if composite_score >= 85 and direction_confidence >= 5:
+            result = "EXECUTE"
+        elif composite_score >= 60:
+            result = "WATCH"
+        else:
+            result = "REJECT"
+
+        if (
+            regime_result.get("regime") == "WEAK_LIVE"
+            or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
+        ):
+            if result == "EXECUTE":
+                result = "WATCH"
+
+        governor = ExecutionGovernor().evaluate_execution_permission(result)
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "engine": "GreyLineSimulationDecisionAdapter",
+            "candidate_available": True,
+            "symbol": symbol,
+            "result": result,
+            "composite_score": composite_score,
+            "bullish_score": bullish_score,
+            "bearish_score": bearish_score,
+            "opposing_score": opposing_score,
+            "directional_bias": directional_bias,
+            "option_type": option_type,
+            "direction_confidence": direction_confidence,
+            "market_data_score": market_data_score,
+            "liquidity_score": liquidity_score,
+            "setup_score": setup_score,
+            "regime_score": regime_result.get("regime_score", 50),
+            "volatility_score": volatility_score,
+            "expected_value_score": expected_value_score,
+            "trend_persistence_score": trend_persistence_score,
+            "breadth_score": breadth_score,
+            "institutional_sponsorship_score": institutional_sponsorship_score,
+            "asymmetry_score": asymmetry_score,
+            "risk_state_score": risk_state_result.get("risk_state_score", 50),
+            "governor": governor,
+            "emulation_target": "OpportunityScoringEngine",
+            "emulation_rule": "SIMULATOR_ADAPTS_TO_GREYLINE_PRODUCTION_FORMULA",
+            "source": "SIMULATION_GREYLINE_ADAPTER_NO_LOOKAHEAD",
+            "status": "SIMULATION_GREYLINE_DECISION_READY",
+        }
