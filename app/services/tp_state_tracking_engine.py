@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from app.services.dynamic_divestment_engine import DynamicDivestmentEngine
+
 
 class TPStateTrackingEngine:
     """
@@ -39,14 +41,29 @@ class TPStateTrackingEngine:
         tp2_hit = bool(tp2 and current >= tp2)
         tp3_hit = bool(tp3 and current >= tp3)
 
-        exit_unit = qty * 0.25
+        divest_engine = DynamicDivestmentEngine()
 
-        tp1_exit_qty = exit_unit if tp1_hit else 0
-        tp2_exit_qty = exit_unit if tp2_hit else 0
-        tp3_exit_qty = exit_unit if tp3_hit else 0
+        tp1_divestment = divest_engine.evaluate(trade, "TP1") if tp1_hit else None
+        tp1_exit_qty = float((tp1_divestment or {}).get("recommended_exit_qty") or 0)
+        remaining_after_tp1 = max(qty - tp1_exit_qty, 0)
+
+        trade_tp2 = dict(trade)
+        trade_tp2["position_remaining_after_tp_exits"] = remaining_after_tp1
+        tp2_divestment = divest_engine.evaluate(trade_tp2, "TP2") if tp2_hit else None
+        tp2_exit_qty = float((tp2_divestment or {}).get("recommended_exit_qty") or 0)
+        tp2_exit_qty = min(tp2_exit_qty, remaining_after_tp1)
+        remaining_after_tp2 = max(remaining_after_tp1 - tp2_exit_qty, 0)
+
+        trade_tp3 = dict(trade)
+        trade_tp3["position_remaining_after_tp_exits"] = remaining_after_tp2
+        tp3_divestment = divest_engine.evaluate(trade_tp3, "TP3") if tp3_hit else None
+        tp3_exit_qty = float((tp3_divestment or {}).get("recommended_exit_qty") or 0)
+        tp3_exit_qty = min(tp3_exit_qty, remaining_after_tp2)
 
         total_exited = tp1_exit_qty + tp2_exit_qty + tp3_exit_qty
         remaining = max(qty - total_exited, 0)
+
+        exit_unit = None
 
         runner_active = bool(tp3_hit and remaining > 0)
 
@@ -70,18 +87,23 @@ class TPStateTrackingEngine:
 
             "original_position_size": qty,
             "tp_exit_unit": exit_unit,
+            "tp_exit_model": "DYNAMIC_DIVESTMENT_ADVISORY",
+            "fixed_25pct_tp_exit_replaced": True,
 
             "tp1_state_hit": tp1_hit,
             "tp1_hypothetical_exit_qty": tp1_exit_qty,
             "tp1_hypothetical_exit_price": tp1 if tp1_hit else None,
+            "tp1_dynamic_divestment": tp1_divestment,
 
             "tp2_state_hit": tp2_hit,
             "tp2_hypothetical_exit_qty": tp2_exit_qty,
             "tp2_hypothetical_exit_price": tp2 if tp2_hit else None,
+            "tp2_dynamic_divestment": tp2_divestment,
 
             "tp3_state_hit": tp3_hit,
             "tp3_hypothetical_exit_qty": tp3_exit_qty,
             "tp3_hypothetical_exit_price": tp3 if tp3_hit else None,
+            "tp3_dynamic_divestment": tp3_divestment,
 
             "total_hypothetical_exited_qty": total_exited,
             "position_remaining_after_tp_exits": remaining,
