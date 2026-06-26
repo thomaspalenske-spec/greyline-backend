@@ -4,6 +4,7 @@ from pathlib import Path
 from app.services.simulation.historical_market_data_provider import HistoricalMarketDataProvider
 from app.services.simulation.historical_opportunity_scoring_engine import HistoricalOpportunityScoringEngine
 from app.services.simulation.dynamic_divestment_engine import DynamicDivestmentEngine
+from app.services.simulation.historical_exit_policy_optimizer import HistoricalExitPolicyOptimizer
 
 
 class HistoricalDynamicTPPerformanceEngine:
@@ -162,6 +163,13 @@ class HistoricalDynamicTPPerformanceEngine:
         realized_return = 0.0
         exits = []
 
+        exit_policy = HistoricalExitPolicyOptimizer().choose(
+            regime_score=signal.get("regime_score") or 0,
+            risk_state_score=signal.get("risk_state_score") or 0,
+            direction_confidence=signal.get("direction_confidence") or 0,
+            volatility_score=signal.get("volatility_score") or 0,
+        )
+
         tp1_hit = False
         tp2_hit = False
         tp3_hit = False
@@ -216,10 +224,19 @@ class HistoricalDynamicTPPerformanceEngine:
                 break
 
             if not tp1_hit and ret_pct >= tp1_pct and remaining >= 0.75:
-                divest = DynamicDivestmentEngine().evaluate(
-                    "TP1", signal, ret_pct, high_water_return, remaining
-                )
-                weight = divest.get("divestment_pct", 0.25)
+                if exit_policy == "DYNAMIC_DIVESTMENT":
+                    divest = DynamicDivestmentEngine().evaluate(
+                        "TP1", signal, ret_pct, high_water_return, remaining
+                    )
+                    weight = divest.get("divestment_pct", 0.25)
+                else:
+                    divest = {
+                        "policy": exit_policy,
+                        "tp_stage": "TP1",
+                        "divestment_pct": min(0.25, remaining),
+                        "status": "STATIC_POLICY_DIVESTMENT_READY",
+                    }
+                    weight = min(0.25, remaining)
                 realized_return += weight * ret_pct
                 remaining -= weight
                 tp1_hit = True
@@ -234,10 +251,19 @@ class HistoricalDynamicTPPerformanceEngine:
                 })
 
             if not tp2_hit and ret_pct >= tp2_pct and remaining >= 0.50:
-                divest = DynamicDivestmentEngine().evaluate(
-                    "TP2", signal, ret_pct, high_water_return, remaining
-                )
-                weight = divest.get("divestment_pct", 0.25)
+                if exit_policy == "DYNAMIC_DIVESTMENT":
+                    divest = DynamicDivestmentEngine().evaluate(
+                        "TP2", signal, ret_pct, high_water_return, remaining
+                    )
+                    weight = divest.get("divestment_pct", 0.25)
+                else:
+                    divest = {
+                        "policy": exit_policy,
+                        "tp_stage": "TP2",
+                        "divestment_pct": min(0.25, remaining),
+                        "status": "STATIC_POLICY_DIVESTMENT_READY",
+                    }
+                    weight = min(0.25, remaining)
                 realized_return += weight * ret_pct
                 remaining -= weight
                 tp2_hit = True
@@ -252,10 +278,19 @@ class HistoricalDynamicTPPerformanceEngine:
                 })
 
             if not tp3_hit and ret_pct >= tp3_pct and remaining >= 0.25:
-                divest = DynamicDivestmentEngine().evaluate(
-                    "TP3", signal, ret_pct, high_water_return, remaining
-                )
-                weight = divest.get("divestment_pct", 0.25)
+                if exit_policy == "DYNAMIC_DIVESTMENT":
+                    divest = DynamicDivestmentEngine().evaluate(
+                        "TP3", signal, ret_pct, high_water_return, remaining
+                    )
+                    weight = divest.get("divestment_pct", 0.25)
+                else:
+                    divest = {
+                        "policy": exit_policy,
+                        "tp_stage": "TP3",
+                        "divestment_pct": min(0.25, remaining),
+                        "status": "STATIC_POLICY_DIVESTMENT_READY",
+                    }
+                    weight = min(0.25, remaining)
                 realized_return += weight * ret_pct
                 remaining -= weight
                 tp3_hit = True
@@ -301,6 +336,7 @@ class HistoricalDynamicTPPerformanceEngine:
             "regime_score": signal.get("regime_score"),
             "directional_bias": direction,
             "option_type": option_type,
+            "exit_policy": exit_policy,
             "tp1_hit": tp1_hit,
             "tp2_hit": tp2_hit,
             "tp3_hit": tp3_hit,
