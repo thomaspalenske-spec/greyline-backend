@@ -12,6 +12,7 @@ from app.services.simulation.simulation_exit_engine import SimulationExitEngine
 from app.services.simulation.market_replay_engine import MarketReplayEngine
 from app.services.simulation.greyline_simulation_decision_adapter import GreyLineSimulationDecisionAdapter
 from app.services.simulation.historical_component_builder import HistoricalComponentBuilder
+from app.services.simulation.historical_master_decision_engine import HistoricalMasterDecisionEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 
 
