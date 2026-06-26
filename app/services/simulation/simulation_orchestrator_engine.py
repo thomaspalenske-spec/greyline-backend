@@ -177,7 +177,7 @@ class SimulationOrchestratorEngine:
                 "simulation_clock_enabled_per_step": True,
                 "future_prices_visible": False,
                 "future_outcomes_visible": False,
-                "production_engine_bridge": "PARTIAL",
+                "production_engine_bridge": "HISTORICAL_MASTER_DECISION_BRIDGE",
             },
             "status": "SIMULATION_ORCHESTRATOR_READY",
         }
