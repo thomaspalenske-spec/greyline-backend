@@ -561,6 +561,25 @@ async function refreshAll() {
         <td><span class="badge">${t.position_action || t.status}</span></td>
         <td>${String(t.tp_state_stage || t.position_stage || "--").replaceAll("_", " ")}</td>
       </tr>
+      <tr>
+        <td colspan="8" style="background:rgba(255,255,255,.035); color:#9aa7b8;">
+          <strong class="red">SL:</strong> ${fmtPct(t.stop_loss_pct)}
+          &nbsp; | &nbsp;
+          <strong class="green">TP1:</strong> ${fmtMoney(t.dynamic_tp1_price || t.tp1_price)}
+          &nbsp;
+          <strong class="green">TP2:</strong> ${fmtMoney(t.dynamic_tp2_price || t.tp2_price)}
+          &nbsp;
+          <strong class="green">TP3:</strong> ${fmtMoney(t.dynamic_tp3_price || t.tp3_price)}
+          &nbsp;
+          <strong class="green">TP4:</strong> ${t.tp4_mode === "DYNAMIC_RUNNER_NO_FIXED_TARGET" || t.tp4_runner ? "RUNNER" : fmtMoney(t.tp4_price)}
+          &nbsp; | &nbsp;
+          Target Dist: ${fmtPct(t.distance_to_target_pct)}
+          &nbsp;
+          Stop Dist: ${fmtPct(t.distance_to_stop_pct)}
+          &nbsp; | &nbsp;
+          Health: ${String(t.position_health || "--").replaceAll("_", " ")}
+        </td>
+      </tr>
     `).join("") || `<tr><td colspan="8">No open positions</td></tr>`;
 
     drawCurve(trades);
