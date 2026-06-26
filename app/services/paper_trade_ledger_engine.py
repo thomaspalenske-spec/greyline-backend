@@ -165,11 +165,14 @@ class PaperTradeLedgerEngine:
             "tp4_runner": True,
             "fixed_25pct_exit_model_replaced": True,
             "divestment_model": "DYNAMIC_DIVESTMENT_ADVISORY",
+            "tp_pct_fields_mean": "PRICE_TARGET_LEVELS_NOT_EXIT_PERCENTAGES",
         }
 
         for i, pct in enumerate(tp_pcts, start=1):
             price = round(entry * (1 + pct), 2)
-            ladder[f"tp{i}_pct"] = round(pct * 100, 2)
+            ladder[f"tp{i}_pct"] = round(pct * 100, 2)  # Backward compatibility: target level, not exit size.
+            ladder[f"tp{i}_target_pct"] = round(pct * 100, 2)
+            ladder[f"tp{i}_target_pct_type"] = "PRICE_TARGET_LEVEL_NOT_DIVESTMENT_SIZE"
             ladder[f"tp{i}_price"] = price
             ladder[f"tp{i}_hit"] = bool(current >= price) if current else False
             ladder[f"tp{i}_distance_dollars"] = round(price - current, 2) if current else None
