@@ -50,7 +50,16 @@ class SimulationOrchestratorEngine:
                 snapshot = replay.next()
                 SimulationClock.enable_simulation(snapshot["timestamp"])
 
-                candidate = GreyLineSimulationDecisionAdapter().evaluate(snapshot.get("market_data"), HistoricalComponentBuilder().build(snapshot.get("market_data")))
+                historical_master_decision = HistoricalMasterDecisionEngine().evaluate(
+                    [symbol],
+                    snapshot["timestamp"][:10]
+                )
+
+                candidate = historical_master_decision.get("top_candidate") or {
+                    "candidate_available": False,
+                    "result": "REJECT",
+                    "composite_score": 0
+                }
                 if not candidate.get("candidate_available"):
                     candidate = {
                         "symbol": symbol.upper(),
