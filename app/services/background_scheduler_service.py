@@ -2,6 +2,7 @@ import json
 import threading
 import time
 from datetime import datetime
+from app.services.execution_governor import ExecutionGovernor
 from pathlib import Path
 
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
@@ -63,8 +64,8 @@ class BackgroundSchedulerService:
             "timestamp": datetime.utcnow().isoformat(),
             "scheduler_enabled": True,
             "interval_seconds": interval_seconds,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "BACKGROUND_SCHEDULER_STARTED",
         }
 
@@ -76,8 +77,8 @@ class BackgroundSchedulerService:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "scheduler_enabled": False,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "BACKGROUND_SCHEDULER_STOPPED",
         }
 
@@ -91,8 +92,8 @@ class BackgroundSchedulerService:
             "last_run": cls._last_run,
             "last_status": cls._last_status,
             "thread_alive": bool(cls._thread and cls._thread.is_alive()),
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "BACKGROUND_SCHEDULER_STATUS_READY",
         }
 
@@ -114,8 +115,8 @@ class BackgroundSchedulerService:
                     "BACKGROUND_SCHEDULER_CYCLE_FAILED",
                     {
                         "error": str(exc),
-                        "execution_enabled": False,
-                        "order_placement_allowed": False,
+                        "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+                        "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
                     },
                 )
             cls._stop_event.wait(interval_seconds)
@@ -192,7 +193,7 @@ class BackgroundSchedulerService:
             "options_stale_quote_blocked": options_position_manager.get("stale_quote_blocked"),
             "system_health_status": health.get("status"),
             "overall_health": health.get("overall_health"),
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
+            "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "BACKGROUND_SCHEDULER_CYCLE_COMPLETE",
         }
