@@ -16,7 +16,12 @@ class SimulationSignalEngine:
         low = self._num(market_data.get("low"))
         volume = self._num(market_data.get("volume"))
 
-        if close is None or open_price is None:
+        if close is None or open_price is None or high is None or low is None:
+            return {
+                "candidate_available": False,
+                "reason": "NO_REPLAY_MARKET_DATA",
+                "status": "SIMULATION_SIGNAL_NO_DATA",
+            }
             return {
                 "candidate_available": False,
                 "reason": "NO_REPLAY_MARKET_DATA",
