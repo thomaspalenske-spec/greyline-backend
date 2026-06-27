@@ -6,6 +6,7 @@ from app.services.simulation.historical_opportunity_scoring_engine import Histor
 from app.services.simulation.dynamic_divestment_engine import DynamicDivestmentEngine
 from app.services.simulation.historical_exit_policy_optimizer import HistoricalExitPolicyOptimizer
 from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
+from app.services.dynamic_exit_policy_engine import DynamicExitPolicyEngine
 
 
 class HistoricalDynamicTPPerformanceEngine:
@@ -162,12 +163,20 @@ class HistoricalDynamicTPPerformanceEngine:
         if not entry_price:
             return None
 
+        dynamic_exit_policy = DynamicExitPolicyEngine().build_policy(
+            symbol=symbol,
+            composite_score=signal.get("composite_score"),
+        )
+
+        dynamic_stop_loss_pct = float(dynamic_exit_policy.get("stop_loss_pct") or stop_loss_pct)
+        dynamic_take_profit_pct = float(dynamic_exit_policy.get("take_profit_pct") or abs(dynamic_stop_loss_pct) * 2.5)
+
         dynamic_trade = {
             "entry_price": entry_price,
             "current_price": entry_price,
             "asset_type": "EQUITY",
-            "take_profit_pct": abs(stop_loss_pct) * 2.5,
-            "volatility_score": signal.get("volatility_score") or 50,
+            "take_profit_pct": dynamic_take_profit_pct,
+            "volatility_score": dynamic_exit_policy.get("volatility_score") or signal.get("volatility_score") or 50,
             "unrealized_pnl_pct": 0,
         }
         dynamic_tp = DynamicTPManagementEngine().evaluate(dynamic_trade)
@@ -204,7 +213,7 @@ class HistoricalDynamicTPPerformanceEngine:
 
         exit_reason = "TIME_EXIT"
         final_exit_date = forward_dates[-1]
-        active_stop_pct = stop_loss_pct
+        active_stop_pct = dynamic_stop_loss_pct
 
         def ret_from_close(close):
             if direction == "BEARISH" or option_type == "PUT":
@@ -222,8 +231,8 @@ class HistoricalDynamicTPPerformanceEngine:
                 "entry_price": entry_price,
                 "current_price": close,
                 "asset_type": "EQUITY",
-                "take_profit_pct": abs(stop_loss_pct) * 2.5,
-                "volatility_score": signal.get("volatility_score") or 50,
+                "take_profit_pct": dynamic_take_profit_pct,
+                "volatility_score": dynamic_exit_policy.get("volatility_score") or signal.get("volatility_score") or 50,
                 "unrealized_pnl_pct": ret_pct,
             }
             dynamic_tp = DynamicTPManagementEngine().evaluate(dynamic_trade)
@@ -385,6 +394,9 @@ class HistoricalDynamicTPPerformanceEngine:
             "runner_return_pct": round(runner_return_pct, 2),
             "max_favorable_pct": round(max_favorable_pct, 2),
             "max_adverse_pct": round(max_adverse_pct, 2),
+            "dynamic_exit_policy": dynamic_exit_policy,
+            "dynamic_stop_loss_pct_used": round(dynamic_stop_loss_pct, 2),
+            "dynamic_take_profit_pct_used": round(dynamic_take_profit_pct, 2),
             "dynamic_tp": dynamic_tp,
             "tp1_pct_used": round(tp1_pct, 2),
             "tp2_pct_used": round(tp2_pct, 2),
