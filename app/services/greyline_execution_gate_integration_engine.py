@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.services.greyline_safety_gate_engine import GreyLineSafetyGateEngine
+from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 
 
 class GreyLineExecutionGateIntegrationEngine:
@@ -11,8 +12,21 @@ class GreyLineExecutionGateIntegrationEngine:
     def evaluate_and_route(self, allocations, execution_engine, broker_interface):
 
         live_enabled = self.safety_gate.status()["live_enabled"]
+        reliability_governor = ReliabilityGovernorEngine().evaluate()
 
-        # STEP 1 — SAFETY CHECK
+        # STEP 1 — RELIABILITY GOVERNOR CHECK
+        if reliability_governor.get("execution_allowed") is not True:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "status": "EXECUTION_BLOCKED_BY_RELIABILITY_GOVERNOR",
+                "reason": reliability_governor.get("reason"),
+                "executed_trades": [],
+                "broker_results": [],
+                "live_enabled": live_enabled,
+                "reliability_governor": reliability_governor,
+            }
+
+        # STEP 2 — SAFETY CHECK
         if not self.safety_gate.can_execute_live():
             return {
                 "timestamp": datetime.utcnow().isoformat(),
@@ -20,7 +34,8 @@ class GreyLineExecutionGateIntegrationEngine:
                 "reason": "LIVE_EXECUTION_NOT_ALLOWED",
                 "executed_trades": [],
                 "broker_results": [],
-                "live_enabled": live_enabled
+                "live_enabled": live_enabled,
+                "reliability_governor": reliability_governor
             }
 
         # STEP 2 — EXECUTE THROUGH ENGINE
@@ -52,5 +67,6 @@ class GreyLineExecutionGateIntegrationEngine:
             "status": "EXECUTION_GATE_PASS_COMPLETE",
             "execution": execution_result,
             "broker_results": broker_results,
-            "live_enabled": live_enabled
+            "live_enabled": live_enabled,
+            "reliability_governor": reliability_governor
         }
