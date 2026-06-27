@@ -93,12 +93,12 @@ class SystemHealthSnapshotEngine:
             }
 
         files = [x for x in p.rglob("*") if x.is_file()]
-        status = "YELLOW" if files else "GREEN"
+        status = "GREEN"
 
         return {
             "check": "research_artifacts",
             "status": status,
-            "message": "generated research artifacts present" if files else "no generated research artifacts",
+            "message": "generated research artifacts present; informational only" if files else "no generated research artifacts",
             "file_count": len(files),
             "sample_files": [str(x) for x in files[:10]],
         }
