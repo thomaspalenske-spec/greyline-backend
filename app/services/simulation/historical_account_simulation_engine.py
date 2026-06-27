@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.research.historical_trade_warehouse_engine import HistoricalTradeWarehouseEngine
 from pathlib import Path
 import csv
 
@@ -88,6 +89,26 @@ class HistoricalAccountSimulationEngine:
         gross_loss = round(sum(t["realized_pnl"] for t in losses), 2)
         net_profit = round(balance - float(starting_balance), 2)
 
+        avg_win = round(gross_profit / len(wins), 2) if wins else 0
+        avg_loss = round(gross_loss / len(losses), 2) if losses else 0
+
+        peak = float(starting_balance)
+        max_drawdown_pct = 0.0
+        for point in equity_curve:
+            bal = float(point.get("balance") or 0)
+            if bal > peak:
+                peak = bal
+            if peak > 0:
+                dd = ((bal - peak) / peak) * 100.0
+                if dd < max_drawdown_pct:
+                    max_drawdown_pct = dd
+        max_drawdown_pct = round(max_drawdown_pct, 2)
+
+        HistoricalTradeWarehouseEngine().save(
+            simulation_name="account_simulation",
+            trades=realized_trades,
+        )
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
@@ -106,6 +127,9 @@ class HistoricalAccountSimulationEngine:
             "gross_profit": gross_profit,
             "gross_loss": gross_loss,
             "profit_factor": round(gross_profit / abs(gross_loss), 2) if gross_loss else None,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "max_drawdown_pct": max_drawdown_pct,
             "max_position_pct": max_position_pct,
             "max_trades_per_day": max_trades_per_day,
             "source_performance": {
