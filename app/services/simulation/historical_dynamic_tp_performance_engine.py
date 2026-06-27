@@ -7,6 +7,7 @@ from app.services.simulation.dynamic_divestment_engine import DynamicDivestmentE
 from app.services.simulation.historical_exit_policy_optimizer import HistoricalExitPolicyOptimizer
 from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.dynamic_exit_policy_engine import DynamicExitPolicyEngine
+from app.services.simulation.historical_exit_doctrine_engine import HistoricalExitDoctrineEngine
 
 
 class HistoricalDynamicTPPerformanceEngine:
@@ -163,33 +164,24 @@ class HistoricalDynamicTPPerformanceEngine:
         if not entry_price:
             return None
 
-        dynamic_exit_policy = DynamicExitPolicyEngine().build_policy(
+        doctrine_engine = HistoricalExitDoctrineEngine()
+        exit_doctrine = doctrine_engine.build(
             symbol=symbol,
-            composite_score=signal.get("composite_score"),
+            signal=signal,
+            entry_price=entry_price,
+            current_price=entry_price,
+            unrealized_pct=0,
         )
 
-        dynamic_stop_loss_pct = float(dynamic_exit_policy.get("stop_loss_pct") or stop_loss_pct)
-        dynamic_take_profit_pct = float(dynamic_exit_policy.get("take_profit_pct") or abs(dynamic_stop_loss_pct) * 2.5)
+        dynamic_exit_policy = exit_doctrine.get("dynamic_exit_policy") or {}
+        dynamic_tp = exit_doctrine.get("dynamic_tp") or {}
+        dynamic_stop_loss_pct = float(exit_doctrine.get("stop_loss_pct") or stop_loss_pct)
+        dynamic_take_profit_pct = float(exit_doctrine.get("take_profit_pct") or abs(dynamic_stop_loss_pct) * 2.5)
 
-        dynamic_trade = {
-            "entry_price": entry_price,
-            "current_price": entry_price,
-            "asset_type": "EQUITY",
-            "take_profit_pct": dynamic_take_profit_pct,
-            "volatility_score": dynamic_exit_policy.get("volatility_score") or signal.get("volatility_score") or 50,
-            "unrealized_pnl_pct": 0,
-        }
-        dynamic_tp = DynamicTPManagementEngine().evaluate(dynamic_trade)
-
-        if dynamic_tp.get("dynamic_tp_engine") == "ACTIVE":
-            if direction == "BEARISH" or option_type == "PUT":
-                tp1_pct = abs(((entry_price - dynamic_tp["dynamic_tp1_price"]) / entry_price) * 100)
-                tp2_pct = abs(((entry_price - dynamic_tp["dynamic_tp2_price"]) / entry_price) * 100)
-                tp3_pct = abs(((entry_price - dynamic_tp["dynamic_tp3_price"]) / entry_price) * 100)
-            else:
-                tp1_pct = ((dynamic_tp["dynamic_tp1_price"] - entry_price) / entry_price) * 100
-                tp2_pct = ((dynamic_tp["dynamic_tp2_price"] - entry_price) / entry_price) * 100
-                tp3_pct = ((dynamic_tp["dynamic_tp3_price"] - entry_price) / entry_price) * 100
+        thresholds = doctrine_engine.tp_return_thresholds(exit_doctrine, entry_price, direction, option_type)
+        tp1_pct = thresholds["tp1_pct"]
+        tp2_pct = thresholds["tp2_pct"]
+        tp3_pct = thresholds["tp3_pct"]
 
         remaining = 1.0
         realized_return = 0.0
@@ -227,23 +219,22 @@ class HistoricalDynamicTPPerformanceEngine:
 
             ret_pct = ret_from_close(close)
 
-            dynamic_trade = {
-                "entry_price": entry_price,
-                "current_price": close,
-                "asset_type": "EQUITY",
-                "take_profit_pct": dynamic_take_profit_pct,
-                "volatility_score": dynamic_exit_policy.get("volatility_score") or signal.get("volatility_score") or 50,
-                "unrealized_pnl_pct": ret_pct,
-            }
-            dynamic_tp = DynamicTPManagementEngine().evaluate(dynamic_trade)
+            exit_doctrine = doctrine_engine.build(
+                symbol=symbol,
+                signal=signal,
+                entry_price=entry_price,
+                current_price=close,
+                unrealized_pct=ret_pct,
+            )
 
-            if dynamic_tp.get("dynamic_tp_engine") == "ACTIVE":
-                if direction == "BEARISH" or option_type == "PUT":
-                    tp2_pct = abs(((entry_price - dynamic_tp["dynamic_tp2_price"]) / entry_price) * 100)
-                    tp3_pct = abs(((entry_price - dynamic_tp["dynamic_tp3_price"]) / entry_price) * 100)
-                else:
-                    tp2_pct = ((dynamic_tp["dynamic_tp2_price"] - entry_price) / entry_price) * 100
-                    tp3_pct = ((dynamic_tp["dynamic_tp3_price"] - entry_price) / entry_price) * 100
+            dynamic_exit_policy = exit_doctrine.get("dynamic_exit_policy") or {}
+            dynamic_tp = exit_doctrine.get("dynamic_tp") or {}
+            dynamic_stop_loss_pct = float(exit_doctrine.get("stop_loss_pct") or dynamic_stop_loss_pct)
+            dynamic_take_profit_pct = float(exit_doctrine.get("take_profit_pct") or dynamic_take_profit_pct)
+
+            thresholds = doctrine_engine.tp_return_thresholds(exit_doctrine, entry_price, direction, option_type)
+            tp2_pct = thresholds["tp2_pct"]
+            tp3_pct = thresholds["tp3_pct"]
 
             high_water_return = max(high_water_return, ret_pct)
             max_favorable_pct = max(max_favorable_pct, ret_pct)
@@ -394,6 +385,7 @@ class HistoricalDynamicTPPerformanceEngine:
             "runner_return_pct": round(runner_return_pct, 2),
             "max_favorable_pct": round(max_favorable_pct, 2),
             "max_adverse_pct": round(max_adverse_pct, 2),
+            "exit_doctrine": exit_doctrine,
             "dynamic_exit_policy": dynamic_exit_policy,
             "dynamic_stop_loss_pct_used": round(dynamic_stop_loss_pct, 2),
             "dynamic_take_profit_pct_used": round(dynamic_take_profit_pct, 2),
