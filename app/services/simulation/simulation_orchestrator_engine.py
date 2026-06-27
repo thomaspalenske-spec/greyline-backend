@@ -14,6 +14,7 @@ from app.services.simulation.greyline_simulation_decision_adapter import GreyLin
 from app.services.simulation.historical_component_builder import HistoricalComponentBuilder
 from app.services.simulation.historical_master_decision_engine import HistoricalMasterDecisionEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
+from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 
 
 class SimulationOrchestratorEngine:
@@ -87,8 +88,16 @@ class SimulationOrchestratorEngine:
                     },
                 )
 
+                reliability_governor = ReliabilityGovernorEngine().evaluate()
+
                 decision = {
                     "simulated_time": SimulationClock.isoformat(),
+                    "reliability_governor": reliability_governor,
+                    "reliability_operating_mode": reliability_governor.get("operating_mode"),
+                    "reliability_execution_allowed": reliability_governor.get("execution_allowed"),
+                    "reliability_new_entries_allowed": reliability_governor.get("new_entries_allowed"),
+                    "reliability_autonomous_allowed": reliability_governor.get("autonomous_allowed"),
+                    "reliability_score": reliability_governor.get("reliability_score"),
                     "symbol": symbol.upper(),
                     "market_data": snapshot.get("market_data"),
                     "future_visible": False,
