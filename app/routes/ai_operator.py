@@ -25,6 +25,7 @@ from app.routes.greyline_market_battlefield import greyline_market_battlefield
 from app.routes.greyline_market_battlefield_summary import greyline_market_battlefield_summary
 from app.services.opportunity_queue_engine import OpportunityQueueEngine
 from app.services.decision_explainability_engine import DecisionExplainabilityEngine
+from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 from app.services.institutional.institutional_money_score_engine import InstitutionalMoneyScoreEngine
 from app.services.institutional.institutional_flow_provider import InstitutionalFlowProvider
 from app.routes.market_battlefield_forecast import market_battlefield_forecast
@@ -474,6 +475,7 @@ def operator_decision_summary():
         top_candidate_summary,
         feeds=institutional_flow.get("feeds") or {},
     )
+    reliability_governor = ReliabilityGovernorEngine().evaluate()
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -492,6 +494,12 @@ def operator_decision_summary():
         "institutional_flow": institutional_flow,
         "institutional_money": institutional_money,
         "decision_explainability": explainability,
+        "reliability_governor": reliability_governor,
+        "reliability_operating_mode": reliability_governor.get("operating_mode"),
+        "reliability_execution_allowed": reliability_governor.get("execution_allowed"),
+        "reliability_new_entries_allowed": reliability_governor.get("new_entries_allowed"),
+        "reliability_autonomous_allowed": reliability_governor.get("autonomous_allowed"),
+        "reliability_score": reliability_governor.get("reliability_score"),
         "token_status": safe_call(
             "tradestation_token_status",
             lambda: TradeStationTokenStatusEngine().evaluate()
