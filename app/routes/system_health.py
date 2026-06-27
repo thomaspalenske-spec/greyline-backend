@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
 from app.services.system_health_snapshot_engine import SystemHealthSnapshotEngine
 from app.services.unified_reliability_core_engine import UnifiedReliabilityCoreEngine
+from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 
 router = APIRouter()
 
