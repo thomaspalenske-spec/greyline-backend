@@ -83,8 +83,18 @@ class HistoricalExitDoctrineEngine:
             tp2_pct = ((tp2_price - entry_price) / entry_price) * 100
             tp3_pct = ((tp3_price - entry_price) / entry_price) * 100
 
+        tp1_pct = round(tp1_pct, 2)
+        tp2_pct = round(tp2_pct, 2)
+        tp3_pct = round(tp3_pct, 2)
+
+        if tp2_pct <= tp1_pct:
+            tp2_pct = round(tp1_pct + 1.0, 2)
+
+        if tp3_pct <= tp2_pct:
+            tp3_pct = round(tp2_pct + 1.0, 2)
+
         return {
-            "tp1_pct": round(tp1_pct, 2),
-            "tp2_pct": round(tp2_pct, 2),
-            "tp3_pct": round(tp3_pct, 2),
+            "tp1_pct": tp1_pct,
+            "tp2_pct": tp2_pct,
+            "tp3_pct": tp3_pct,
         }

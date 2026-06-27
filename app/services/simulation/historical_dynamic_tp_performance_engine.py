@@ -244,8 +244,12 @@ class HistoricalDynamicTPPerformanceEngine:
                 if remaining > 0:
                     realized_return += remaining * ret_pct
 
-                    if active_stop_pct >= tp2_pct:
+                    if active_stop_pct >= tp3_pct:
+                        stop_stage = "TP3_PROTECTIVE_STOP"
+                    elif active_stop_pct >= tp2_pct:
                         stop_stage = "TP2_PROTECTIVE_STOP"
+                    elif active_stop_pct >= tp1_pct:
+                        stop_stage = "TP1_PROTECTIVE_STOP"
                     elif active_stop_pct >= 0:
                         stop_stage = "BREAKEVEN_STOP"
                     else:
@@ -365,6 +369,17 @@ class HistoricalDynamicTPPerformanceEngine:
                 runner_return_pct = final_ret_pct
             exits.append({"date": final_exit_date, "stage": "TIME_EXIT", "weight": round(remaining, 2), "return_pct": round(final_ret_pct, 2)})
 
+        doctrine_summary = {
+            "stop_loss_pct": round(dynamic_stop_loss_pct, 2),
+            "take_profit_pct": round(dynamic_take_profit_pct, 2),
+            "tp1_pct": round(tp1_pct, 2),
+            "tp2_pct": round(tp2_pct, 2),
+            "tp3_pct": round(tp3_pct, 2),
+            "exit_policy": exit_policy,
+            "volatility_score": dynamic_exit_policy.get("volatility_score"),
+            "volatility_band": dynamic_exit_policy.get("volatility_band"),
+        }
+
         return {
             "symbol": symbol,
             "entry_date": entry_date,
@@ -385,6 +400,7 @@ class HistoricalDynamicTPPerformanceEngine:
             "runner_return_pct": round(runner_return_pct, 2),
             "max_favorable_pct": round(max_favorable_pct, 2),
             "max_adverse_pct": round(max_adverse_pct, 2),
+            "doctrine_summary": doctrine_summary,
             "exit_doctrine": exit_doctrine,
             "dynamic_exit_policy": dynamic_exit_policy,
             "dynamic_stop_loss_pct_used": round(dynamic_stop_loss_pct, 2),
