@@ -8,6 +8,7 @@ from app.services.master_decision_event_log import MasterDecisionEventLog
 from app.services.opportunity_symmetry_engine import OpportunitySymmetryEngine
 from app.services.institutional_flow_engine import InstitutionalFlowEngine
 from app.services.bear_market_opportunity_engine import BearMarketOpportunityEngine
+from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 
 
 class GreyLineMasterDecisionEngine:
@@ -66,6 +67,8 @@ class GreyLineMasterDecisionEngine:
             top_candidate.get("result") if top_candidate else "NO_ACTION"
         )
 
+        reliability_governor = ReliabilityGovernorEngine().evaluate()
+
         institutional_flow = InstitutionalFlowEngine().evaluate({
             "symbols_scored": opportunity_summary.get("symbols_scored", 0),
             "top_candidate": top_candidate,
@@ -90,6 +93,12 @@ class GreyLineMasterDecisionEngine:
             "decision": decision,
             "decision_reason": reason,
             "governor": governor,
+            "reliability_governor": reliability_governor,
+            "reliability_operating_mode": reliability_governor.get("operating_mode"),
+            "reliability_execution_allowed": reliability_governor.get("execution_allowed"),
+            "reliability_new_entries_allowed": reliability_governor.get("new_entries_allowed"),
+            "reliability_autonomous_allowed": reliability_governor.get("autonomous_allowed"),
+            "reliability_score": reliability_governor.get("reliability_score"),
             "execution_enabled": False,
             "order_placement_allowed": False,
             "status": "GREYLINE_MASTER_DECISION_READY"
