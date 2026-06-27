@@ -18,3 +18,18 @@ def system_health_snapshot():
 @router.get("/unified-reliability-core")
 def unified_reliability_core():
     return UnifiedReliabilityCoreEngine().evaluate()
+
+
+@router.get("/reliability-brief")
+def reliability_brief():
+    r = UnifiedReliabilityCoreEngine().evaluate()
+    return {
+        "timestamp": r.get("timestamp"),
+        "system": "GreyLine",
+        "overall_reliability": r.get("overall_reliability"),
+        "summary": r.get("summary"),
+        "reliability_score": r.get("reliability_score"),
+        "max_score": r.get("max_score"),
+        "checks": r.get("checks"),
+        "status": "RELIABILITY_BRIEF_READY",
+    }
