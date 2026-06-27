@@ -12,11 +12,20 @@ class UnifiedReliabilityCoreEngine:
 
     BASE_URL = "http://127.0.0.1:8000"
 
-    def evaluate(self):
+    def evaluate(self, simulate_fault=None):
         system_health = self._get("/system-health-snapshot")
         scheduler = self._get("/background-scheduler/status")
         quote_heartbeat = self._get("/fast-quote-heartbeat/status")
         token = self._get("/tradestation-token-status")
+
+        if simulate_fault:
+            system_health, scheduler, quote_heartbeat, token = self._apply_simulated_fault(
+                simulate_fault,
+                system_health,
+                scheduler,
+                quote_heartbeat,
+                token,
+            )
 
         checks = [
             self._score_system_health(system_health),
@@ -52,8 +61,63 @@ class UnifiedReliabilityCoreEngine:
                 "quote_heartbeat": quote_heartbeat,
                 "token": token,
             },
+            "simulate_fault": simulate_fault,
             "status": "UNIFIED_RELIABILITY_CORE_READY",
         }
+
+
+    def _apply_simulated_fault(self, simulate_fault, system_health, scheduler, quote_heartbeat, token):
+        fault = str(simulate_fault or "").upper().strip()
+
+        if fault == "SCHEDULER_DOWN":
+            scheduler = {
+                "http_status": 200,
+                "ok": True,
+                "data": {
+                    "scheduler_enabled": True,
+                    "thread_alive": False,
+                    "status": "SIMULATED_SCHEDULER_DOWN",
+                },
+            }
+
+        elif fault == "QUOTE_HEARTBEAT_DOWN":
+            quote_heartbeat = {
+                "http_status": 200,
+                "ok": True,
+                "data": {
+                    "enabled": True,
+                    "thread_alive": False,
+                    "state": {
+                        "market_data_health": "SIMULATED_QUOTE_HEARTBEAT_DOWN",
+                    },
+                    "status": "SIMULATED_QUOTE_HEARTBEAT_DOWN",
+                },
+            }
+
+        elif fault == "TOKEN_EXPIRED":
+            token = {
+                "http_status": 200,
+                "ok": True,
+                "data": {
+                    "ready_for_read_only": False,
+                    "token_expired": True,
+                    "seconds_remaining": 0,
+                    "status": "SIMULATED_TOKEN_EXPIRED",
+                },
+            }
+
+        elif fault == "SYSTEM_RED":
+            system_health = {
+                "http_status": 200,
+                "ok": True,
+                "data": {
+                    "overall_health": "RED",
+                    "summary": "SIMULATED_SYSTEM_RED",
+                    "status": "SIMULATED_SYSTEM_RED",
+                },
+            }
+
+        return system_health, scheduler, quote_heartbeat, token
 
     def _get(self, path):
         try:
@@ -86,7 +150,7 @@ class UnifiedReliabilityCoreEngine:
         if response.get("ok") and data.get("scheduler_enabled") and data.get("thread_alive"):
             return {"check": "background_scheduler", "status": "GREEN", "points": 25, "message": "scheduler enabled and thread alive"}
         if response.get("ok") and data.get("scheduler_enabled"):
-            return {"check": "background_scheduler", "status": "YELLOW", "points": 12, "message": "scheduler enabled but thread not confirmed alive"}
+            return {"check": "background_scheduler", "status": "RED", "points": 0, "message": "scheduler enabled but thread not confirmed alive"}
         return {"check": "background_scheduler", "status": "RED", "points": 0, "message": "scheduler unavailable or disabled"}
 
     def _score_quote_heartbeat(self, response):
