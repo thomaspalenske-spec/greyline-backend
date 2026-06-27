@@ -1,0 +1,112 @@
+from datetime import datetime
+import requests
+
+
+class UnifiedReliabilityCoreEngine:
+    """
+    GreyLine unified reliability core.
+
+    Read-only operational health aggregator.
+    Does not place trades or modify execution state.
+    """
+
+    BASE_URL = "http://127.0.0.1:8000"
+
+    def evaluate(self):
+        system_health = self._get("/system-health-snapshot")
+        scheduler = self._get("/background-scheduler/status")
+        quote_heartbeat = self._get("/fast-quote-heartbeat/status")
+        token = self._get("/tradestation-token-status")
+
+        checks = [
+            self._score_system_health(system_health),
+            self._score_scheduler(scheduler),
+            self._score_quote_heartbeat(quote_heartbeat),
+            self._score_token(token),
+        ]
+
+        score = sum(c["points"] for c in checks)
+
+        if any(c["status"] == "RED" for c in checks):
+            overall = "RED"
+            summary = "ACTION_REQUIRED"
+        elif any(c["status"] == "YELLOW" for c in checks):
+            overall = "YELLOW"
+            summary = "DEGRADED_BUT_RUNNING"
+        else:
+            overall = "GREEN"
+            summary = "RELIABILITY_READY"
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "system": "GreyLine",
+            "engine": "UNIFIED_RELIABILITY_CORE",
+            "overall_reliability": overall,
+            "summary": summary,
+            "reliability_score": score,
+            "max_score": 100,
+            "checks": checks,
+            "source_snapshots": {
+                "system_health": system_health,
+                "scheduler": scheduler,
+                "quote_heartbeat": quote_heartbeat,
+                "token": token,
+            },
+            "status": "UNIFIED_RELIABILITY_CORE_READY",
+        }
+
+    def _get(self, path):
+        try:
+            r = requests.get(self.BASE_URL + path, timeout=5)
+            return {
+                "http_status": r.status_code,
+                "ok": r.ok,
+                "data": r.json() if r.content else {},
+            }
+        except Exception as e:
+            return {
+                "http_status": None,
+                "ok": False,
+                "error": str(e),
+                "data": {},
+            }
+
+    def _score_system_health(self, response):
+        data = response.get("data") or {}
+        health = data.get("overall_health")
+
+        if response.get("ok") and health == "GREEN":
+            return {"check": "system_health", "status": "GREEN", "points": 25, "message": "system health green"}
+        if response.get("ok") and health == "YELLOW":
+            return {"check": "system_health", "status": "YELLOW", "points": 15, "message": "system health degraded"}
+        return {"check": "system_health", "status": "RED", "points": 0, "message": "system health unavailable or red"}
+
+    def _score_scheduler(self, response):
+        data = response.get("data") or {}
+        if response.get("ok") and data.get("scheduler_enabled") and data.get("thread_alive"):
+            return {"check": "background_scheduler", "status": "GREEN", "points": 25, "message": "scheduler enabled and thread alive"}
+        if response.get("ok") and data.get("scheduler_enabled"):
+            return {"check": "background_scheduler", "status": "YELLOW", "points": 12, "message": "scheduler enabled but thread not confirmed alive"}
+        return {"check": "background_scheduler", "status": "RED", "points": 0, "message": "scheduler unavailable or disabled"}
+
+    def _score_quote_heartbeat(self, response):
+        data = response.get("data") or {}
+        state = data.get("state") or {}
+        market_health = state.get("market_data_health")
+
+        if response.get("ok") and data.get("enabled") and data.get("thread_alive"):
+            if market_health in ["HEALTHY", "MARKET_CLOSED_LAST_QUOTE_MARK"]:
+                return {"check": "quote_heartbeat", "status": "GREEN", "points": 25, "message": market_health}
+            return {"check": "quote_heartbeat", "status": "YELLOW", "points": 15, "message": market_health or "quote heartbeat running but degraded"}
+
+        return {"check": "quote_heartbeat", "status": "RED", "points": 0, "message": "quote heartbeat unavailable or stopped"}
+
+    def _score_token(self, response):
+        data = response.get("data") or {}
+        seconds_remaining = int(data.get("seconds_remaining") or 0)
+
+        if response.get("ok") and data.get("ready_for_read_only") and not data.get("token_expired") and seconds_remaining > 300:
+            return {"check": "tradestation_token", "status": "GREEN", "points": 25, "message": f"token valid with {seconds_remaining}s remaining"}
+        if response.get("ok") and data.get("ready_for_read_only") and not data.get("token_expired"):
+            return {"check": "tradestation_token", "status": "YELLOW", "points": 12, "message": f"token valid but near expiry: {seconds_remaining}s"}
+        return {"check": "tradestation_token", "status": "RED", "points": 0, "message": "token unavailable or expired"}
