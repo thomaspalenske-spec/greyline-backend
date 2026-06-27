@@ -33,3 +33,8 @@ def reliability_brief():
         "checks": r.get("checks"),
         "status": "RELIABILITY_BRIEF_READY",
     }
+
+
+@router.get("/reliability-governor")
+def reliability_governor():
+    return ReliabilityGovernorEngine().evaluate()
