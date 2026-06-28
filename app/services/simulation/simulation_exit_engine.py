@@ -1,11 +1,10 @@
+from app.services.simulation.historical_exit_doctrine_engine import HistoricalExitDoctrineEngine
+
+
 class SimulationExitEngine:
     """
-    First-pass simulation exit engine.
-
-    Rules:
-    - Take profit at +2.0%
-    - Stop loss at -1.0%
-    - No future data used
+    Simulator exit engine using GreyLine historical exit doctrine.
+    No future data used.
     """
 
     def evaluate(self, open_positions, market_data):
@@ -22,12 +21,23 @@ class SimulationExitEngine:
             should_close = False
             exit_reason = None
 
-            if pnl_pct is not None and pnl_pct >= 2.0:
+            doctrine = HistoricalExitDoctrineEngine().build(
+                symbol=pos.get("symbol"),
+                signal=pos.get("entry_signal") or {},
+                entry_price=self._num(pos.get("entry_price")),
+                current_price=current_close,
+                unrealized_pct=pnl_pct or 0,
+            )
+
+            stop_loss_pct = self._num(doctrine.get("stop_loss_pct"))
+            take_profit_pct = self._num(doctrine.get("take_profit_pct"))
+
+            if pnl_pct is not None and take_profit_pct is not None and pnl_pct >= take_profit_pct:
                 should_close = True
-                exit_reason = "SIM_TAKE_PROFIT_2_PCT"
-            elif pnl_pct is not None and pnl_pct <= -1.0:
+                exit_reason = "GREYLINE_DYNAMIC_TAKE_PROFIT"
+            elif pnl_pct is not None and stop_loss_pct is not None and pnl_pct <= stop_loss_pct:
                 should_close = True
-                exit_reason = "SIM_STOP_LOSS_1_PCT"
+                exit_reason = "GREYLINE_DYNAMIC_STOP_LOSS"
 
             if should_close:
                 entry = self._num(pos.get("entry_price"))
@@ -49,6 +59,7 @@ class SimulationExitEngine:
                     "capital_returned": round(capital_returned, 2),
                     "total_cash_returned": round(capital_returned + realized_pnl, 2),
                     "exit_reason": exit_reason,
+                    "exit_doctrine": doctrine,
                     "status": "CLOSED",
                     "future_data_used": False,
                 })
