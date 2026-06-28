@@ -185,6 +185,7 @@ class SimulationOrchestratorEngine:
             "open_position_count": len(open_positions),
             "open_positions": open_positions,
             "decision_count": len(decisions),
+            "decisions": decisions,
             "sample_decisions": decisions[:5],
             "final_decision": decisions[-1] if decisions else None,
             "rules": {
