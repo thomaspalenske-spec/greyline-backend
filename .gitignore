@@ -65,3 +65,7 @@ app/data/simulation_runs/
 
 # Simulation run outputs
 app/data/research/
+
+# GreyLine runtime data
+app/data/options_paper_trading/
+app/data/paper_trading/archive/
