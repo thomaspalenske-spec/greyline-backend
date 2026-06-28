@@ -550,12 +550,20 @@ async function refreshAll() {
     setClassBySign("total_return", totalReturn);
     setClassBySign("realized_pnl", l.total_realized_pnl || 0);
 
-    document.getElementById("positions").innerHTML = open.map(t => `
+    document.getElementById("positions").innerHTML = open.map(t => {
+      const cv = t.commander_view || {};
+      const rb = cv.risk_box || {};
+      const tp = cv.tp_underlying_ladder || [];
+      const tp1 = tp[0] || {};
+      const tp2 = tp[1] || {};
+      const tp3 = tp[2] || {};
+
+      return `
       <tr>
-        <td><strong>${t.symbol}</strong><br><span class="green">${t.option_type || ""}</span></td>
+        <td><strong>${cv.underlying || t.underlying || t.symbol}</strong><br><span class="green">${t.option_type || ""}</span></td>
         <td class="green">${t.side || "--"}</td>
-        <td>${fmtMoney(t.entry_price)}</td>
-        <td>${fmtMoney(t.current_price)}</td>
+        <td>${fmtMoney(cv.estimated_entry_underlying_price || t.underlying_entry_price || t.entry_underlying_price || t.entry_price)}</td>
+        <td>${fmtMoney(cv.current_underlying_price || t.current_underlying_price || t.current_price)}</td>
         <td class="${Number(t.unrealized_pnl || 0) >= 0 ? "green" : "red"}">${fmtMoney(t.unrealized_pnl)}</td>
         <td class="${Number(t.unrealized_pnl_pct || 0) >= 0 ? "green" : "red"}">${fmtPct(t.unrealized_pnl_pct)}</td>
         <td><span class="badge">${t.position_action || t.status}</span></td>
@@ -563,24 +571,51 @@ async function refreshAll() {
       </tr>
       <tr>
         <td colspan="8" style="background:rgba(255,255,255,.035); color:#9aa7b8;">
-          <strong class="red">SL:</strong> ${fmtPct(t.stop_loss_pct)}
+          <strong>Underlying Plan:</strong>
+          Entry ${fmtMoney(cv.estimated_entry_underlying_price)}
           &nbsp; | &nbsp;
-          <strong class="green">TP1:</strong> ${fmtMoney(t.dynamic_tp1_price || t.tp1_price)}
+          Current ${fmtMoney(cv.current_underlying_price)}
+          &nbsp; | &nbsp;
+          <strong class="red">SL:</strong> ${fmtMoney(rb.estimated_stop_underlying_price)}
+          &nbsp; | &nbsp;
+          <strong class="green">TP1:</strong> ${fmtMoney(tp1.estimated_underlying_target_price)}
           &nbsp;
-          <strong class="green">TP2:</strong> ${fmtMoney(t.dynamic_tp2_price || t.tp2_price)}
+          <strong class="green">TP2:</strong> ${fmtMoney(tp2.estimated_underlying_target_price)}
           &nbsp;
-          <strong class="green">TP3:</strong> ${fmtMoney(t.dynamic_tp3_price || t.tp3_price)}
+          <strong class="green">TP3:</strong> ${fmtMoney(tp3.estimated_underlying_target_price)}
           &nbsp;
           <strong class="green">TP4:</strong> ${t.tp4_mode === "DYNAMIC_RUNNER_NO_FIXED_TARGET" || t.tp4_runner ? "RUNNER" : fmtMoney(t.tp4_price)}
-          &nbsp; | &nbsp;
-          Target Dist: ${fmtPct(t.distance_to_target_pct)}
-          &nbsp;
-          Stop Dist: ${fmtPct(t.distance_to_stop_pct)}
-          &nbsp; | &nbsp;
-          Health: ${String(t.position_health || "--").replaceAll("_", " ")}
         </td>
       </tr>
-    `).join("") || `<tr><td colspan="8">No open positions</td></tr>`;
+      <tr>
+        <td colspan="8" style="background:rgba(255,255,255,.025); color:#9aa7b8;">
+          <strong>Option Contract:</strong>
+          ${cv.option_symbol || t.option_symbol || t.symbol}
+          &nbsp; | &nbsp;
+          Strike ${fmtMoney(cv.strike || t.strike)}
+          &nbsp; | &nbsp;
+          Exp ${cv.expiration || t.expiration || "--"}
+          &nbsp; | &nbsp;
+          Entry Premium ${fmtMoney(cv.entry_contract_price || t.entry_price)}
+          &nbsp; | &nbsp;
+          Current Premium ${fmtMoney(cv.current_contract_price || t.current_price)}
+          &nbsp; | &nbsp;
+          Delta ${cv.delta_used_for_underlying_estimates ?? t.delta ?? "--"}
+          &nbsp; | &nbsp;
+          Theta ${cv.theta_per_contract_per_day ?? t.theta ?? "--"}
+          &nbsp; | &nbsp;
+          Days ${cv.days_remaining ?? "--"}
+        </td>
+      </tr>
+      <tr>
+        <td colspan="8" style="background:rgba(255,255,255,.02); color:#9aa7b8;">
+          <strong>Commander:</strong>
+          ${String(cv.commander_action || "--").replaceAll("_", " ")}
+          &nbsp; | &nbsp;
+          ${cv.commander_reason || "No commander view available."}
+        </td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="8">No open positions</td></tr>`;
 
     drawCurve(trades);
   }
