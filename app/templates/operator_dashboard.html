@@ -473,7 +473,7 @@ async function refreshAll() {
 
   const [battlefield, ledger, scheduler] = await Promise.allSettled([
     getJSON("/greyline-market-battlefield-summary"),
-    getJSON("/paper-trade-ledger"),
+    getJSON("/options-account-dashboard"),
     getJSON("/background-scheduler/status")
   ]);
 
@@ -524,14 +524,14 @@ async function refreshAll() {
 
   if (ledger.status === "fulfilled") {
     const l = ledger.value;
-    const trades = l.trades || [];
-    const open = trades.filter(t => t.status === "OPEN");
-    const unrealized = open.reduce((a,t) => a + Number(t.unrealized_pnl || 0), 0);
-    const deployed = open.reduce((a,t) => a + Number(t.entry_price || 0) * Number(t.quantity || 1), 0);
-    const starting = 10000;
-    const equity = starting + Number(l.total_realized_pnl || 0) + unrealized;
-    const cash = starting - deployed + Number(l.total_realized_pnl || 0);
-    const totalReturn = ((equity - starting) / starting) * 100;
+    const trades = l.open_positions || [];
+    const open = l.open_positions || [];
+    const unrealized = Number(l.unrealized_pnl || 0);
+    const deployed = Number(l.deployed_capital || 0);
+    const starting = Number(l.starting_equity || 10000);
+    const equity = Number(l.current_equity || starting);
+    const cash = Number(l.cash_on_hand || 0);
+    const totalReturn = Number(l.total_return_pct || 0);
 
     setText("equity", fmtMoney(equity));
     setText("cash", fmtMoney(cash));
@@ -541,14 +541,14 @@ async function refreshAll() {
     setText("unrealized", fmtMoney(unrealized));
     setText("total_return", fmtPct(totalReturn));
     setText("open_trades", open.length);
-    setText("total_trades", l.trade_count ?? trades.length);
-    setText("open_trade_count", l.open_trade_count ?? open.length);
-    setText("closed_trade_count", l.closed_trade_count ?? trades.filter(t => t.status === "CLOSED").length);
-    setText("realized_pnl", fmtMoney(l.total_realized_pnl || 0));
+    setText("total_trades", l.option_trade_count ?? trades.length);
+    setText("open_trade_count", l.open_option_trade_count ?? open.length);
+    setText("closed_trade_count", l.closed_option_trade_count ?? 0);
+    setText("realized_pnl", fmtMoney(l.realized_pnl || 0));
 
     setClassBySign("unrealized", unrealized);
     setClassBySign("total_return", totalReturn);
-    setClassBySign("realized_pnl", l.total_realized_pnl || 0);
+    setClassBySign("realized_pnl", l.realized_pnl || 0);
 
     document.getElementById("positions").innerHTML = open.map(t => {
       const cv = t.commander_view || {};
