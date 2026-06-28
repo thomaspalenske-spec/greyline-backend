@@ -147,9 +147,14 @@ class SimulationOrchestratorEngine:
                 ), 2)
                 equity_value = round(capital + open_position_value, 2)
 
+                closed_positions = exit_update.get("closed_positions", [])
+
                 decision["execution"] = execution
                 decision["position_update"] = position_update
                 decision["exit_update"] = exit_update
+                decision["closed_positions"] = closed_positions
+                decision["closed_position_count"] = len(closed_positions)
+                decision["exit_event"] = bool(closed_positions)
                 decision["realized_pnl"] = round(realized_pnl, 2)
                 decision["cash_returned"] = round(cash_returned, 2)
                 decision["open_position_value"] = open_position_value
