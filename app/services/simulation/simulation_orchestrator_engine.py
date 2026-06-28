@@ -73,6 +73,10 @@ class SimulationOrchestratorEngine:
                         "setup_score": 0,
                     }
 
+                # Normalize simulator adapter output to production-style score field.
+                if candidate.get("adjusted_score") is None:
+                    candidate["adjusted_score"] = candidate.get("composite_score", 0)
+
                 institutional = InstitutionalMoneyScoreEngine().evaluate(
                     candidate,
                     feeds={
