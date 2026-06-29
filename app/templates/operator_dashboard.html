@@ -596,15 +596,15 @@ async function refreshAll() {
           &nbsp; | &nbsp;
           Exp ${cv.expiration || t.expiration || "--"}
           &nbsp; | &nbsp;
-          Entry Premium ${fmtMoney(cv.entry_contract_price || t.entry_price)}
+          Entry Stock ${fmtMoney(cv.estimated_entry_underlying_price || t.underlying_entry_price)}
           &nbsp; | &nbsp;
-          Current Premium ${fmtMoney(cv.current_contract_price || t.current_price)}
-          &nbsp; | &nbsp;
-          Delta ${cv.delta_used_for_underlying_estimates ?? t.delta ?? "--"}
-          &nbsp; | &nbsp;
-          Theta ${cv.theta_per_contract_per_day ?? t.theta ?? "--"}
+          Current Stock ${fmtMoney(cv.current_underlying_price || t.current_underlying_price || t.underlying_last)}
           &nbsp; | &nbsp;
           Days ${cv.days_remaining ?? "--"}
+          &nbsp; | &nbsp;
+          Forced Exit ${t.forced_liquidation_deadline || "--"}
+          &nbsp; | &nbsp;
+          Thesis ${t.thesis_status || "--"} ${t.thesis_integrity_score ? "(" + t.thesis_integrity_score + "%)" : ""}
         </td>
       </tr>
       <tr>
