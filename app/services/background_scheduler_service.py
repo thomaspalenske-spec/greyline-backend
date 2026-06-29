@@ -11,6 +11,7 @@ from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEng
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
 from app.services.paper_position_manager_engine import PaperPositionManagerEngine
 from app.services.options_position_manager_engine import OptionsPositionManagerEngine
+from app.services.options_paper_execution_sweep_engine import OptionsPaperExecutionSweepEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.routes.paper_trade_executor import run_paper_trade_executor
 from app.services.market_hours_engine import MarketHoursEngine
@@ -132,6 +133,7 @@ class BackgroundSchedulerService:
         forward = ForwardOutcomeCaptureEngine().capture(limit=1)
         learning = DecisionLearningMemoryEngine().record_current_learning()
         paper_executor = run_paper_trade_executor()
+        options_executor = OptionsPaperExecutionSweepEngine().run(limit=10)
         paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
         options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
         from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
@@ -154,6 +156,8 @@ class BackgroundSchedulerService:
                 "learning_memory_status": learning.get("status"),
                 "paper_executor_status": paper_executor.get("status"),
                 "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
+                "options_executor_status": options_executor.get("status"),
+                "options_paper_trades_recorded": options_executor.get("paper_trades_recorded"),
             "paper_position_manager_status": paper_position_manager.get("status"),
             "paper_positions_checked": paper_position_manager.get("positions_checked"),
             "paper_positions_closed": paper_position_manager.get("positions_closed"),
@@ -181,6 +185,8 @@ class BackgroundSchedulerService:
             "learning_memory_status": learning.get("status"),
             "paper_executor_status": paper_executor.get("status"),
             "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
+            "options_executor_status": options_executor.get("status"),
+            "options_paper_trades_recorded": options_executor.get("paper_trades_recorded"),
             "paper_position_manager_status": paper_position_manager.get("status"),
             "paper_positions_checked": paper_position_manager.get("positions_checked"),
             "paper_positions_closed": paper_position_manager.get("positions_closed"),
