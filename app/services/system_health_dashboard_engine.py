@@ -16,7 +16,7 @@ class SystemHealthDashboardEngine:
         governance = AdaptiveWeightGovernanceEngine().active_governance()
 
         broker_healthy = broker.get("status") == "TRADESTATION_TOKEN_MAINTENANCE_READY"
-        scheduler_healthy = scheduler.get("thread_alive") is True
+        scheduler_healthy = scheduler.get("thread_alive") is True or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
         learning_healthy = learning.get("status") == "LEARNING_ANALYTICS_READY"
         governance_healthy = governance.get("status") == "ACTIVE_WEIGHT_GOVERNANCE_READY"
 
