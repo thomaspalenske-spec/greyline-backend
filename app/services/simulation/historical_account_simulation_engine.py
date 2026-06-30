@@ -32,9 +32,38 @@ class HistoricalAccountSimulationEngine:
         tp2_pct=6.0,
         tp3_pct=9.0,
         runner_trail_pct=-4.0,
+        max_account_drawdown_pct=-25.0,
+        recovery_resume_drawdown_pct=-18.0,
+        recovery_position_pct=0.03,
+        min_cash_balance_pct=0.25,
+        halt_on_drawdown=True,
+        universe_mode="ALL_TRADED_EQUITIES",
+        include_equities=True,
+        include_calls=True,
+        include_puts=True,
+        aperture=1.0,
+        walk_forward=True,
+        no_lookahead=True,
+        as_of_timeline_only=True,
     ):
         if end_date is None:
             end_date = self._latest_historical_date()
+
+        lookahead_enforced = (
+            walk_forward is True
+            and no_lookahead is True
+            and as_of_timeline_only is True
+        )
+
+        if not lookahead_enforced:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "engine": "HistoricalAccountSimulationEngine",
+                "status": "SIMULATION_REJECTED_LOOKAHEAD_DISCIPLINE_NOT_ENFORCED",
+                "future_visible": True,
+                "live_execution_enabled": False,
+            }
 
         perf = HistoricalDynamicTPPerformanceEngine().evaluate(
             start_date=start_date,
@@ -46,15 +75,68 @@ class HistoricalAccountSimulationEngine:
             tp3_pct=tp3_pct,
             runner_trail_pct=runner_trail_pct,
             max_trades_per_day=max_trades_per_day,
+            universe_mode=universe_mode,
+            include_equities=include_equities,
+            include_calls=include_calls,
+            include_puts=include_puts,
+            aperture=aperture,
+            walk_forward=walk_forward,
+            no_lookahead=no_lookahead,
+            as_of_timeline_only=as_of_timeline_only,
         )
 
         balance = float(starting_balance)
         equity_curve = []
         realized_trades = []
 
+        peak_balance = balance
+        halted = False
+        recovery_mode = False
+        halt_reason = None
+        skipped_trades = 0
+        resumed_trades = 0
+        recovery_trades = 0
+
         for i, trade in enumerate(perf.get("trades") or [], start=1):
+            if balance > peak_balance:
+                peak_balance = balance
+
+            current_drawdown_pct = ((balance - peak_balance) / peak_balance) * 100.0 if peak_balance else 0
+
+            if halt_on_drawdown and current_drawdown_pct <= max_account_drawdown_pct:
+                halted = True
+                recovery_mode = True
+                halt_reason = "MAX_ACCOUNT_DRAWDOWN_RECOVERY_MODE"
+
+            if recovery_mode and current_drawdown_pct >= recovery_resume_drawdown_pct:
+                recovery_mode = False
+                resumed_trades += 1
+
+            if balance <= float(starting_balance) * float(min_cash_balance_pct):
+                halted = True
+                halt_reason = "MIN_CASH_BALANCE_HALT"
+                skipped_trades += 1
+                continue
+
             entry_balance = balance
-            position_size = round(entry_balance * float(max_position_pct), 2)
+            if current_drawdown_pct <= -22.0:
+                skipped_trades += 1
+                continue
+            elif current_drawdown_pct <= -18.0:
+                active_position_pct = 0.005
+                recovery_mode = True
+            elif current_drawdown_pct <= -18.0:
+                active_position_pct = 0.02
+                recovery_mode = True
+            elif current_drawdown_pct <= -10.0:
+                active_position_pct = 0.05
+                recovery_mode = True
+            else:
+                active_position_pct = max_position_pct
+
+            if recovery_mode:
+                recovery_trades += 1
+            position_size = round(entry_balance * float(active_position_pct), 2)
             ret_pct = float(trade.get("return_pct") or 0)
             realized_pnl = round(position_size * (ret_pct / 100.0), 2)
             balance = round(balance + realized_pnl, 2)
@@ -70,6 +152,8 @@ class HistoricalAccountSimulationEngine:
                 "return_pct": ret_pct,
                 "entry_balance": round(entry_balance, 2),
                 "position_size": position_size,
+                "recovery_mode": recovery_mode,
+                "active_position_pct": active_position_pct,
                 "realized_pnl": realized_pnl,
                 "ending_balance": balance,
                 "winner": realized_pnl > 0,
@@ -113,7 +197,7 @@ class HistoricalAccountSimulationEngine:
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
             "engine": "HistoricalAccountSimulationEngine",
-            "simulation_mode": "ACCOUNT_LEVEL_REALIZED_PNL",
+            "simulation_mode": "ACCOUNT_LEVEL_REALIZED_PNL_FULL_APERTURE_WALK_FORWARD",
             "start_date": start_date,
             "end_date": end_date,
             "starting_balance": round(float(starting_balance), 2),
@@ -131,7 +215,36 @@ class HistoricalAccountSimulationEngine:
             "avg_loss": avg_loss,
             "max_drawdown_pct": max_drawdown_pct,
             "max_position_pct": max_position_pct,
+            "portfolio_governor": {
+                "enabled": True,
+                "halted": halted,
+                "halt_reason": halt_reason,
+                "max_account_drawdown_pct": max_account_drawdown_pct,
+                "min_cash_balance_pct": min_cash_balance_pct,
+                "recovery_resume_drawdown_pct": recovery_resume_drawdown_pct,
+                "recovery_position_pct": recovery_position_pct,
+                "tiered_drawdown_sizing": {
+                    "normal": max_position_pct,
+                    "drawdown_10_pct": 0.05,
+                    "drawdown_18_pct": 0.02,
+                    "drawdown_22_pct": 0.005,
+                    "drawdown_25_pct": "SKIP_TRADE"
+                },
+                "recovery_mode": recovery_mode,
+                "skipped_trades": skipped_trades,
+                "resumed_trades": resumed_trades,
+                "recovery_trades": recovery_trades,
+            },
             "max_trades_per_day": max_trades_per_day,
+            "universe_mode": universe_mode,
+            "include_equities": include_equities,
+            "include_calls": include_calls,
+            "include_puts": include_puts,
+            "aperture": aperture,
+            "walk_forward": walk_forward,
+            "no_lookahead": no_lookahead,
+            "as_of_timeline_only": as_of_timeline_only,
+            "lookahead_enforced": lookahead_enforced,
             "source_performance": {
                 "trade_count": perf.get("trade_count"),
                 "win_rate_pct": perf.get("win_rate_pct"),
@@ -140,12 +253,21 @@ class HistoricalAccountSimulationEngine:
                 "profit_factor": perf.get("profit_factor"),
                 "total_return_pct_sum": perf.get("total_return_pct_sum"),
                 "status": perf.get("status"),
+                "universe_mode": perf.get("universe_mode"),
+                "symbols_scored": perf.get("symbols_scored"),
+                "trading_days": perf.get("trading_days"),
+                "execute_signals_seen": perf.get("execute_signals_seen"),
+                "lookahead_enforced": perf.get("lookahead_enforced"),
+                "future_visible": perf.get("future_visible"),
+                "aperture_limit_note": perf.get("aperture_limit_note"),
             },
             "top_10_realized_trades": sorted(realized_trades, key=lambda x: x["realized_pnl"], reverse=True)[:10],
             "worst_10_realized_trades": sorted(realized_trades, key=lambda x: x["realized_pnl"])[:10],
             "equity_curve_tail": equity_curve[-20:],
             "realized_trades": realized_trades,
             "future_visible": False,
+            "timeline_awareness": "AS_OF_EACH_SIMULATED_DATE_ONLY",
+            "aperture_note": "Account engine accepts full-aperture intent. Source performance engine still determines actual historical universe coverage.",
             "live_execution_enabled": False,
             "status": "HISTORICAL_ACCOUNT_SIMULATION_READY",
         }
