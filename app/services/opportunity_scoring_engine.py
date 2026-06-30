@@ -54,7 +54,10 @@ class OpportunityScoringEngine:
             symbol_timings["liquidity_seconds"] = round((t1 - t0).total_seconds(), 2)
 
             t0 = datetime.utcnow()
-            setup_score = SetupScoringEngine().score_symbol(symbol).get('setup_score', 50)
+            setup_result = SetupScoringEngine().score_symbol(symbol)
+            setup_score = setup_result.get("setup_score", 50)
+            bullish_setup_score = setup_result.get("bullish_setup_score", setup_score)
+            bearish_setup_score = setup_result.get("bearish_setup_score", 100 - setup_score)
             t1 = datetime.utcnow()
             symbol_timings["setup_seconds"] = round((t1 - t0).total_seconds(), 2)
 
@@ -111,7 +114,7 @@ class OpportunityScoringEngine:
                 (
                     market_data_score * 0.08
                     + liquidity_score * 0.11
-                    + setup_score * 0.13
+                    + bullish_setup_score * 0.13
                     + regime_score * 0.11
                     + volatility_score * 0.07
                     + expected_value_score * 0.10
@@ -124,24 +127,32 @@ class OpportunityScoringEngine:
                 2
             )
 
+            # Directional mirror scores.
+            # Bullish components reward strength; bearish components must reward weakness.
+            bear_setup_score = bearish_setup_score
             bear_regime_score = 100 - regime_score
-            bear_breadth_score = 100 - breadth_score
+            # Do not let broad-market bullish breadth hard-zero valid sector/index PUT setups.
+            # Strong bullish breadth should dampen bearish trades, not erase them.
+            bear_breadth_score = max(35, 100 - breadth_score)
             bear_trend_score = 100 - trend_persistence_score
             bear_sponsorship_score = 100 - institutional_sponsorship_score
+            # Keep bearish EV from being mechanically crushed by bullish EV mirror.
+            bear_expected_value_score = max(45, 100 - expected_value_score)
+            bear_asymmetry_score = 100 - asymmetry_score
             bear_risk_score = risk_state_score
 
             bearish_score = round(
                 (
                     market_data_score * 0.08
                     + liquidity_score * 0.11
-                    + setup_score * 0.08
+                    + bear_setup_score * 0.08
                     + bear_regime_score * 0.13
                     + volatility_score * 0.12
-                    + expected_value_score * 0.09
+                    + bear_expected_value_score * 0.09
                     + bear_trend_score * 0.10
                     + bear_breadth_score * 0.10
                     + bear_sponsorship_score * 0.08
-                    + asymmetry_score * 0.06
+                    + bear_asymmetry_score * 0.06
                     + bear_risk_score * 0.05
                 ),
                 2
@@ -197,7 +208,10 @@ class OpportunityScoringEngine:
                 "market_data_score": market_data_score,
                 "liquidity_score": liquidity_score,
                 "setup_score": setup_score,
+                "bullish_setup_score": bullish_setup_score,
+                "bearish_setup_score": bearish_setup_score,
                 "regime_score": regime_score,
+                "bear_regime_score": bear_regime_score,
                 "regime": regime_result.get("regime"),
                 "regime_live_context": {
                     "last": regime_result.get("last"),
@@ -209,10 +223,15 @@ class OpportunityScoringEngine:
                 },
                 "volatility_score": volatility_score,
                 "expected_value_score": expected_value_score,
+                "bear_expected_value_score": bear_expected_value_score,
                 "trend_persistence_score": trend_persistence_score,
+                "bear_trend_score": bear_trend_score,
                 "breadth_score": breadth_score,
+                "bear_breadth_score": bear_breadth_score,
                 "institutional_sponsorship_score": institutional_sponsorship_score,
+                "bear_sponsorship_score": bear_sponsorship_score,
                 "asymmetry_score": asymmetry_score,
+                "bear_asymmetry_score": bear_asymmetry_score,
                 "risk_state_score": risk_state_score,
                 "risk_state": risk_state_result.get("risk_state"),
                 "risk_live_context": {

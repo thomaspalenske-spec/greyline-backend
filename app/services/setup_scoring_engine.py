@@ -80,6 +80,48 @@ class SetupScoringEngine:
             score += 8
             reasons.append("STRONG_DAILY_ADVANCE")
 
+        bullish_score = score
+
+        bearish_score = 60
+        bearish_reasons = []
+
+        if previous_close and last < previous_close:
+            bearish_score += 12
+            bearish_reasons.append("BELOW_PREVIOUS_CLOSE")
+        else:
+            bearish_score -= 10
+            bearish_reasons.append("ABOVE_PREVIOUS_CLOSE")
+
+        if vwap and last < vwap:
+            bearish_score += 12
+            bearish_reasons.append("BELOW_VWAP")
+        else:
+            bearish_score -= 10
+            bearish_reasons.append("ABOVE_VWAP")
+
+        if open_price and last < open_price:
+            bearish_score += 8
+            bearish_reasons.append("BELOW_OPEN")
+        else:
+            bearish_score -= 6
+            bearish_reasons.append("ABOVE_OPEN")
+
+        if close_location <= 0.25:
+            bearish_score += 10
+            bearish_reasons.append("CLOSE_NEAR_LOW")
+        elif close_location >= 0.75:
+            bearish_score -= 10
+            bearish_reasons.append("CLOSE_NEAR_HIGH")
+
+        if net_change_pct <= -2:
+            bearish_score += 8
+            bearish_reasons.append("STRONG_DAILY_DECLINE")
+        elif net_change_pct >= 3:
+            bearish_score -= 12
+            bearish_reasons.append("SHARP_DAILY_ADVANCE")
+
+        bearish_score = max(0, min(100, bearish_score))
+
         score = max(0, min(100, score))
 
         if score >= 85:
@@ -95,8 +137,11 @@ class SetupScoringEngine:
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
             "setup_score": round(score, 2),
+            "bullish_setup_score": round(bullish_score, 2),
+            "bearish_setup_score": round(bearish_score, 2),
             "setup_tier": setup_tier,
             "setup_reasons": reasons,
+            "bearish_setup_reasons": bearish_reasons,
             "setup_context": {
                 "last": last,
                 "open": open_price,
