@@ -183,7 +183,9 @@ from app.routes import opportunity_balance
 app.include_router(opportunity_balance.router)
 
 from app.routes import directional_opportunity_report
+from app.routes import directional_attribution_report
 app.include_router(directional_opportunity_report.router)
+app.include_router(directional_attribution_report.router)
 
 from app.routes import directional_readiness_dashboard
 app.include_router(directional_readiness_dashboard.router)

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from app.services.opportunity_summary_engine import OpportunitySummaryEngine
+from app.services.opportunity_scoring_engine import OpportunityScoringEngine
 
 
 class DirectionalAttributionReportEngine:
@@ -21,7 +21,7 @@ class DirectionalAttributionReportEngine:
     }
 
     def run(self, limit=100):
-        rows = OpportunitySummaryEngine().get_summary(limit=limit).get("opportunities", [])
+        rows = OpportunityScoringEngine().score_opportunities(limit=limit).get("opportunities", [])
 
         analyzed = [self._analyze(r) for r in rows]
         calls = [x for x in analyzed if x.get("option_type") == "CALL"]
@@ -107,6 +107,8 @@ class DirectionalAttributionReportEngine:
 
     def _num(self, value):
         try:
-            return float(value)
+            n = float(value)
         except (TypeError, ValueError):
             return 0.0
+
+        return max(0.0, min(100.0, n))
