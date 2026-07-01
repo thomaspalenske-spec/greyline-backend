@@ -78,7 +78,12 @@ class OpportunityScoringEngine:
             symbol_timings["trend_persistence_seconds"] = round((t1 - t0).total_seconds(), 2)
 
             t0 = datetime.utcnow()
-            breadth_score = BreadthScoringEngine().score_symbol(symbol).get("breadth_score", 50)
+            breadth_result = BreadthScoringEngine().score_symbol(symbol)
+            breadth_score = breadth_result.get("breadth_score", 50)
+            bearish_breadth_score = breadth_result.get(
+                "bearish_breadth_score",
+                max(35, 100 - breadth_score),
+            )
             t1 = datetime.utcnow()
             symbol_timings["breadth_seconds"] = round((t1 - t0).total_seconds(), 2)
 
@@ -141,7 +146,7 @@ class OpportunityScoringEngine:
             bear_regime_score = 100 - regime_score
             # Do not let broad-market bullish breadth hard-zero valid sector/index PUT setups.
             # Strong bullish breadth should dampen bearish trades, not erase them.
-            bear_breadth_score = max(35, 100 - breadth_score)
+            bear_breadth_score = max(35, bearish_breadth_score)
             bear_trend_score = 100 - trend_persistence_score
             bear_sponsorship_score = 100 - institutional_sponsorship_score
             # Keep bearish EV from being mechanically crushed by bullish EV mirror.

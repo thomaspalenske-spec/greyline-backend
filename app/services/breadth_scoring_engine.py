@@ -64,7 +64,9 @@ class BreadthScoringEngine:
         qqq = self._quote_context("QQQ")
 
         score = 50
+        bearish_score = 50
         reasons = []
+        bearish_reasons = []
 
         for context in [spy, qqq]:
             label = context.get("symbol")
@@ -76,30 +78,57 @@ class BreadthScoringEngine:
 
             if context.get("above_previous_close"):
                 score += 12
+                bearish_score -= 10
                 reasons.append(f"{label}_ABOVE_PREVIOUS_CLOSE")
+                bearish_reasons.append(f"{label}_ABOVE_PREVIOUS_CLOSE")
             else:
                 score -= 10
+                bearish_score += 12
                 reasons.append(f"{label}_BELOW_PREVIOUS_CLOSE")
+                bearish_reasons.append(f"{label}_BELOW_PREVIOUS_CLOSE")
 
             if context.get("above_vwap"):
                 score += 10
+                bearish_score -= 8
                 reasons.append(f"{label}_ABOVE_VWAP")
+                bearish_reasons.append(f"{label}_ABOVE_VWAP")
             else:
                 score -= 8
+                bearish_score += 10
                 reasons.append(f"{label}_BELOW_VWAP")
+                bearish_reasons.append(f"{label}_BELOW_VWAP")
 
             if context.get("net_change_pct", 0) <= -2:
                 score -= 8
+                bearish_score += 8
                 reasons.append(f"{label}_NEGATIVE_MOMENTUM")
+                bearish_reasons.append(f"{label}_NEGATIVE_MOMENTUM")
+            elif context.get("net_change_pct", 0) >= 2:
+                bearish_score -= 8
+                bearish_reasons.append(f"{label}_POSITIVE_MOMENTUM")
 
             if context.get("volume_confirming"):
                 score += 4
+                bearish_score += 4
                 reasons.append(f"{label}_VOLUME_CONFIRMING")
+                bearish_reasons.append(f"{label}_VOLUME_CONFIRMING")
             else:
                 score -= 3
+                bearish_score -= 3
                 reasons.append(f"{label}_VOLUME_NOT_CONFIRMING")
+                bearish_reasons.append(f"{label}_VOLUME_NOT_CONFIRMING")
 
         score = max(0, min(100, score))
+        bearish_score = max(0, min(100, bearish_score))
+
+        if bearish_score >= 80:
+            bearish_breadth_state = "BROAD_BEARISH_CONFIRMATION_LIVE"
+        elif bearish_score >= 65:
+            bearish_breadth_state = "MODERATE_BEARISH_CONFIRMATION_LIVE"
+        elif bearish_score >= 45:
+            bearish_breadth_state = "MIXED_BEARISH_BREADTH_LIVE"
+        else:
+            bearish_breadth_state = "BEARISH_BREADTH_WEAK_LIVE"
 
         if score >= 80:
             breadth_state = "BROAD_CONFIRMATION_LIVE"
@@ -114,8 +143,11 @@ class BreadthScoringEngine:
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
             "breadth_score": round(score, 2),
+            "bearish_breadth_score": round(bearish_score, 2),
             "breadth_state": breadth_state,
+            "bearish_breadth_state": bearish_breadth_state,
             "breadth_reasons": reasons,
+            "bearish_breadth_reasons": bearish_reasons,
             "market_breadth_context": {
                 "SPY": spy,
                 "QQQ": qqq
