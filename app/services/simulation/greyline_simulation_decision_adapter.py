@@ -117,6 +117,33 @@ class GreyLineSimulationDecisionAdapter:
             composite_score = bearish_score
             opposing_score = bullish_score
 
+        # Simulator-only calibration:
+        # Historical daily OHLCV lacks live institutional/flow inputs, so strong
+        # aligned replay conditions receive a bounded no-lookahead execution bonus.
+        historical_execution_bonus = 0
+
+        if directional_bias == "BULLISH":
+            if (
+                regime_result.get("regime_score", 50) >= 72
+                and trend_persistence_score >= 75
+                and bullish_setup_score >= 82
+                and risk_state_result.get("risk_state_score", 50) >= 75
+            ):
+                historical_execution_bonus = 6
+        else:
+            if (
+                bear_regime_score >= 70
+                and bear_trend_score >= 75
+                and bear_setup_score >= 82
+                and risk_state_result.get("risk_state_score", 50) >= 60
+            ):
+                historical_execution_bonus = 6
+
+        if composite_score + historical_execution_bonus < 85:
+            historical_execution_bonus = 0
+
+        composite_score = round(min(100, composite_score + historical_execution_bonus), 2)
+
         direction_confidence = round(abs(bullish_score - bearish_score), 2)
 
         if composite_score >= 85 and direction_confidence >= 5:
@@ -149,6 +176,7 @@ class GreyLineSimulationDecisionAdapter:
             "directional_bias": directional_bias,
             "option_type": option_type,
             "direction_confidence": direction_confidence,
+            "historical_execution_bonus": historical_execution_bonus,
             "market_data_score": market_data_score,
             "liquidity_score": liquidity_score,
             "setup_score": setup_score,

@@ -22,6 +22,10 @@ class HistoricalOpportunityScoringEngine:
         snapshot = replay.next()
 
         market_data = snapshot.get("market_data") if snapshot else None
+
+        if market_data:
+            market_data["history"] = replay.provider.get_history(symbol, timestamp, lookback=30)
+
         components = HistoricalComponentBuilder().build(market_data)
         candidate = GreyLineSimulationDecisionAdapter().evaluate(market_data, components)
 

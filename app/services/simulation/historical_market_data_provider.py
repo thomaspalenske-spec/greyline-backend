@@ -75,6 +75,38 @@ class HistoricalMarketDataProvider:
             "status": "HISTORICAL_MARKET_DATA_PROVIDER_READY",
         }
 
+
+    def get_history(self, symbol, timestamp, lookback=30):
+        """
+        Return historical daily rows up to and including timestamp.
+        No future rows are visible.
+        """
+        symbol = (symbol or "").upper().strip()
+
+        if isinstance(timestamp, datetime):
+            dt = timestamp
+        else:
+            dt = datetime.fromisoformat(str(timestamp))
+
+        self._load_symbol(symbol)
+        cutoff = dt.date().isoformat()
+        dates = [d for d in self._date_cache.get(symbol, []) if d <= cutoff]
+        dates = dates[-int(lookback):]
+
+        history = []
+        for d in dates:
+            row = self._row_cache.get(symbol, {}).get(d) or {}
+            history.append({
+                "date": d,
+                "open": self._num(float(row.get("open") or 0)),
+                "high": self._num(float(row.get("high") or 0)),
+                "low": self._num(float(row.get("low") or 0)),
+                "close": self._num(float(row.get("close") or 0)),
+                "volume": self._num(float(row.get("volume") or 0)),
+            })
+
+        return history
+
     def _load_symbol(self, symbol):
         symbol = (symbol or "").upper().strip()
         if symbol in self._row_cache:
