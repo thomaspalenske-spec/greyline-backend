@@ -12,10 +12,18 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 SYMBOLS = [
     "SPY", "QQQ", "IWM", "DIA",
+    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "TSLA", "AVGO", "AMD",
+    "JPM", "BAC", "WFC", "C", "GS", "MS", "V", "MA", "AXP",
+    "XOM", "CVX", "COP", "SLB", "EOG",
+    "UNH", "LLY", "JNJ", "MRK", "PFE", "ABBV", "TMO", "ABT", "DHR",
+    "WMT", "COST", "HD", "LOW", "TGT", "MCD", "SBUX", "NKE",
+    "NFLX", "DIS", "CMCSA", "ADBE", "CRM", "ORCL", "INTC", "CSCO", "QCOM", "TXN",
+    "BA", "CAT", "DE", "HON", "GE", "LMT", "RTX", "NOC",
+    "KO", "PEP", "PG", "PM", "MO", "CL",
+    "NEE", "DUK", "SO", "AEP",
+    "PLTR", "SNOW", "SHOP", "UBER", "ABNB", "COIN", "MSTR",
     "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC",
-    "SMH", "IBB", "KRE", "TLT", "GLD", "SLV", "USO",
-    "AAPL", "MSFT", "NVDA", "AMD", "AVGO", "META", "AMZN", "GOOGL", "TSLA",
-    "JPM", "BAC", "GS", "XOM", "CVX", "UNH", "LLY", "COST", "WMT", "HD"
+    "SMH", "IBB", "KRE", "TLT", "GLD", "SLV", "USO"
 ]
 
 
