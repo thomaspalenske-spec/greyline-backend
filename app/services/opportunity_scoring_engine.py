@@ -99,14 +99,22 @@ class OpportunityScoringEngine:
             risk_state_score = risk_state_result.get("risk_state_score", 50)
 
             t0 = datetime.utcnow()
-            expected_value_score = ExpectedValueScoringEngine().score_symbol(
+            expected_value_result = ExpectedValueScoringEngine().score_symbol(
                 symbol,
                 regime=regime_result,
                 risk=risk_state_result,
                 breadth={"breadth_score": breadth_score},
-                setup={"setup_score": setup_score},
+                setup={
+                    "setup_score": setup_score,
+                    "bearish_setup_score": bearish_setup_score,
+                },
                 asymmetry={"asymmetry_score": asymmetry_score},
-            ).get("expected_value_score", 50)
+            )
+            expected_value_score = expected_value_result.get("expected_value_score", 50)
+            bearish_expected_value_score = expected_value_result.get(
+                "bearish_expected_value_score",
+                max(45, 100 - expected_value_score),
+            )
             t1 = datetime.utcnow()
             symbol_timings["expected_value_seconds"] = round((t1 - t0).total_seconds(), 2)
 
@@ -137,7 +145,7 @@ class OpportunityScoringEngine:
             bear_trend_score = 100 - trend_persistence_score
             bear_sponsorship_score = 100 - institutional_sponsorship_score
             # Keep bearish EV from being mechanically crushed by bullish EV mirror.
-            bear_expected_value_score = max(45, 100 - expected_value_score)
+            bear_expected_value_score = bearish_expected_value_score
             bear_asymmetry_score = 100 - asymmetry_score
             bear_risk_score = risk_state_score
 
