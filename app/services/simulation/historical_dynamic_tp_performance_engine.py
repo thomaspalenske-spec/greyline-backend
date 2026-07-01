@@ -39,7 +39,31 @@ class HistoricalDynamicTPPerformanceEngine:
         tp3_pct=9.0,
         runner_trail_pct=-4.0,
         max_trades_per_day=1,
+        universe_mode="ALL_TRADED_EQUITIES",
+        include_equities=True,
+        include_calls=True,
+        include_puts=True,
+        aperture=1.0,
+        walk_forward=True,
+        no_lookahead=True,
+        as_of_timeline_only=True,
     ):
+        lookahead_enforced = (
+            walk_forward is True
+            and no_lookahead is True
+            and as_of_timeline_only is True
+        )
+
+        if not lookahead_enforced:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "engine": "HistoricalDynamicTPPerformanceEngine",
+                "status": "SIMULATION_REJECTED_LOOKAHEAD_DISCIPLINE_NOT_ENFORCED",
+                "future_visible": True,
+                "trades": [],
+            }
+
         symbols = sorted(
             p.name.replace("_daily.csv", "")
             for p in Path("app/data/historical").glob("*_daily.csv")
@@ -68,7 +92,12 @@ class HistoricalDynamicTPPerformanceEngine:
                 executes,
                 key=lambda x: x.get("composite_score") or 0,
                 reverse=True,
-            )[:max_trades_per_day]
+            )
+
+            daily_execute_count = len(executes)
+
+            if aperture < 1.0 and max_trades_per_day:
+                executes = executes[:max_trades_per_day]
 
             for signal in executes:
                 execute_seen += 1
@@ -104,6 +133,17 @@ class HistoricalDynamicTPPerformanceEngine:
             "engine": "HistoricalDynamicTPPerformanceEngine",
             "start_date": start_date,
             "end_date": end_date,
+            "universe_mode": universe_mode,
+            "include_equities": include_equities,
+            "include_calls": include_calls,
+            "include_puts": include_puts,
+            "aperture": aperture,
+            "walk_forward": walk_forward,
+            "no_lookahead": no_lookahead,
+            "as_of_timeline_only": as_of_timeline_only,
+            "lookahead_enforced": lookahead_enforced,
+            "future_visible": False,
+            "timeline_awareness": "AS_OF_EACH_SIMULATED_DATE_ONLY",
             "symbols_scored": len(symbols),
             "trading_days": len(dates),
             "execute_signals_seen": execute_seen,
@@ -126,6 +166,7 @@ class HistoricalDynamicTPPerformanceEngine:
             "tp3_pct": tp3_pct,
             "runner_trail_pct": runner_trail_pct,
             "max_trades_per_day": max_trades_per_day,
+            "aperture_limit_note": "aperture=1.0 disables max_trades_per_day slicing; aperture<1.0 applies max_trades_per_day.",
             "top_25_trades": sorted(trades, key=lambda x: x["return_pct"], reverse=True)[:25],
             "worst_25_trades": sorted(trades, key=lambda x: x["return_pct"])[:25],
             "trades": trades,
