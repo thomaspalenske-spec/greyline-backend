@@ -37,7 +37,9 @@ class RegimeScoringEngine:
         is_delayed = market_flags.get("IsDelayed") is True
 
         score = 60
+        bearish_score = 60
         regime = "NEUTRAL_LIVE"
+        bearish_regime = "NEUTRAL_BEARISH_LIVE"
 
         if is_halted:
             score = 20
@@ -48,25 +50,34 @@ class RegimeScoringEngine:
         else:
             if previous_close and last > previous_close:
                 score += 12
+                bearish_score -= 10
             elif previous_close and last < previous_close:
                 score -= 10
+                bearish_score += 12
 
             if vwap and last > vwap:
                 score += 10
+                bearish_score -= 8
             elif vwap and last < vwap:
                 score -= 8
+                bearish_score += 10
 
             if previous_volume and volume > previous_volume:
                 score += 6
+                bearish_score += 6
             elif previous_volume and volume < previous_volume * 0.5:
                 score -= 4
+                bearish_score -= 4
 
             if net_change_pct >= 2:
                 score += 8
+                bearish_score -= 8
             elif net_change_pct <= -2:
                 score -= 8
+                bearish_score += 8
 
             score = max(0, min(100, score))
+            bearish_score = max(0, min(100, bearish_score))
 
             if score >= 85:
                 regime = "STRONG_LIVE_TREND"
@@ -77,11 +88,22 @@ class RegimeScoringEngine:
             else:
                 regime = "WEAK_LIVE"
 
+            if bearish_score >= 85:
+                bearish_regime = "STRONG_BEARISH_LIVE_TREND"
+            elif bearish_score >= 70:
+                bearish_regime = "CONSTRUCTIVE_BEARISH_LIVE"
+            elif bearish_score >= 50:
+                bearish_regime = "NEUTRAL_BEARISH_LIVE"
+            else:
+                bearish_regime = "WEAK_BEARISH_LIVE"
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
             "regime_score": round(score, 2),
+            "bearish_regime_score": round(bearish_score, 2),
             "regime": regime,
+            "bearish_regime": bearish_regime,
             "last": last,
             "previous_close": previous_close,
             "vwap": vwap,

@@ -119,6 +119,23 @@ class OptionsPaperTradeLedgerEngine:
             "contract_status": status,
         }
 
+
+    def _open_deployed_capital(self):
+        if not self.ledger_file.exists():
+            return 0.0
+
+        deployed = 0.0
+        for line in self.ledger_file.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                trade = json.loads(line)
+            except Exception:
+                continue
+            if trade.get("status") == "OPEN":
+                deployed += float(trade.get("estimated_cost") or 0)
+        return round(deployed, 2)
+
     def record_trade(self, candidate, source="OPTIONS_CYCLE_ENGINE", max_position_pct=0.05, candidate_score=None):
         legs = candidate.get("Legs") or [{}]
         leg = legs[0]
@@ -135,6 +152,54 @@ class OptionsPaperTradeLedgerEngine:
             option_ask=float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0),
             max_position_pct=max_position_pct,
         )
+
+        estimated_position_cost = float(sizing.get("estimated_position_cost") or 0)
+        deployed_capital = self._open_deployed_capital()
+        account_equity = 10000.0
+        max_total_deployed_pct = 0.95
+        max_total_deployed = round(account_equity * max_total_deployed_pct, 2)
+        available_cash = round(account_equity - deployed_capital, 2)
+        available_exposure_capacity = round(max_total_deployed - deployed_capital, 2)
+
+        if estimated_position_cost > available_exposure_capacity:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_TRADE_LEDGER",
+                "paper_trade_recorded": False,
+                "reason": "OPTIONS_PORTFOLIO_EXPOSURE_CAP_BLOCK",
+                "candidate_score": candidate_score,
+                "max_position_pct_used": max_position_pct,
+                "position_sizing": sizing,
+                "deployed_capital": deployed_capital,
+                "account_equity": account_equity,
+                "max_total_deployed_pct": max_total_deployed_pct,
+                "max_total_deployed": max_total_deployed,
+                "available_exposure_capacity": available_exposure_capacity,
+                "available_cash": available_cash,
+                "estimated_position_cost": estimated_position_cost,
+                "execution_enabled": False,
+                "order_placement_allowed": False,
+                "status": "OPTIONS_PAPER_TRADE_EXPOSURE_BLOCKED",
+            }
+
+        if estimated_position_cost > available_cash:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_TRADE_LEDGER",
+                "paper_trade_recorded": False,
+                "reason": "INSUFFICIENT_OPTIONS_PAPER_CASH",
+                "candidate_score": candidate_score,
+                "max_position_pct_used": max_position_pct,
+                "position_sizing": sizing,
+                "deployed_capital": deployed_capital,
+                "available_cash": available_cash,
+                "estimated_position_cost": estimated_position_cost,
+                "execution_enabled": False,
+                "order_placement_allowed": False,
+                "status": "OPTIONS_PAPER_TRADE_CASH_BLOCKED",
+            }
 
         if int(sizing.get("recommended_contracts") or 0) <= 0:
             return {

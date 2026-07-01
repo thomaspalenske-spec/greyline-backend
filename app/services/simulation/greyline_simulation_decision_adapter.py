@@ -78,7 +78,10 @@ class GreyLineSimulationDecisionAdapter:
         )
 
         bear_setup_score = bearish_setup_score
-        bear_regime_score = 100 - regime_result.get("regime_score", 50)
+        bear_regime_score = component_overrides.get(
+            "bearish_regime_score",
+            regime_result.get("bearish_regime_score", 100 - regime_result.get("regime_score", 50)),
+        )
         bear_breadth_score = max(35, 100 - breadth_score)
         bear_trend_score = 100 - trend_persistence_score
         bear_sponsorship_score = 100 - institutional_sponsorship_score
@@ -151,6 +154,7 @@ class GreyLineSimulationDecisionAdapter:
             "setup_score": setup_score,
             "bullish_setup_score": bullish_setup_score,
             "bearish_setup_score": bearish_setup_score,
+            "regime": regime_result.get("regime"),
             "regime_score": regime_result.get("regime_score", 50),
             "bear_regime_score": bear_regime_score,
             "volatility_score": volatility_score,
@@ -164,6 +168,7 @@ class GreyLineSimulationDecisionAdapter:
             "bear_sponsorship_score": bear_sponsorship_score,
             "asymmetry_score": asymmetry_score,
             "bear_asymmetry_score": bear_asymmetry_score,
+            "risk_state": risk_state_result.get("risk_state"),
             "risk_state_score": risk_state_result.get("risk_state_score", 50),
             "governor": governor,
             "emulation_target": "OpportunityScoringEngine",

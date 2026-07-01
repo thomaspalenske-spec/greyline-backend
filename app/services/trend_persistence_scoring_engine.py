@@ -39,21 +39,31 @@ class TrendPersistenceScoringEngine:
         net_change_pct = self._float(quote.get("NetChangePct"))
 
         score = 60
+        bearish_score = 60
         reasons = []
+        bearish_reasons = []
 
         if previous_close and last > previous_close:
             score += 14
+            bearish_score -= 12
             reasons.append("ABOVE_PREVIOUS_CLOSE")
+            bearish_reasons.append("ABOVE_PREVIOUS_CLOSE")
         else:
             score -= 12
+            bearish_score += 14
             reasons.append("BELOW_PREVIOUS_CLOSE")
+            bearish_reasons.append("BELOW_PREVIOUS_CLOSE")
 
         if vwap and last > vwap:
             score += 14
+            bearish_score -= 12
             reasons.append("ABOVE_VWAP")
+            bearish_reasons.append("ABOVE_VWAP")
         else:
             score -= 12
+            bearish_score += 14
             reasons.append("BELOW_VWAP")
+            bearish_reasons.append("BELOW_VWAP")
 
         day_range = high - low if high and low else 0
         close_location = 0.5
@@ -63,19 +73,28 @@ class TrendPersistenceScoringEngine:
 
         if close_location >= 0.70:
             score += 12
+            bearish_score -= 12
             reasons.append("CLOSE_IN_UPPER_RANGE")
+            bearish_reasons.append("CLOSE_IN_UPPER_RANGE")
         elif close_location <= 0.30:
             score -= 12
+            bearish_score += 12
             reasons.append("CLOSE_IN_LOWER_RANGE")
+            bearish_reasons.append("CLOSE_IN_LOWER_RANGE")
 
         if net_change_pct >= 2:
             score += 10
+            bearish_score -= 10
             reasons.append("POSITIVE_MOMENTUM")
+            bearish_reasons.append("POSITIVE_MOMENTUM")
         elif net_change_pct <= -2:
             score -= 10
+            bearish_score += 10
             reasons.append("NEGATIVE_MOMENTUM")
+            bearish_reasons.append("NEGATIVE_MOMENTUM")
 
         score = max(0, min(100, score))
+        bearish_score = max(0, min(100, bearish_score))
 
         if score >= 85:
             trend_state = "ELITE_TREND_PERSISTENCE_LIVE"
@@ -86,12 +105,24 @@ class TrendPersistenceScoringEngine:
         else:
             trend_state = "TREND_FAILURE_RISK_LIVE"
 
+        if bearish_score >= 85:
+            bearish_trend_state = "ELITE_BEARISH_TREND_PERSISTENCE_LIVE"
+        elif bearish_score >= 75:
+            bearish_trend_state = "STRONG_BEARISH_TREND_PERSISTENCE_LIVE"
+        elif bearish_score >= 60:
+            bearish_trend_state = "DEVELOPING_BEARISH_TREND_LIVE"
+        else:
+            bearish_trend_state = "BEARISH_TREND_FAILURE_RISK_LIVE"
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
             "trend_persistence_score": round(score, 2),
+            "bearish_trend_persistence_score": round(bearish_score, 2),
             "trend_state": trend_state,
+            "bearish_trend_state": bearish_trend_state,
             "trend_reasons": reasons,
+            "bearish_trend_reasons": bearish_reasons,
             "trend_context": {
                 "last": last,
                 "high": high,

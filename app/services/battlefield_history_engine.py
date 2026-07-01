@@ -51,7 +51,7 @@ class BattlefieldHistoryEngine:
         if not symbol or not cls._path.exists():
             return 0
 
-        first_seen = None
+        last_seen = None
         now = datetime.utcnow()
 
         with open(cls._path) as f:
@@ -64,18 +64,14 @@ class BattlefieldHistoryEngine:
                 for key in ["best_call", "best_put"]:
                     item = row.get(key) or {}
                     if item.get("symbol") == symbol and item.get("option_type") == option_type:
-                        first_seen = row.get("timestamp")
-                        break
+                        last_seen = row.get("timestamp")
 
-                if first_seen:
-                    break
-
-        if not first_seen:
+        if not last_seen:
             return 0
 
         try:
-            first_dt = datetime.fromisoformat(first_seen)
-            return round(max((now - first_dt).total_seconds(), 0) / 86400, 4)
+            last_dt = datetime.fromisoformat(last_seen)
+            return round(max((now - last_dt).total_seconds(), 0) / 86400, 4)
         except Exception:
             return 0
 

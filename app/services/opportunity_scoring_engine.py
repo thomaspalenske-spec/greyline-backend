@@ -66,6 +66,7 @@ class OpportunityScoringEngine:
             t1 = datetime.utcnow()
             symbol_timings["regime_seconds"] = round((t1 - t0).total_seconds(), 2)
             regime_score = regime_result.get("regime_score", 50)
+            bearish_regime_score = regime_result.get("bearish_regime_score", 100 - regime_score)
 
             t0 = datetime.utcnow()
             volatility_score = VolatilityScoringEngine().score_symbol(symbol).get("volatility_score", 50)
@@ -73,7 +74,12 @@ class OpportunityScoringEngine:
             symbol_timings["volatility_seconds"] = round((t1 - t0).total_seconds(), 2)
 
             t0 = datetime.utcnow()
-            trend_persistence_score = TrendPersistenceScoringEngine().score_symbol(symbol).get("trend_persistence_score", 50)
+            trend_persistence_result = TrendPersistenceScoringEngine().score_symbol(symbol)
+            trend_persistence_score = trend_persistence_result.get("trend_persistence_score", 50)
+            bearish_trend_persistence_score = trend_persistence_result.get(
+                "bearish_trend_persistence_score",
+                max(35, 100 - trend_persistence_score),
+            )
             t1 = datetime.utcnow()
             symbol_timings["trend_persistence_seconds"] = round((t1 - t0).total_seconds(), 2)
 
@@ -143,11 +149,11 @@ class OpportunityScoringEngine:
             # Directional mirror scores.
             # Bullish components reward strength; bearish components must reward weakness.
             bear_setup_score = bearish_setup_score
-            bear_regime_score = 100 - regime_score
+            bear_regime_score = bearish_regime_score
             # Do not let broad-market bullish breadth hard-zero valid sector/index PUT setups.
             # Strong bullish breadth should dampen bearish trades, not erase them.
             bear_breadth_score = max(35, bearish_breadth_score)
-            bear_trend_score = 100 - trend_persistence_score
+            bear_trend_score = bearish_trend_persistence_score
             bear_sponsorship_score = 100 - institutional_sponsorship_score
             # Keep bearish EV from being mechanically crushed by bullish EV mirror.
             bear_expected_value_score = bearish_expected_value_score
