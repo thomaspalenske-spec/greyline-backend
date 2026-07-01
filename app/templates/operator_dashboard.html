@@ -30,7 +30,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -141,11 +141,11 @@ button.primary {
 }
 
 .metrics {
-  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  grid-template-columns: repeat(6, minmax(190px, 1fr));
 }
 
 .health {
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(190px, 1fr));
   margin-top: 14px;
 }
 
@@ -184,7 +184,7 @@ button.primary {
 
 .content {
   display: grid;
-  grid-template-columns: 1.2fr 1.8fr;
+  grid-template-columns: minmax(520px, 0.9fr) minmax(900px, 1.6fr);
   gap: 14px;
   margin-top: 14px;
 }
@@ -198,7 +198,7 @@ button.primary {
 
 .battlefield {
   display: grid;
-  grid-template-columns: 210px 1fr;
+  grid-template-columns: minmax(260px, 0.75fr) minmax(420px, 1.25fr);
   gap: 14px;
 }
 
@@ -245,7 +245,7 @@ td {
 
 .two-col {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
   margin-top: 14px;
 }
@@ -273,6 +273,164 @@ td {
   .health { grid-template-columns: repeat(2, 1fr); }
   .content, .two-col, .battlefield { grid-template-columns: 1fr; }
 }
+
+/* ===== GREYLINE COMMAND CENTER LAYOUT FIX ===== */
+body {
+    overflow-x: hidden !important;
+}
+
+.main-content,
+.dashboard-content,
+.content,
+.container,
+.wrapper {
+    max-width: none !important;
+    width: 100% !important;
+}
+
+.metric-grid,
+.stats-grid,
+.overview-grid,
+.cards-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+    gap: 16px !important;
+}
+
+.metric-card,
+.stat-card,
+.card {
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+
+.metric-card *,
+.stat-card *,
+.card * {
+    text-overflow: clip !important;
+}
+
+.metric-value,
+.stat-value,
+.value,
+.big-number {
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    font-size: clamp(24px, 2vw, 38px) !important;
+    line-height: 1.1 !important;
+}
+
+.dashboard-grid,
+.command-grid {
+    display: grid !important;
+    grid-template-columns: minmax(420px, 0.85fr) minmax(720px, 1.35fr) !important;
+    gap: 16px !important;
+    align-items: start !important;
+}
+
+.positions-table,
+.open-positions table,
+table {
+    width: 100% !important;
+}
+
+.open-positions,
+.positions-panel,
+.table-card {
+    overflow-x: auto !important;
+}
+
+td,
+th {
+    white-space: nowrap !important;
+}
+
+@media (max-width: 1400px) {
+    .dashboard-grid,
+    .command-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+
+/* ===== GREYLINE SURGICAL COMMAND CENTER FIX ===== */
+.app {
+  width: 100vw !important;
+  max-width: none !important;
+  grid-template-columns: 260px minmax(0, 1fr) !important;
+}
+
+.main {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  padding-right: 28px !important;
+}
+
+.metrics {
+  grid-template-columns: repeat(6, minmax(190px, 1fr)) !important;
+}
+
+.health {
+  grid-template-columns: repeat(5, minmax(190px, 1fr)) !important;
+}
+
+.content {
+  grid-template-columns: minmax(520px, 0.9fr) minmax(900px, 1.6fr) !important;
+}
+
+.battlefield {
+  grid-template-columns: minmax(260px, 0.75fr) minmax(420px, 1.25fr) !important;
+}
+
+.card {
+  min-width: 0 !important;
+}
+
+.value {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  font-size: clamp(28px, 1.65vw, 38px) !important;
+}
+
+table {
+  min-width: 980px !important;
+}
+
+.content > .card:nth-child(2) {
+  overflow-x: auto !important;
+}
+
+@media (max-width: 1700px) {
+  .metrics { grid-template-columns: repeat(3, minmax(220px, 1fr)) !important; }
+  .health { grid-template-columns: repeat(3, minmax(220px, 1fr)) !important; }
+  .content { grid-template-columns: 1fr !important; }
+}
+
+
+/* ===== STICKY OPEN POSITIONS HEADER ===== */
+
+.content > .card:nth-child(2){
+    overflow:auto !important;
+    max-height:700px;
+}
+
+.content > .card:nth-child(2) table{
+    border-collapse:separate;
+    border-spacing:0;
+}
+
+.content > .card:nth-child(2) thead th{
+    position:sticky;
+    top:0;
+    z-index:100;
+    background:#161b22;
+    color:#dbe4ee;
+    border-bottom:2px solid #2d333b;
+}
+
 </style>
 </head>
 
