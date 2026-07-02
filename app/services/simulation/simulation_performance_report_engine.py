@@ -1,0 +1,60 @@
+class SimulationPerformanceReportEngine:
+    """
+    Summarizes completed simulation performance.
+    Reporting only. Does not change trading logic.
+    """
+
+    def build(self, simulation_result):
+        simulation_result = simulation_result or {}
+        decisions = simulation_result.get("decisions") or []
+
+        closed = []
+        for d in decisions:
+            closed.extend(d.get("closed_positions") or [])
+
+        wins = [p for p in closed if float(p.get("realized_pnl") or 0) > 0]
+        losses = [p for p in closed if float(p.get("realized_pnl") or 0) < 0]
+
+        realized_pnl = round(sum(float(p.get("realized_pnl") or 0) for p in closed), 2)
+        gross_profit = round(sum(float(p.get("realized_pnl") or 0) for p in wins), 2)
+        gross_loss = round(abs(sum(float(p.get("realized_pnl") or 0) for p in losses)), 2)
+
+        trade_count = len(closed)
+        win_rate = round((len(wins) / trade_count) * 100, 2) if trade_count else 0
+        avg_win = round(gross_profit / len(wins), 2) if wins else 0
+        avg_loss = round(gross_loss / len(losses), 2) if losses else 0
+        profit_factor = round(gross_profit / gross_loss, 2) if gross_loss else None
+        expectancy = round(realized_pnl / trade_count, 2) if trade_count else 0
+
+        starting_capital = float(simulation_result.get("starting_capital") or 0)
+        ending_capital = float(simulation_result.get("ending_capital") or 0)
+        open_positions = simulation_result.get("open_positions") or []
+        open_position_value = round(sum(
+            float(p.get("shares") or 0) * float(p.get("current_price") or 0)
+            for p in open_positions
+        ), 2)
+
+        total_equity = round(ending_capital + open_position_value, 2)
+        return_pct = round(((total_equity - starting_capital) / starting_capital) * 100, 2) if starting_capital else 0
+
+        return {
+            "engine": "SimulationPerformanceReportEngine",
+            "trade_count": trade_count,
+            "winning_trades": len(wins),
+            "losing_trades": len(losses),
+            "win_rate_pct": win_rate,
+            "realized_pnl": realized_pnl,
+            "gross_profit": gross_profit,
+            "gross_loss": gross_loss,
+            "average_winner": avg_win,
+            "average_loser": avg_loss,
+            "profit_factor": profit_factor,
+            "expectancy_per_trade": expectancy,
+            "starting_capital": starting_capital,
+            "ending_cash": ending_capital,
+            "open_position_count": len(open_positions),
+            "open_position_value": open_position_value,
+            "total_equity": total_equity,
+            "return_pct": return_pct,
+            "status": "SIMULATION_PERFORMANCE_REPORT_READY",
+        }
