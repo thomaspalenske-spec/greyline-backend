@@ -58,6 +58,8 @@ class SimulationExitEngine:
                     "realized_pnl": round(realized_pnl, 2),
                     "capital_returned": round(capital_returned, 2),
                     "total_cash_returned": round(capital_returned + realized_pnl, 2),
+                    "capital_deployed_returned": round(capital_returned, 2),
+                    "net_cash_returned": round(capital_returned + realized_pnl, 2),
                     "exit_reason": exit_reason,
                     "exit_doctrine": doctrine,
                     "status": "CLOSED",
