@@ -55,12 +55,22 @@ class HistoricalComponentBuilder:
         bearish_setup_score = min(100, max(0, 55 + downside_blend * 5.0 + (50 - close_location_pct) * 0.18))
 
         volatility_score = min(100, max(0, 100 - intraday_range_pct * 8))
-        trend_persistence_score = min(100, max(0, 55 + momentum_blend * 4.0))
+        trend_persistence_score = min(100, max(0,
+            58
+            + momentum_blend * 4.8
+            + ret_20 * 0.35
+            + (close_location_pct - 50) * 0.06
+        ))
         asymmetry_score = min(100, max(0, 55 + momentum_blend * 3.5 + min(10, max(-10, (volume_pressure - 1) * 20))))
 
         liquidity_score = 90 if volume and volume > 0 else 50
 
-        regime_score = min(100, max(0, 55 + momentum_blend * 3.5))
+        regime_score = min(100, max(0,
+            58
+            + momentum_blend * 4.2
+            + ret_20 * 0.30
+            + max(0, ret_10) * 0.20
+        ))
 
         # Simulator-only risk model:
         # Do not treat all high range / high momentum days as automatically stressed.
@@ -79,8 +89,29 @@ class HistoricalComponentBuilder:
             + liquidity_credit
         ))
 
-        breadth_score = min(100, max(0, 55 + momentum_blend * 2.8))
-        institutional_sponsorship_score = min(100, max(0, 55 + momentum_blend * 3.0 + min(8, max(-8, (volume_pressure - 1) * 16))))
+        # Simulator-only historical proxies:
+        # Single-symbol replay lacks true market breadth and institutional flow.
+        # Infer both from persistent multi-window trend, close strength, and volume pressure.
+        breadth_score = min(100, max(0,
+            58
+            + momentum_blend * 3.6
+            + ret_20 * 0.55
+            + (close_location_pct - 50) * 0.10
+        ))
+
+        institutional_sponsorship_score = min(100, max(0,
+            58
+            + momentum_blend * 3.8
+            + min(12, max(-8, (volume_pressure - 1) * 22))
+            + max(0, ret_10) * 0.45
+        ))
+
+        asymmetry_score = min(100, max(0,
+            58
+            + momentum_blend * 4.0
+            + (100 - volatility_score) * 0.08
+            + (close_location_pct - 50) * 0.08
+        ))
 
         if regime_score >= 65:
             regime = "STRONG_LIVE_TREND"
