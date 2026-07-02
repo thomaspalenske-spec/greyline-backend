@@ -146,12 +146,26 @@ class GreyLineSimulationDecisionAdapter:
 
         direction_confidence = round(abs(bullish_score - bearish_score), 2)
 
+        execution_blockers = []
+
+        if composite_score < 85:
+            execution_blockers.append("COMPOSITE_SCORE_BELOW_85")
+        if direction_confidence < 5:
+            execution_blockers.append("DIRECTION_CONFIDENCE_BELOW_5")
+        if liquidity_score < 70:
+            execution_blockers.append("LIQUIDITY_BELOW_70")
+
         if composite_score >= 85 and direction_confidence >= 5:
             result = "EXECUTE"
         elif composite_score >= 60:
             result = "WATCH"
         else:
             result = "REJECT"
+
+        if regime_result.get("regime") == "WEAK_LIVE":
+            execution_blockers.append("REGIME_WEAK_LIVE")
+        if risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]:
+            execution_blockers.append("RISK_STATE_DEFENSIVE_OR_STRESSED")
 
         if (
             regime_result.get("regime") == "WEAK_LIVE"
@@ -177,6 +191,7 @@ class GreyLineSimulationDecisionAdapter:
             "option_type": option_type,
             "direction_confidence": direction_confidence,
             "historical_execution_bonus": historical_execution_bonus,
+            "execution_blockers": execution_blockers,
             "market_data_score": market_data_score,
             "liquidity_score": liquidity_score,
             "setup_score": setup_score,
