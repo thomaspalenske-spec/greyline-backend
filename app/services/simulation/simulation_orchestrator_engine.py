@@ -116,6 +116,10 @@ class SimulationOrchestratorEngine:
                     "institutional_flow_mode": institutional.get("flow_mode"),
                     "capital": capital,
                 }
+                # Execution must obey the adapter's final gated result.
+                # This prevents blocked candidates from filling when raw adjusted_score says EXECUTE.
+                decision["decision"] = candidate.get("result", decision.get("decision"))
+
                 execution = SimulationExecutionEngine().evaluate(decision, capital)
                 capital = execution.get("capital_after", capital)
 
