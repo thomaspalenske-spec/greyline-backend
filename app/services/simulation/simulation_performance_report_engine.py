@@ -37,6 +37,43 @@ class SimulationPerformanceReportEngine:
         total_equity = round(ending_capital + open_position_value, 2)
         return_pct = round(((total_equity - starting_capital) / starting_capital) * 100, 2) if starting_capital else 0
 
+        by_score_bucket = {
+            "85_to_89_99": [],
+            "90_to_94_99": [],
+            "95_plus": [],
+            "unknown": [],
+        }
+
+        for p_closed in closed:
+            score = p_closed.get("composite_score")
+            try:
+                score = float(score)
+            except Exception:
+                score = None
+
+            if score is None:
+                by_score_bucket["unknown"].append(p_closed)
+            elif score >= 95:
+                by_score_bucket["95_plus"].append(p_closed)
+            elif score >= 90:
+                by_score_bucket["90_to_94_99"].append(p_closed)
+            elif score >= 85:
+                by_score_bucket["85_to_89_99"].append(p_closed)
+            else:
+                by_score_bucket["unknown"].append(p_closed)
+
+        score_bucket_report = {}
+        for bucket, subset in by_score_bucket.items():
+            pnl = round(sum(float(p.get("realized_pnl") or 0) for p in subset), 2)
+            wins_subset = [p for p in subset if float(p.get("realized_pnl") or 0) > 0]
+            score_bucket_report[bucket] = {
+                "trade_count": len(subset),
+                "winning_trades": len(wins_subset),
+                "win_rate_pct": round((len(wins_subset) / len(subset)) * 100, 2) if subset else 0,
+                "realized_pnl": pnl,
+                "expectancy_per_trade": round(pnl / len(subset), 2) if subset else 0,
+            }
+
         by_option_type = {}
         for option_type in ["CALL", "PUT"]:
             subset = [p for p in closed if p.get("option_type") == option_type]
@@ -70,5 +107,6 @@ class SimulationPerformanceReportEngine:
             "total_equity": total_equity,
             "return_pct": return_pct,
             "performance_by_option_type": by_option_type,
+            "performance_by_score_bucket": score_bucket_report,
             "status": "SIMULATION_PERFORMANCE_REPORT_READY",
         }

@@ -36,6 +36,8 @@ class SimulationExecutionEngine:
             "action": "BUY_TO_OPEN",
             "symbol": decision_row.get("symbol"),
             "direction": candidate.get("directional_bias"),
+            "option_type": candidate.get("option_type"),
+            "composite_score": candidate.get("composite_score"),
             "entry_price": close,
             "shares": shares,
             "capital_deployed": deployed,

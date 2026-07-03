@@ -18,6 +18,7 @@ class SimulationPositionEngine:
                 "symbol": execution.get("symbol"),
                 "direction": execution.get("direction"),
                 "option_type": execution.get("option_type") or ("PUT" if execution.get("direction") == "BEARISH" else "CALL"),
+                "composite_score": execution.get("composite_score"),
                 "entry_price": execution.get("entry_price"),
                 "shares": execution.get("shares"),
                 "capital_deployed": execution.get("capital_deployed"),
