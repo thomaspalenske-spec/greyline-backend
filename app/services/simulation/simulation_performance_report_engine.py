@@ -37,6 +37,47 @@ class SimulationPerformanceReportEngine:
         total_equity = round(ending_capital + open_position_value, 2)
         return_pct = round(((total_equity - starting_capital) / starting_capital) * 100, 2) if starting_capital else 0
 
+        by_risk_state_score_bucket = {
+            "under_70": [],
+            "70_to_74_99": [],
+            "75_to_79_99": [],
+            "80_to_84_99": [],
+            "85_plus": [],
+            "unknown": [],
+        }
+
+        for p_closed in closed:
+            score = p_closed.get("risk_state_score")
+            try:
+                score = float(score)
+            except Exception:
+                score = None
+
+            if score is None:
+                by_risk_state_score_bucket["unknown"].append(p_closed)
+            elif score >= 85:
+                by_risk_state_score_bucket["85_plus"].append(p_closed)
+            elif score >= 80:
+                by_risk_state_score_bucket["80_to_84_99"].append(p_closed)
+            elif score >= 75:
+                by_risk_state_score_bucket["75_to_79_99"].append(p_closed)
+            elif score >= 70:
+                by_risk_state_score_bucket["70_to_74_99"].append(p_closed)
+            else:
+                by_risk_state_score_bucket["under_70"].append(p_closed)
+
+        risk_state_score_bucket_report = {}
+        for bucket, subset in by_risk_state_score_bucket.items():
+            pnl = round(sum(float(p.get("realized_pnl") or 0) for p in subset), 2)
+            wins_subset = [p for p in subset if float(p.get("realized_pnl") or 0) > 0]
+            risk_state_score_bucket_report[bucket] = {
+                "trade_count": len(subset),
+                "winning_trades": len(wins_subset),
+                "win_rate_pct": round((len(wins_subset) / len(subset)) * 100, 2) if subset else 0,
+                "realized_pnl": pnl,
+                "expectancy_per_trade": round(pnl / len(subset), 2) if subset else 0,
+            }
+
         by_risk_state = {}
         for p_closed in closed:
             risk_state = p_closed.get("risk_state") or "UNKNOWN"
@@ -220,6 +261,7 @@ class SimulationPerformanceReportEngine:
             "performance_by_regime": regime_report,
             "performance_by_regime_score_bucket": regime_score_bucket_report,
             "performance_by_risk_state": risk_state_report,
+            "performance_by_risk_state_score_bucket": risk_state_score_bucket_report,
             "performance_by_exit_reason": exit_reason_report,
             "status": "SIMULATION_PERFORMANCE_REPORT_READY",
         }
