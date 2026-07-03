@@ -17,6 +17,7 @@ class SimulationPositionEngine:
             open_positions.append({
                 "symbol": execution.get("symbol"),
                 "direction": execution.get("direction"),
+                "option_type": execution.get("option_type") or ("PUT" if execution.get("direction") == "BEARISH" else "CALL"),
                 "entry_price": execution.get("entry_price"),
                 "shares": execution.get("shares"),
                 "capital_deployed": execution.get("capital_deployed"),

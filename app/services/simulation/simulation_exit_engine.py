@@ -52,8 +52,12 @@ class SimulationExitEngine:
 
                 capital_returned = self._num(pos.get("capital_deployed")) or 0
 
+                entry_signal = pos.get("entry_signal") or {}
+
                 closed.append({
                     **pos,
+                    "option_type": pos.get("option_type") or entry_signal.get("option_type"),
+                    "direction": pos.get("direction") or entry_signal.get("direction"),
                     "exit_price": current_close,
                     "realized_pnl": round(realized_pnl, 2),
                     "capital_returned": round(capital_returned, 2),

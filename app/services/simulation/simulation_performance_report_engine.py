@@ -37,6 +37,19 @@ class SimulationPerformanceReportEngine:
         total_equity = round(ending_capital + open_position_value, 2)
         return_pct = round(((total_equity - starting_capital) / starting_capital) * 100, 2) if starting_capital else 0
 
+        by_option_type = {}
+        for option_type in ["CALL", "PUT"]:
+            subset = [p for p in closed if p.get("option_type") == option_type]
+            pnl = round(sum(float(p.get("realized_pnl") or 0) for p in subset), 2)
+            wins_subset = [p for p in subset if float(p.get("realized_pnl") or 0) > 0]
+            by_option_type[option_type] = {
+                "trade_count": len(subset),
+                "winning_trades": len(wins_subset),
+                "win_rate_pct": round((len(wins_subset) / len(subset)) * 100, 2) if subset else 0,
+                "realized_pnl": pnl,
+                "expectancy_per_trade": round(pnl / len(subset), 2) if subset else 0,
+            }
+
         return {
             "engine": "SimulationPerformanceReportEngine",
             "trade_count": trade_count,
@@ -56,5 +69,6 @@ class SimulationPerformanceReportEngine:
             "open_position_value": open_position_value,
             "total_equity": total_equity,
             "return_pct": return_pct,
+            "performance_by_option_type": by_option_type,
             "status": "SIMULATION_PERFORMANCE_REPORT_READY",
         }
