@@ -37,6 +37,40 @@ class SimulationPerformanceReportEngine:
         total_equity = round(ending_capital + open_position_value, 2)
         return_pct = round(((total_equity - starting_capital) / starting_capital) * 100, 2) if starting_capital else 0
 
+        by_exit_reason = {}
+        for p_closed in closed:
+            reason = p_closed.get("exit_reason") or "UNKNOWN"
+            by_exit_reason.setdefault(reason, []).append(p_closed)
+
+        exit_reason_report = {}
+        for reason, subset in by_exit_reason.items():
+            pnl = round(sum(float(p.get("realized_pnl") or 0) for p in subset), 2)
+            wins_subset = [p for p in subset if float(p.get("realized_pnl") or 0) > 0]
+            exit_reason_report[reason] = {
+                "trade_count": len(subset),
+                "winning_trades": len(wins_subset),
+                "win_rate_pct": round((len(wins_subset) / len(subset)) * 100, 2) if subset else 0,
+                "realized_pnl": pnl,
+                "expectancy_per_trade": round(pnl / len(subset), 2) if subset else 0,
+            }
+
+        by_exit_reason = {}
+        for p_closed in closed:
+            reason = p_closed.get("exit_reason") or "UNKNOWN"
+            by_exit_reason.setdefault(reason, []).append(p_closed)
+
+        exit_reason_report = {}
+        for reason, subset in by_exit_reason.items():
+            pnl = round(sum(float(p.get("realized_pnl") or 0) for p in subset), 2)
+            wins_subset = [p for p in subset if float(p.get("realized_pnl") or 0) > 0]
+            exit_reason_report[reason] = {
+                "trade_count": len(subset),
+                "winning_trades": len(wins_subset),
+                "win_rate_pct": round((len(wins_subset) / len(subset)) * 100, 2) if subset else 0,
+                "realized_pnl": pnl,
+                "expectancy_per_trade": round(pnl / len(subset), 2) if subset else 0,
+            }
+
         by_score_bucket = {
             "85_to_89_99": [],
             "90_to_94_99": [],
@@ -108,5 +142,7 @@ class SimulationPerformanceReportEngine:
             "return_pct": return_pct,
             "performance_by_option_type": by_option_type,
             "performance_by_score_bucket": score_bucket_report,
+            "performance_by_exit_reason": exit_reason_report,
+            "performance_by_exit_reason": exit_reason_report,
             "status": "SIMULATION_PERFORMANCE_REPORT_READY",
         }
