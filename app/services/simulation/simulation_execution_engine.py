@@ -38,6 +38,8 @@ class SimulationExecutionEngine:
             "direction": candidate.get("directional_bias"),
             "option_type": candidate.get("option_type"),
             "composite_score": candidate.get("composite_score"),
+            "regime": candidate.get("regime"),
+            "regime_score": candidate.get("regime_score"),
             "entry_price": close,
             "shares": shares,
             "capital_deployed": deployed,

@@ -37,6 +37,63 @@ class SimulationPerformanceReportEngine:
         total_equity = round(ending_capital + open_position_value, 2)
         return_pct = round(((total_equity - starting_capital) / starting_capital) * 100, 2) if starting_capital else 0
 
+        by_regime_score_bucket = {
+            "65_to_74_99": [],
+            "75_to_84_99": [],
+            "85_to_94_99": [],
+            "95_plus": [],
+            "unknown": [],
+        }
+
+        for p_closed in closed:
+            score = p_closed.get("regime_score")
+            try:
+                score = float(score)
+            except Exception:
+                score = None
+
+            if score is None:
+                by_regime_score_bucket["unknown"].append(p_closed)
+            elif score >= 95:
+                by_regime_score_bucket["95_plus"].append(p_closed)
+            elif score >= 85:
+                by_regime_score_bucket["85_to_94_99"].append(p_closed)
+            elif score >= 75:
+                by_regime_score_bucket["75_to_84_99"].append(p_closed)
+            elif score >= 65:
+                by_regime_score_bucket["65_to_74_99"].append(p_closed)
+            else:
+                by_regime_score_bucket["unknown"].append(p_closed)
+
+        regime_score_bucket_report = {}
+        for bucket, subset in by_regime_score_bucket.items():
+            pnl = round(sum(float(p.get("realized_pnl") or 0) for p in subset), 2)
+            wins_subset = [p for p in subset if float(p.get("realized_pnl") or 0) > 0]
+            regime_score_bucket_report[bucket] = {
+                "trade_count": len(subset),
+                "winning_trades": len(wins_subset),
+                "win_rate_pct": round((len(wins_subset) / len(subset)) * 100, 2) if subset else 0,
+                "realized_pnl": pnl,
+                "expectancy_per_trade": round(pnl / len(subset), 2) if subset else 0,
+            }
+
+        by_regime = {}
+        for p_closed in closed:
+            regime = p_closed.get("regime") or "UNKNOWN"
+            by_regime.setdefault(regime, []).append(p_closed)
+
+        regime_report = {}
+        for regime, subset in by_regime.items():
+            pnl = round(sum(float(p.get("realized_pnl") or 0) for p in subset), 2)
+            wins_subset = [p for p in subset if float(p.get("realized_pnl") or 0) > 0]
+            regime_report[regime] = {
+                "trade_count": len(subset),
+                "winning_trades": len(wins_subset),
+                "win_rate_pct": round((len(wins_subset) / len(subset)) * 100, 2) if subset else 0,
+                "realized_pnl": pnl,
+                "expectancy_per_trade": round(pnl / len(subset), 2) if subset else 0,
+            }
+
         by_exit_reason = {}
         for p_closed in closed:
             reason = p_closed.get("exit_reason") or "UNKNOWN"
@@ -143,6 +200,8 @@ class SimulationPerformanceReportEngine:
             "performance_by_option_type": by_option_type,
             "performance_by_score_bucket": score_bucket_report,
             "performance_by_exit_reason": exit_reason_report,
+            "performance_by_regime": regime_report,
+            "performance_by_regime_score_bucket": regime_score_bucket_report,
             "performance_by_exit_reason": exit_reason_report,
             "status": "SIMULATION_PERFORMANCE_REPORT_READY",
         }
