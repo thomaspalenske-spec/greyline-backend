@@ -40,6 +40,8 @@ class SimulationExecutionEngine:
             "composite_score": candidate.get("composite_score"),
             "regime": candidate.get("regime"),
             "regime_score": candidate.get("regime_score"),
+            "risk_state": candidate.get("risk_state"),
+            "risk_state_score": candidate.get("risk_state_score"),
             "entry_price": close,
             "shares": shares,
             "capital_deployed": deployed,

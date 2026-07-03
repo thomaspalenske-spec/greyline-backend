@@ -21,6 +21,8 @@ class SimulationPositionEngine:
                 "composite_score": execution.get("composite_score"),
                 "regime": execution.get("regime"),
                 "regime_score": execution.get("regime_score"),
+                "risk_state": execution.get("risk_state"),
+                "risk_state_score": execution.get("risk_state_score"),
                 "entry_price": execution.get("entry_price"),
                 "shares": execution.get("shares"),
                 "capital_deployed": execution.get("capital_deployed"),
