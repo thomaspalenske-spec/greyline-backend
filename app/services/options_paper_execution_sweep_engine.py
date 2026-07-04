@@ -4,6 +4,7 @@ from app.routes.greyline_market_battlefield_summary import greyline_market_battl
 from app.services.options_cycle_engine import OptionsCycleEngine
 from app.services.options_dynamic_position_sizing_engine import OptionsDynamicPositionSizingEngine
 from app.services.signal_reliability_engine import SignalReliabilityEngine
+from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 
 class OptionsPaperExecutionSweepEngine:
@@ -50,6 +51,23 @@ class OptionsPaperExecutionSweepEngine:
                 candidate_score=score,
             )
             ledger_result = r.get("paper_trade") or {}
+
+            if r.get("paper_trade_recorded") is True:
+                OperatorEventBusEngine().publish(
+                    source="OptionsPaperExecutionSweepEngine",
+                    category="POSITION_OPENED",
+                    severity="INFO",
+                    title="New Option Position Opened",
+                    message=f"{symbol} {option_type} paper option position opened.",
+                    symbol=symbol,
+                    trade_id=ledger_result.get("trade_id") or (((r.get("top_candidate") or {}).get("Legs") or [{}])[0]).get("Symbol"),
+                    ack_required=False,
+                    payload={
+                        "candidate": c,
+                        "cycle_result": r,
+                        "paper_trade": ledger_result,
+                    },
+                )
 
             results.append({
                 "symbol": symbol,
