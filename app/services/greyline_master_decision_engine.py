@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 from app.services.live_broker_health_engine import LiveBrokerHealthEngine
 from app.services.risk_engine import RiskEngine
@@ -75,6 +76,34 @@ class GreyLineMasterDecisionEngine:
             "risk_state": risk_state,
             "symmetry": opportunity_symmetry,
         })
+
+        top = top_candidate or {}
+
+        decision_event_category = "DECISION"
+        decision_event_severity = "INFO"
+        decision_ack_required = False
+
+        if decision == "EXECUTE_SIGNAL_BLOCKED_READ_ONLY":
+            decision_event_category = "EXECUTION_BLOCKED"
+            decision_event_severity = "WARNING"
+            decision_ack_required = True
+
+        OperatorEventBusEngine().publish(
+            source="GreyLineMasterDecisionEngine",
+            category=decision_event_category,
+            severity=decision_event_severity,
+            title=f"Master Decision: {decision}",
+            message=f"{top.get('symbol', '--')} {top.get('option_type', '--')} decision: {decision}.",
+            symbol=top.get("symbol"),
+            trade_id=None,
+            ack_required=decision_ack_required,
+            payload={
+                "decision": decision,
+                "decision_reason": reason,
+                "top_candidate": top,
+                "reliability_governor": reliability_governor,
+            },
+        )
 
         result = {
             "timestamp": datetime.utcnow().isoformat(),
