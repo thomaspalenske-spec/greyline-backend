@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 from app.services.reliability_remediation_advisor_engine import ReliabilityRemediationAdvisorEngine
 
@@ -48,6 +49,34 @@ class ReliabilityGovernorEngine:
             new_entries_allowed = False
             autonomous_allowed = False
             reason = "Reliability below operational threshold."
+
+
+        severity = {
+            "FULL_OPERATION": "INFO",
+            "DEGRADED": "WARNING",
+            "OBSERVE_ONLY": "WARNING",
+            "HALT": "CRITICAL",
+        }.get(operating_mode, "INFO")
+
+        ack_required = operating_mode in ["OBSERVE_ONLY", "HALT"]
+
+        OperatorEventBusEngine().publish(
+            source="ReliabilityGovernorEngine",
+            category="OPERATING_MODE",
+            severity=severity,
+            title=f"Reliability Mode: {operating_mode}",
+            message=f"GreyLine reliability governor entered {operating_mode}.",
+            symbol=None,
+            trade_id=None,
+            ack_required=ack_required,
+            payload={
+                "operating_mode": operating_mode,
+                "reliability_score": reliability_score,
+                "execution_allowed": execution_allowed,
+                "new_entries_allowed": new_entries_allowed,
+                "autonomous_allowed": autonomous_allowed,
+            },
+        )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
