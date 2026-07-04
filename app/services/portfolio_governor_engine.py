@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 from app.services.portfolio_allocation_engine import PortfolioAllocationEngine
 from app.services.portfolio_regime_alignment_engine import PortfolioRegimeAlignmentEngine
@@ -69,6 +70,32 @@ class PortfolioGovernorEngine:
             new_trade_allowed = True
             max_deployment_pct = recommended_size
             reason = "PORTFOLIO_DEPLOYMENT_APPROVED"
+
+
+        severity = {
+            "APPROVE": "INFO",
+            "REDUCE": "WARNING",
+            "BLOCK": "CRITICAL",
+        }.get(decision, "INFO")
+
+        ack_required = decision in ["REDUCE", "BLOCK"]
+
+        OperatorEventBusEngine().publish(
+            source="PortfolioGovernorEngine",
+            category="PORTFOLIO_GOVERNOR",
+            severity=severity,
+            title=f"Portfolio Governor: {decision}",
+            message=f"Portfolio governor decision: {decision}.",
+            symbol=candidate_symbol,
+            trade_id=None,
+            ack_required=ack_required,
+            payload={
+                "decision": decision,
+                "current_drawdown_pct": current_drawdown_pct,
+                "recommended_position_pct": recommended_position_pct,
+                "reason": reason,
+            },
+        )
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
