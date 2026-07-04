@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.services.greyline_safety_gate_engine import GreyLineSafetyGateEngine
+from app.services.operator_event_bus_engine import OperatorEventBusEngine
 from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 
 
@@ -15,6 +16,19 @@ class GreyLineExecutionGateIntegrationEngine:
         reliability_governor = ReliabilityGovernorEngine().evaluate()
 
         # STEP 1 — RELIABILITY GOVERNOR CHECK
+
+        if reliability_governor.get("execution_allowed") is not True:
+            OperatorEventBusEngine().publish(
+                source="GreyLineExecutionGateIntegrationEngine",
+                category="EXECUTION_GATE",
+                severity="CRITICAL",
+                title="Execution Blocked by Reliability Governor",
+                message="Reliability governor denied execution.",
+                symbol=None,
+                trade_id=None,
+                ack_required=True,
+                payload=reliability_governor,
+            )
         if reliability_governor.get("execution_allowed") is not True:
             return {
                 "timestamp": datetime.utcnow().isoformat(),
