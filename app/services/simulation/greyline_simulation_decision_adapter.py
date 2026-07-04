@@ -217,6 +217,9 @@ class GreyLineSimulationDecisionAdapter:
         if risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]:
             execution_blockers.append("RISK_STATE_DEFENSIVE_OR_STRESSED")
 
+        if option_type == "PUT" and risk_state_result.get("risk_state_score", 50) < 70:
+            execution_blockers.append("PUT_RISK_STATE_BELOW_70")
+
         if option_type == "CALL" and (
             regime_result.get("regime") == "WEAK_LIVE"
             or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
