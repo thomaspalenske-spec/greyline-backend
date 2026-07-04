@@ -535,6 +535,16 @@ table {
         </div>
       </div>
 
+      <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
+        <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
+        <table>
+          <thead>
+            <tr><th>Symbol</th><th>Option</th><th>Reason</th><th>Exit</th><th>P/L</th><th>P/L %</th><th>Closed</th><th>Action</th></tr>
+          </thead>
+          <tbody id="position_alerts"></tbody>
+        </table>
+      </div>
+
       <div class="card">
         <div class="section-title">OPEN POSITIONS</div>
         <table>
@@ -635,14 +645,24 @@ function drawCurve(trades) {
   svg.innerHTML += `<path d="${d}" fill="none" stroke="#ff4d57" stroke-width="4" />`;
 }
 
+async function ackPositionAlert(tradeId) {
+  await fetch(`/position-alerts/ack/${encodeURIComponent(tradeId)}`, { method: "POST" });
+  refreshAll();
+}
+
 async function refreshAll() {
   setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
 
-  const [battlefield, ledger, scheduler] = await Promise.allSettled([
+  const [battlefield, ledger, scheduler, positionAlerts] = await Promise.allSettled([
     getJSON("/greyline-market-battlefield-summary"),
     getJSON("/options-account-dashboard"),
-    getJSON("/background-scheduler/status")
+    getJSON("/background-scheduler/status"),
+    getJSON("/position-alerts")
   ]);
+
+  if (arguments[0]) {}
+
+  const alertsResult = arguments;
 
   if (scheduler.status === "fulfilled") {
     const s = scheduler.value;
@@ -687,6 +707,33 @@ async function refreshAll() {
       </tr>
     `).join("");
     document.getElementById("top_calls").innerHTML = rows || `<tr><td colspan="5">No candidates</td></tr>`;
+  }
+
+
+  if (positionAlerts.status === "fulfilled") {
+    const payload = positionAlerts.value || {};
+    const alerts = payload.alerts || [];
+    const card = document.getElementById("position_alert_card");
+    const body = document.getElementById("position_alerts");
+
+    if (alerts.length > 0) {
+      card.style.display = "block";
+      body.innerHTML = alerts.map(a => `
+        <tr style="background:rgba(248,81,73,.10);">
+          <td><strong>${a.symbol || "--"}</strong></td>
+          <td>${a.option_symbol || "--"}<br><span class="yellow">${a.option_type || ""}</span></td>
+          <td><span class="badge blocked">${String(a.exit_reason || "--").replaceAll("_", " ")}</span></td>
+          <td>${fmtMoney(a.exit_price)}</td>
+          <td class="${Number(a.realized_pnl || 0) >= 0 ? "green" : "red"}">${fmtMoney(a.realized_pnl)}</td>
+          <td class="${Number(a.realized_pnl_pct || 0) >= 0 ? "green" : "red"}">${fmtPct(a.realized_pnl_pct)}</td>
+          <td>${a.exit_timestamp || "--"}</td>
+          <td><button onclick="ackPositionAlert('${a.trade_id}')">ACK</button></td>
+        </tr>
+      `).join("");
+    } else {
+      card.style.display = "none";
+      body.innerHTML = "";
+    }
   }
 
   if (ledger.status === "fulfilled") {

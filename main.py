@@ -216,3 +216,13 @@ app.include_router(forecast_accuracy_dashboard.router)
 app.include_router(forecast_reliability_dashboard.router)
 
 app.include_router(portfolio_governor.router)
+
+from app.services.position_alert_ack_engine import PositionAlertAckEngine
+
+@app.get("/position-alerts")
+def position_alerts():
+    return PositionAlertAckEngine().unacknowledged_alerts()
+
+@app.post("/position-alerts/ack/{trade_id}")
+def acknowledge_position_alert(trade_id: str):
+    return PositionAlertAckEngine().acknowledge(trade_id)
