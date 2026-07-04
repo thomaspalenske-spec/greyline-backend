@@ -84,7 +84,14 @@ class GreyLineSimulationDecisionAdapter:
         )
         bear_breadth_score = max(35, 100 - breadth_score)
         bear_trend_score = 100 - trend_persistence_score
-        bear_sponsorship_score = 100 - institutional_sponsorship_score
+        # Direction-aware sponsorship:
+        # Historical single-symbol replay only has one sponsorship field.
+        # For PUT candidates, bearish institutional pressure should sponsor the trade,
+        # not be treated as a lack of bullish sponsorship.
+        bear_sponsorship_score = component_overrides.get(
+            "bear_institutional_sponsorship_score",
+            100 - institutional_sponsorship_score,
+        )
         bear_expected_value_score = max(45, 100 - expected_value_score)
         bear_asymmetry_score = 100 - asymmetry_score
         bear_risk_score = risk_state_result.get("risk_state_score", 50)
@@ -139,6 +146,15 @@ class GreyLineSimulationDecisionAdapter:
             ):
                 historical_execution_bonus = 6
 
+        if (
+            directional_bias == "BEARISH"
+            and 78 <= bear_trend_score <= 82
+            and 90 <= bear_setup_score <= 95
+            and bear_sponsorship_score >= 88
+            and risk_state_result.get("risk_state_score", 50) >= 55
+        ):
+            historical_execution_bonus = max(historical_execution_bonus, 5)
+
         if composite_score + historical_execution_bonus < 85:
             historical_execution_bonus = 0
 
@@ -154,11 +170,18 @@ class GreyLineSimulationDecisionAdapter:
             execution_blockers.append("DIRECTION_CONFIDENCE_BELOW_5")
         if liquidity_score < 70:
             execution_blockers.append("LIQUIDITY_BELOW_70")
-        if institutional_sponsorship_score < 80:
+        directional_sponsorship_score = (
+            bear_sponsorship_score if option_type == "PUT" else institutional_sponsorship_score
+        )
+
+        if directional_sponsorship_score < 80:
             execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
         if option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80:
             execution_blockers.append("CALL_RISK_STATE_SCORE_BELOW_80")
-        if institutional_sponsorship_score < 80:
+
+        if option_type == "PUT" and bear_trend_score >= 84 and bear_setup_score >= 90:
+            execution_blockers.append("PUT_DOWNSIDE_EXHAUSTION_RISK")
+        if directional_sponsorship_score < 80:
             execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
 
         call_risk_ok = not (option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80)
@@ -174,24 +197,36 @@ class GreyLineSimulationDecisionAdapter:
             and risk_state_result.get("risk_state_score", 50) < 82
         )
 
-        if composite_score >= 85 and direction_confidence >= 5 and institutional_sponsorship_score >= 80 and call_risk_ok and call_bear_rally_ok and call_overheated_trap_ok:
+        if (
+            composite_score >= 85
+            and direction_confidence >= 5
+            and directional_sponsorship_score >= 80
+            and call_risk_ok
+            and call_bear_rally_ok
+            and call_overheated_trap_ok
+            and not execution_blockers
+        ):
             result = "EXECUTE"
         elif composite_score >= 60:
             result = "WATCH"
         else:
             result = "REJECT"
 
-        if regime_result.get("regime") == "WEAK_LIVE":
+        if option_type == "CALL" and regime_result.get("regime") == "WEAK_LIVE":
             execution_blockers.append("REGIME_WEAK_LIVE")
         if risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]:
             execution_blockers.append("RISK_STATE_DEFENSIVE_OR_STRESSED")
 
-        if (
+        if option_type == "CALL" and (
             regime_result.get("regime") == "WEAK_LIVE"
             or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
         ):
             if result == "EXECUTE":
                 result = "WATCH"
+
+        # Final safety invariant: no trade can remain EXECUTE with blockers present.
+        if result == "EXECUTE" and execution_blockers:
+            result = "WATCH"
 
         governor = ExecutionGovernor().evaluate_execution_permission(result)
 
@@ -226,7 +261,9 @@ class GreyLineSimulationDecisionAdapter:
             "bear_trend_score": bear_trend_score,
             "breadth_score": breadth_score,
             "bear_breadth_score": bear_breadth_score,
-            "institutional_sponsorship_score": institutional_sponsorship_score,
+            "institutional_sponsorship_score": directional_sponsorship_score,
+            "bull_institutional_sponsorship_score": institutional_sponsorship_score,
+            "bear_institutional_sponsorship_score": bear_sponsorship_score,
             "bear_sponsorship_score": bear_sponsorship_score,
             "asymmetry_score": asymmetry_score,
             "bear_asymmetry_score": bear_asymmetry_score,

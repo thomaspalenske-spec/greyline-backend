@@ -106,6 +106,14 @@ class HistoricalComponentBuilder:
             + max(0, ret_10) * 0.45
         ))
 
+        bear_institutional_sponsorship_score = min(100, max(0,
+            58
+            - momentum_blend * 3.8
+            + min(12, max(-8, (volume_pressure - 1) * 22))
+            + max(0, -ret_10) * 0.45
+            + max(0, -day_return_pct) * 0.35
+        ))
+
         asymmetry_score = min(100, max(0,
             58
             + momentum_blend * 4.0
@@ -149,5 +157,6 @@ class HistoricalComponentBuilder:
             "trend_persistence_score": round(trend_persistence_score, 2),
             "breadth_score": round(breadth_score, 2),
             "institutional_sponsorship_score": round(institutional_sponsorship_score, 2),
+            "bear_institutional_sponsorship_score": round(bear_institutional_sponsorship_score, 2),
             "asymmetry_score": round(asymmetry_score, 2),
         }
