@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.market_hours_engine import MarketHoursEngine
+from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 
 class OptionsPositionManagerEngine:
@@ -169,6 +170,17 @@ class OptionsPositionManagerEngine:
                 trade["realized_pnl"] = pnl
                 trade["realized_pnl_pct"] = pnl_pct
                 trade["exit_reason"] = "OPTIONS_MATURITY_PROTECTION_24HR"
+                OperatorEventBusEngine().publish(
+                    source="OptionsPositionManagerEngine",
+                    category="POSITION_EXIT",
+                    severity="WARNING",
+                    title="Option Maturity Protection Exit",
+                    message=f"{option_symbol} closed due to maturity protection.",
+                    symbol=trade.get("underlying") or trade.get("symbol"),
+                    trade_id=trade.get("trade_id") or option_symbol,
+                    ack_required=True,
+                    payload=trade,
+                )
                 closed.append(trade)
             elif pnl_pct >= 50:
                 trade["status"] = "CLOSED"
@@ -177,6 +189,17 @@ class OptionsPositionManagerEngine:
                 trade["realized_pnl"] = pnl
                 trade["realized_pnl_pct"] = pnl_pct
                 trade["exit_reason"] = "OPTIONS_TAKE_PROFIT_50_PCT"
+                OperatorEventBusEngine().publish(
+                    source="OptionsPositionManagerEngine",
+                    category="TAKE_PROFIT",
+                    severity="INFO",
+                    title="Option Take Profit Hit",
+                    message=f"{option_symbol} hit +50% take profit.",
+                    symbol=trade.get("underlying") or trade.get("symbol"),
+                    trade_id=trade.get("trade_id") or option_symbol,
+                    ack_required=False,
+                    payload=trade,
+                )
                 closed.append(trade)
             elif pnl_pct <= -35:
                 stop_loss_threshold_pct = -35
@@ -194,6 +217,17 @@ class OptionsPositionManagerEngine:
                     "LATE_STOP_LOSS_EXECUTION"
                     if stop_loss_breach_pct >= 10
                     else "NORMAL_STOP_LOSS_EXECUTION"
+                )
+                OperatorEventBusEngine().publish(
+                    source="OptionsPositionManagerEngine",
+                    category="STOP_LOSS",
+                    severity="CRITICAL",
+                    title="Option Stop Loss Triggered",
+                    message=f"{option_symbol} hit stop loss at {pnl_pct}%.",
+                    symbol=trade.get("underlying") or trade.get("symbol"),
+                    trade_id=trade.get("trade_id") or option_symbol,
+                    ack_required=True,
+                    payload=trade,
                 )
                 closed.append(trade)
 
