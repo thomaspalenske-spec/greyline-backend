@@ -226,3 +226,13 @@ def position_alerts():
 @app.post("/position-alerts/ack/{trade_id}")
 def acknowledge_position_alert(trade_id: str):
     return PositionAlertAckEngine().acknowledge(trade_id)
+
+from app.services.operator_notification_engine import OperatorNotificationEngine
+
+@app.get("/operator-notifications")
+def operator_notifications():
+    return OperatorNotificationEngine().unread()
+
+@app.post("/operator-notifications/ack/{notification_id}")
+def acknowledge_operator_notification(notification_id: str):
+    return OperatorNotificationEngine().acknowledge(notification_id)
