@@ -431,6 +431,15 @@ table {
     border-bottom:2px solid #2d333b;
 }
 
+  .tp-hit {
+    background: rgba(250, 204, 21, .18);
+    color: #facc15 !important;
+    border: 1px solid rgba(250, 204, 21, .55);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-weight: 800;
+    box-shadow: 0 0 10px rgba(250, 204, 21, .25);
+  }
 </style>
 </head>
 
@@ -715,6 +724,22 @@ async function refreshAll() {
       const tp1 = tp[0] || {};
       const tp2 = tp[1] || {};
       const tp3 = tp[2] || {};
+      const currentUnderlying = Number(cv.current_underlying_price || t.current_underlying_price || t.current_price || 0);
+      const optionType = String(t.option_type || "").toUpperCase();
+
+      function tpHit(target) {
+        const v = Number(target || 0);
+        if (!v || !currentUnderlying) return false;
+        return optionType === "PUT" ? currentUnderlying <= v : currentUnderlying >= v;
+      }
+
+      function tpClass(target) {
+        return tpHit(target) ? "tp-hit" : "green";
+      }
+
+      function tpLabel(name, target) {
+        return `${name}${tpHit(target) ? " HIT ✓" : ""}:`;
+      }
 
       return `
       <tr>
@@ -736,13 +761,13 @@ async function refreshAll() {
           &nbsp; | &nbsp;
           <strong class="red">SL:</strong> ${fmtMoney(rb.estimated_stop_underlying_price)}
           &nbsp; | &nbsp;
-          <strong class="green">TP1:</strong> ${fmtMoney(tp1.estimated_underlying_target_price)}
+          <strong class="${tpClass(tp1.estimated_underlying_target_price)}">${tpLabel("TP1", tp1.estimated_underlying_target_price)}</strong> ${fmtMoney(tp1.estimated_underlying_target_price)}
           &nbsp;
-          <strong class="green">TP2:</strong> ${fmtMoney(tp2.estimated_underlying_target_price)}
+          <strong class="${tpClass(tp2.estimated_underlying_target_price)}">${tpLabel("TP2", tp2.estimated_underlying_target_price)}</strong> ${fmtMoney(tp2.estimated_underlying_target_price)}
           &nbsp;
-          <strong class="green">TP3:</strong> ${fmtMoney(tp3.estimated_underlying_target_price)}
+          <strong class="${tpClass(tp3.estimated_underlying_target_price)}">${tpLabel("TP3", tp3.estimated_underlying_target_price)}</strong> ${fmtMoney(tp3.estimated_underlying_target_price)}
           &nbsp;
-          <strong class="green">TP4:</strong> ${t.tp4_mode === "DYNAMIC_RUNNER_NO_FIXED_TARGET" || t.tp4_runner ? "RUNNER" : fmtMoney(t.tp4_price)}
+          <strong class="${tpClass(t.tp4_price)}">${t.tp4_mode === "DYNAMIC_RUNNER_NO_FIXED_TARGET" || t.tp4_runner ? "TP4 RUNNER" : tpLabel("TP4", t.tp4_price)}</strong> ${t.tp4_mode === "DYNAMIC_RUNNER_NO_FIXED_TARGET" || t.tp4_runner ? "" : fmtMoney(t.tp4_price)}
         </td>
       </tr>
       <tr>
