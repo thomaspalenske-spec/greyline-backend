@@ -236,3 +236,21 @@ def operator_notifications():
 @app.post("/operator-notifications/ack/{notification_id}")
 def acknowledge_operator_notification(notification_id: str):
     return OperatorNotificationEngine().acknowledge(notification_id)
+
+from app.services.operator_event_bus_engine import OperatorEventBusEngine
+
+@app.get("/operator-events")
+def operator_events():
+    return OperatorEventBusEngine().recent()
+
+@app.post("/operator-events/test")
+def operator_events_test():
+    return OperatorEventBusEngine().publish(
+        source="MANUAL_TEST",
+        category="SYSTEM_TEST",
+        severity="WARNING",
+        title="Operator Event Bus Test",
+        message="Manual operator event bus test notification.",
+        ack_required=True,
+        payload={"test": True},
+    )
