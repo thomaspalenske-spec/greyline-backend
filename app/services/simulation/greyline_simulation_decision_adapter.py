@@ -154,8 +154,27 @@ class GreyLineSimulationDecisionAdapter:
             execution_blockers.append("DIRECTION_CONFIDENCE_BELOW_5")
         if liquidity_score < 70:
             execution_blockers.append("LIQUIDITY_BELOW_70")
+        if institutional_sponsorship_score < 80:
+            execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
+        if option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80:
+            execution_blockers.append("CALL_RISK_STATE_SCORE_BELOW_80")
+        if institutional_sponsorship_score < 80:
+            execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
 
-        if composite_score >= 85 and direction_confidence >= 5:
+        call_risk_ok = not (option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80)
+        call_bear_rally_ok = not (
+            option_type == "CALL"
+            and regime_result.get("regime_score", 50) >= 82
+            and risk_state_result.get("risk_state_score", 50) < 82
+            and institutional_sponsorship_score < 90
+        )
+        call_overheated_trap_ok = not (
+            option_type == "CALL"
+            and regime_result.get("regime_score", 50) >= 94
+            and risk_state_result.get("risk_state_score", 50) < 82
+        )
+
+        if composite_score >= 85 and direction_confidence >= 5 and institutional_sponsorship_score >= 80 and call_risk_ok and call_bear_rally_ok and call_overheated_trap_ok:
             result = "EXECUTE"
         elif composite_score >= 60:
             result = "WATCH"

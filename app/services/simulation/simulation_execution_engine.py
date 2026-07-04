@@ -43,6 +43,7 @@ class SimulationExecutionEngine:
             "risk_state": candidate.get("risk_state"),
             "risk_state_score": candidate.get("risk_state_score"),
             "institutional_sponsorship_score": candidate.get("institutional_sponsorship_score"),
+            "entry_time": market_data.get("timestamp"),
             "entry_price": close,
             "shares": shares,
             "capital_deployed": deployed,

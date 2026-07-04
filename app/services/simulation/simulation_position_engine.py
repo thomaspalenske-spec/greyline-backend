@@ -24,6 +24,7 @@ class SimulationPositionEngine:
                 "risk_state": execution.get("risk_state"),
                 "risk_state_score": execution.get("risk_state_score"),
                 "institutional_sponsorship_score": execution.get("institutional_sponsorship_score"),
+                "entry_time": execution.get("entry_time"),
                 "entry_price": execution.get("entry_price"),
                 "shares": execution.get("shares"),
                 "capital_deployed": execution.get("capital_deployed"),
