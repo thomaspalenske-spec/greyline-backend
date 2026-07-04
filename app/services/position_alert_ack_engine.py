@@ -75,6 +75,8 @@ class PositionAlertAckEngine:
                 "realized_pnl_pct": trade.get("realized_pnl_pct"),
                 "exit_timestamp": trade.get("exit_timestamp") or trade.get("closed_timestamp"),
                 "acknowledged": False,
+                "severity": self._severity(trade.get("exit_reason"), trade.get("realized_pnl_pct")),
+                "alert_age_minutes": self._age_minutes(trade.get("exit_timestamp") or trade.get("closed_timestamp")),
             })
 
         return {
@@ -84,6 +86,30 @@ class PositionAlertAckEngine:
             "alerts": alerts,
             "status": "POSITION_ALERTS_READY",
         }
+
+    def _severity(self, reason, pnl_pct):
+        reason = str(reason or "").upper()
+        try:
+            pnl_pct = float(pnl_pct or 0)
+        except Exception:
+            pnl_pct = 0
+
+        if "STOP_LOSS" in reason or pnl_pct <= -35:
+            return "CRITICAL"
+        if "MATURITY" in reason or "EXPIRATION" in reason:
+            return "WARNING"
+        return "INFO"
+
+    def _age_minutes(self, timestamp):
+        if not timestamp:
+            return None
+        try:
+            ts = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+            if ts.tzinfo is not None:
+                ts = ts.replace(tzinfo=None)
+            return round((datetime.utcnow() - ts).total_seconds() / 60, 1)
+        except Exception:
+            return None
 
     def acknowledge(self, trade_id):
         rows = self._read()
