@@ -1,4 +1,7 @@
 from datetime import datetime
+from pathlib import Path
+import json
+
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 from app.services.reliability_remediation_advisor_engine import ReliabilityRemediationAdvisorEngine
@@ -60,23 +63,47 @@ class ReliabilityGovernorEngine:
 
         ack_required = mode in ["OBSERVE_ONLY", "HALT"]
 
-        OperatorEventBusEngine().publish(
-            source="ReliabilityGovernorEngine",
-            category="OPERATING_MODE",
-            severity=severity,
-            title=f"Reliability Mode: {mode}",
-            message=f"GreyLine reliability governor entered {mode}.",
-            symbol=None,
-            trade_id=None,
-            ack_required=ack_required,
-            payload={
-                "operating_mode": mode,
-                "reliability_score": score,
-                "execution_allowed": execution_allowed,
-                "new_entries_allowed": new_entries_allowed,
-                "autonomous_allowed": autonomous_allowed,
-            },
-        )
+        state_file = Path("app/data/operator_events/reliability_governor_state.json")
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+
+        previous_mode = None
+        if state_file.exists():
+            try:
+                previous_mode = (json.loads(state_file.read_text()) or {}).get("operating_mode")
+            except Exception:
+                previous_mode = None
+
+        mode_changed = previous_mode != mode
+
+        if mode_changed:
+            OperatorEventBusEngine().publish(
+                source="ReliabilityGovernorEngine",
+                category="OPERATING_MODE",
+                severity=severity,
+                title=f"Reliability Mode: {mode}",
+                message=f"GreyLine reliability governor entered {mode}.",
+                symbol=None,
+                trade_id=None,
+                ack_required=ack_required,
+                payload={
+                    "previous_operating_mode": previous_mode,
+                    "operating_mode": mode,
+                    "reliability_score": score,
+                    "execution_allowed": execution_allowed,
+                    "new_entries_allowed": new_entries_allowed,
+                    "autonomous_allowed": autonomous_allowed,
+                },
+            )
+
+        state_file.write_text(json.dumps({
+            "timestamp": datetime.utcnow().isoformat(),
+            "operating_mode": mode,
+            "reliability_score": score,
+            "overall_reliability": reliability,
+            "execution_allowed": execution_allowed,
+            "new_entries_allowed": new_entries_allowed,
+            "autonomous_allowed": autonomous_allowed,
+        }, indent=2))
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
