@@ -15,7 +15,7 @@ class ReliabilityGovernorEngine:
     def evaluate(self, simulate_fault=None):
         advisor = ReliabilityRemediationAdvisorEngine().evaluate(simulate_fault=simulate_fault)
 
-        score = int(advisor.get("reliability_score") or 0)
+        score = int(advisor.get("score") or 0)
         reliability = advisor.get("overall_reliability")
         posture = advisor.get("posture")
         actions = advisor.get("actions") or []
@@ -52,26 +52,26 @@ class ReliabilityGovernorEngine:
 
 
         severity = {
-            "FULL_OPERATION": "INFO",
-            "DEGRADED": "WARNING",
+            "FULL_OPERATIONAL": "INFO",
+            "RECOMMEND_ONLY": "WARNING",
             "OBSERVE_ONLY": "WARNING",
-            "HALT": "CRITICAL",
-        }.get(operating_mode, "INFO")
+            "SAFE_MODE": "CRITICAL",
+        }.get(mode, "INFO")
 
-        ack_required = operating_mode in ["OBSERVE_ONLY", "HALT"]
+        ack_required = mode in ["OBSERVE_ONLY", "HALT"]
 
         OperatorEventBusEngine().publish(
             source="ReliabilityGovernorEngine",
             category="OPERATING_MODE",
             severity=severity,
-            title=f"Reliability Mode: {operating_mode}",
-            message=f"GreyLine reliability governor entered {operating_mode}.",
+            title=f"Reliability Mode: {mode}",
+            message=f"GreyLine reliability governor entered {mode}.",
             symbol=None,
             trade_id=None,
             ack_required=ack_required,
             payload={
-                "operating_mode": operating_mode,
-                "reliability_score": reliability_score,
+                "operating_mode": mode,
+                "reliability_score": score,
                 "execution_allowed": execution_allowed,
                 "new_entries_allowed": new_entries_allowed,
                 "autonomous_allowed": autonomous_allowed,
