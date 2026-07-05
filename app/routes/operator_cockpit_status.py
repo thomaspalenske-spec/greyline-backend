@@ -6,6 +6,7 @@ from app.services.unified_reliability_core_engine import UnifiedReliabilityCoreE
 from app.services.operator_notification_engine import OperatorNotificationEngine
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
 from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
+from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ def operator_cockpit_status(include_master_decision: bool = False):
     governor = ReliabilityGovernorEngine().evaluate()
     notifications = OperatorNotificationEngine().unread()
     events = OperatorEventBusEngine().recent(limit=10)
+    quote_heartbeat = FastQuoteHeartbeatService.status()
 
     master_decision = None
     if include_master_decision:
@@ -33,6 +35,7 @@ def operator_cockpit_status(include_master_decision: bool = False):
         "autonomous_allowed": governor.get("autonomous_allowed"),
         "unread_notifications": notifications.get("unread_count"),
         "latest_events": events.get("events"),
+        "quote_heartbeat": quote_heartbeat,
         "master_decision": master_decision,
         "status": "OPERATOR_COCKPIT_STATUS_READY",
     }

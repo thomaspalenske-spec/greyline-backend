@@ -865,11 +865,12 @@ async function refreshAll() {
   await refreshCockpitBanner();
   await refreshCommanderSummary();
 
-  const [battlefield, ledger, scheduler, positionAlerts] = await Promise.allSettled([
+  const [battlefield, ledger, scheduler, positionAlerts, cockpit] = await Promise.allSettled([
     getJSON("/greyline-market-battlefield-summary"),
     getJSON("/options-account-dashboard"),
     getJSON("/background-scheduler/status"),
-    getJSON("/position-alerts")
+    getJSON("/position-alerts"),
+    getJSON("/operator-cockpit-status")
   ]);
 
   if (arguments[0]) {}
@@ -893,13 +894,10 @@ async function refreshAll() {
 
     const schedulerRunning = !!(s.thread_alive || s.last_status === "BACKGROUND_SCHEDULER_CYCLE_COMPLETE");
     const tokenReady = String(s.token_status || s.broker_token_status || "READY").toUpperCase();
-    const quoteStatus = String(s.quote_status || s.quote_health || "UNKNOWN").toUpperCase();
-
     setStatusValue("ready_execution", ex ? "READY" : "BLOCKED", ex ? "green" : "red");
     setStatusValue("ready_orders", ord ? "READY" : "BLOCKED", ord ? "green" : "red");
     setStatusValue("ready_scheduler", schedulerRunning ? "RUNNING" : "CHECK", schedulerRunning ? "green" : "yellow");
     setStatusValue("ready_token", tokenReady.includes("READY") || tokenReady.includes("VALID") ? "READY" : tokenReady, tokenReady.includes("READY") || tokenReady.includes("VALID") ? "green" : "yellow");
-    setStatusValue("ready_quotes", quoteStatus === "UNKNOWN" ? "CHECK" : quoteStatus, quoteStatus.includes("GREEN") || quoteStatus.includes("READY") || quoteStatus.includes("FRESH") ? "green" : "yellow");
     setText("ready_refresh", new Date().toLocaleTimeString());
   }
 
@@ -957,6 +955,27 @@ async function refreshAll() {
       card.style.display = "none";
       body.innerHTML = "";
     }
+  }
+
+
+  if (cockpit.status === "fulfilled") {
+    const qh = cockpit.value.quote_heartbeat || {};
+    const qs = qh.state || {};
+    const health = String(qs.market_data_health || "UNKNOWN").toUpperCase();
+
+    let label = health.replaceAll("_", " ");
+    let color = "yellow";
+
+    if (health === "FRESH" || health === "ACCEPTABLE" || health === "MARKET_CLOSED_LAST_QUOTE_MARK") color = "green";
+    if (health === "DEGRADED") color = "yellow";
+    if (health === "STALE_DATA" || health === "UNKNOWN") color = "red";
+
+    if (!qh.thread_alive || !qh.enabled) {
+      label = "OFFLINE";
+      color = "red";
+    }
+
+    setStatusValue("ready_quotes", label, color);
   }
 
   if (ledger.status === "fulfilled") {
