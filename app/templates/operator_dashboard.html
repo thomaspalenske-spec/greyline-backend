@@ -669,7 +669,7 @@ table {
             <div class="card" style="margin-top:14px;">
               <div class="section-title">Top 5 Calls</div>
               <table>
-                <thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Result</th><th>Status</th></tr></thead>
+                <thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Flow</th><th>Conviction</th><th>Gate</th><th>Result</th><th>Status</th></tr></thead>
                 <tbody id="top_calls"></tbody>
               </table>
             </div>
@@ -918,16 +918,27 @@ async function refreshAll() {
     setText("ready_calls", b.ready_call_count ?? "--");
     setText("ready_puts", b.ready_put_count ?? "--");
 
-    const rows = (b.top_calls || []).slice(0, 5).map((c, i) => `
+    const rows = (b.top_calls || []).slice(0, 5).map((c, i) => {
+      const flow = String(c.institutional_flow_direction || "--").replaceAll("_", " ");
+      const flowClass = c.institutional_flow_direction === "INFLOW" ? "green" : c.institutional_flow_direction === "OUTFLOW" ? "red" : "yellow";
+      const gate = String(c.institutional_flow_gate || "--").replaceAll("_", " ");
+      const gateClass = c.institutional_flow_gate === "ALIGNED" ? "green" : "red";
+      const conviction = c.institutional_conviction_score ?? "--";
+      const convictionState = String(c.institutional_conviction_state || "--").replaceAll("_", " ");
+
+      return `
       <tr>
         <td>${i+1}</td>
-        <td><strong>${c.symbol}</strong></td>
+        <td><strong>${c.symbol}</strong><br><span class="${flowClass}">${c.option_type || ""}</span></td>
         <td>${c.composite_score}</td>
+        <td><strong class="${flowClass}">${flow}</strong><br><span class="sub">${c.institutional_flow_confidence ?? "--"} conf</span></td>
+        <td><strong>${conviction}</strong><br><span class="sub">${convictionState}</span></td>
+        <td><span class="badge ${gateClass === "green" ? "" : "blocked"}">${gate}</span></td>
         <td>${c.result}</td>
         <td><span class="badge blocked">${c.order_placement_allowed ? "ALLOWED" : "BLOCKED"}</span></td>
-      </tr>
-    `).join("");
-    document.getElementById("top_calls").innerHTML = rows || `<tr><td colspan="5">No candidates</td></tr>`;
+      </tr>`;
+    }).join("");
+    document.getElementById("top_calls").innerHTML = rows || `<tr><td colspan="8">No candidates</td></tr>`;
   }
 
 
