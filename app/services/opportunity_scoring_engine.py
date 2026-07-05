@@ -203,6 +203,19 @@ class OpportunityScoringEngine:
             else:
                 result = "REJECT"
 
+            institutional_flow_direction = equity_flow_result.get("institutional_flow_direction")
+            institutional_flow_aligned = (
+                (option_type == "CALL" and institutional_flow_direction == "INFLOW")
+                or (option_type == "PUT" and institutional_flow_direction == "OUTFLOW")
+                or institutional_flow_direction == "NEUTRAL"
+            )
+
+            institutional_flow_gate = "ALIGNED"
+            if not institutional_flow_aligned:
+                institutional_flow_gate = "MISALIGNED_DOWNGRADED"
+                if result == "EXECUTE":
+                    result = "WATCH"
+
             if (
                 regime_result.get("regime") == "WEAK_LIVE"
                 or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
@@ -262,6 +275,8 @@ class OpportunityScoringEngine:
                 "institutional_flow_confidence": equity_flow_result.get("institutional_flow_confidence"),
                 "institutional_flow_reasons": equity_flow_result.get("institutional_flow_reasons"),
                 "institutional_flow_context": equity_flow_result.get("institutional_flow_context"),
+                "institutional_flow_aligned": institutional_flow_aligned,
+                "institutional_flow_gate": institutional_flow_gate,
                 "bear_sponsorship_score": bear_sponsorship_score,
                 "asymmetry_score": asymmetry_score,
                 "bear_asymmetry_score": bear_asymmetry_score,
