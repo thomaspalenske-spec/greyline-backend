@@ -11,6 +11,7 @@ from app.services.trend_persistence_scoring_engine import TrendPersistenceScorin
 from app.services.breadth_scoring_engine import BreadthScoringEngine
 from app.services.institutional_sponsorship_scoring_engine import InstitutionalSponsorshipScoringEngine
 from app.services.equity_institutional_flow_engine import EquityInstitutionalFlowEngine
+from app.services.institutional_conviction_engine import InstitutionalConvictionEngine
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 
@@ -135,6 +136,18 @@ class OpportunityScoringEngine:
             t1 = datetime.utcnow()
             symbol_timings["expected_value_seconds"] = round((t1 - t0).total_seconds(), 2)
 
+            t0 = datetime.utcnow()
+            bull_conviction = InstitutionalConvictionEngine().score(
+                "CALL", setup_result, regime_result, trend_persistence_result, equity_flow_result
+            )
+            bear_conviction = InstitutionalConvictionEngine().score(
+                "PUT", setup_result, regime_result, trend_persistence_result, equity_flow_result
+            )
+            institutional_conviction_score = bull_conviction.get("institutional_conviction_score", 50)
+            bear_institutional_conviction_score = bear_conviction.get("institutional_conviction_score", 50)
+            t1 = datetime.utcnow()
+            symbol_timings["institutional_conviction_seconds"] = round((t1 - t0).total_seconds(), 2)
+
             bullish_score = round(
                 (
                     market_data_score * 0.08
@@ -145,7 +158,8 @@ class OpportunityScoringEngine:
                     + expected_value_score * 0.10
                     + trend_persistence_score * 0.09
                     + breadth_score * 0.08
-                    + institutional_inflow_score * 0.08
+                    + institutional_inflow_score * 0.06
+                    + institutional_conviction_score * 0.02
                     + asymmetry_score * 0.08
                     + risk_state_score * 0.07
                 ),
@@ -176,7 +190,8 @@ class OpportunityScoringEngine:
                     + bear_expected_value_score * 0.09
                     + bear_trend_score * 0.10
                     + bear_breadth_score * 0.10
-                    + bear_sponsorship_score * 0.08
+                    + bear_sponsorship_score * 0.06
+                    + bear_institutional_conviction_score * 0.02
                     + bear_asymmetry_score * 0.06
                     + bear_risk_score * 0.05
                 ),
@@ -277,6 +292,10 @@ class OpportunityScoringEngine:
                 "institutional_flow_context": equity_flow_result.get("institutional_flow_context"),
                 "institutional_flow_aligned": institutional_flow_aligned,
                 "institutional_flow_gate": institutional_flow_gate,
+                "institutional_conviction_score": institutional_conviction_score if option_type == "CALL" else bear_institutional_conviction_score,
+                "institutional_conviction_state": bull_conviction.get("institutional_conviction_state") if option_type == "CALL" else bear_conviction.get("institutional_conviction_state"),
+                "institutional_conviction_reasons": bull_conviction.get("institutional_conviction_reasons") if option_type == "CALL" else bear_conviction.get("institutional_conviction_reasons"),
+                "institutional_conviction_components": bull_conviction.get("institutional_conviction_components") if option_type == "CALL" else bear_conviction.get("institutional_conviction_components"),
                 "bear_sponsorship_score": bear_sponsorship_score,
                 "asymmetry_score": asymmetry_score,
                 "bear_asymmetry_score": bear_asymmetry_score,
