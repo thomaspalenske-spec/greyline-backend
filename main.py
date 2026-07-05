@@ -256,3 +256,6 @@ def operator_events_test():
         ack_required=True,
         payload={"test": True},
     )
+
+from app.routes import operator_cockpit_status
+app.include_router(operator_cockpit_status.router)
