@@ -381,7 +381,14 @@ class OptionsAccountDashboardEngine:
         realized_pnl = round(sum(float(t.get("realized_pnl") or 0) for t in closed_trades), 2)
         unrealized_pnl = round(sum(float(t.get("unrealized_pnl") or 0) for t in open_trades), 2)
 
-        deployed_capital = round(sum(float(t.get("estimated_cost") or 0) for t in open_trades), 2)
+        deployable_open_trades = [
+            t for t in open_trades
+            if not (
+                str(t.get("manager_status") or "") == "OPTION_MARKET_CLOSED_LAST_QUOTE_MARK"
+                and float(t.get("unrealized_pnl_pct") or 0) <= -35
+            )
+        ]
+        deployed_capital = round(sum(float(t.get("estimated_cost") or 0) for t in deployable_open_trades), 2)
         open_position_value = round(deployed_capital + unrealized_pnl, 2)
         cash_on_hand = round(self.starting_equity + realized_pnl - deployed_capital, 2)
         buying_power_remaining = cash_on_hand
