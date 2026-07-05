@@ -12,6 +12,7 @@ from app.services.breadth_scoring_engine import BreadthScoringEngine
 from app.services.institutional_sponsorship_scoring_engine import InstitutionalSponsorshipScoringEngine
 from app.services.equity_institutional_flow_engine import EquityInstitutionalFlowEngine
 from app.services.institutional_conviction_engine import InstitutionalConvictionEngine
+from app.services.institutional_flow_momentum_engine import InstitutionalFlowMomentumEngine
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 
@@ -231,6 +232,21 @@ class OpportunityScoringEngine:
                 if result == "EXECUTE":
                     result = "WATCH"
 
+            momentum_input = {
+                "symbol": symbol,
+                "option_type": option_type,
+                "result": result,
+                "composite_score": composite_score,
+                "institutional_flow_direction": institutional_flow_direction,
+                "institutional_flow_confidence": equity_flow_result.get("institutional_flow_confidence"),
+                "institutional_conviction_score": institutional_conviction_score if option_type == "CALL" else bear_institutional_conviction_score,
+                "institutional_flow_gate": institutional_flow_gate,
+            }
+            institutional_flow_momentum = InstitutionalFlowMomentumEngine().update(momentum_input)
+
+            if institutional_flow_momentum.get("institutional_flow_decay") is True and result == "EXECUTE":
+                result = "WATCH"
+
             if (
                 regime_result.get("regime") == "WEAK_LIVE"
                 or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
@@ -296,6 +312,14 @@ class OpportunityScoringEngine:
                 "institutional_conviction_state": bull_conviction.get("institutional_conviction_state") if option_type == "CALL" else bear_conviction.get("institutional_conviction_state"),
                 "institutional_conviction_reasons": bull_conviction.get("institutional_conviction_reasons") if option_type == "CALL" else bear_conviction.get("institutional_conviction_reasons"),
                 "institutional_conviction_components": bull_conviction.get("institutional_conviction_components") if option_type == "CALL" else bear_conviction.get("institutional_conviction_components"),
+                "institutional_flow_momentum_score": institutional_flow_momentum.get("institutional_flow_momentum_score"),
+                "institutional_flow_acceleration": institutional_flow_momentum.get("institutional_flow_acceleration"),
+                "institutional_flow_velocity": institutional_flow_momentum.get("institutional_flow_velocity"),
+                "institutional_flow_trend": institutional_flow_momentum.get("institutional_flow_trend"),
+                "institutional_flow_decay": institutional_flow_momentum.get("institutional_flow_decay"),
+                "institutional_flow_duration": institutional_flow_momentum.get("institutional_flow_duration"),
+                "institutional_flow_persistence": institutional_flow_momentum.get("institutional_flow_persistence"),
+                "institutional_flow_momentum_context": institutional_flow_momentum.get("institutional_flow_momentum_context"),
                 "bear_sponsorship_score": bear_sponsorship_score,
                 "asymmetry_score": asymmetry_score,
                 "bear_asymmetry_score": bear_asymmetry_score,
