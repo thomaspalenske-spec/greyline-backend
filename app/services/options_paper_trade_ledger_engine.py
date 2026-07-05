@@ -140,6 +140,23 @@ class OptionsPaperTradeLedgerEngine:
                 deployed += float(trade.get("estimated_cost") or 0)
         return round(deployed, 2)
 
+
+    def _closed_realized_pnl(self):
+        if not self.ledger_file.exists():
+            return 0.0
+
+        realized = 0.0
+        for line in self.ledger_file.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                trade = json.loads(line)
+            except Exception:
+                continue
+            if trade.get("status") == "CLOSED":
+                realized += float(trade.get("realized_pnl") or 0)
+        return round(realized, 2)
+
     def record_trade(self, candidate, source="OPTIONS_CYCLE_ENGINE", max_position_pct=0.05, candidate_score=None):
         legs = candidate.get("Legs") or [{}]
         leg = legs[0]
@@ -162,8 +179,9 @@ class OptionsPaperTradeLedgerEngine:
         account_equity = 10000.0
         max_total_deployed_pct = 0.95
         max_total_deployed = round(account_equity * max_total_deployed_pct, 2)
-        available_cash = round(account_equity - deployed_capital, 2)
-        available_exposure_capacity = round(max_total_deployed - deployed_capital, 2)
+        realized_pnl = self._closed_realized_pnl()
+        available_cash = round(account_equity + realized_pnl - deployed_capital, 2)
+        available_exposure_capacity = round(max_total_deployed + realized_pnl - deployed_capital, 2)
 
         if estimated_position_cost > available_exposure_capacity:
             return {
@@ -181,6 +199,7 @@ class OptionsPaperTradeLedgerEngine:
                 "max_total_deployed": max_total_deployed,
                 "available_exposure_capacity": available_exposure_capacity,
                 "available_cash": available_cash,
+                "realized_pnl": realized_pnl,
                 "estimated_position_cost": estimated_position_cost,
                 "execution_enabled": False,
                 "order_placement_allowed": False,
@@ -199,6 +218,7 @@ class OptionsPaperTradeLedgerEngine:
                 "position_sizing": sizing,
                 "deployed_capital": deployed_capital,
                 "available_cash": available_cash,
+                "realized_pnl": realized_pnl,
                 "estimated_position_cost": estimated_position_cost,
                 "execution_enabled": False,
                 "order_placement_allowed": False,
