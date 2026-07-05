@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.services.operator_notification_engine import OperatorNotificationEngine
@@ -29,6 +29,28 @@ class OperatorEventBusEngine:
         payload=None,
     ):
         payload = payload or {}
+
+        dedupe_key = "|".join([
+            str(source),
+            str(category),
+            str(symbol),
+            str(title),
+            str(message),
+        ])
+        dedupe_window_seconds = int(payload.get("dedupe_window_seconds") or 60)
+
+        recent_duplicate = self._recent_duplicate(dedupe_key, dedupe_window_seconds)
+        if recent_duplicate:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "engine": "OperatorEventBusEngine",
+                "event_published": False,
+                "deduped": True,
+                "dedupe_key": dedupe_key,
+                "duplicate_of_event_id": recent_duplicate.get("event_id"),
+                "status": "OPERATOR_EVENT_DEDUPED",
+            }
+
         event_id = f"{source}-{category}-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
 
         event = {
@@ -43,6 +65,7 @@ class OperatorEventBusEngine:
             "trade_id": trade_id,
             "ack_required": bool(ack_required),
             "payload": payload,
+            "dedupe_key": dedupe_key,
         }
 
         with self.ledger_file.open("a") as f:
@@ -70,6 +93,34 @@ class OperatorEventBusEngine:
             "audit": audit,
             "status": "OPERATOR_EVENT_PUBLISHED",
         }
+
+
+    def _recent_duplicate(self, dedupe_key, window_seconds=60):
+        if not self.ledger_file.exists():
+            return None
+
+        cutoff = datetime.utcnow() - timedelta(seconds=window_seconds)
+
+        for line in reversed(self.ledger_file.read_text().splitlines()):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+
+            if row.get("dedupe_key") != dedupe_key:
+                continue
+
+            try:
+                row_time = datetime.fromisoformat(row.get("timestamp"))
+            except Exception:
+                continue
+
+            if row_time >= cutoff:
+                return row
+
+        return None
 
     def recent(self, limit=50):
         if not self.ledger_file.exists():
