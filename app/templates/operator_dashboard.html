@@ -515,6 +515,46 @@ table {
   .cockpit-grid { grid-template-columns: 1fr; }
 }
 
+
+.execution-readiness {
+  margin-top: 14px;
+}
+
+.readiness-title {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .4px;
+  margin-bottom: 10px;
+}
+
+.readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(145px, 1fr));
+  gap: 12px;
+}
+
+.readiness-tile {
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.readiness-value {
+  font-size: 18px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+@media (max-width: 1700px) {
+  .readiness-grid { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .readiness-grid { grid-template-columns: 1fr; }
+}
+
 </style>
 </head>
 
@@ -564,6 +604,18 @@ table {
         <div class="cockpit-tile"><div class="label">Reliability</div><div class="cockpit-value" id="cockpit_reliability">--</div></div>
         <div class="cockpit-tile"><div class="label">Unread Alerts</div><div class="cockpit-value" id="cockpit_unread">--</div></div>
         <div class="cockpit-tile"><div class="label">Last Decision</div><div class="cockpit-value" id="cockpit_decision">--</div></div>
+      </div>
+
+      <div class="execution-readiness">
+        <div class="readiness-title">EXECUTION READINESS</div>
+        <div class="readiness-grid">
+          <div class="readiness-tile"><div class="label">Execution</div><div class="readiness-value red" id="ready_execution">--</div></div>
+          <div class="readiness-tile"><div class="label">Order Placement</div><div class="readiness-value red" id="ready_orders">--</div></div>
+          <div class="readiness-tile"><div class="label">Scheduler</div><div class="readiness-value yellow" id="ready_scheduler">--</div></div>
+          <div class="readiness-tile"><div class="label">Broker Token</div><div class="readiness-value yellow" id="ready_token">--</div></div>
+          <div class="readiness-tile"><div class="label">Quote Feed</div><div class="readiness-value yellow" id="ready_quotes">--</div></div>
+          <div class="readiness-tile"><div class="label">Last Refresh</div><div class="readiness-value" id="ready_refresh">--</div></div>
+        </div>
       </div>
     </section>
 
@@ -703,6 +755,15 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+
+function setStatusValue(id, value, color) {
+  setText(id, value);
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove("green", "red", "yellow");
+  el.classList.add(color);
+}
+
 function setClassBySign(id, value) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -829,6 +890,17 @@ async function refreshAll() {
 
     document.getElementById("execution_enabled").className = "value " + (ex ? "green" : "red");
     document.getElementById("orders_allowed").className = "value " + (ord ? "green" : "red");
+
+    const schedulerRunning = !!(s.thread_alive || s.last_status === "BACKGROUND_SCHEDULER_CYCLE_COMPLETE");
+    const tokenReady = String(s.token_status || s.broker_token_status || "READY").toUpperCase();
+    const quoteStatus = String(s.quote_status || s.quote_health || "UNKNOWN").toUpperCase();
+
+    setStatusValue("ready_execution", ex ? "READY" : "BLOCKED", ex ? "green" : "red");
+    setStatusValue("ready_orders", ord ? "READY" : "BLOCKED", ord ? "green" : "red");
+    setStatusValue("ready_scheduler", schedulerRunning ? "RUNNING" : "CHECK", schedulerRunning ? "green" : "yellow");
+    setStatusValue("ready_token", tokenReady.includes("READY") || tokenReady.includes("VALID") ? "READY" : tokenReady, tokenReady.includes("READY") || tokenReady.includes("VALID") ? "green" : "yellow");
+    setStatusValue("ready_quotes", quoteStatus === "UNKNOWN" ? "CHECK" : quoteStatus, quoteStatus.includes("GREEN") || quoteStatus.includes("READY") || quoteStatus.includes("FRESH") ? "green" : "yellow");
+    setText("ready_refresh", new Date().toLocaleTimeString());
   }
 
   if (battlefield.status === "fulfilled") {
