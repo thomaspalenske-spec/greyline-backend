@@ -88,7 +88,7 @@ class GreyLineMasterDecisionEngine:
             decision_event_severity = "WARNING"
             decision_ack_required = True
 
-        OperatorEventBusEngine().publish(
+        operator_event_result = OperatorEventBusEngine().publish(
             source="GreyLineMasterDecisionEngine",
             category=decision_event_category,
             severity=decision_event_severity,
@@ -130,6 +130,10 @@ class GreyLineMasterDecisionEngine:
             "reliability_score": reliability_governor.get("reliability_score"),
             "execution_enabled": False,
             "order_placement_allowed": False,
+            "operator_event_result": operator_event_result,
+            "operator_event_published": operator_event_result.get("event_published"),
+            "operator_event_deduped": operator_event_result.get("deduped", False),
+            "operator_event_status": operator_event_result.get("status"),
             "status": "GREYLINE_MASTER_DECISION_READY"
         }
 
