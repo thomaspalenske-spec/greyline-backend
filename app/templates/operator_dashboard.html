@@ -464,6 +464,57 @@ table {
   font-weight: 950;
 }
 
+
+/* ===== OPERATOR COCKPIT BANNER ===== */
+.cockpit-banner {
+  margin-bottom: 14px;
+  border: 1px solid rgba(53, 208, 111, .35);
+  box-shadow: 0 0 24px rgba(53, 208, 111, .10);
+}
+
+.cockpit-banner.yellow {
+  border-color: rgba(255, 179, 44, .55);
+  box-shadow: 0 0 24px rgba(255, 179, 44, .12);
+}
+
+.cockpit-banner.red {
+  border-color: rgba(255, 77, 87, .60);
+  box-shadow: 0 0 24px rgba(255, 77, 87, .14);
+}
+
+.cockpit-headline {
+  font-size: clamp(24px, 2vw, 38px);
+  font-weight: 950;
+  margin: 6px 0 14px 0;
+}
+
+.cockpit-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.cockpit-tile {
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.cockpit-value {
+  font-size: 18px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+@media (max-width: 1700px) {
+  .cockpit-grid { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .cockpit-grid { grid-template-columns: 1fr; }
+}
+
 </style>
 </head>
 
@@ -513,6 +564,21 @@ table {
         <div><div class="label">Top Candidate</div><strong id="commander_candidate">--</strong></div>
         <div><div class="label">Top Score</div><strong id="commander_score">--</strong></div>
         <div><div class="label">Unread</div><strong id="commander_unread">--</strong></div>
+      </div>
+    </section>
+
+
+    <section class="card cockpit-banner" id="cockpit_banner">
+      <div class="section-title">OPERATOR COCKPIT</div>
+      <div class="label">Mission Headline</div>
+      <div class="cockpit-headline green" id="cockpit_headline">Loading cockpit status...</div>
+      <div class="cockpit-grid">
+        <div class="cockpit-tile"><div class="label">Mission Status</div><div class="cockpit-value green" id="cockpit_status">--</div></div>
+        <div class="cockpit-tile"><div class="label">Battlefield</div><div class="cockpit-value" id="cockpit_battlefield">--</div></div>
+        <div class="cockpit-tile"><div class="label">Execution Authority</div><div class="cockpit-value" id="cockpit_mode">--</div></div>
+        <div class="cockpit-tile"><div class="label">Reliability</div><div class="cockpit-value" id="cockpit_reliability">--</div></div>
+        <div class="cockpit-tile"><div class="label">Unread Alerts</div><div class="cockpit-value" id="cockpit_unread">--</div></div>
+        <div class="cockpit-tile"><div class="label">Last Decision</div><div class="cockpit-value" id="cockpit_decision">--</div></div>
       </div>
     </section>
 
@@ -718,8 +784,39 @@ async function refreshCommanderSummary() {
   }
 }
 
+
+async function refreshCockpitBanner() {
+  try {
+    const payload = await getJSON("/operator-commander-summary");
+    const summary = payload.operator_summary || {};
+    const status = summary.status || "YELLOW";
+    const color = status === "GREEN" ? "green" : status === "RED" ? "red" : "yellow";
+
+    setText("cockpit_headline", summary.headline || "--");
+    setText("cockpit_status", status);
+    setText("cockpit_battlefield", `${summary.top_symbol || "--"} ${summary.top_option_type || ""} ${summary.top_score ?? ""}`.trim());
+    setText("cockpit_mode", summary.operating_mode || "--");
+    setText("cockpit_reliability", `${summary.reliability_score ?? "--"}/100`);
+    setText("cockpit_unread", summary.unread_notifications ?? "--");
+    setText("cockpit_decision", summary.master_decision || "--");
+
+    const banner = document.getElementById("cockpit_banner");
+    const headline = document.getElementById("cockpit_headline");
+    const statusEl = document.getElementById("cockpit_status");
+
+    if (banner) banner.className = "card cockpit-banner " + (status === "GREEN" ? "" : color);
+    if (headline) headline.className = "cockpit-headline " + color;
+    if (statusEl) statusEl.className = "cockpit-value " + color;
+  } catch (e) {
+    setText("cockpit_headline", "Cockpit status unavailable.");
+    const headline = document.getElementById("cockpit_headline");
+    if (headline) headline.className = "cockpit-headline yellow";
+  }
+}
+
 async function refreshAll() {
   setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
+  await refreshCockpitBanner();
   await refreshCommanderSummary();
 
   const [battlefield, ledger, scheduler, positionAlerts] = await Promise.allSettled([
