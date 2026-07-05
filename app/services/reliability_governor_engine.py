@@ -15,7 +15,7 @@ class ReliabilityGovernorEngine:
     def evaluate(self, simulate_fault=None):
         advisor = ReliabilityRemediationAdvisorEngine().evaluate(simulate_fault=simulate_fault)
 
-        score = int(advisor.get("score") or 0)
+        score = int(advisor.get("reliability_score") or 0)
         reliability = advisor.get("overall_reliability")
         posture = advisor.get("posture")
         actions = advisor.get("actions") or []
