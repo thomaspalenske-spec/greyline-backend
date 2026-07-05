@@ -4,7 +4,7 @@ from app.services.opportunity_scoring_engine import OpportunityScoringEngine
 
 
 class DirectionalAttributionReportEngine:
-    EXECUTE_THRESHOLD = 85.0
+    EXECUTE_THRESHOLD = 80.0
 
     WEIGHTS = {
         "market_data_score": 0.08,

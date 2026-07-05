@@ -4,7 +4,7 @@ from app.services.battlefield_history_engine import BattlefieldHistoryEngine
 
 
 class ReadinessAccelerationEngine:
-    EXECUTE_SCORE = 85
+    EXECUTE_SCORE = 80
 
     def evaluate(self, symbol=None):
         history = BattlefieldHistoryEngine().history(limit=100)
