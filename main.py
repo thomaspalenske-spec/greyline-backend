@@ -259,3 +259,6 @@ def operator_events_test():
 
 from app.routes import operator_cockpit_status
 app.include_router(operator_cockpit_status.router)
+
+from app.routes import operator_commander_summary
+app.include_router(operator_commander_summary.router)
