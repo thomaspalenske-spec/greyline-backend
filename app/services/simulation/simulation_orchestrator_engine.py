@@ -106,7 +106,7 @@ class SimulationOrchestratorEngine:
                     "market_data": snapshot.get("market_data"),
                     "future_visible": False,
                     "decision": (
-                        "EXECUTE" if candidate.get("adjusted_score", 0) >= 85
+                        "EXECUTE" if candidate.get("adjusted_score", 0) >= 80
                         else "WATCH" if candidate.get("adjusted_score", 0) >= 55
                         else "OBSERVE"
                     ),

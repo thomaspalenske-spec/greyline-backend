@@ -27,7 +27,7 @@ class SimulationPutLearningReportEngine:
                 bucket = self._bucket(risk)
                 rows[bucket]["blocked_put_candidates"] += 1
 
-                if (c.get("composite_score") or 0) >= 85:
+                if (c.get("composite_score") or 0) >= 80:
                     rows[bucket]["near_execute_put_candidates"] += 1
 
             for pos in d.get("closed_positions", []) or []:

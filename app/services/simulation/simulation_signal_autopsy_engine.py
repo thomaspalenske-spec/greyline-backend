@@ -73,8 +73,8 @@ class SimulationSignalAutopsyEngine:
                 continue
 
             near_execute = (
-                float(c.get("composite_score") or 0) >= 85
-                and float(c.get("institutional_sponsorship_score") or 0) >= 80
+                float(c.get("composite_score") or 0) >= 80
+                and float(c.get("institutional_sponsorship_score") or 0) >= 70
             )
             if not near_execute:
                 continue

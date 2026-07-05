@@ -155,7 +155,7 @@ class GreyLineSimulationDecisionAdapter:
         ):
             historical_execution_bonus = max(historical_execution_bonus, 5)
 
-        if composite_score + historical_execution_bonus < 85:
+        if composite_score + historical_execution_bonus < 80:
             historical_execution_bonus = 0
 
         composite_score = round(min(100, composite_score + historical_execution_bonus), 2)

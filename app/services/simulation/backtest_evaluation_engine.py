@@ -22,7 +22,7 @@ class BacktestEvaluationEngine:
             score = float(e.get("score") or e.get("composite_score") or e.get("adjusted_score") or 0)
             liquidity = float(e.get("liquidity_score") or 0)
 
-            if score >= 85 and liquidity >= 70:
+            if score >= 80 and liquidity >= 70:
                 return "EXECUTE"
             if score >= 70:
                 return "WATCH"

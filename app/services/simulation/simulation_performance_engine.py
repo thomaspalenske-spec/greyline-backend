@@ -22,7 +22,7 @@ class SimulationPerformanceEngine:
             score = float(signal.get("score") or signal.get("composite_score") or signal.get("adjusted_score") or 0)
             liquidity = float(signal.get("liquidity_score") or 0)
 
-            if score < 85 or liquidity < 70:
+            if score < 80 or liquidity < 70:
                 continue
 
             entry_step = replay_steps[i] if i < len(replay_steps) else None
