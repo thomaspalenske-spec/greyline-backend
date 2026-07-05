@@ -14,7 +14,7 @@ class OptionsCycleEngine:
             symbol=symbol,
             expiration=expiration,
             option_type="All",
-            max_contracts=50,
+            max_contracts=10,
         )
 
         contracts = chain.get("contracts", [])

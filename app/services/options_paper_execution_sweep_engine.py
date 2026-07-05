@@ -4,6 +4,7 @@ from app.routes.greyline_market_battlefield_summary import greyline_market_battl
 from app.services.options_cycle_engine import OptionsCycleEngine
 from app.services.options_dynamic_position_sizing_engine import OptionsDynamicPositionSizingEngine
 from app.services.signal_reliability_engine import SignalReliabilityEngine
+from app.services.institutional_trade_lifecycle_engine import InstitutionalTradeLifecycleEngine
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 
@@ -43,7 +44,21 @@ class OptionsPaperExecutionSweepEngine:
 
             score = c.get("score") or c.get("composite_score")
             reliability = SignalReliabilityEngine().evaluate(c)
-            max_position_pct = OptionsDynamicPositionSizingEngine().max_position_pct(score, reliability.get('signal_reliability_score'))
+
+            lifecycle = InstitutionalTradeLifecycleEngine().evaluate({
+                "institutional_flow_direction": c.get("institutional_flow_direction"),
+                "institutional_flow_momentum_score": c.get("institutional_flow_momentum_score"),
+                "institutional_flow_decay": c.get("institutional_flow_decay"),
+                "institutional_conviction_score": c.get("institutional_conviction_score"),
+            })
+
+            max_position_pct = (
+                OptionsDynamicPositionSizingEngine().max_position_pct(
+                    score,
+                    reliability.get("signal_reliability_score"),
+                )
+                * lifecycle.get("position_multiplier", 1.0)
+            )
             r = OptionsCycleEngine().run(
                 symbol=symbol,
                 option_type=option_type,
@@ -82,6 +97,10 @@ class OptionsPaperExecutionSweepEngine:
                 "selected_option_symbol": (((r.get("top_candidate") or {}).get("Legs") or [{}])[0]).get("Symbol"),
                 "block_reason": ledger_result.get("reason"),
                 "position_sizing": ledger_result.get("position_sizing"),
+                "trade_phase": lifecycle.get("trade_phase"),
+                "trade_action": lifecycle.get("trade_action"),
+                "stop_adjustment": lifecycle.get("stop_adjustment"),
+                "position_multiplier": lifecycle.get("position_multiplier"),
                 "engine_status": r.get("status"),
                 "status": "OPTIONS_PAPER_SWEEP_EVALUATED",
             })

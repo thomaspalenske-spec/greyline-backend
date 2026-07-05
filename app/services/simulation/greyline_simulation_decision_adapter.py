@@ -164,8 +164,8 @@ class GreyLineSimulationDecisionAdapter:
 
         execution_blockers = []
 
-        if composite_score < 85:
-            execution_blockers.append("COMPOSITE_SCORE_BELOW_85")
+        if composite_score < 80:
+            execution_blockers.append("COMPOSITE_SCORE_BELOW_80")
         if direction_confidence < 5:
             execution_blockers.append("DIRECTION_CONFIDENCE_BELOW_5")
         if liquidity_score < 70:
@@ -174,16 +174,10 @@ class GreyLineSimulationDecisionAdapter:
             bear_sponsorship_score if option_type == "PUT" else institutional_sponsorship_score
         )
 
-        if directional_sponsorship_score < 80:
-            execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
-        if option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80:
-            execution_blockers.append("CALL_RISK_STATE_SCORE_BELOW_80")
-
+        if directional_sponsorship_score < 70:
+            execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_70")
         if option_type == "PUT" and bear_trend_score >= 84 and bear_setup_score >= 90:
             execution_blockers.append("PUT_DOWNSIDE_EXHAUSTION_RISK")
-        if directional_sponsorship_score < 80:
-            execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
-
         call_risk_ok = not (option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80)
         call_bear_rally_ok = not (
             option_type == "CALL"
@@ -198,9 +192,9 @@ class GreyLineSimulationDecisionAdapter:
         )
 
         if (
-            composite_score >= 85
+            composite_score >= 80
             and direction_confidence >= 5
-            and directional_sponsorship_score >= 80
+            and directional_sponsorship_score >= 70
             and call_risk_ok
             and call_bear_rally_ok
             and call_overheated_trap_ok
@@ -212,15 +206,7 @@ class GreyLineSimulationDecisionAdapter:
         else:
             result = "REJECT"
 
-        if option_type == "CALL" and regime_result.get("regime") == "WEAK_LIVE":
-            execution_blockers.append("REGIME_WEAK_LIVE")
-        if risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]:
-            execution_blockers.append("RISK_STATE_DEFENSIVE_OR_STRESSED")
-
-        if option_type == "PUT" and risk_state_result.get("risk_state_score", 50) < 70:
-            execution_blockers.append("PUT_RISK_STATE_BELOW_70")
-
-        if option_type == "CALL" and (
+        if (
             regime_result.get("regime") == "WEAK_LIVE"
             or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
         ):
