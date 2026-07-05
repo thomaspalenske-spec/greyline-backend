@@ -96,6 +96,7 @@ class OptionsPaperExecutionSweepEngine:
                 "duplicate_blocked": r.get("duplicate_blocked"),
                 "selected_option_symbol": (((r.get("top_candidate") or {}).get("Legs") or [{}])[0]).get("Symbol"),
                 "block_reason": ledger_result.get("reason"),
+                "ledger_result": ledger_result,
                 "position_sizing": ledger_result.get("position_sizing"),
                 "trade_phase": lifecycle.get("trade_phase"),
                 "trade_action": lifecycle.get("trade_action"),

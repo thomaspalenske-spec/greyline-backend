@@ -65,6 +65,12 @@ class OptionsCycleEngine:
 
             if ledger.open_position_exists(option_symbol):
                 duplicate_blocked = True
+                paper_trade = {
+                    "paper_trade_recorded": False,
+                    "reason": "DUPLICATE_OPEN_OPTION_POSITION",
+                    "option_symbol": option_symbol,
+                    "status": "OPTIONS_PAPER_TRADE_DUPLICATE_BLOCKED",
+                }
             else:
                 paper_trade = ledger.record_trade(
                     top,
