@@ -133,6 +133,10 @@ class OptionsPaperTradeLedgerEngine:
             except Exception:
                 continue
             if trade.get("status") == "OPEN":
+                manager_status = str(trade.get("manager_status") or "")
+                pnl_pct = float(trade.get("unrealized_pnl_pct") or 0)
+                if manager_status == "OPTION_MARKET_CLOSED_LAST_QUOTE_MARK" and pnl_pct <= -35:
+                    continue
                 deployed += float(trade.get("estimated_cost") or 0)
         return round(deployed, 2)
 
