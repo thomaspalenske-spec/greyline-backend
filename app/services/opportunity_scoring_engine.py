@@ -10,6 +10,7 @@ from app.services.expected_value_scoring_engine import ExpectedValueScoringEngin
 from app.services.trend_persistence_scoring_engine import TrendPersistenceScoringEngine
 from app.services.breadth_scoring_engine import BreadthScoringEngine
 from app.services.institutional_sponsorship_scoring_engine import InstitutionalSponsorshipScoringEngine
+from app.services.equity_institutional_flow_engine import EquityInstitutionalFlowEngine
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 
@@ -94,9 +95,14 @@ class OpportunityScoringEngine:
             symbol_timings["breadth_seconds"] = round((t1 - t0).total_seconds(), 2)
 
             t0 = datetime.utcnow()
-            institutional_sponsorship_score = InstitutionalSponsorshipScoringEngine().score_symbol(symbol).get("institutional_sponsorship_score", 50)
+            sponsorship_result = InstitutionalSponsorshipScoringEngine().score_symbol(symbol)
+            institutional_sponsorship_score = sponsorship_result.get("institutional_sponsorship_score", 50)
+            equity_flow_result = EquityInstitutionalFlowEngine().evaluate_symbol(symbol)
+            institutional_inflow_score = equity_flow_result.get("institutional_inflow_score", institutional_sponsorship_score)
+            institutional_outflow_score = equity_flow_result.get("institutional_outflow_score", 100 - institutional_sponsorship_score)
             t1 = datetime.utcnow()
             symbol_timings["institutional_sponsorship_seconds"] = round((t1 - t0).total_seconds(), 2)
+            symbol_timings["equity_institutional_flow_seconds"] = symbol_timings["institutional_sponsorship_seconds"]
 
             t0 = datetime.utcnow()
             asymmetry_score = AsymmetryScoringEngine().score_symbol(symbol).get("asymmetry_score", 50)
@@ -139,7 +145,7 @@ class OpportunityScoringEngine:
                     + expected_value_score * 0.10
                     + trend_persistence_score * 0.09
                     + breadth_score * 0.08
-                    + institutional_sponsorship_score * 0.08
+                    + institutional_inflow_score * 0.08
                     + asymmetry_score * 0.08
                     + risk_state_score * 0.07
                 ),
@@ -154,7 +160,7 @@ class OpportunityScoringEngine:
             # Strong bullish breadth should dampen bearish trades, not erase them.
             bear_breadth_score = max(35, bearish_breadth_score)
             bear_trend_score = bearish_trend_persistence_score
-            bear_sponsorship_score = 100 - institutional_sponsorship_score
+            bear_sponsorship_score = institutional_outflow_score
             # Keep bearish EV from being mechanically crushed by bullish EV mirror.
             bear_expected_value_score = bearish_expected_value_score
             bear_asymmetry_score = 100 - asymmetry_score
@@ -248,6 +254,14 @@ class OpportunityScoringEngine:
                 "breadth_score": breadth_score,
                 "bear_breadth_score": bear_breadth_score,
                 "institutional_sponsorship_score": institutional_sponsorship_score,
+                "institutional_inflow_score": institutional_inflow_score,
+                "institutional_outflow_score": institutional_outflow_score,
+                "net_institutional_flow_score": equity_flow_result.get("net_institutional_flow_score"),
+                "institutional_flow_direction": equity_flow_result.get("institutional_flow_direction"),
+                "institutional_flow_strength": equity_flow_result.get("institutional_flow_strength"),
+                "institutional_flow_confidence": equity_flow_result.get("institutional_flow_confidence"),
+                "institutional_flow_reasons": equity_flow_result.get("institutional_flow_reasons"),
+                "institutional_flow_context": equity_flow_result.get("institutional_flow_context"),
                 "bear_sponsorship_score": bear_sponsorship_score,
                 "asymmetry_score": asymmetry_score,
                 "bear_asymmetry_score": bear_asymmetry_score,
