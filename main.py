@@ -1,5 +1,6 @@
 from app.routes import portfolio_governor
 from fastapi import FastAPI
+from app.routes import operator_notifications
 from app.routes.historical_data_import import router as historical_data_import_router
 from app.routes.simulation_outcomes import router as simulation_outcomes_router
 from app.routes.simulation_report import router as simulation_report_router
@@ -26,6 +27,7 @@ from app.routes import decision_outcomes
 from app.routes import decision_self_audit
 
 app = FastAPI(title="GreyLine Backend Server")
+app.include_router(operator_notifications.router)
 app.include_router(historical_data_import_router)
 app.include_router(simulation_outcomes_router)
 app.include_router(simulation_report_router)

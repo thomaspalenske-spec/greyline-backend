@@ -88,3 +88,31 @@ class OperatorNotificationEngine:
             "acknowledged": matched,
             "status": "OPERATOR_NOTIFICATION_ACKNOWLEDGED" if matched else "OPERATOR_NOTIFICATION_NOT_FOUND",
         }
+
+    def acknowledge_all(self):
+        rows = self._read()
+        now = datetime.utcnow().isoformat()
+        previous_unread_count = 0
+        acknowledged_count = 0
+
+        for r in rows:
+            if r.get("acknowledged") is not True:
+                previous_unread_count += 1
+                r["acknowledged"] = True
+                r["acknowledged_at"] = now
+                acknowledged_count += 1
+
+        if acknowledged_count:
+            self._write(rows)
+
+        remaining_unread_count = len([r for r in rows if r.get("acknowledged") is not True])
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "engine": "OperatorNotificationEngine",
+            "previous_unread_count": previous_unread_count,
+            "acknowledged_count": acknowledged_count,
+            "remaining_unread_count": remaining_unread_count,
+            "status": "OPERATOR_NOTIFICATIONS_ACKNOWLEDGED_ALL",
+        }
+
