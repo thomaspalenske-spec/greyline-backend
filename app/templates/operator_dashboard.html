@@ -440,6 +440,30 @@ table {
     font-weight: 800;
     box-shadow: 0 0 10px rgba(250, 204, 21, .25);
   }
+
+.commander-summary {
+  margin-bottom: 14px;
+  border: 1px solid rgba(53, 208, 111, .35);
+  box-shadow: 0 0 22px rgba(53, 208, 111, .08);
+}
+
+.commander-headline {
+  font-size: clamp(22px, 2vw, 34px);
+  font-weight: 950;
+  margin-top: 6px;
+}
+
+.commander-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.commander-status {
+  font-weight: 950;
+}
+
 </style>
 </head>
 
@@ -476,6 +500,21 @@ table {
         <button class="primary" onclick="runOptionsManager()">Run Options Manager</button>
       </div>
     </div>
+
+
+    <section class="card commander-summary">
+      <div class="section-title">COMMANDER SUMMARY</div>
+      <div class="label">Current Operator Headline</div>
+      <div class="commander-headline green" id="commander_headline">Loading commander summary...</div>
+      <div class="commander-grid">
+        <div><div class="label">Status</div><strong class="commander-status green" id="commander_status">--</strong></div>
+        <div><div class="label">Mode</div><strong id="commander_mode">--</strong></div>
+        <div><div class="label">Reliability</div><strong id="commander_reliability">--</strong></div>
+        <div><div class="label">Top Candidate</div><strong id="commander_candidate">--</strong></div>
+        <div><div class="label">Top Score</div><strong id="commander_score">--</strong></div>
+        <div><div class="label">Unread</div><strong id="commander_unread">--</strong></div>
+      </div>
+    </section>
 
     <section class="grid metrics">
       <div class="card"><div class="label">Current Options Equity</div><div class="value" id="equity">$--</div></div>
@@ -650,8 +689,38 @@ async function ackPositionAlert(tradeId) {
   refreshAll();
 }
 
+
+async function refreshCommanderSummary() {
+  try {
+    const payload = await getJSON("/operator-commander-summary");
+    const summary = payload.operator_summary || {};
+
+    setText("commander_headline", summary.headline || "--");
+    setText("commander_status", summary.status || "--");
+    setText("commander_mode", summary.operating_mode || "--");
+    setText("commander_reliability", `${summary.reliability_score ?? "--"}/100`);
+    setText("commander_candidate", `${summary.top_symbol || "--"} ${summary.top_option_type || ""}`);
+    setText("commander_score", summary.top_score ?? "--");
+    setText("commander_unread", summary.unread_notifications ?? "--");
+
+    const headline = document.getElementById("commander_headline");
+    const status = document.getElementById("commander_status");
+    if (headline && status) {
+      headline.className = "commander-headline " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
+      status.className = "commander-status " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
+    }
+
+    setText("side_mode", summary.operating_mode || "--");
+  } catch (e) {
+    setText("commander_headline", "Commander summary unavailable.");
+    const headline = document.getElementById("commander_headline");
+    if (headline) headline.className = "commander-headline yellow";
+  }
+}
+
 async function refreshAll() {
   setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
+  await refreshCommanderSummary();
 
   const [battlefield, ledger, scheduler, positionAlerts] = await Promise.allSettled([
     getJSON("/greyline-market-battlefield-summary"),
