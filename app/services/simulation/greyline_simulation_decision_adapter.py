@@ -187,6 +187,14 @@ class GreyLineSimulationDecisionAdapter:
             and setup_score < 84
         ):
             execution_blockers.append("XLF_WEAK_REGIME_SETUP_BLOCK")
+        if (
+            symbol == "NVDA"
+            and option_type == "CALL"
+            and regime_result.get("regime_score", 50) >= 100
+            and trend_persistence_score >= 100
+            and setup_score >= 100
+        ):
+            execution_blockers.append("NVDA_OVERHEATED_CALL_CHASE_BLOCK")
         call_risk_ok = not (option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80)
         call_bear_rally_ok = not (
             option_type == "CALL"
