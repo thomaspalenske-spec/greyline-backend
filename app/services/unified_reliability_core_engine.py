@@ -159,7 +159,7 @@ class UnifiedReliabilityCoreEngine:
         market_health = state.get("market_data_health")
 
         if response.get("ok") and data.get("enabled") and data.get("thread_alive"):
-            if market_health in ["HEALTHY", "MARKET_CLOSED_LAST_QUOTE_MARK"]:
+            if market_health in ["HEALTHY", "ACCEPTABLE", "MARKET_CLOSED_LAST_QUOTE_MARK"]:
                 return {"check": "quote_heartbeat", "status": "GREEN", "points": 25, "message": market_health}
             return {"check": "quote_heartbeat", "status": "YELLOW", "points": 15, "message": market_health or "quote heartbeat running but degraded"}
 
