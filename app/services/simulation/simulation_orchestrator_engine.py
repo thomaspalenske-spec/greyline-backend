@@ -190,6 +190,12 @@ class SimulationOrchestratorEngine:
             if ((d.get("execution") or {}).get("position_opened") is True)
         ])
 
+        ending_open_position_value = round(sum(
+            float(pos.get("shares") or 0) * float(pos.get("current_price") or pos.get("entry_price") or 0)
+            for pos in open_positions
+        ), 2)
+        ending_equity = round(capital + ending_open_position_value, 2)
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "SimulationOrchestratorEngine",
@@ -200,7 +206,8 @@ class SimulationOrchestratorEngine:
             "step_days": step_days,
             "starting_capital": float(starting_capital),
             "ending_capital": capital,
-            "ending_equity": capital,
+            "ending_open_position_value": ending_open_position_value,
+            "ending_equity": ending_equity,
             "trade_count": trade_count,
             "closed_position_count": len(all_closed_positions),
             "closed_positions": all_closed_positions,
