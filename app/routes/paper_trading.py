@@ -39,9 +39,14 @@ def paper_trading_blockers():
 
 @router.get("/paper-trading-approval-gate")
 def paper_trading_approval_gate():
+    blockers = PaperTradingBlockerEngine().evaluate_blockers()
+    paper_trading_ready = not blockers.get("paper_trading_blocked", True)
+
+    readiness = blockers.get("readiness", {})
+
     return PaperTradingApprovalGateEngine().evaluate_approval(
-        paper_trading_ready=False,
-        manual_approval_granted=False
+        paper_trading_ready=paper_trading_ready,
+        manual_approval_granted=readiness.get("manual_approval_granted", False)
     )
 
 
@@ -52,11 +57,19 @@ def paper_trading_control_center():
 
 @router.get("/paper-trading-transition-summary")
 def paper_trading_transition_summary():
+    blockers = PaperTradingBlockerEngine().evaluate_blockers()
+    approval = paper_trading_approval_gate()
+
+    blocker_names = blockers.get("blockers", [])
+    paper_trading_ready = not blockers.get("paper_trading_blocked", True)
+    broker_connected = "Broker sandbox not connected" not in blocker_names
+    api_credentials_configured = "TradeStation API credentials not configured" not in blocker_names
+
     return PaperTradingTransitionSummaryEngine().summarize_transition(
-        paper_trading_ready=False,
-        approval_passed=False,
-        broker_connected=False,
-        api_credentials_configured=False
+        paper_trading_ready=paper_trading_ready,
+        approval_passed=approval.get("approval_passed", False),
+        broker_connected=broker_connected,
+        api_credentials_configured=api_credentials_configured
     )
 
 
@@ -67,11 +80,19 @@ def paper_trading_launch_checklist():
 
 @router.get("/paper-trading-final-gate")
 def paper_trading_final_gate():
+    blockers = PaperTradingBlockerEngine().evaluate_blockers()
+    approval = paper_trading_approval_gate()
+    checklist = PaperTradingLaunchChecklistEngine().get_checklist()
+
+    paper_trading_ready = not blockers.get("paper_trading_blocked", True)
+    blockers_cleared = blockers.get("blocker_count", 0) == 0
+    launch_checklist_complete = checklist.get("launch_ready", False)
+
     return PaperTradingFinalGateEngine().evaluate_final_gate(
-        paper_trading_ready=False,
-        approval_passed=False,
-        blockers_cleared=False,
-        launch_checklist_complete=False
+        paper_trading_ready=paper_trading_ready,
+        approval_passed=approval.get("approval_passed", False),
+        blockers_cleared=blockers_cleared,
+        launch_checklist_complete=launch_checklist_complete
     )
 
 

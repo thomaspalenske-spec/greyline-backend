@@ -28,6 +28,6 @@ class PaperTradingTransitionSummaryEngine:
             "next_state": (
                 "PAPER_TRADING_ALLOWED"
                 if transition_allowed
-                else "PAPER_TRADING_ALLOWED"
+                else "PAPER_TRADING_BLOCKED"
             )
         }

@@ -22,6 +22,6 @@ class PaperTradingApprovalGateEngine:
             "next_state": (
                 "PAPER_TRADING_ALLOWED"
                 if approval_passed
-                else "PAPER_TRADING_ALLOWED"
+                else "PAPER_TRADING_BLOCKED"
             )
         }
