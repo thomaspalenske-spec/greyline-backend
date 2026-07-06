@@ -55,6 +55,8 @@ class OpportunityQueueEngine:
                 "liquidity_distance_to_execute": round(max(70 - liquidity, 0), 2) if liquidity_available else None,
                 "directional_bias": item.get("directional_bias"),
                 "setup_score": item.get("setup_score"),
+                "bullish_setup_score": item.get("bullish_setup_score"),
+                "bearish_setup_score": item.get("bearish_setup_score"),
                 "direction_confidence": item.get("direction_confidence"),
             })
 

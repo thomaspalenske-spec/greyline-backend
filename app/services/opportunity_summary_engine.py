@@ -23,6 +23,8 @@ class OpportunitySummaryEngine:
                 "direction_confidence": item.get("direction_confidence"),
                 "liquidity_score": item.get("liquidity_score"),
                 "setup_score": item.get("setup_score"),
+                "bullish_setup_score": item.get("bullish_setup_score"),
+                "bearish_setup_score": item.get("bearish_setup_score"),
                 "order_placement_allowed": item.get("order_placement_allowed"),
                 "governor_status": item.get("governor_status")
             })

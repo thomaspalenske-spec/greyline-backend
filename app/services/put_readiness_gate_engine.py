@@ -11,7 +11,9 @@ class PutReadinessGateEngine:
             "score_ready": float(candidate.get("composite_score") or 0) >= 85,
             "confidence_ready": float(candidate.get("direction_confidence") or 0) >= 5,
             "liquidity_ready": float(candidate.get("liquidity_score") or 0) >= 70,
-            "setup_ready": float(candidate.get("setup_score") or 0) >= 60,
+            "setup_ready": float(
+                candidate.get("bearish_setup_score", candidate.get("setup_score") or 0)
+            ) >= 60,
             "watch_or_execute": candidate.get("result") in ["WATCH", "EXECUTE"],
         }
 
@@ -31,5 +33,7 @@ class PutReadinessGateEngine:
             "bearish_score": candidate.get("bearish_score"),
             "bullish_score": candidate.get("bullish_score"),
             "direction_confidence": candidate.get("direction_confidence"),
+            "setup_score": candidate.get("setup_score"),
+            "bearish_setup_score": candidate.get("bearish_setup_score"),
             "status": "PUT_READY" if ready else "PUT_NOT_READY",
         }
