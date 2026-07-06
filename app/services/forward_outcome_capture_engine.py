@@ -47,22 +47,40 @@ class ForwardOutcomeCaptureEngine:
             price = prices.get(symbol, {})
             current_price = price.get("price") or 0
 
-            if current_price <= 0:
+            snapshot_price = float(r.get("snapshot_price") or 0)
+            directional_bias = r.get("directional_bias")
+
+            raw_return_pct = None
+            directional_return_pct = None
+            successful = None
+
+            if current_price <= 0 or snapshot_price <= 0:
                 outcome_state = "PRICE_UNAVAILABLE"
             else:
                 outcome_state = "PRICE_CAPTURED"
+                raw_return_pct = round(((current_price / snapshot_price) - 1) * 100, 4)
+
+                if directional_bias == "BULLISH":
+                    directional_return_pct = raw_return_pct
+                    successful = current_price > snapshot_price
+                elif directional_bias == "BEARISH":
+                    directional_return_pct = round(raw_return_pct * -1, 4)
+                    successful = current_price < snapshot_price
 
             outcomes.append({
                 "timestamp": datetime.utcnow().isoformat(),
                 "candidate_timestamp": r.get("timestamp"),
                 "symbol": symbol,
                 "option_type": r.get("option_type"),
-                "directional_bias": r.get("directional_bias"),
+                "directional_bias": directional_bias,
                 "candidate_result": r.get("result"),
                 "candidate_score": r.get("score"),
                 "candidate_rank": r.get("rank"),
-                "snapshot_price": r.get("snapshot_price"),
+                "snapshot_price": snapshot_price,
                 "current_price": current_price,
+                "raw_return_pct": raw_return_pct,
+                "directional_return_pct": directional_return_pct,
+                "successful": successful,
                 "quote_trade_time": price.get("trade_time"),
                 "quote_is_delayed": price.get("is_delayed"),
                 "outcome_state": outcome_state,
