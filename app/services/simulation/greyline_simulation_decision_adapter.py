@@ -174,8 +174,8 @@ class GreyLineSimulationDecisionAdapter:
             bear_sponsorship_score if option_type == "PUT" else institutional_sponsorship_score
         )
 
-        if directional_sponsorship_score < 70:
-            execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_70")
+        if directional_sponsorship_score < 80:
+            execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
         if option_type == "PUT" and bear_trend_score >= 84 and bear_setup_score >= 90:
             execution_blockers.append("PUT_DOWNSIDE_EXHAUSTION_RISK")
         call_risk_ok = not (option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80)
@@ -194,7 +194,7 @@ class GreyLineSimulationDecisionAdapter:
         if (
             composite_score >= 80
             and direction_confidence >= 5
-            and directional_sponsorship_score >= 70
+            and directional_sponsorship_score >= 80
             and call_risk_ok
             and call_bear_rally_ok
             and call_overheated_trap_ok
