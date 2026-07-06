@@ -2,6 +2,8 @@ from datetime import datetime
 
 from app.services.learning_analytics_engine import LearningAnalyticsEngine
 from app.services.decision_feature_attribution_engine import DecisionFeatureAttributionEngine
+from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
+from app.services.forward_outcome_attribution_engine import ForwardOutcomeAttributionEngine
 
 
 class DecisionWeightRecommendationEngine:
@@ -9,6 +11,11 @@ class DecisionWeightRecommendationEngine:
     def recommend(self):
         analytics = LearningAnalyticsEngine().summarize()
         attribution = DecisionFeatureAttributionEngine().analyze()
+
+        forward_capture = ForwardOutcomeCaptureEngine().capture(limit=100)
+        forward_attribution = ForwardOutcomeAttributionEngine().evaluate(
+            forward_capture.get("outcomes", [])
+        )
 
         recommendations = []
 
@@ -58,6 +65,11 @@ class DecisionWeightRecommendationEngine:
             "learning_events": analytics.get("total_learning_events"),
             "system_confidence_trend": analytics.get("system_confidence_trend"),
             "recommendations": recommendations,
+            "forward_outcome_attribution": forward_attribution,
+            "forward_learning_note": (
+                "Forward attribution is advisory only. "
+                "Automatic threshold or weight changes remain disabled."
+            ),
             "automatic_weight_changes_enabled": False,
             "human_approval_required": True,
             "execution_enabled": False,
