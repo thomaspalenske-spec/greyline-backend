@@ -180,6 +180,13 @@ class GreyLineSimulationDecisionAdapter:
             execution_blockers.append("PUT_DOWNSIDE_EXHAUSTION_RISK")
         if symbol == "XLE" and option_type == "CALL":
             execution_blockers.append("XLE_CALL_HISTORICAL_WEAKNESS_BLOCK")
+        if (
+            symbol == "XLF"
+            and option_type == "CALL"
+            and regime_result.get("regime_score", 50) < 80
+            and setup_score < 84
+        ):
+            execution_blockers.append("XLF_WEAK_REGIME_SETUP_BLOCK")
         call_risk_ok = not (option_type == "CALL" and risk_state_result.get("risk_state_score", 50) < 80)
         call_bear_rally_ok = not (
             option_type == "CALL"
