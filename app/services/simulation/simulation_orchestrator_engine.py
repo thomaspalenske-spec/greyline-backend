@@ -181,6 +181,15 @@ class SimulationOrchestratorEngine:
         finally:
             SimulationClock.disable_simulation()
 
+        all_closed_positions = []
+        for d in decisions:
+            all_closed_positions.extend(d.get("closed_positions") or [])
+
+        trade_count = len([
+            d for d in decisions
+            if ((d.get("execution") or {}).get("position_opened") is True)
+        ])
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "SimulationOrchestratorEngine",
@@ -191,6 +200,10 @@ class SimulationOrchestratorEngine:
             "step_days": step_days,
             "starting_capital": float(starting_capital),
             "ending_capital": capital,
+            "ending_equity": capital,
+            "trade_count": trade_count,
+            "closed_position_count": len(all_closed_positions),
+            "closed_positions": all_closed_positions,
             "open_position_count": len(open_positions),
             "open_positions": open_positions,
             "decision_count": len(decisions),
