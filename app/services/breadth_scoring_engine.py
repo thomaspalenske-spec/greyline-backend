@@ -38,8 +38,13 @@ class BreadthScoringEngine:
         previous_volume = self._float(quote.get("PreviousVolume"))
 
         above_previous_close = bool(previous_close and last > previous_close)
-        above_vwap = bool(vwap and last > vwap)
+        vwap_available = vwap > 0
+        above_vwap = bool(vwap_available and last > vwap)
+
+        # Intraday volume should not be compared harshly against full prior-day volume.
+        # Treat volume as neutral unless it is meaningfully confirming.
         volume_confirming = bool(previous_volume and volume >= previous_volume * 0.7)
+        volume_available = bool(previous_volume and volume)
 
         context = {
             "symbol": symbol,
@@ -52,7 +57,9 @@ class BreadthScoringEngine:
             "previous_volume": previous_volume,
             "above_previous_close": above_previous_close,
             "above_vwap": above_vwap,
-            "volume_confirming": volume_confirming
+            "vwap_available": vwap_available,
+            "volume_confirming": volume_confirming,
+            "volume_available": volume_available
         }
         self._quote_context_cache[symbol] = dict(context)
         return context
@@ -87,16 +94,20 @@ class BreadthScoringEngine:
                 reasons.append(f"{label}_BELOW_PREVIOUS_CLOSE")
                 bearish_reasons.append(f"{label}_BELOW_PREVIOUS_CLOSE")
 
-            if context.get("above_vwap"):
-                score += 10
-                bearish_score -= 8
-                reasons.append(f"{label}_ABOVE_VWAP")
-                bearish_reasons.append(f"{label}_ABOVE_VWAP")
+            if context.get("vwap_available"):
+                if context.get("above_vwap"):
+                    score += 10
+                    bearish_score -= 8
+                    reasons.append(f"{label}_ABOVE_VWAP")
+                    bearish_reasons.append(f"{label}_ABOVE_VWAP")
+                else:
+                    score -= 8
+                    bearish_score += 10
+                    reasons.append(f"{label}_BELOW_VWAP")
+                    bearish_reasons.append(f"{label}_BELOW_VWAP")
             else:
-                score -= 8
-                bearish_score += 10
-                reasons.append(f"{label}_BELOW_VWAP")
-                bearish_reasons.append(f"{label}_BELOW_VWAP")
+                reasons.append(f"{label}_VWAP_UNAVAILABLE_NEUTRAL")
+                bearish_reasons.append(f"{label}_VWAP_UNAVAILABLE_NEUTRAL")
 
             if context.get("net_change_pct", 0) <= -2:
                 score -= 8
@@ -113,10 +124,8 @@ class BreadthScoringEngine:
                 reasons.append(f"{label}_VOLUME_CONFIRMING")
                 bearish_reasons.append(f"{label}_VOLUME_CONFIRMING")
             else:
-                score -= 3
-                bearish_score -= 3
-                reasons.append(f"{label}_VOLUME_NOT_CONFIRMING")
-                bearish_reasons.append(f"{label}_VOLUME_NOT_CONFIRMING")
+                reasons.append(f"{label}_VOLUME_NEUTRAL_INTRADAY")
+                bearish_reasons.append(f"{label}_VOLUME_NEUTRAL_INTRADAY")
 
         score = max(0, min(100, score))
         bearish_score = max(0, min(100, bearish_score))
