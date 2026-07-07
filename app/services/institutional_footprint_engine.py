@@ -1,7 +1,14 @@
 from datetime import datetime
+from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
 
 
 class InstitutionalFootprintEngine:
+
+    def __init__(self):
+        try:
+            self.uw = UnusualWhalesProvider()
+        except Exception:
+            self.uw = None
     """
     Shared institutional footprint model.
 
@@ -31,6 +38,20 @@ class InstitutionalFootprintEngine:
         net_change_pct=None,
         source="INSTITUTIONAL_FOOTPRINT_ENGINE",
     ):
+
+        live_flow = None
+        live_darkpool = None
+
+        if self.uw:
+            try:
+                live_flow = self.uw.recent_flow(symbol)
+            except Exception as e:
+                print("UW ERROR:", repr(e))
+
+            try:
+                live_darkpool = self.uw.dark_pool(symbol)
+            except Exception as e:
+                print("UW ERROR:", repr(e))
         symbol = (symbol or "").upper().strip()
 
         last = self._float(last)
@@ -149,6 +170,63 @@ class InstitutionalFootprintEngine:
         else:
             strength = "WEAK"
 
+        
+        live_flow_score = None
+
+        if live_flow:
+            try:
+                bullish = 0
+                bearish = 0
+
+                for trade in live_flow:
+                    tags = [
+                        str(t).lower()
+                        for t in (trade.get("tags") or [])
+                    ]
+
+                    option_type = str(
+                        trade.get("option_type") or ""
+                    ).lower()
+
+                    premium = float(
+                        trade.get("premium") or 0
+                    )
+
+                    if "bullish" in tags or option_type == "call":
+                        bullish += premium
+                    elif "bearish" in tags or option_type == "put":
+                        bearish += premium
+
+                total = bullish + bearish
+
+                if total > 0:
+                    live_flow_score = round(
+                        ((bullish - bearish) / total) * 100,
+                        2,
+                    )
+
+                    if abs(live_flow_score) >= 15:
+                        net = live_flow_score
+                        confidence = min(100, round(abs(live_flow_score), 2))
+
+                        if live_flow_score >= 15:
+                            direction = "INFLOW"
+                        elif live_flow_score <= -15:
+                            direction = "OUTFLOW"
+                        else:
+                            direction = "NEUTRAL"
+
+                        if confidence >= 30:
+                            strength = "STRONG"
+                        elif confidence >= 15:
+                            strength = "DEVELOPING"
+                        else:
+                            strength = "WEAK"
+
+                        reasons.append("UNUSUAL_WHALES_LIVE_FLOW_CONFIRMED")
+            except Exception:
+                pass
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
@@ -159,6 +237,7 @@ class InstitutionalFootprintEngine:
             "institutional_flow_strength": strength,
             "institutional_flow_confidence": confidence,
             "institutional_flow_reasons": reasons,
+            "live_unusual_whales_flow_score": live_flow_score,
             "institutional_flow_context": {
                 "last": last,
                 "open": open_price,
