@@ -181,7 +181,13 @@ class GreyLineSimulationDecisionAdapter:
             bear_sponsorship_score if option_type == "PUT" else institutional_sponsorship_score
         )
 
-        if directional_sponsorship_score < 80:
+        footprint_confirmed_sponsorship = (
+            (option_type == "CALL" and (net_institutional_flow_score or 0) >= 30 and institutional_sponsorship_score >= 65)
+            or
+            (option_type == "PUT" and (net_institutional_flow_score or 0) <= -30 and bear_sponsorship_score >= 65)
+        )
+
+        if directional_sponsorship_score < 80 and not footprint_confirmed_sponsorship:
             execution_blockers.append("INSTITUTIONAL_SPONSORSHIP_BELOW_80")
         if option_type == "PUT" and bear_trend_score >= 84 and bear_setup_score >= 90:
             execution_blockers.append("PUT_DOWNSIDE_EXHAUSTION_RISK")
@@ -225,7 +231,7 @@ class GreyLineSimulationDecisionAdapter:
         if (
             composite_score >= 80
             and direction_confidence >= 5
-            and directional_sponsorship_score >= 80
+            and (directional_sponsorship_score >= 80 or footprint_confirmed_sponsorship)
             and call_risk_ok
             and call_bear_rally_ok
             and call_overheated_trap_ok
@@ -293,6 +299,7 @@ class GreyLineSimulationDecisionAdapter:
             "institutional_flow_confidence": institutional_flow_confidence,
             "institutional_flow_reasons": institutional_flow_reasons,
             "institutional_footprint": institutional_footprint,
+            "footprint_confirmed_sponsorship": footprint_confirmed_sponsorship,
             "asymmetry_score": asymmetry_score,
             "bear_asymmetry_score": bear_asymmetry_score,
             "risk_state": risk_state_result.get("risk_state"),
