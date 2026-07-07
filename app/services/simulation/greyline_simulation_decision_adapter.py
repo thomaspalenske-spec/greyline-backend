@@ -208,6 +208,13 @@ class GreyLineSimulationDecisionAdapter:
             and risk_state_result.get("risk_state_score", 50) < 82
         )
 
+        if not call_risk_ok:
+            execution_blockers.append("CALL_RISK_STATE_BELOW_80")
+        if not call_bear_rally_ok:
+            execution_blockers.append("CALL_BEAR_RALLY_RISK")
+        if not call_overheated_trap_ok:
+            execution_blockers.append("CALL_OVERHEATED_TRAP_RISK")
+
         if (
             composite_score >= 80
             and direction_confidence >= 5
@@ -228,6 +235,7 @@ class GreyLineSimulationDecisionAdapter:
             or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
         ):
             if result == "EXECUTE":
+                execution_blockers.append("WEAK_REGIME_OR_STRESSED_RISK_DOWNGRADE")
                 result = "WATCH"
 
         # Final safety invariant: no trade can remain EXECUTE with blockers present.
