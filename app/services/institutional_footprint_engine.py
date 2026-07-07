@@ -5,6 +5,12 @@ from app.services.data_providers.unusual_whales_provider import UnusualWhalesPro
 class InstitutionalFootprintEngine:
 
     def __init__(self):
+        import os
+
+        if os.getenv("GREYLINE_DISABLE_LIVE_UW", "").lower() in ["1", "true", "yes"]:
+            self.uw = None
+            return
+
         try:
             self.uw = UnusualWhalesProvider()
         except Exception:
