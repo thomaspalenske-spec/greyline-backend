@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.institutional_footprint_engine import InstitutionalFootprintEngine
 
 
 class EquityInstitutionalFlowEngine:
@@ -58,111 +59,23 @@ class EquityInstitutionalFlowEngine:
         ask = self._float(q.get("Ask"))
         net_change_pct = self._float(q.get("NetChangePct"))
 
-        inflow = 50
-        outflow = 50
-        reasons = []
+        footprint = InstitutionalFootprintEngine().evaluate(
+            symbol=symbol,
+            last=last,
+            open_price=open_price,
+            high=high,
+            low=low,
+            previous_close=previous_close,
+            vwap=vwap,
+            volume=volume,
+            previous_volume=previous_volume,
+            bid=bid,
+            ask=ask,
+            net_change_pct=net_change_pct,
+            source="INFERRED_EQUITY_PROXY_NO_DIRECT_DARK_POOL_OR_BLOCK_FEED",
+        )
 
-        volume_ratio = volume / previous_volume if volume and previous_volume else 1.0
-        spread_pct = ((ask - bid) / last) * 100 if last and bid and ask else 0.0
-        intraday_range = high - low if high and low else 0
-        close_location = ((last - low) / intraday_range) if intraday_range > 0 else 0.5
-
-        # Volume participation: institutions leave footprints through participation.
-        if volume_ratio >= 1.5:
-            inflow += 14
-            outflow += 14
-            reasons.append("HEAVY_VOLUME_PARTICIPATION")
-        elif volume_ratio >= 1.0:
-            inflow += 8
-            outflow += 8
-            reasons.append("ABOVE_BASELINE_VOLUME")
-        elif volume_ratio <= 0.6:
-            inflow -= 8
-            outflow -= 8
-            reasons.append("WEAK_VOLUME_PARTICIPATION")
-
-        # Directional price acceptance relative to VWAP.
-        if vwap and last > vwap:
-            inflow += 18
-            outflow -= 12
-            reasons.append("BUYERS_ACCEPTING_ABOVE_VWAP")
-        elif vwap and last < vwap:
-            outflow += 18
-            inflow -= 12
-            reasons.append("SELLERS_ACCEPTING_BELOW_VWAP")
-
-        # Directional acceptance vs prior close and open.
-        if previous_close and last > previous_close:
-            inflow += 10
-            outflow -= 7
-            reasons.append("ABOVE_PREVIOUS_CLOSE")
-        elif previous_close and last < previous_close:
-            outflow += 10
-            inflow -= 7
-            reasons.append("BELOW_PREVIOUS_CLOSE")
-
-        if open_price and last > open_price:
-            inflow += 7
-            outflow -= 5
-            reasons.append("ABOVE_OPEN")
-        elif open_price and last < open_price:
-            outflow += 7
-            inflow -= 5
-            reasons.append("BELOW_OPEN")
-
-        # Close location reveals accumulation/distribution pressure.
-        if close_location >= 0.8:
-            inflow += 13
-            outflow -= 8
-            reasons.append("CLOSING_NEAR_SESSION_HIGH")
-        elif close_location <= 0.2:
-            outflow += 13
-            inflow -= 8
-            reasons.append("CLOSING_NEAR_SESSION_LOW")
-        elif close_location >= 0.65:
-            inflow += 6
-            reasons.append("UPPER_RANGE_ACCEPTANCE")
-        elif close_location <= 0.35:
-            outflow += 6
-            reasons.append("LOWER_RANGE_ACCEPTANCE")
-
-        # Large directional candles with volume get extra institutional weight.
-        if net_change_pct >= 2 and volume_ratio >= 1.0:
-            inflow += 8
-            reasons.append("STRONG_UP_DAY_WITH_VOLUME")
-        elif net_change_pct <= -2 and volume_ratio >= 1.0:
-            outflow += 8
-            reasons.append("STRONG_DOWN_DAY_WITH_VOLUME")
-
-        # Wide spreads reduce confidence; tight spreads confirm tradability.
-        if spread_pct <= 0.05 and last:
-            inflow += 3
-            outflow += 3
-            reasons.append("TIGHT_SPREAD_CONFIRMS_LIQUIDITY")
-        elif spread_pct >= 0.20:
-            inflow -= 6
-            outflow -= 6
-            reasons.append("WIDE_SPREAD_REDUCES_CONFIDENCE")
-
-        inflow = round(max(0, min(100, inflow)), 2)
-        outflow = round(max(0, min(100, outflow)), 2)
-        net = round(inflow - outflow, 2)
-        confidence = round(abs(net), 2)
-
-        if net >= 12:
-            direction = "INFLOW"
-        elif net <= -12:
-            direction = "OUTFLOW"
-        else:
-            direction = "NEUTRAL"
-
-        if confidence >= 30:
-            strength = "STRONG"
-        elif confidence >= 15:
-            strength = "DEVELOPING"
-        else:
-            strength = "WEAK"
-
+        return footprint
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
