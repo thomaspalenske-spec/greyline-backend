@@ -7,6 +7,7 @@ from app.services.expected_value_scoring_engine import ExpectedValueScoringEngin
 from app.services.options_position_sizing_engine import OptionsPositionSizingEngine
 from app.services.options_entry_quality_gate_engine import OptionsEntryQualityGateEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.equity_institutional_flow_engine import EquityInstitutionalFlowEngine
 
 
 class OptionsPaperTradeLedgerEngine:
@@ -21,9 +22,18 @@ class OptionsPaperTradeLedgerEngine:
         regime = RegimeScoringEngine().score_symbol(symbol)
         risk = RiskStateScoringEngine().score_symbol(symbol)
         ev = ExpectedValueScoringEngine().score_symbol(symbol, regime=regime, risk=risk)
+        flow = EquityInstitutionalFlowEngine().evaluate_symbol(symbol)
 
         return {
             "entry_thesis_capture_status": "ENTRY_THESIS_CAPTURED",
+            "entry_institutional_inflow_score": flow.get("institutional_inflow_score"),
+            "entry_institutional_outflow_score": flow.get("institutional_outflow_score"),
+            "entry_net_institutional_flow_score": flow.get("net_institutional_flow_score"),
+            "entry_institutional_flow_direction": flow.get("institutional_flow_direction"),
+            "entry_institutional_flow_confidence": flow.get("institutional_flow_confidence"),
+            "entry_institutional_flow_reasons": flow.get("institutional_flow_reasons"),
+            "entry_institutional_flow_context": flow.get("institutional_flow_context"),
+            "entry_institutional_flow_source": flow.get("flow_source"),
             "entry_expected_value_score": ev.get("expected_value_score"),
             "entry_regime_score": regime.get("regime_score"),
             "entry_risk_state_score": risk.get("risk_state_score"),
