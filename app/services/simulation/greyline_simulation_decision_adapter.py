@@ -49,6 +49,13 @@ class GreyLineSimulationDecisionAdapter:
         trend_persistence_score = component_overrides.get("trend_persistence_score", 50)
         breadth_score = component_overrides.get("breadth_score", 50)
         institutional_sponsorship_score = component_overrides.get("institutional_sponsorship_score", 50)
+        institutional_inflow_score = component_overrides.get("institutional_inflow_score")
+        institutional_outflow_score = component_overrides.get("institutional_outflow_score")
+        net_institutional_flow_score = component_overrides.get("net_institutional_flow_score")
+        institutional_flow_direction = component_overrides.get("institutional_flow_direction")
+        institutional_flow_confidence = component_overrides.get("institutional_flow_confidence")
+        institutional_flow_reasons = component_overrides.get("institutional_flow_reasons")
+        institutional_footprint = component_overrides.get("institutional_footprint")
         asymmetry_score = component_overrides.get("asymmetry_score", 50)
 
         expected_value_score = ExpectedValueScoringEngine().score_symbol(
@@ -279,6 +286,13 @@ class GreyLineSimulationDecisionAdapter:
             "bull_institutional_sponsorship_score": institutional_sponsorship_score,
             "bear_institutional_sponsorship_score": bear_sponsorship_score,
             "bear_sponsorship_score": bear_sponsorship_score,
+            "institutional_inflow_score": institutional_inflow_score,
+            "institutional_outflow_score": institutional_outflow_score,
+            "net_institutional_flow_score": net_institutional_flow_score,
+            "institutional_flow_direction": institutional_flow_direction,
+            "institutional_flow_confidence": institutional_flow_confidence,
+            "institutional_flow_reasons": institutional_flow_reasons,
+            "institutional_footprint": institutional_footprint,
             "asymmetry_score": asymmetry_score,
             "bear_asymmetry_score": bear_asymmetry_score,
             "risk_state": risk_state_result.get("risk_state"),
