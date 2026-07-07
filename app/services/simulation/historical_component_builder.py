@@ -1,3 +1,5 @@
+from app.services.institutional_footprint_engine import InstitutionalFootprintEngine
+
 class HistoricalComponentBuilder:
     """
     Simulator-only component builder.
@@ -114,6 +116,24 @@ class HistoricalComponentBuilder:
             + max(0, -day_return_pct) * 0.35
         ))
 
+        previous_close = closes[-2] if len(closes) >= 2 else None
+
+        institutional_footprint = InstitutionalFootprintEngine().evaluate(
+            symbol=market_data.get("symbol"),
+            last=close,
+            open_price=open_price,
+            high=high,
+            low=low,
+            previous_close=previous_close,
+            vwap=market_data.get("vwap"),
+            volume=volume,
+            previous_volume=avg_volume_20,
+            bid=market_data.get("bid"),
+            ask=market_data.get("ask"),
+            net_change_pct=None,
+            source="HISTORICAL_OHLCV_INFERRED_FOOTPRINT",
+        )
+
         asymmetry_score = min(100, max(0,
             58
             + momentum_blend * 4.0
@@ -158,5 +178,12 @@ class HistoricalComponentBuilder:
             "breadth_score": round(breadth_score, 2),
             "institutional_sponsorship_score": round(institutional_sponsorship_score, 2),
             "bear_institutional_sponsorship_score": round(bear_institutional_sponsorship_score, 2),
+            "institutional_footprint": institutional_footprint,
+            "institutional_inflow_score": institutional_footprint.get("institutional_inflow_score"),
+            "institutional_outflow_score": institutional_footprint.get("institutional_outflow_score"),
+            "net_institutional_flow_score": institutional_footprint.get("net_institutional_flow_score"),
+            "institutional_flow_direction": institutional_footprint.get("institutional_flow_direction"),
+            "institutional_flow_confidence": institutional_footprint.get("institutional_flow_confidence"),
+            "institutional_flow_reasons": institutional_footprint.get("institutional_flow_reasons"),
             "asymmetry_score": round(asymmetry_score, 2),
         }
