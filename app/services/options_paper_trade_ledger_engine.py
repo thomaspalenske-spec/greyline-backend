@@ -5,6 +5,7 @@ from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 from app.services.expected_value_scoring_engine import ExpectedValueScoringEngine
 from app.services.options_position_sizing_engine import OptionsPositionSizingEngine
+from app.services.options_entry_quality_gate_engine import OptionsEntryQualityGateEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
 
@@ -174,6 +175,29 @@ class OptionsPaperTradeLedgerEngine:
             max_position_pct=max_position_pct,
         )
 
+        entry_price = float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0)
+        entry_quality_gate = OptionsEntryQualityGateEngine().evaluate(
+            candidate_score=candidate_score,
+            initial_contract_days=contract_metrics.get("initial_contract_days"),
+            entry_price=entry_price,
+        )
+
+        if entry_quality_gate.get("approved") is not True:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_TRADE_LEDGER",
+                "paper_trade_recorded": False,
+                "reason": "OPTIONS_ENTRY_QUALITY_GATE_BLOCK",
+                "candidate_score": candidate_score,
+                "max_position_pct_used": max_position_pct,
+                "position_sizing": sizing,
+                "entry_quality_gate": entry_quality_gate,
+                "execution_enabled": False,
+                "order_placement_allowed": False,
+                "status": "OPTIONS_PAPER_TRADE_ENTRY_QUALITY_BLOCKED",
+            }
+
         estimated_position_cost = float(sizing.get("estimated_position_cost") or 0)
         deployed_capital = self._open_deployed_capital()
         account_equity = 10000.0
@@ -254,7 +278,7 @@ class OptionsPaperTradeLedgerEngine:
             "option_symbol": leg.get("Symbol"),
             "side": "BUY_TO_OPEN",
             "contracts": sizing.get("recommended_contracts", 1),
-            "entry_price": float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0),
+            "entry_price": entry_price,
             "entry_mid": float(candidate.get("Mid") or 0),
             "bid": float(candidate.get("Bid") or 0),
             "ask": float(candidate.get("Ask") or 0),
@@ -271,6 +295,7 @@ class OptionsPaperTradeLedgerEngine:
             "candidate_score": candidate_score,
             "max_position_pct_used": max_position_pct,
             "position_sizing": sizing,
+            "entry_quality_gate": entry_quality_gate,
             "source": source,
             "status": "OPEN",
         }
