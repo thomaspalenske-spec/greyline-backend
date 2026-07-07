@@ -1,3 +1,6 @@
+from app.services.options_entry_quality_gate_engine import OptionsEntryQualityGateEngine
+
+
 class SimulationExecutionEngine:
     """
     First-pass simulated execution engine.
@@ -28,6 +31,38 @@ class SimulationExecutionEngine:
                 "status": "SIMULATION_EXECUTION_READY",
             }
 
+        simulated_dte = self._num(candidate.get("initial_contract_days"))
+        if simulated_dte is None:
+            simulated_dte = self._num(candidate.get("remaining_contract_days"))
+        if simulated_dte is None:
+            simulated_dte = 30
+
+        simulated_entry_price = max(close * 0.01, 0.01)
+        candidate_score = (
+            candidate.get("candidate_score")
+            or candidate.get("adjusted_score")
+            or candidate.get("composite_score")
+            or 0
+        )
+
+        entry_quality_gate = OptionsEntryQualityGateEngine().evaluate(
+            candidate_score=candidate_score,
+            initial_contract_days=simulated_dte,
+            entry_price=simulated_entry_price,
+        )
+
+        if entry_quality_gate.get("approved") is not True:
+            return {
+                "action": "NO_FILL",
+                "capital_before": capital,
+                "capital_after": capital,
+                "position_opened": False,
+                "reason": "SIMULATION_OPTIONS_ENTRY_QUALITY_GATE_BLOCK",
+                "entry_quality_gate": entry_quality_gate,
+                "future_data_used": False,
+                "status": "SIMULATION_EXECUTION_ENTRY_QUALITY_BLOCKED",
+            }
+
         allocation_pct = 0.10
         deployed = round(capital * allocation_pct, 2)
         shares = round(deployed / close, 6) if close else 0
@@ -55,6 +90,9 @@ class SimulationExecutionEngine:
             "setup_score": candidate.get("setup_score"),
             "entry_time": market_data.get("timestamp"),
             "entry_price": close,
+            "entry_quality_gate": entry_quality_gate,
+            "simulated_option_entry_price": simulated_entry_price,
+            "simulated_contract_days": simulated_dte,
             "shares": shares,
             "capital_deployed": deployed,
             "capital_before": capital,
