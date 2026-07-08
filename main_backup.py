@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.routes.greyline_reliability_core import router as greyline_reliability_core_router
 from app.routes.position_alerts import router as position_alerts_router
+from app.routes.market_microstructure import router as market_microstructure_router
 
 from app.services.account_engine import AccountEngine
 from app.services.ledger_engine import LedgerEngine
@@ -81,3 +82,5 @@ def validate_test():
     }
 
     return validator.validate_trade(test_trade)
+
+app.include_router(market_microstructure_router)
