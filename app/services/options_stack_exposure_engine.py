@@ -6,7 +6,7 @@ from app.services.options_account_dashboard_engine import OptionsAccountDashboar
 
 class OptionsStackExposureEngine:
     def evaluate(self):
-        d = OptionsAccountDashboardEngine().evaluate()
+        d = OptionsAccountDashboardEngine().build()
         groups = defaultdict(list)
 
         for p in d.get("open_positions", []):
