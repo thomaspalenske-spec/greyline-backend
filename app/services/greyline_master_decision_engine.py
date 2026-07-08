@@ -51,9 +51,22 @@ class GreyLineMasterDecisionEngine:
         decision = "NO_ACTION"
         reason = "No EXECUTE candidate available"
 
-        if execute_candidate_available and broker_ready and risk_allows:
+        governor = ExecutionGovernor().evaluate_execution_permission(
+            top_candidate.get("result") if top_candidate else "NO_ACTION"
+        )
+
+        reliability_governor = ReliabilityGovernorEngine().evaluate()
+
+        execution_allowed = bool(reliability_governor.get("execution_allowed"))
+        new_entries_allowed = bool(reliability_governor.get("new_entries_allowed"))
+        order_placement_allowed = bool(governor.get("order_placement_allowed"))
+
+        if execute_candidate_available and broker_ready and risk_allows and execution_allowed and new_entries_allowed and order_placement_allowed:
+            decision = "EXECUTE"
+            reason = "Best EXECUTE candidate meets criteria; paper execution allowed"
+        elif execute_candidate_available and broker_ready and risk_allows:
             decision = "EXECUTE_SIGNAL_BLOCKED_READ_ONLY"
-            reason = "Best EXECUTE candidate meets decision criteria, but order placement is disabled"
+            reason = "Best EXECUTE candidate meets decision criteria, but execution/order placement is disabled"
         elif execute_candidate_available and not broker_ready:
             decision = "NO_ACTION"
             reason = "Broker health is not ready"
@@ -63,12 +76,6 @@ class GreyLineMasterDecisionEngine:
         elif candidate_available:
             decision = "NO_ACTION"
             reason = f"Best candidate is {top_candidate.get('result')}, not EXECUTE"
-
-        governor = ExecutionGovernor().evaluate_execution_permission(
-            top_candidate.get("result") if top_candidate else "NO_ACTION"
-        )
-
-        reliability_governor = ReliabilityGovernorEngine().evaluate()
 
         institutional_flow = InstitutionalFlowEngine().evaluate({
             "symbols_scored": opportunity_summary.get("symbols_scored", 0),
@@ -108,7 +115,7 @@ class GreyLineMasterDecisionEngine:
         result = {
             "timestamp": datetime.utcnow().isoformat(),
             "system": "GreyLine",
-            "source": "MASTER_DECISION_READ_ONLY",
+            "source": "MASTER_DECISION",
             "broker_ready": broker_ready,
             "broker_health": broker_health,
             "risk_state": risk_state,
@@ -128,8 +135,8 @@ class GreyLineMasterDecisionEngine:
             "reliability_new_entries_allowed": reliability_governor.get("new_entries_allowed"),
             "reliability_autonomous_allowed": reliability_governor.get("autonomous_allowed"),
             "reliability_score": reliability_governor.get("reliability_score"),
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": execution_allowed,
+            "order_placement_allowed": order_placement_allowed,
             "operator_event_result": operator_event_result,
             "operator_event_published": operator_event_result.get("event_published"),
             "operator_event_deduped": operator_event_result.get("deduped", False),
