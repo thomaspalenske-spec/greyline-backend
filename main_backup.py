@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.routes.greyline_reliability_core import router as greyline_reliability_core_router
 from app.routes.position_alerts import router as position_alerts_router
 
 from app.services.account_engine import AccountEngine
@@ -20,6 +21,7 @@ from app.routes.fast_quote_heartbeat import router as fast_quote_heartbeat_route
 from app.routes.system_health import router as system_health_router
 
 app = FastAPI(title="GreyLine Backend")
+app.include_router(greyline_reliability_core_router)
 app.include_router(position_alerts_router)
 
 app.include_router(tradestation_router)
