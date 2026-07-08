@@ -6,7 +6,31 @@ from app.services.snapshot_engine import SnapshotEngine
 from app.services.position_reconciliation_engine import PositionReconciliationEngine
 from app.services.schema_validator import SchemaValidator
 
+
+from app.routes.background_scheduler import router as background_scheduler_router
+from app.routes.operator_commander_summary import router as operator_commander_summary_router
+from app.routes.greyline_market_battlefield_summary import router as greyline_market_battlefield_summary_router
+from app.routes.options_account_dashboard import router as options_account_dashboard_router
+
+
+from app.routes.tradestation import router as tradestation_router
+from app.routes.operator_cockpit_status import router as operator_cockpit_status_router
+from app.routes.fast_quote_heartbeat import router as fast_quote_heartbeat_router
+from app.routes.system_health import router as system_health_router
+
 app = FastAPI(title="GreyLine Backend")
+
+app.include_router(tradestation_router)
+app.include_router(operator_cockpit_status_router)
+app.include_router(fast_quote_heartbeat_router)
+app.include_router(system_health_router)
+
+
+app.include_router(background_scheduler_router)
+app.include_router(operator_commander_summary_router)
+app.include_router(greyline_market_battlefield_summary_router)
+app.include_router(options_account_dashboard_router)
+
 
 
 @app.get("/")
