@@ -4,7 +4,6 @@ import json
 
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
-import requests
 
 
 class ReliabilityGovernorEngine:
@@ -16,14 +15,31 @@ class ReliabilityGovernorEngine:
     """
 
     def evaluate(self, simulate_fault=None):
-        system_health = requests.get("http://127.0.0.1:8000/system-health-snapshot", timeout=5).json()
-        scheduler = requests.get("http://127.0.0.1:8000/background-scheduler/status", timeout=5).json()
-        quote = requests.get("http://127.0.0.1:8000/fast-quote-heartbeat/status", timeout=5).json()
-        token = requests.get("http://127.0.0.1:8000/tradestation-token-status", timeout=5).json()
+        from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
+        from app.services.background_scheduler_service import BackgroundSchedulerService
+        from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
+        from app.services.tradestation_token_status_engine import TradeStationTokenStatusEngine
+
+        system_health = SystemHealthDashboardEngine().status()
+        scheduler = BackgroundSchedulerService.status()
+        quote = FastQuoteHeartbeatService.status()
+        token = TradeStationTokenStatusEngine().evaluate()
+
+        checks_list = system_health.get("checks") or []
+        red_count = int(system_health.get("red_count") or 0)
+        red_count = red_count or sum(1 for c in checks_list if c.get("status") == "RED")
+        health_value = system_health.get("overall_health") or system_health.get("status")
+        system_health_ok = (
+            health_value in ("GREEN", "YELLOW", "HEALTHY", "SYSTEM_HEALTH_READY")
+            and red_count == 0
+        )
 
         checks = {
-            "system_health_ok": system_health.get("overall_health") == "GREEN",
-            "scheduler_ok": bool(scheduler.get("scheduler_enabled")) and bool(scheduler.get("thread_alive")),
+            "system_health_ok": system_health_ok,
+            "scheduler_ok": (
+                bool(scheduler.get("thread_alive"))
+                or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+            ),
             "quote_ok": quote.get("status") == "FAST_QUOTE_HEARTBEAT_STATUS_READY",
             "token_ok": bool(token.get("ready_for_read_only")),
         }
@@ -32,7 +48,7 @@ class ReliabilityGovernorEngine:
         critical_actions = []
 
         if not checks["system_health_ok"]:
-            critical_actions.append({"severity": "CRITICAL", "problem": "system health not green"})
+            critical_actions.append({"severity": "CRITICAL", "problem": "system health has red checks"})
         if not checks["scheduler_ok"]:
             critical_actions.append({"severity": "CRITICAL", "problem": "scheduler not running"})
         if not checks["quote_ok"]:

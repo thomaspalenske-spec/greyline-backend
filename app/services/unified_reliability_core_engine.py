@@ -139,18 +139,25 @@ class UnifiedReliabilityCoreEngine:
         data = response.get("data") or {}
         health = data.get("overall_health")
 
+        red_count = int(data.get("red_count") or 0)
+
         if response.get("ok") and health == "GREEN":
             return {"check": "system_health", "status": "GREEN", "points": 25, "message": "system health green"}
+        if response.get("ok") and health == "YELLOW" and red_count == 0:
+            return {"check": "system_health", "status": "GREEN", "points": 25, "message": "system health yellow with no red checks"}
         if response.get("ok") and health == "YELLOW":
             return {"check": "system_health", "status": "YELLOW", "points": 15, "message": "system health degraded"}
         return {"check": "system_health", "status": "RED", "points": 0, "message": "system health unavailable or red"}
 
     def _score_scheduler(self, response):
         data = response.get("data") or {}
-        if response.get("ok") and data.get("scheduler_enabled") and data.get("thread_alive"):
-            return {"check": "background_scheduler", "status": "GREEN", "points": 25, "message": "scheduler enabled and thread alive"}
-        if response.get("ok") and data.get("scheduler_enabled"):
-            return {"check": "background_scheduler", "status": "RED", "points": 0, "message": "scheduler enabled but thread not confirmed alive"}
+        scheduler_alive = (
+            data.get("thread_alive") is True
+            or data.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+        )
+
+        if response.get("ok") and scheduler_alive:
+            return {"check": "background_scheduler", "status": "GREEN", "points": 25, "message": "scheduler heartbeat alive"}
         return {"check": "background_scheduler", "status": "RED", "points": 0, "message": "scheduler unavailable or disabled"}
 
     def _score_quote_heartbeat(self, response):
@@ -158,16 +165,12 @@ class UnifiedReliabilityCoreEngine:
         state = data.get("state") or {}
         market_health = state.get("market_data_health")
 
-        if response.get("ok") and data.get("enabled") and data.get("thread_alive"):
-            heartbeat_allows_execution = (
-                data.get("execution_enabled") is True
-                and data.get("order_placement_allowed") is True
-            )
-
-            if heartbeat_allows_execution or market_health in ["FRESH", "HEALTHY", "ACCEPTABLE", "DEGRADED", "MARKET_CLOSED_LAST_QUOTE_MARK"]:
+        if response.get("ok") and data.get("status") == "FAST_QUOTE_HEARTBEAT_STATUS_READY":
+            if market_health in ["FRESH", "HEALTHY", "ACCEPTABLE", "DEGRADED", "MARKET_CLOSED_LAST_QUOTE_MARK"]:
                 return {"check": "quote_heartbeat", "status": "GREEN", "points": 25, "message": market_health}
 
-            return {"check": "quote_heartbeat", "status": "YELLOW", "points": 15, "message": market_health or "quote heartbeat running but degraded"}
+            if data.get("enabled") and data.get("thread_alive"):
+                return {"check": "quote_heartbeat", "status": "YELLOW", "points": 15, "message": market_health or "quote heartbeat running but degraded"}
 
         return {"check": "quote_heartbeat", "status": "RED", "points": 0, "message": "quote heartbeat unavailable or stopped"}
 

@@ -28,7 +28,14 @@ def _mission_readiness_score(reliability, governor, quote_heartbeat, token_statu
         score -= 15
         reasons.append("New entries not allowed.")
 
-    if not quote_heartbeat.get("enabled") or not quote_heartbeat.get("thread_alive"):
+    quote_state = quote_heartbeat.get("state") or {}
+    quote_health = quote_state.get("market_data_health")
+    quote_ready = (
+        quote_heartbeat.get("status") == "FAST_QUOTE_HEARTBEAT_STATUS_READY"
+        and quote_health in ["FRESH", "HEALTHY", "ACCEPTABLE", "DEGRADED", "MARKET_CLOSED_LAST_QUOTE_MARK"]
+    )
+
+    if not quote_ready:
         score -= 25
         reasons.append("Quote heartbeat offline.")
     else:
