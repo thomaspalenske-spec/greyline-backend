@@ -77,12 +77,23 @@ class OptionsCycleEngine:
 
             ledger = OptionsPaperTradeLedgerEngine()
 
-            if ledger.open_position_exists(option_symbol):
+            existing = ledger.open_positions()
+            same_underlying_open = [
+                t for t in existing
+                if str(t.get("underlying") or "").upper() == symbol
+                and str(t.get("option_type") or "").upper() == side.upper()
+                and str(t.get("status") or "").upper() == "OPEN"
+            ]
+
+            if ledger.open_position_exists(option_symbol) or same_underlying_open:
                 duplicate_blocked = True
                 paper_trade = {
                     "paper_trade_recorded": False,
-                    "reason": "DUPLICATE_OPEN_OPTION_POSITION",
+                    "reason": "DUPLICATE_OPEN_UNDERLYING_OPTION_POSITION",
                     "option_symbol": option_symbol,
+                    "underlying": symbol,
+                    "option_type": side,
+                    "open_same_underlying_count": len(same_underlying_open),
                     "status": "OPTIONS_PAPER_TRADE_DUPLICATE_BLOCKED",
                 }
             else:
