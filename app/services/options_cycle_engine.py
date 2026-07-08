@@ -77,7 +77,8 @@ class OptionsCycleEngine:
 
             ledger = OptionsPaperTradeLedgerEngine()
 
-            existing = ledger.open_positions()
+            history = ledger.history()
+            existing = history.get("open_positions") or history.get("open_trades") or history.get("trades") or []
             same_underlying_open = [
                 t for t in existing
                 if str(t.get("underlying") or "").upper() == symbol
