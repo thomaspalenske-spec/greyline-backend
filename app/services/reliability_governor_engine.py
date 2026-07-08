@@ -4,7 +4,7 @@ import json
 
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
-from app.services.reliability_remediation_advisor_engine import ReliabilityRemediationAdvisorEngine
+import requests
 
 
 class ReliabilityGovernorEngine:
@@ -16,21 +16,40 @@ class ReliabilityGovernorEngine:
     """
 
     def evaluate(self, simulate_fault=None):
-        advisor = ReliabilityRemediationAdvisorEngine().evaluate(simulate_fault=simulate_fault)
+        system_health = requests.get("http://127.0.0.1:8000/system-health-snapshot", timeout=5).json()
+        scheduler = requests.get("http://127.0.0.1:8000/background-scheduler/status", timeout=5).json()
+        quote = requests.get("http://127.0.0.1:8000/fast-quote-heartbeat/status", timeout=5).json()
+        token = requests.get("http://127.0.0.1:8000/tradestation-token-status", timeout=5).json()
 
-        score = int(advisor.get("reliability_score") or 0)
-        reliability = advisor.get("overall_reliability")
-        posture = advisor.get("posture")
-        actions = advisor.get("actions") or []
+        checks = {
+            "system_health_ok": system_health.get("overall_health") == "GREEN",
+            "scheduler_ok": bool(scheduler.get("scheduler_enabled")) and bool(scheduler.get("thread_alive")),
+            "quote_ok": quote.get("status") == "FAST_QUOTE_HEARTBEAT_STATUS_READY",
+            "token_ok": bool(token.get("ready_for_read_only")),
+        }
 
-        critical_actions = [a for a in actions if a.get("severity") == "CRITICAL"]
+        score = 25 * sum(1 for v in checks.values() if v)
+        critical_actions = []
+
+        if not checks["system_health_ok"]:
+            critical_actions.append({"severity": "CRITICAL", "problem": "system health not green"})
+        if not checks["scheduler_ok"]:
+            critical_actions.append({"severity": "CRITICAL", "problem": "scheduler not running"})
+        if not checks["quote_ok"]:
+            critical_actions.append({"severity": "CRITICAL", "problem": "quote heartbeat not ready"})
+        if not checks["token_ok"]:
+            critical_actions.append({"severity": "CRITICAL", "problem": "TradeStation token not ready"})
+
+        reliability = "GREEN" if score == 100 else ("YELLOW" if score >= 75 else "RED")
+        posture = "OPERATIONAL" if reliability == "GREEN" else "OPERATOR_ACTION_REQUIRED"
+        actions = critical_actions
 
         if reliability == "GREEN" and score >= 95:
-            mode = "FULL_OPERATIONAL"
+            mode = "PAPER_OPERATIONAL"
             execution_allowed = True
             new_entries_allowed = True
-            autonomous_allowed = True
-            reason = "Reliability green and score at or above 95."
+            autonomous_allowed = False
+            reason = "Reliability checks healthy; paper execution allowed. Live autonomous execution remains disabled."
 
         elif reliability == "YELLOW" and score >= 85:
             mode = "RECOMMEND_ONLY"
@@ -55,7 +74,7 @@ class ReliabilityGovernorEngine:
 
 
         severity = {
-            "FULL_OPERATIONAL": "INFO",
+            "PAPER_OPERATIONAL": "INFO",
             "RECOMMEND_ONLY": "WARNING",
             "OBSERVE_ONLY": "WARNING",
             "SAFE_MODE": "CRITICAL",
