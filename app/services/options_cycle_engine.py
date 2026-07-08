@@ -2,11 +2,25 @@ from datetime import datetime
 
 from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
 from app.services.options_paper_trade_ledger_engine import OptionsPaperTradeLedgerEngine
+from app.services.execution_authority_engine import ExecutionAuthorityEngine
 
 
 class OptionsCycleEngine:
 
-    def run(self, symbol="NVDA", option_type="CALL", expiration="2026-07-17", max_position_pct=0.05, candidate_score=None):
+    def run(self, symbol="NVDA", option_type="CALL", expiration="2026-07-17", max_position_pct=0.05, candidate_score=None, enforce_authority=False):
+        if enforce_authority:
+            authority = ExecutionAuthorityEngine().evaluate()
+            if not authority.get("paper_execution_allowed"):
+                return {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "system": "GreyLine",
+                    "source": "OPTIONS_CYCLE_ENGINE",
+                    "paper_trade_recorded": False,
+                    "reason": authority.get("reason"),
+                    "execution_authority": authority.get("execution_authority"),
+                    "status": "OPTIONS_CYCLE_AUTHORITY_BLOCKED",
+                }
+
         symbol = (symbol or "NVDA").upper().strip()
         option_type = (option_type or "CALL").upper().strip()
 

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter
 
-from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
+from app.services.execution_authority_engine import ExecutionAuthorityEngine
 from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 
@@ -20,18 +20,19 @@ def _parse_trade_time(value):
 
 @router.post("/paper-trade-executor/run")
 def run_paper_trade_executor():
-    decision = GreyLineMasterDecisionEngine().evaluate()
+    authority = ExecutionAuthorityEngine().evaluate()
 
-    top_candidate = decision.get("top_candidate", {})
-    decision_value = decision.get("decision")
+    top_candidate = authority.get("top_candidate", {})
+    decision_value = authority.get("signal_decision")
 
-    if decision_value not in ["EXECUTE_SIGNAL_BLOCKED_READ_ONLY", "EXECUTE"]:
+    if not authority.get("paper_execution_allowed"):
         return {
             "system": "GreyLine",
             "source": "PAPER_TRADE_EXECUTOR",
             "paper_trade_recorded": False,
-            "reason": "NO_EXECUTE_SIGNAL",
+            "reason": authority.get("reason"),
             "decision": decision_value,
+            "execution_authority": authority.get("execution_authority"),
             "status": "PAPER_TRADE_EXECUTOR_NO_ACTION",
         }
 

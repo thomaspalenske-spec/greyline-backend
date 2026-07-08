@@ -6,10 +6,24 @@ from app.services.options_dynamic_position_sizing_engine import OptionsDynamicPo
 from app.services.signal_reliability_engine import SignalReliabilityEngine
 from app.services.institutional_trade_lifecycle_engine import InstitutionalTradeLifecycleEngine
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
+from app.services.execution_authority_engine import ExecutionAuthorityEngine
 
 
 class OptionsPaperExecutionSweepEngine:
     def run(self, limit=10):
+        authority = ExecutionAuthorityEngine().evaluate()
+        if not authority.get("paper_execution_allowed"):
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_EXECUTION_SWEEP",
+                "candidates_checked": 0,
+                "paper_trades_recorded": 0,
+                "reason": authority.get("reason"),
+                "execution_authority": authority.get("execution_authority"),
+                "status": "OPTIONS_PAPER_EXECUTION_SWEEP_AUTHORITY_BLOCKED",
+            }
+
         battlefield = greyline_market_battlefield_summary(force_refresh=True)
         candidates = battlefield.get("top_candidates") or []
 
