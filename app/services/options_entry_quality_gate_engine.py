@@ -21,8 +21,8 @@ class OptionsEntryQualityGateEngine:
         tp2_rr = round(tp2_pct / stop_loss_pct, 2)
 
         checks = {
-            "candidate_score_90_plus": score >= 90,
-            "minimum_21_dte": dte >= 21,
+            "candidate_score_85_plus": score >= 85,
+            "minimum_7_dte": dte >= 7,
             "entry_price_valid": entry > 0,
             "tp1_reward_risk_1_plus": tp1_rr >= 1.0,
             "tp2_reward_risk_1_5_plus": tp2_rr >= 1.5,

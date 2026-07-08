@@ -5,6 +5,7 @@ from app.services.greyline_reliability_core_engine import GreyLineReliabilityCor
 from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 from app.services.operator_notification_engine import OperatorNotificationEngine
 from app.services.greyline_master_decision_engine import GreyLineMasterDecisionEngine
+from app.services.execution_authority_engine import ExecutionAuthorityEngine
 
 router = APIRouter()
 
@@ -15,6 +16,7 @@ def operator_commander_summary():
     governor = ReliabilityGovernorEngine().evaluate()
     notifications = OperatorNotificationEngine().unread()
     decision = GreyLineMasterDecisionEngine().evaluate()
+    authority = ExecutionAuthorityEngine().evaluate()
 
     top = decision.get("top_candidate") or {}
     decision_name = decision.get("decision")
@@ -44,8 +46,11 @@ def operator_commander_summary():
             "headline": headline,
             "action_required": action_required,
             "unread_notifications": unread,
-            "operating_mode": governor.get("operating_mode"),
-            "execution_allowed": governor.get("execution_allowed"),
+            "operating_mode": authority.get("governor_mode"),
+            "execution_allowed": authority.get("paper_execution_allowed"),
+            "execution_authority": authority.get("execution_authority"),
+            "paper_execution_allowed": authority.get("paper_execution_allowed"),
+            "live_execution_allowed": authority.get("live_execution_allowed"),
             "reliability_score": reliability.get("health_score"),
             "master_decision": decision_name,
             "top_symbol": top.get("symbol"),
