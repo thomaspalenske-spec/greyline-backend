@@ -32,7 +32,12 @@ def operator_commander_summary():
         action_required = True
     elif decision_name == "EXECUTE_SIGNAL_BLOCKED_READ_ONLY":
         status = "GREEN"
-        headline = f"{top.get('symbol', '--')} {top.get('option_type', '--')} ready; live order placement disabled."
+        symbol = top.get("symbol", "--")
+        option_type = top.get("option_type", "--")
+        if authority.get("paper_execution_allowed") is True and authority.get("live_execution_allowed") is not True:
+            headline = f"Paper Trader active: {symbol} {option_type} qualified; live orders remain locked."
+        else:
+            headline = f"{symbol} {option_type} qualified; execution authority restricted."
     elif unread > 0:
         status = "YELLOW"
         headline = f"{unread} unread operator notification(s)."
