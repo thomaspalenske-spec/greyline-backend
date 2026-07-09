@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone, timedelta
 from app.services.execution_governor import ExecutionGovernor
+from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 from pathlib import Path
 from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.tp_state_tracking_engine import TPStateTrackingEngine
@@ -402,6 +403,8 @@ class OptionsAccountDashboardEngine:
 
         win_rate_pct = round((len(wins) / len(closed_trades)) * 100, 2) if closed_trades else 0
         execution_permission = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
+        paper_permission = ReliabilityGovernorEngine().evaluate()
+        paper_execution_permission = ReliabilityGovernorEngine().evaluate()
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
@@ -425,7 +428,11 @@ class OptionsAccountDashboardEngine:
             "win_rate_pct": win_rate_pct,
             "open_positions": open_trades,
             "execution_permission": execution_permission,
-            "execution_enabled": execution_permission.get("execution_enabled"),
+            "paper_execution_permission": paper_execution_permission,
+            "execution_enabled": paper_execution_permission.get("execution_allowed"),
+            "paper_execution_enabled": paper_execution_permission.get("execution_allowed"),
+            "paper_new_entries_allowed": paper_execution_permission.get("new_entries_allowed"),
             "order_placement_allowed": execution_permission.get("order_placement_allowed"),
+            "live_order_placement_allowed": execution_permission.get("order_placement_allowed"),
             "status": "OPTIONS_ACCOUNT_DASHBOARD_READY",
         }
