@@ -12,6 +12,15 @@ from app.services.tradestation_token_status_engine import TradeStationTokenStatu
 router = APIRouter()
 
 
+def _is_actionable_cockpit_event(event):
+    if (
+        event.get("category") == "EXECUTION_BLOCKED"
+        and "EXECUTE_SIGNAL_BLOCKED_READ_ONLY" in str(event.get("title") or "")
+    ):
+        return False
+    return True
+
+
 def _mission_readiness_score(reliability, governor, quote_heartbeat, token_status):
     score = 100
     reasons = []
@@ -74,7 +83,8 @@ def operator_cockpit_status(include_master_decision: bool = False):
     reliability = UnifiedReliabilityCoreEngine().evaluate()
     governor = ReliabilityGovernorEngine().evaluate()
     notifications = OperatorNotificationEngine().unread()
-    events = OperatorEventBusEngine().recent(limit=10)
+    raw_events = OperatorEventBusEngine().recent(limit=50).get("events") or []
+    events = [e for e in raw_events if _is_actionable_cockpit_event(e)][:10]
     quote_heartbeat = FastQuoteHeartbeatService.status()
     token_status = TradeStationTokenStatusEngine().evaluate()
     mission_readiness = _mission_readiness_score(reliability, governor, quote_heartbeat, token_status)
@@ -94,7 +104,9 @@ def operator_cockpit_status(include_master_decision: bool = False):
         "new_entries_allowed": governor.get("new_entries_allowed"),
         "autonomous_allowed": governor.get("autonomous_allowed"),
         "unread_notifications": notifications.get("unread_count"),
-        "latest_events": events.get("events"),
+        "latest_events": events,
+        "latest_events_filtered": True,
+        "read_only_execution_blocks_suppressed": True,
         "quote_heartbeat": quote_heartbeat,
         "token_status": token_status,
         "mission_readiness": mission_readiness,
