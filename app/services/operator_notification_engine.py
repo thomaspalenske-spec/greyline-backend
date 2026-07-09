@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -57,15 +57,43 @@ class OperatorNotificationEngine:
             "status": "OPERATOR_NOTIFICATION_RECORDED",
         }
 
-    def unread(self):
-        rows = [r for r in self._read() if r.get("acknowledged") is not True]
-        rows = sorted(rows, key=lambda r: r.get("timestamp") or "", reverse=True)
+    def unread(self, limit=25):
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+        rows = []
+        historical_unread_count = 0
 
+        for r in self._read():
+            if r.get("acknowledged") is True:
+                continue
+
+            historical_unread_count += 1
+
+            ts_raw = str(r.get("timestamp") or "")
+            try:
+                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                ts = datetime.min
+
+            if ts < cutoff:
+                continue
+
+            if (
+                r.get("event_type") == "EXECUTION_BLOCKED"
+                and "EXECUTE_SIGNAL_BLOCKED_READ_ONLY" in str(r.get("title") or "")
+            ):
+                continue
+
+            rows.append(r)
+
+        rows = sorted(rows, key=lambda r: r.get("timestamp", ""), reverse=True)[:limit]
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "OperatorNotificationEngine",
             "unread_count": len(rows),
-            "notifications": rows[:50],
+            "historical_unread_count": historical_unread_count,
+            "active_alert_window_hours": 24,
+            "read_only_execution_blocks_suppressed": True,
+            "notifications": rows,
             "status": "OPERATOR_NOTIFICATIONS_READY",
         }
 
