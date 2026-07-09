@@ -38,6 +38,8 @@ class OperatorEventBusEngine:
             str(message),
         ])
         dedupe_window_seconds = int(payload.get("dedupe_window_seconds") or 60)
+        if category == "EXECUTION_BLOCKED" and "EXECUTE_SIGNAL_BLOCKED_READ_ONLY" in str(title):
+            dedupe_window_seconds = max(dedupe_window_seconds, 1800)
 
         recent_duplicate = self._recent_duplicate(dedupe_key, dedupe_window_seconds)
         if recent_duplicate:
