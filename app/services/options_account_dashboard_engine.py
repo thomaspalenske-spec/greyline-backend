@@ -403,7 +403,6 @@ class OptionsAccountDashboardEngine:
 
         win_rate_pct = round((len(wins) / len(closed_trades)) * 100, 2) if closed_trades else 0
         execution_permission = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
-        paper_permission = ReliabilityGovernorEngine().evaluate()
         paper_execution_permission = ReliabilityGovernorEngine().evaluate()
 
         return {
