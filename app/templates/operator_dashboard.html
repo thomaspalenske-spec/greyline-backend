@@ -822,7 +822,9 @@ async function refreshCommanderSummary() {
       status.className = "commander-status " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
     }
 
-    setText("side_mode", summary.operating_mode || "--");
+    const paperMode = summary.operating_mode === "PAPER_OPERATIONAL" || summary.paper_execution_allowed === true;
+    const liveMode = summary.live_execution_allowed === true;
+    setText("side_mode", paperMode && !liveMode ? "PAPER AUTO" : (liveMode ? "LIVE AUTO" : "OBSERVE"));
   } catch (e) {
     setText("commander_headline", "Commander summary unavailable.");
     const headline = document.getElementById("commander_headline");
@@ -953,7 +955,7 @@ async function refreshAll() {
         <td><strong>${conviction}</strong><br><span class="sub">${convictionState}</span></td>
         <td><span class="badge ${gateClass === "green" ? "" : "blocked"}">${gate}</span></td>
         <td>${c.result}</td>
-        <td><span class="badge blocked">${c.order_placement_allowed ? "ALLOWED" : "BLOCKED"}</span></td>
+        <td><span class="badge blocked">${c.order_placement_allowed ? "LIVE ALLOWED" : "LIVE BLOCKED"}</span></td>
       </tr>`;
     }).join("");
     document.getElementById("top_calls").innerHTML = rows || `<tr><td colspan="8">No candidates</td></tr>`;
