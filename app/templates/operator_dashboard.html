@@ -573,9 +573,9 @@ table {
 
     <div class="system-card">
       <div class="section-title green">System Status</div>
-      <div class="system-row"><span>Mode</span><strong id="side_mode">LIVE AUTO</strong></div>
-      <div class="system-row"><span>Execution</span><strong id="side_execution" class="red">DISABLED</strong></div>
-      <div class="system-row"><span>Order Placement</span><strong id="side_orders" class="red">DISABLED</strong></div>
+      <div class="system-row"><span>Mode</span><strong id="side_mode">PAPER AUTO</strong></div>
+      <div class="system-row"><span>Paper Execution</span><strong id="side_execution" class="red">DISABLED</strong></div>
+      <div class="system-row"><span>Live Orders</span><strong id="side_orders" class="red">DISABLED</strong></div>
       <div class="system-row"><span>Token</span><strong id="side_token">READY</strong></div>
     </div>
   </aside>
@@ -583,7 +583,7 @@ table {
   <main class="main">
     <div class="topbar">
       <div>
-        <span class="status-pill"><span class="dot"></span> LIVE AUTO</span>
+        <span class="status-pill"><span class="dot"></span> PAPER AUTO</span>
         <span class="sub" id="last_update">Last Update: --</span>
       </div>
       <div class="actions">
@@ -609,8 +609,8 @@ table {
       <div class="execution-readiness">
         <div class="readiness-title">EXECUTION READINESS</div>
         <div class="readiness-grid">
-          <div class="readiness-tile"><div class="label">Execution</div><div class="readiness-value red" id="ready_execution">--</div></div>
-          <div class="readiness-tile"><div class="label">Order Placement</div><div class="readiness-value red" id="ready_orders">--</div></div>
+          <div class="readiness-tile"><div class="label">Paper Execution</div><div class="readiness-value red" id="ready_execution">--</div></div>
+          <div class="readiness-tile"><div class="label">Live Order Placement</div><div class="readiness-value red" id="ready_orders">--</div></div>
           <div class="readiness-tile"><div class="label">Scheduler</div><div class="readiness-value yellow" id="ready_scheduler">--</div></div>
           <div class="readiness-tile"><div class="label">Broker Token</div><div class="readiness-value yellow" id="ready_token">--</div></div>
           <div class="readiness-tile"><div class="label">Quote Feed</div><div class="readiness-value yellow" id="ready_quotes">--</div></div>
@@ -630,8 +630,8 @@ table {
 
     <section class="grid health">
       <div class="card"><div class="label">Open Option Trades</div><div class="value yellow" id="open_trades">--</div></div>
-      <div class="card"><div class="label">Execution Enabled</div><div class="value red" id="execution_enabled">NO</div></div>
-      <div class="card"><div class="label">Order Placement Allowed</div><div class="value red" id="orders_allowed">NO</div></div>
+      <div class="card"><div class="label">Paper Execution Enabled</div><div class="value red" id="execution_enabled">NO</div></div>
+      <div class="card"><div class="label">Live Order Placement Allowed</div><div class="value red" id="orders_allowed">NO</div></div>
       <div class="card"><div class="label">Battlefield Health</div><div class="value yellow" id="battlefield_health">--</div></div>
       <div class="card"><div class="label">Token Status</div><div class="value green" id="token_status">READY</div></div>
     </section>
@@ -895,15 +895,17 @@ async function refreshAll() {
 
   if (scheduler.status === "fulfilled") {
     const s = scheduler.value;
-    const ex = !!s.execution_enabled;
-    const ord = !!s.order_placement_allowed;
+    const ledgerData = ledger.status === "fulfilled" ? ledger.value : {};
+    const ex = !!(ledgerData.paper_execution_enabled ?? s.execution_enabled);
+    const ord = !!(ledgerData.live_order_placement_allowed ?? s.order_placement_allowed);
+    setText("side_mode", ex && !ord ? "PAPER AUTO" : (ord ? "LIVE AUTO" : "OBSERVE"));
 
     setText("execution_enabled", ex ? "YES" : "NO");
     setText("orders_allowed", ord ? "YES" : "NO");
     setText("side_execution", ex ? "ENABLED" : "DISABLED");
     setText("side_orders", ord ? "ENABLED" : "DISABLED");
-    setText("alert_execution", ex ? "Execution is ENABLED" : "Execution is DISABLED");
-    setText("alert_orders", ord ? "Order placement is ENABLED" : "Order placement is DISABLED");
+    setText("alert_execution", ex ? "Paper execution is ENABLED" : "Paper execution is DISABLED");
+    setText("alert_orders", ord ? "Live order placement is ENABLED" : "Live order placement is DISABLED");
 
     document.getElementById("execution_enabled").className = "value " + (ex ? "green" : "red");
     document.getElementById("orders_allowed").className = "value " + (ord ? "green" : "red");
