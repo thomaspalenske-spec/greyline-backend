@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from app.services.execution_governor import ExecutionGovernor
 from pathlib import Path
 from app.services.regime_scoring_engine import RegimeScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
@@ -275,6 +276,19 @@ class OptionsPaperTradeLedgerEngine:
                 "execution_enabled": False,
                 "order_placement_allowed": False,
                 "status": "OPTIONS_PAPER_TRADE_SIZE_BLOCKED",
+            }
+
+
+        governor = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
+        if not governor.get("order_placement_allowed"):
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_TRADE_LEDGER",
+                "paper_trade_recorded": False,
+                "reason": "EXECUTION_GOVERNOR_BLOCKED",
+                "execution_permission": governor,
+                "status": "OPTIONS_PAPER_TRADE_EXECUTION_BLOCKED",
             }
 
         trade = {
