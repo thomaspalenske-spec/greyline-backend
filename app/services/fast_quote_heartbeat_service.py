@@ -1,6 +1,6 @@
 import json
 import threading
-from datetime import datetime, timezone, timezone
+from datetime import datetime, timezone
 from app.services.execution_governor import ExecutionGovernor
 from pathlib import Path
 
@@ -57,13 +57,13 @@ class FastQuoteHeartbeatService:
         if not market_open:
             return "MARKET_CLOSED_LAST_QUOTE_MARK"
 
-        if max_quote_age_seconds <= 15:
+        if max_quote_age_seconds <= 30:
             return "FRESH"
 
-        if max_quote_age_seconds <= 30:
+        if max_quote_age_seconds <= 60:
             return "ACCEPTABLE"
 
-        if max_quote_age_seconds <= 60:
+        if max_quote_age_seconds <= 120:
             return "DEGRADED"
 
         return "STALE_DATA"
@@ -198,6 +198,11 @@ class FastQuoteHeartbeatService:
             "average_quote_age_seconds": average_quote_age_seconds,
             "max_quote_age_seconds": max_quote_age_seconds,
             "market_data_health": market_data_health,
+            "market_open_health_thresholds": {
+                "fresh_seconds": 30,
+                "acceptable_seconds": 60,
+                "degraded_seconds": 120
+            },
             "cycle_latency_ms": latency_ms,
             "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
             "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
