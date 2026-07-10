@@ -21,6 +21,12 @@ from app.services.institutional_intelligence_engine import (
 from app.services.institutional.institutional_memory_engine import (
     InstitutionalMemoryEngine,
 )
+from app.services.institutional.institutional_validation_engine import (
+    InstitutionalValidationEngine,
+)
+from app.services.institutional.institutional_forecast_engine import (
+    InstitutionalForecastEngine,
+)
 
 
 class OpportunityScoringEngine:
@@ -374,6 +380,8 @@ class OpportunityScoringEngine:
 
         intelligence_engine = InstitutionalIntelligenceEngine()
         memory_engine = InstitutionalMemoryEngine()
+        validation_engine = InstitutionalValidationEngine()
+        forecast_engine = InstitutionalForecastEngine()
 
         for candidate in ranked_for_intelligence:
             candidate_symbol = candidate.get("symbol")
@@ -410,10 +418,38 @@ class OpportunityScoringEngine:
                     intelligence.get("status")
                 )
 
-                memory_engine.record(
+                memory_result = memory_engine.record(
                     candidate_symbol,
                     intelligence,
                     source="OPPORTUNITY_SCORING_ENGINE",
+                )
+
+                validation = validation_engine.evaluate(
+                    candidate_symbol
+                )
+                forecast = forecast_engine.evaluate(
+                    candidate_symbol
+                )
+
+                candidate["institutional_memory"] = memory_result
+                candidate["institutional_validation"] = validation
+                candidate["institutional_forecast"] = forecast
+                candidate["institutional_validation_ready"] = (
+                    validation.get("validated") is True
+                )
+                candidate["institutional_forecast_available"] = (
+                    forecast.get("forecast_available") is True
+                )
+                candidate["institutional_forecast_trend"] = (
+                    forecast.get("institutional_trend")
+                )
+                candidate["institutional_forecast_score"] = (
+                    forecast.get(
+                        "projected_score_next_snapshot"
+                    )
+                )
+                candidate["institutional_forecast_confidence"] = (
+                    forecast.get("forecast_confidence")
                 )
 
                 institutional_intelligence_symbols.append(
