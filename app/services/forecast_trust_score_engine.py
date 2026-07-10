@@ -3,6 +3,10 @@ from datetime import datetime
 from math import sqrt
 from pathlib import Path
 
+from app.services.forecast_half_life_engine import (
+    ForecastHalfLifeEngine,
+)
+
 
 class ForecastTrustScoreEngine:
     """
@@ -83,11 +87,50 @@ class ForecastTrustScoreEngine:
             else 0.0
         )
 
+        half_life = ForecastHalfLifeEngine().evaluate()
+
+        weighted_accuracy_pct = half_life.get(
+            "weighted_accuracy_pct"
+        )
+        effective_sample_weight = float(
+            half_life.get("total_weight") or 0.0
+        )
+
+        if (
+            weighted_accuracy_pct is not None
+            and effective_sample_weight > 0
+        ):
+            weighted_accuracy = (
+                float(weighted_accuracy_pct) / 100.0
+            )
+            effective_correct_count = (
+                weighted_accuracy
+                * effective_sample_weight
+            )
+            effective_incorrect_count = (
+                effective_sample_weight
+                - effective_correct_count
+            )
+            posterior_source = "HALF_LIFE_WEIGHTED"
+        else:
+            effective_correct_count = float(
+                correct_count
+            )
+            effective_incorrect_count = float(
+                incorrect_count
+            )
+            effective_sample_weight = float(
+                sample_size
+            )
+            posterior_source = "RAW_HISTORY_FALLBACK"
+
         posterior_alpha = (
-            self.prior_alpha + correct_count
+            self.prior_alpha
+            + effective_correct_count
         )
         posterior_beta = (
-            self.prior_beta + incorrect_count
+            self.prior_beta
+            + effective_incorrect_count
         )
         posterior_total = (
             posterior_alpha + posterior_beta
@@ -129,7 +172,7 @@ class ForecastTrustScoreEngine:
 
         evidence_strength = min(
             100.0,
-            sample_size / 50.0 * 100.0,
+            effective_sample_weight / 50.0 * 100.0,
         )
 
         return {
@@ -143,6 +186,27 @@ class ForecastTrustScoreEngine:
             "correct_count": correct_count,
             "incorrect_count": incorrect_count,
             "accuracy_pct": round(raw_accuracy, 2),
+            "half_life_weighted_accuracy_pct": (
+                round(
+                    float(weighted_accuracy_pct),
+                    2,
+                )
+                if weighted_accuracy_pct is not None
+                else None
+            ),
+            "effective_sample_weight": round(
+                effective_sample_weight,
+                3,
+            ),
+            "effective_correct_count": round(
+                effective_correct_count,
+                3,
+            ),
+            "effective_incorrect_count": round(
+                effective_incorrect_count,
+                3,
+            ),
+            "posterior_source": posterior_source,
             "bayesian_accuracy_pct": round(
                 posterior_mean_pct,
                 2,
@@ -165,9 +229,10 @@ class ForecastTrustScoreEngine:
                 ),
             },
             "posterior": {
-                "alpha": round(posterior_alpha, 2),
-                "beta": round(posterior_beta, 2),
+                "alpha": round(posterior_alpha, 3),
+                "beta": round(posterior_beta, 3),
             },
+            "half_life": half_life,
             "evidence_strength_pct": round(
                 evidence_strength,
                 2,
