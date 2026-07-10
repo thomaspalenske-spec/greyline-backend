@@ -15,6 +15,7 @@ from app.services.institutional_conviction_engine import InstitutionalConviction
 from app.services.institutional_flow_momentum_engine import InstitutionalFlowMomentumEngine
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
+from app.services.institutional.institutional_execution_gate_engine import InstitutionalExecutionGateEngine
 from app.services.institutional_intelligence_engine import (
     InstitutionalIntelligenceEngine,
 )
@@ -230,7 +231,25 @@ class OpportunityScoringEngine:
 
             direction_confidence = round(abs(bullish_score - bearish_score), 2)
 
-            if composite_score >= 85 and direction_confidence >= 5:
+            institutional_gate = InstitutionalExecutionGateEngine().evaluate(symbol)
+
+            composite_score = round(
+                composite_score *
+                institutional_gate["institutional_multiplier"],
+                2,
+            )
+
+            direction_confidence = round(
+                direction_confidence +
+                institutional_gate["confidence_adjustment"],
+                2,
+            )
+
+            if (
+                institutional_gate["allow_execution"]
+                and composite_score >= 85
+                and direction_confidence >= 5
+            ):
                 result = "EXECUTE"
             elif composite_score >= 60:
                 result = "WATCH"
@@ -361,6 +380,7 @@ class OpportunityScoringEngine:
                 "directional_bias": directional_bias,
                 "option_type": option_type,
                 "direction_confidence": direction_confidence,
+                "institutional_execution_gate": institutional_gate,
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
                 "governor_status": governor.get("status"),
