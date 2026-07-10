@@ -180,6 +180,27 @@ class OptionsPaperTradeLedgerEngine:
         expiration_raw = leg.get("Expiration")
         contract_metrics = self._contract_metrics(now.isoformat(), expiration_raw)
 
+        quote_market_state = (
+            underlying_quote.get("market_state")
+            or underlying_quote.get("underlying_market_state")
+            or "UNKNOWN"
+        )
+
+        if quote_market_state != "MARKET_OPEN":
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_TRADE_LEDGER",
+                "paper_trade_recorded": False,
+                "reason": "OPTIONS_NEW_ENTRY_MARKET_CLOSED_BLOCK",
+                "underlying": underlying,
+                "market_state": quote_market_state,
+                "underlying_quote": underlying_quote,
+                "execution_enabled": False,
+                "order_placement_allowed": False,
+                "status": "OPTIONS_PAPER_TRADE_MARKET_CLOSED_BLOCKED",
+            }
+
         sizing = OptionsPositionSizingEngine().evaluate(
             account_equity=10000,
             option_ask=float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0),
