@@ -30,6 +30,9 @@ from app.services.institutional.institutional_forecast_engine import (
 from app.services.unusual_whales_budget_governor import (
     UnusualWhalesBudgetGovernor,
 )
+from app.services.unusual_whales_refresh_decision_engine import (
+    UnusualWhalesRefreshDecisionEngine,
+)
 
 
 class OpportunityScoringEngine:
@@ -394,11 +397,114 @@ class OpportunityScoringEngine:
         memory_engine = InstitutionalMemoryEngine()
         validation_engine = InstitutionalValidationEngine()
         forecast_engine = InstitutionalForecastEngine()
+        refresh_engine = UnusualWhalesRefreshDecisionEngine()
 
         for candidate in ranked_for_intelligence:
             candidate_symbol = candidate.get("symbol")
 
             try:
+                refresh_decision = refresh_engine.evaluate(
+                    candidate,
+                    uw_budget_policy,
+                )
+
+                candidate[
+                    "unusual_whales_refresh_decision"
+                ] = refresh_decision
+
+                if not refresh_decision.get("refresh_allowed"):
+                    latest_memory = memory_engine.latest(
+                        candidate_symbol
+                    )
+                    cached_intelligence = (
+                        (latest_memory or {}).get("snapshot")
+                        or {}
+                    )
+
+                    if cached_intelligence:
+                        candidate[
+                            "direct_institutional_intelligence"
+                        ] = cached_intelligence
+                        candidate[
+                            "overall_institutional_score"
+                        ] = cached_intelligence.get(
+                            "overall_institutional_score"
+                        )
+                        candidate[
+                            "institutional_market_tide_score"
+                        ] = cached_intelligence.get(
+                            "market_tide_score"
+                        )
+                        candidate[
+                            "institutional_sector_tide_score"
+                        ] = cached_intelligence.get(
+                            "sector_tide_score"
+                        )
+                        candidate[
+                            "institutional_ownership_score"
+                        ] = cached_intelligence.get(
+                            "ownership_score"
+                        )
+                        candidate[
+                            "institutional_short_interest_score"
+                        ] = cached_intelligence.get(
+                            "short_interest_score"
+                        )
+                        candidate[
+                            "institutional_intelligence_execution_impact"
+                        ] = "OBSERVATION_ONLY"
+                        candidate[
+                            "institutional_intelligence_status"
+                        ] = (
+                            "INSTITUTIONAL_INTELLIGENCE_MEMORY_REUSED"
+                        )
+
+                        validation = validation_engine.evaluate(
+                            candidate_symbol
+                        )
+                        forecast = forecast_engine.evaluate(
+                            candidate_symbol
+                        )
+
+                        candidate[
+                            "institutional_validation"
+                        ] = validation
+                        candidate[
+                            "institutional_forecast"
+                        ] = forecast
+                        candidate[
+                            "institutional_validation_ready"
+                        ] = validation.get("validated") is True
+                        candidate[
+                            "institutional_forecast_available"
+                        ] = (
+                            forecast.get(
+                                "forecast_available"
+                            )
+                            is True
+                        )
+                        candidate[
+                            "institutional_forecast_trend"
+                        ] = forecast.get(
+                            "institutional_trend"
+                        )
+                        candidate[
+                            "institutional_forecast_score"
+                        ] = forecast.get(
+                            "projected_score_next_snapshot"
+                        )
+                        candidate[
+                            "institutional_forecast_confidence"
+                        ] = forecast.get(
+                            "forecast_confidence"
+                        )
+
+                        institutional_intelligence_symbols.append(
+                            candidate_symbol
+                        )
+
+                    continue
+
                 intelligence = intelligence_engine.analyze(
                     candidate_symbol
                 )
@@ -436,6 +542,8 @@ class OpportunityScoringEngine:
                     source="OPPORTUNITY_SCORING_ENGINE",
                     minimum_interval_seconds=300,
                 )
+
+                refresh_engine.mark_refreshed(candidate)
 
                 validation = validation_engine.evaluate(
                     candidate_symbol
