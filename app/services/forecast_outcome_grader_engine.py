@@ -175,6 +175,28 @@ class ForecastOutcomeGraderEngine:
                 "direction_confidence": record.get(
                     "direction_confidence"
                 ),
+
+                # Preserve market regime metadata
+                "regime": record.get("regime"),
+                "regime_score": record.get("regime_score"),
+                "forecast_regime_trust": record.get(
+                    "forecast_regime_trust"
+                ),
+                "forecast_regime_trust_actionable": record.get(
+                    "forecast_regime_trust_actionable"
+                ),
+                "forecast_regime_trust_sample_size": record.get(
+                    "forecast_regime_trust_sample_size"
+                ),
+                "forecast_regime_bayesian_accuracy_pct": record.get(
+                    "forecast_regime_bayesian_accuracy_pct"
+                ),
+                "forecast_regime_confidence_adjustment": record.get(
+                    "forecast_regime_confidence_adjustment"
+                ),
+                "forecast_regime_trust_impact": record.get(
+                    "forecast_regime_trust_impact"
+                ),
                 "regime": record.get("regime"),
                 "regime_score": record.get("regime_score"),
                 "risk_state": record.get("risk_state"),
