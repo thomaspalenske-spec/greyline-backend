@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,27 +26,90 @@ class InstitutionalMemoryEngine:
         symbol: str,
         snapshot: Dict[str, Any],
         source: str = "INSTITUTIONAL_INTELLIGENCE_ENGINE",
+        minimum_interval_seconds: int = 60,
     ) -> Dict[str, Any]:
         symbol = self._symbol(symbol)
 
         if not isinstance(snapshot, dict):
             raise TypeError("snapshot must be a dictionary")
 
+        now = datetime.now(timezone.utc)
+        path = self._path(symbol)
+
+        normalized_snapshot = dict(snapshot)
+        normalized_snapshot.pop("timestamp", None)
+
+        snapshot_json = json.dumps(
+            normalized_snapshot,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        snapshot_hash = hashlib.sha256(
+            snapshot_json.encode("utf-8")
+        ).hexdigest()
+
+        latest = self.latest(symbol)
+
+        if isinstance(latest, dict):
+            latest_hash = latest.get("snapshot_hash")
+            latest_timestamp = latest.get("timestamp")
+
+            elapsed_seconds = None
+
+            try:
+                parsed = datetime.fromisoformat(
+                    str(latest_timestamp).replace("Z", "+00:00")
+                )
+                elapsed_seconds = (now - parsed).total_seconds()
+            except (TypeError, ValueError):
+                pass
+
+            if latest_hash == snapshot_hash:
+                return {
+                    "recorded": False,
+                    "symbol": symbol,
+                    "reason": "IDENTICAL_SNAPSHOT",
+                    "path": str(path),
+                    "status": "INSTITUTIONAL_MEMORY_DUPLICATE_SKIPPED",
+                }
+
+            if (
+                elapsed_seconds is not None
+                and elapsed_seconds < max(
+                    0,
+                    int(minimum_interval_seconds),
+                )
+            ):
+                return {
+                    "recorded": False,
+                    "symbol": symbol,
+                    "reason": "MINIMUM_INTERVAL_NOT_REACHED",
+                    "elapsed_seconds": round(elapsed_seconds, 2),
+                    "minimum_interval_seconds": int(
+                        minimum_interval_seconds
+                    ),
+                    "path": str(path),
+                    "status": "INSTITUTIONAL_MEMORY_INTERVAL_SKIPPED",
+                }
+
         record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": now.isoformat(),
             "symbol": symbol,
             "source": source,
+            "snapshot_hash": snapshot_hash,
             "snapshot": snapshot,
         }
 
-        path = self._path(symbol)
-
         with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+            handle.write(
+                json.dumps(record, separators=(",", ":")) + "\n"
+            )
 
         return {
             "recorded": True,
             "symbol": symbol,
+            "snapshot_hash": snapshot_hash,
             "path": str(path),
             "status": "INSTITUTIONAL_MEMORY_RECORDED",
         }
