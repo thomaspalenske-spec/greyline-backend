@@ -194,6 +194,24 @@ class ForecastOutcomeCaptureEngine:
                     "adaptive_institutional_weighting"
                 )
             ),
+            "forecast_regime_trust": forecast.get(
+                "forecast_regime_trust"
+            ),
+            "forecast_regime_trust_actionable": forecast.get(
+                "forecast_regime_trust_actionable"
+            ),
+            "forecast_regime_trust_sample_size": forecast.get(
+                "forecast_regime_trust_sample_size"
+            ),
+            "forecast_regime_bayesian_accuracy_pct": forecast.get(
+                "forecast_regime_bayesian_accuracy_pct"
+            ),
+            "forecast_regime_confidence_adjustment": forecast.get(
+                "forecast_regime_confidence_adjustment"
+            ),
+            "forecast_regime_trust_impact": forecast.get(
+                "forecast_regime_trust_impact"
+            ),
             "captured": True,
             "deduped": False,
             "status": (

@@ -53,6 +53,24 @@ class OpportunitySummaryEngine:
                 "institutional_forecast_verification": item.get(
                     "institutional_forecast_verification"
                 ),
+                "forecast_regime_trust": item.get(
+                    "forecast_regime_trust"
+                ),
+                "forecast_regime_trust_actionable": item.get(
+                    "forecast_regime_trust_actionable"
+                ),
+                "forecast_regime_trust_sample_size": item.get(
+                    "forecast_regime_trust_sample_size"
+                ),
+                "forecast_regime_bayesian_accuracy_pct": item.get(
+                    "forecast_regime_bayesian_accuracy_pct"
+                ),
+                "forecast_regime_confidence_adjustment": item.get(
+                    "forecast_regime_confidence_adjustment"
+                ),
+                "forecast_regime_trust_impact": item.get(
+                    "forecast_regime_trust_impact"
+                ),
                 "order_placement_allowed": item.get("order_placement_allowed"),
                 "governor_status": item.get("governor_status")
             })
