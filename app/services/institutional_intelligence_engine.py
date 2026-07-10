@@ -15,7 +15,7 @@ class InstitutionalIntelligenceEngine:
         return max(lo, min(hi, float(v)))
 
     def analyze(self, symbol: str):
-        d = self.uw.build(symbol)
+        d = self.uw.analyze(symbol)
 
         options_flow = d.get("options_flow") or {}
         alerts = d.get("flow_alerts") or {}
