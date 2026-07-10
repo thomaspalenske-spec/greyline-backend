@@ -15,6 +15,7 @@ from app.services.options_paper_execution_sweep_engine import OptionsPaperExecut
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.routes.paper_trade_executor import run_paper_trade_executor
 from app.services.market_hours_engine import MarketHoursEngine
+from app.services.forecast_outcome_grader_engine import ForecastOutcomeGraderEngine
 
 
 class BackgroundSchedulerService:
@@ -130,6 +131,22 @@ class BackgroundSchedulerService:
         market_hours = MarketHoursEngine().status()
         token = TradeStationTokenMaintenanceEngine().evaluate()
         decision = DecisionSchedulerEngine().run_manual_cycle()
+
+        try:
+            forecast_grading = (
+                ForecastOutcomeGraderEngine().grade_pending(
+                    min_age_minutes=60
+                )
+            )
+        except Exception as exc:
+            forecast_grading = {
+                "graded_count": 0,
+                "error": repr(exc),
+                "status": (
+                    "FORECAST_OUTCOME_GRADER_DEGRADED"
+                ),
+            }
+
         forward = ForwardOutcomeCaptureEngine().capture(limit=1)
         learning = DecisionLearningMemoryEngine().record_current_learning()
         paper_executor = run_paper_trade_executor()
@@ -152,6 +169,12 @@ class BackgroundSchedulerService:
                 "market_open": market_hours.get("is_regular_session"),
                 "token_maintenance_status": token.get("status"),
                 "decision_status": decision.get("status"),
+                "forecast_grading_status": (
+                    forecast_grading.get("status")
+                ),
+                "forecast_grades_processed": (
+                    forecast_grading.get("graded_count")
+                ),
                 "forward_outcome_status": forward.get("status"),
                 "learning_memory_status": learning.get("status"),
                 "paper_executor_status": paper_executor.get("status"),
@@ -181,6 +204,12 @@ class BackgroundSchedulerService:
             "market_open": market_hours.get("is_regular_session"),
             "token_maintenance_status": token.get("status"),
             "decision_status": decision.get("status"),
+            "forecast_grading_status": (
+                forecast_grading.get("status")
+            ),
+            "forecast_grades_processed": (
+                forecast_grading.get("graded_count")
+            ),
             "forward_outcome_status": forward.get("status"),
             "learning_memory_status": learning.get("status"),
             "paper_executor_status": paper_executor.get("status"),

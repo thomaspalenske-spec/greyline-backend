@@ -10,6 +10,7 @@ from app.services.opportunity_symmetry_engine import OpportunitySymmetryEngine
 from app.services.institutional_flow_engine import InstitutionalFlowEngine
 from app.services.bear_market_opportunity_engine import BearMarketOpportunityEngine
 from app.services.reliability_governor_engine import ReliabilityGovernorEngine
+from app.services.forecast_outcome_capture_engine import ForecastOutcomeCaptureEngine
 
 
 class GreyLineMasterDecisionEngine:
@@ -86,6 +87,31 @@ class GreyLineMasterDecisionEngine:
 
         top = top_candidate or {}
 
+        if top_candidate:
+            try:
+                forecast_capture = (
+                    ForecastOutcomeCaptureEngine().capture(
+                        top_candidate
+                    )
+                )
+            except Exception as exc:
+                forecast_capture = {
+                    "captured": False,
+                    "deduped": False,
+                    "error": repr(exc),
+                    "status": (
+                        "FORECAST_OUTCOME_CAPTURE_DEGRADED"
+                    ),
+                }
+        else:
+            forecast_capture = {
+                "captured": False,
+                "deduped": False,
+                "status": (
+                    "FORECAST_OUTCOME_CAPTURE_NO_CANDIDATE"
+                ),
+            }
+
         decision_event_category = "DECISION"
         decision_event_severity = "INFO"
         decision_ack_required = False
@@ -126,6 +152,18 @@ class GreyLineMasterDecisionEngine:
             "opportunity_symmetry": opportunity_symmetry,
             "bear_market_opportunity": bear_market_opportunity,
             "institutional_flow": institutional_flow,
+            "forecast_capture": forecast_capture,
+            "forecast_captured": forecast_capture.get(
+                "captured",
+                False,
+            ),
+            "forecast_capture_deduped": forecast_capture.get(
+                "deduped",
+                False,
+            ),
+            "forecast_capture_status": forecast_capture.get(
+                "status"
+            ),
             "decision": decision,
             "decision_reason": reason,
             "governor": governor,

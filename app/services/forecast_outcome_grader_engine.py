@@ -162,15 +162,51 @@ class ForecastOutcomeGraderEngine:
 
             graded.append(grade_record)
 
-        self.graded_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_grades = {}
+
+        if self.graded_path.exists():
+            for line in self.graded_path.read_text().splitlines():
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+
+                forecast_id = row.get("forecast_id")
+
+                if forecast_id:
+                    existing_grades[str(forecast_id)] = row
+
+        for row in graded:
+            forecast_id = row.get("forecast_id")
+
+            if forecast_id:
+                existing_grades[str(forecast_id)] = row
+
+        ordered_grades = list(existing_grades.values())
+
+        ordered_grades.sort(
+            key=lambda row: (
+                row.get("timestamp") or "",
+                row.get("forecast_id") or "",
+            )
+        )
+
+        self.graded_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
         with self.graded_path.open("w") as f:
-            for row in graded:
+            for row in ordered_grades:
                 f.write(json.dumps(row) + "\n")
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "ForecastOutcomeGraderEngine",
             "graded_count": len(graded),
+            "total_grade_record_count": len(
+                ordered_grades
+            ),
             "grades": graded,
             "status": "FORECAST_OUTCOME_GRADER_READY",
         }
