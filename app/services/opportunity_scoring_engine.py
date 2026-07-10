@@ -16,6 +16,9 @@ from app.services.institutional_flow_momentum_engine import InstitutionalFlowMom
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 from app.services.institutional.institutional_execution_gate_engine import InstitutionalExecutionGateEngine
+from app.services.institutional.adaptive_institutional_weight_engine import (
+    AdaptiveInstitutionalWeightEngine,
+)
 from app.services.institutional.institutional_attribution_engine import InstitutionalAttributionEngine
 from app.services.institutional_intelligence_engine import (
     InstitutionalIntelligenceEngine,
@@ -172,22 +175,51 @@ class OpportunityScoringEngine:
             t1 = datetime.utcnow()
             symbol_timings["institutional_conviction_seconds"] = round((t1 - t0).total_seconds(), 2)
 
+            adaptive_weight_engine = (
+                AdaptiveInstitutionalWeightEngine()
+            )
+
+            bullish_adaptive_weighting = (
+                adaptive_weight_engine.evaluate(
+                    symbol,
+                    "CALL",
+                )
+            )
+            bullish_weights = (
+                bullish_adaptive_weighting.get("weights")
+                or AdaptiveInstitutionalWeightEngine.BULLISH_BASELINE
+            )
+
             bullish_score = round(
                 (
-                    market_data_score * 0.08
-                    + liquidity_score * 0.11
-                    + bullish_setup_score * 0.13
-                    + regime_score * 0.11
-                    + volatility_score * 0.07
-                    + expected_value_score * 0.10
-                    + trend_persistence_score * 0.09
-                    + breadth_score * 0.08
-                    + institutional_inflow_score * 0.06
-                    + institutional_conviction_score * 0.02
-                    + asymmetry_score * 0.08
-                    + risk_state_score * 0.07
+                    market_data_score
+                    * bullish_weights["market_data"]
+                    + liquidity_score
+                    * bullish_weights["liquidity"]
+                    + bullish_setup_score
+                    * bullish_weights["setup"]
+                    + regime_score
+                    * bullish_weights["regime"]
+                    + volatility_score
+                    * bullish_weights["volatility"]
+                    + expected_value_score
+                    * bullish_weights["expected_value"]
+                    + trend_persistence_score
+                    * bullish_weights["trend"]
+                    + breadth_score
+                    * bullish_weights["breadth"]
+                    + institutional_inflow_score
+                    * bullish_weights["institutional_flow"]
+                    + institutional_conviction_score
+                    * bullish_weights[
+                        "institutional_conviction"
+                    ]
+                    + asymmetry_score
+                    * bullish_weights["asymmetry"]
+                    + risk_state_score
+                    * bullish_weights["risk"]
                 ),
-                2
+                2,
             )
 
             # Directional mirror scores.
@@ -204,22 +236,47 @@ class OpportunityScoringEngine:
             bear_asymmetry_score = 100 - asymmetry_score
             bear_risk_score = risk_state_score
 
+            bearish_adaptive_weighting = (
+                adaptive_weight_engine.evaluate(
+                    symbol,
+                    "PUT",
+                )
+            )
+            bearish_weights = (
+                bearish_adaptive_weighting.get("weights")
+                or AdaptiveInstitutionalWeightEngine.BEARISH_BASELINE
+            )
+
             bearish_score = round(
                 (
-                    market_data_score * 0.08
-                    + liquidity_score * 0.11
-                    + bear_setup_score * 0.08
-                    + bear_regime_score * 0.13
-                    + volatility_score * 0.12
-                    + bear_expected_value_score * 0.09
-                    + bear_trend_score * 0.10
-                    + bear_breadth_score * 0.10
-                    + bear_sponsorship_score * 0.06
-                    + bear_institutional_conviction_score * 0.02
-                    + bear_asymmetry_score * 0.06
-                    + bear_risk_score * 0.05
+                    market_data_score
+                    * bearish_weights["market_data"]
+                    + liquidity_score
+                    * bearish_weights["liquidity"]
+                    + bear_setup_score
+                    * bearish_weights["setup"]
+                    + bear_regime_score
+                    * bearish_weights["regime"]
+                    + volatility_score
+                    * bearish_weights["volatility"]
+                    + bear_expected_value_score
+                    * bearish_weights["expected_value"]
+                    + bear_trend_score
+                    * bearish_weights["trend"]
+                    + bear_breadth_score
+                    * bearish_weights["breadth"]
+                    + bear_sponsorship_score
+                    * bearish_weights["institutional_flow"]
+                    + bear_institutional_conviction_score
+                    * bearish_weights[
+                        "institutional_conviction"
+                    ]
+                    + bear_asymmetry_score
+                    * bearish_weights["asymmetry"]
+                    + bear_risk_score
+                    * bearish_weights["risk"]
                 ),
-                2
+                2,
             )
 
             if bullish_score >= bearish_score:
@@ -385,6 +442,17 @@ class OpportunityScoringEngine:
                 "option_type": option_type,
                 "direction_confidence": direction_confidence,
                 "institutional_execution_gate": institutional_gate,
+                "adaptive_institutional_weighting": (
+                    bullish_adaptive_weighting
+                    if option_type == "CALL"
+                    else bearish_adaptive_weighting
+                ),
+                "bullish_adaptive_institutional_weighting": (
+                    bullish_adaptive_weighting
+                ),
+                "bearish_adaptive_institutional_weighting": (
+                    bearish_adaptive_weighting
+                ),
                 "result": result,
                 "order_placement_allowed": governor.get("order_placement_allowed"),
                 "governor_status": governor.get("status"),
