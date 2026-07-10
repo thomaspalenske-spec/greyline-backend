@@ -71,3 +71,4 @@ app/data/options_paper_trading/
 app/data/paper_trading/archive/
 app/data/operator_events/
 app/data/operator_notifications/
+app/data/institutional_memory/
