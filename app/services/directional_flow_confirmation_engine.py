@@ -51,7 +51,7 @@ class DirectionalFlowConfirmationEngine:
             "flow_strength": flow_strength,
             "confirmation": confirmation,
             "premium_flow": premium_flow,
-            "direct_flow_feeds_connected": False,
-            "flow_source": "INFERRED_FROM_DIRECTIONAL_SCORE_LIQUIDITY_SETUP_CONFIDENCE",
+            "direct_flow_feeds_connected": premium_flow.get("direct_premium_flow_feed_connected", False),
+            "flow_source": premium_flow.get("flow_source", "INFERRED_FROM_DIRECTIONAL_SCORE_LIQUIDITY_SETUP_CONFIDENCE"),
             "status": "DIRECTIONAL_FLOW_CONFIRMATION_READY",
         }
