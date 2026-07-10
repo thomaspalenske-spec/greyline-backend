@@ -15,6 +15,12 @@ from app.services.institutional_conviction_engine import InstitutionalConviction
 from app.services.institutional_flow_momentum_engine import InstitutionalFlowMomentumEngine
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
+from app.services.institutional_intelligence_engine import (
+    InstitutionalIntelligenceEngine,
+)
+from app.services.institutional.institutional_memory_engine import (
+    InstitutionalMemoryEngine,
+)
 
 
 class OpportunityScoringEngine:
@@ -349,6 +355,95 @@ class OpportunityScoringEngine:
                 "execution_enabled": False
             })
 
+        # Enrich only the strongest live candidates with direct Unusual
+        # Whales intelligence. Do not call all 23 endpoints for every
+        # symbol, and do not alter execution scoring until validation
+        # history is sufficient.
+        t0 = datetime.utcnow()
+
+        institutional_intelligence_symbols = []
+        institutional_intelligence_errors = {}
+
+        ranked_for_intelligence = sorted(
+            opportunities,
+            key=lambda row: float(
+                row.get("composite_score") or 0
+            ),
+            reverse=True,
+        )[:3]
+
+        intelligence_engine = InstitutionalIntelligenceEngine()
+        memory_engine = InstitutionalMemoryEngine()
+
+        for candidate in ranked_for_intelligence:
+            candidate_symbol = candidate.get("symbol")
+
+            try:
+                intelligence = intelligence_engine.analyze(
+                    candidate_symbol
+                )
+
+                candidate["direct_institutional_intelligence"] = (
+                    intelligence
+                )
+                candidate["overall_institutional_score"] = (
+                    intelligence.get(
+                        "overall_institutional_score"
+                    )
+                )
+                candidate["institutional_market_tide_score"] = (
+                    intelligence.get("market_tide_score")
+                )
+                candidate["institutional_sector_tide_score"] = (
+                    intelligence.get("sector_tide_score")
+                )
+                candidate["institutional_ownership_score"] = (
+                    intelligence.get("ownership_score")
+                )
+                candidate["institutional_short_interest_score"] = (
+                    intelligence.get("short_interest_score")
+                )
+                candidate[
+                    "institutional_intelligence_execution_impact"
+                ] = intelligence.get("execution_impact")
+                candidate["institutional_intelligence_status"] = (
+                    intelligence.get("status")
+                )
+
+                memory_engine.record(
+                    candidate_symbol,
+                    intelligence,
+                    source="OPPORTUNITY_SCORING_ENGINE",
+                )
+
+                institutional_intelligence_symbols.append(
+                    candidate_symbol
+                )
+
+            except Exception as exc:
+                candidate["direct_institutional_intelligence"] = None
+                candidate["institutional_intelligence_status"] = (
+                    "INSTITUTIONAL_INTELLIGENCE_DEGRADED"
+                )
+                institutional_intelligence_errors[
+                    candidate_symbol
+                ] = {
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                }
+
+        t1 = datetime.utcnow()
+        timings["institutional_intelligence_seconds"] = round(
+            (t1 - t0).total_seconds(),
+            2,
+        )
+        timings["institutional_intelligence_symbols"] = (
+            institutional_intelligence_symbols
+        )
+        timings["institutional_intelligence_errors"] = (
+            institutional_intelligence_errors
+        )
+
         scoring_completed_at = datetime.utcnow()
         timings["total_scoring_seconds"] = round((scoring_completed_at - scoring_started_at).total_seconds(), 2)
 
@@ -372,6 +467,9 @@ class OpportunityScoringEngine:
             "symbols_scored": len(opportunities),
             "opportunity_scoring_timings": timings,
             "opportunities": opportunities,
+            "institutional_intelligence_mode": "TOP_3_OBSERVATION_ONLY",
+            "institutional_intelligence_symbols": institutional_intelligence_symbols,
+            "institutional_intelligence_errors": institutional_intelligence_errors,
             "execution_enabled": False,
             "status": "OPPORTUNITY_SCORING_COMPLETE"
         }
