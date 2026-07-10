@@ -376,7 +376,7 @@ class OpportunityScoringEngine:
                 row.get("composite_score") or 0
             ),
             reverse=True,
-        )[:3]
+        )[:1]
 
         intelligence_engine = InstitutionalIntelligenceEngine()
         memory_engine = InstitutionalMemoryEngine()
@@ -422,6 +422,7 @@ class OpportunityScoringEngine:
                     candidate_symbol,
                     intelligence,
                     source="OPPORTUNITY_SCORING_ENGINE",
+                    minimum_interval_seconds=300,
                 )
 
                 validation = validation_engine.evaluate(
@@ -503,7 +504,7 @@ class OpportunityScoringEngine:
             "symbols_scored": len(opportunities),
             "opportunity_scoring_timings": timings,
             "opportunities": opportunities,
-            "institutional_intelligence_mode": "TOP_3_OBSERVATION_ONLY",
+            "institutional_intelligence_mode": "TOP_1_CONSERVATION_OBSERVATION_ONLY",
             "institutional_intelligence_symbols": institutional_intelligence_symbols,
             "institutional_intelligence_errors": institutional_intelligence_errors,
             "execution_enabled": False,

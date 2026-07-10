@@ -72,3 +72,5 @@ app/data/paper_trading/archive/
 app/data/operator_events/
 app/data/operator_notifications/
 app/data/institutional_memory/
+.env.local
+app/data/unusual_whales_api_usage.json
