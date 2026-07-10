@@ -27,6 +27,15 @@ class InstitutionalIntelligenceEngine:
         oi_change = d.get("open_interest_change") or {}
         oi_strike = d.get("open_interest_by_strike") or {}
         vrp = d.get("variance_risk_premium") or {}
+        greek_flow = d.get("greek_flow") or {}
+        spot = d.get("spot_exposures") or {}
+        lit = d.get("lit_flow") or {}
+        market_tide = d.get("market_tide") or {}
+        sector_tide = d.get("sector_tide") or {}
+        ownership = d.get("institutional_ownership") or {}
+        shorts = d.get("short_volume") or {}
+        insiders = d.get("insider_transactions") or {}
+        congress = d.get("congress_trades") or {}
 
         buying = self._clamp(
             50
@@ -75,6 +84,16 @@ class InstitutionalIntelligenceEngine:
             expiry_score,
             vrp_rank,
         ]), 2)
+
+        greek_flow_score = 50.0 if greek_flow else 0.0
+        spot_gamma_score = 50.0 if spot else 0.0
+        lit_flow_score = 50.0 if lit else 0.0
+        market_tide_score = 50.0 if market_tide else 0.0
+        sector_tide_score = 50.0 if sector_tide else 0.0
+        ownership_score = 50.0 if ownership else 0.0
+        short_score = 50.0 if shorts else 0.0
+        insider_score = 50.0 if insiders else 0.0
+        congress_score = 50.0 if congress else 0.0
 
         return {
             "symbol": symbol,
