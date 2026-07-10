@@ -29,6 +29,9 @@ from app.services.institutional.institutional_validation_engine import (
 from app.services.institutional.institutional_forecast_engine import (
     InstitutionalForecastEngine,
 )
+from app.services.institutional.institutional_forecast_verification_engine import (
+    InstitutionalForecastVerificationEngine,
+)
 from app.services.unusual_whales_budget_governor import (
     UnusualWhalesBudgetGovernor,
 )
@@ -431,6 +434,9 @@ class OpportunityScoringEngine:
         memory_engine = InstitutionalMemoryEngine()
         validation_engine = InstitutionalValidationEngine()
         forecast_engine = InstitutionalForecastEngine()
+        forecast_verification_engine = (
+            InstitutionalForecastVerificationEngine()
+        )
         refresh_engine = UnusualWhalesRefreshDecisionEngine()
 
         for candidate in ranked_for_intelligence:
@@ -499,10 +505,18 @@ class OpportunityScoringEngine:
                         forecast = forecast_engine.evaluate(
                             candidate_symbol
                         )
+                        forecast_verification = (
+                            forecast_verification_engine.evaluate(
+                                candidate_symbol
+                            )
+                        )
 
                         candidate[
                             "institutional_validation"
                         ] = validation
+                        candidate[
+                            "institutional_forecast_verification"
+                        ] = forecast_verification
                         candidate[
                             "institutional_forecast"
                         ] = forecast
@@ -531,6 +545,16 @@ class OpportunityScoringEngine:
                             "institutional_forecast_confidence"
                         ] = forecast.get(
                             "forecast_confidence"
+                        )
+                        candidate[
+                            "institutional_calibrated_forecast_confidence"
+                        ] = forecast_verification.get(
+                            "calibrated_forecast_confidence"
+                        )
+                        candidate[
+                            "institutional_forecast_trust_state"
+                        ] = forecast_verification.get(
+                            "forecast_trust_state"
                         )
 
                         institutional_intelligence_symbols.append(
@@ -585,8 +609,16 @@ class OpportunityScoringEngine:
                 forecast = forecast_engine.evaluate(
                     candidate_symbol
                 )
+                forecast_verification = (
+                    forecast_verification_engine.evaluate(
+                        candidate_symbol
+                    )
+                )
 
                 candidate["institutional_memory"] = memory_result
+                candidate[
+                    "institutional_forecast_verification"
+                ] = forecast_verification
                 candidate["institutional_validation"] = validation
                 candidate["institutional_forecast"] = forecast
                 candidate["institutional_validation_ready"] = (
@@ -605,6 +637,16 @@ class OpportunityScoringEngine:
                 )
                 candidate["institutional_forecast_confidence"] = (
                     forecast.get("forecast_confidence")
+                )
+                candidate[
+                    "institutional_calibrated_forecast_confidence"
+                ] = forecast_verification.get(
+                    "calibrated_forecast_confidence"
+                )
+                candidate[
+                    "institutional_forecast_trust_state"
+                ] = forecast_verification.get(
+                    "forecast_trust_state"
                 )
 
                 institutional_intelligence_symbols.append(
