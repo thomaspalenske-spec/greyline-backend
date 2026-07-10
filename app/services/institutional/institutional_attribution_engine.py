@@ -18,7 +18,7 @@ class InstitutionalAttributionEngine:
     ENGINE_SCORE_FILE = DATA_DIR / "engine_scores.json"
 
     ENGINE_FIELDS = {
-        "trend": "trend_score",
+        "trend": "trend_persistence_score",
         "liquidity": "liquidity_score",
         "risk": "risk_state_score",
         "regime": "regime_score",
