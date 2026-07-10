@@ -94,6 +94,28 @@ class ForecastOutcomeGraderEngine:
                     "symbol": symbol,
                     "predicted_direction": predicted_direction,
                     "predicted_score": predicted_score,
+                    "forecast_confidence": record.get(
+                        "forecast_confidence"
+                    ),
+                    "direction_confidence": record.get(
+                        "direction_confidence"
+                    ),
+                    "regime": record.get("regime"),
+                    "regime_score": record.get("regime_score"),
+                    "risk_state": record.get("risk_state"),
+                    "risk_state_score": record.get(
+                        "risk_state_score"
+                    ),
+                    "breadth_score": record.get(
+                        "breadth_score"
+                    ),
+                    "setup_score": record.get("setup_score"),
+                    "asymmetry_score": record.get(
+                        "asymmetry_score"
+                    ),
+                    "volatility_score": record.get(
+                        "volatility_score"
+                    ),
                     "snapshot_price": record.get("snapshot_price"),
                     "current_price": None,
                     "return_pct": None,
@@ -147,7 +169,33 @@ class ForecastOutcomeGraderEngine:
                 "symbol": symbol,
                 "predicted_direction": predicted_direction,
                 "predicted_score": predicted_score,
-                "snapshot_price": snapshot_price if snapshot_price > 0 else None,
+                "forecast_confidence": record.get(
+                    "forecast_confidence"
+                ),
+                "direction_confidence": record.get(
+                    "direction_confidence"
+                ),
+                "regime": record.get("regime"),
+                "regime_score": record.get("regime_score"),
+                "risk_state": record.get("risk_state"),
+                "risk_state_score": record.get(
+                    "risk_state_score"
+                ),
+                "breadth_score": record.get(
+                    "breadth_score"
+                ),
+                "setup_score": record.get("setup_score"),
+                "asymmetry_score": record.get(
+                    "asymmetry_score"
+                ),
+                "volatility_score": record.get(
+                    "volatility_score"
+                ),
+                "snapshot_price": (
+                    snapshot_price
+                    if snapshot_price > 0
+                    else None
+                ),
                 "current_price": current_price,
                 "return_pct": return_pct,
                 "forecast_grade": forecast_grade,

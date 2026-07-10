@@ -143,6 +143,15 @@ class ForecastOutcomeCaptureEngine:
             "direction_confidence": forecast.get(
                 "direction_confidence"
             ),
+            "forecast_confidence": (
+                forecast.get(
+                    "institutional_calibrated_forecast_confidence"
+                )
+                or forecast.get(
+                    "institutional_forecast_confidence"
+                )
+                or forecast.get("forecast_confidence")
+            ),
             "snapshot_price": price_info.get("price"),
             "quote_status": price_info.get(
                 "quote_status"
