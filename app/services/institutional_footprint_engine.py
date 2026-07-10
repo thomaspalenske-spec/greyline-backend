@@ -233,6 +233,14 @@ class InstitutionalFootprintEngine:
             except Exception:
                 pass
 
+        direct_flow_feeds_connected = bool(
+            (isinstance(live_flow, list) and live_flow)
+            or (
+                isinstance(live_darkpool, dict)
+                and live_darkpool.get("data")
+            )
+        )
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "symbol": symbol,
@@ -261,6 +269,6 @@ class InstitutionalFootprintEngine:
                 "spread_pct": round(spread_pct, 4),
             },
             "flow_source": source,
-            "direct_flow_feeds_connected": False,
+            "direct_flow_feeds_connected": direct_flow_feeds_connected,
             "status": "INSTITUTIONAL_FOOTPRINT_READY",
         }
