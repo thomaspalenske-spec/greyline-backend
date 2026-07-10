@@ -75,10 +75,17 @@ class InstitutionalPremiumFlowEngine:
         option_type = candidate.get("option_type")
         directional_bias = candidate.get("directional_bias")
 
-        try:
-            direct = self._direct_unusual_whales_flow(symbol)
-        except Exception:
-            direct = None
+        allow_live_uw = (
+            candidate.get("allow_live_uw_refresh") is True
+        )
+
+        direct = None
+
+        if allow_live_uw:
+            try:
+                direct = self._direct_unusual_whales_flow(symbol)
+            except Exception:
+                direct = None
 
         if direct:
             return {

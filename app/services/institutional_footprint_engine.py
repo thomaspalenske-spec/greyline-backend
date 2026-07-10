@@ -43,12 +43,13 @@ class InstitutionalFootprintEngine:
         ask=None,
         net_change_pct=None,
         source="INSTITUTIONAL_FOOTPRINT_ENGINE",
+        allow_live_uw=False,
     ):
 
         live_flow = None
         live_darkpool = None
 
-        if self.uw:
+        if self.uw and allow_live_uw:
             try:
                 live_flow = self.uw.recent_flow(symbol)
             except Exception as e:
