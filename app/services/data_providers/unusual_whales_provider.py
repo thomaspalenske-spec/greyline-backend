@@ -91,3 +91,40 @@ class UnusualWhalesProvider:
     def variance_risk_premium(self, ticker):
         return self._get(f"/api/stock/{ticker}/volatility/variance-risk-premium")
 
+
+
+    def greek_flow(self, symbol, expiry=None):
+        path = f"/api/stock/{symbol}/greek-flow"
+        if expiry:
+            path += f"/{expiry}"
+        return self._get(path)
+
+    def spot_exposures(self, symbol):
+        return self._get(f"/api/stock/{symbol}/spot-exposures")
+
+    def oi_per_expiry(self, symbol):
+        return self._get(f"/api/stock/{symbol}/oi-per-expiry")
+
+    def lit_flow(self, symbol):
+        return self._get(f"/api/lit-flow/{symbol}")
+
+    def market_tide(self):
+        return self._get("/api/market/market-tide")
+
+    def sector_tide(self, sector):
+        return self._get(f"/api/market/{sector}/sector-tide")
+
+    def etf_inflow_outflow(self, ticker):
+        return self._get(f"/api/etfs/{ticker}/in-outflow")
+
+    def institutional_ownership(self, ticker):
+        return self._get(f"/api/institution/{ticker}/ownership")
+
+    def short_volume(self, ticker):
+        return self._get(f"/api/shorts/{ticker}/volume-and-ratio")
+
+    def insider_transactions(self, ticker):
+        return self._get(f"/api/insider/{ticker}")
+
+    def congress_trades(self):
+        return self._get("/api/congress/recent-trades")
