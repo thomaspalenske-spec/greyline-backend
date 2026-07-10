@@ -416,6 +416,51 @@ class UnusualWhalesOperationalEnvironmentEngine:
                 "variance_risk_premium",
                 lambda: self.uw.variance_risk_premium(symbol),
             ),
+
+            "greek_flow": self._safe_call(
+                "greek_flow",
+                lambda: self.uw.greek_flow(symbol),
+            ),
+            "spot_exposures": self._safe_call(
+                "spot_exposures",
+                lambda: self.uw.spot_exposures(symbol),
+            ),
+            "oi_per_expiry": self._safe_call(
+                "oi_per_expiry",
+                lambda: self.uw.oi_per_expiry(symbol),
+            ),
+            "lit_flow": self._safe_call(
+                "lit_flow",
+                lambda: self.uw.lit_flow(symbol),
+            ),
+            "market_tide": self._safe_call(
+                "market_tide",
+                lambda: self.uw.market_tide(),
+            ),
+            "sector_tide": self._safe_call(
+                "sector_tide",
+                lambda: self.uw.sector_tide("technology"),
+            ),
+            "etf_inflow_outflow": self._safe_call(
+                "etf_inflow_outflow",
+                lambda: self.uw.etf_inflow_outflow(symbol),
+            ),
+            "institutional_ownership": self._safe_call(
+                "institutional_ownership",
+                lambda: self.uw.institutional_ownership(symbol),
+            ),
+            "short_volume": self._safe_call(
+                "short_volume",
+                lambda: self.uw.short_volume(symbol),
+            ),
+            "insider_transactions": self._safe_call(
+                "insider_transactions",
+                lambda: self.uw.insider_transactions(symbol),
+            ),
+            "congress_trades": self._safe_call(
+                "congress_trades",
+                lambda: self.uw.congress_trades(),
+            ),
         }
 
         available = [
@@ -511,6 +556,16 @@ class UnusualWhalesOperationalEnvironmentEngine:
             "variance_risk_premium": self._vrp_summary(
                 vrp_rows
             ),
+
+            "greek_flow": calls["greek_flow"]["value"],
+            "spot_exposures": calls["spot_exposures"]["value"],
+            "lit_flow": calls["lit_flow"]["value"],
+            "market_tide": calls["market_tide"]["value"],
+            "sector_tide": calls["sector_tide"]["value"],
+            "institutional_ownership": calls["institutional_ownership"]["value"],
+            "short_volume": calls["short_volume"]["value"],
+            "insider_transactions": calls["insider_transactions"]["value"],
+            "congress_trades": calls["congress_trades"]["value"],
             "market_net_flow_raw":
                 calls["net_flow"]["value"],
             "component_errors": {

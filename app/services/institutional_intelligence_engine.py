@@ -75,6 +75,26 @@ class InstitutionalIntelligenceEngine:
 
         vrp_rank = ((vrp.get("latest") or {}).get("rank") or 0) * 100
 
+
+        greek_flow_score = 50.0 if greek_flow else 0.0
+        spot_gamma_score = 50.0 if spot else 0.0
+        lit_flow_score = 50.0 if lit else 0.0
+
+        market_tide_score = 50.0
+        if market_tide:
+            latest = market_tide[-1] if isinstance(market_tide, list) else market_tide
+            if isinstance(latest, dict):
+                bullish = float(latest.get('bullish_premium', 0) or 0)
+                bearish = float(latest.get('bearish_premium', 0) or 0)
+                total = bullish + bearish
+                if total > 0:
+                    market_tide_score = self._clamp(50 + ((bullish - bearish) / total) * 50)
+
+        sector_tide_score = 50.0 if sector_tide else 0.0
+        ownership_score = 50.0 if ownership else 0.0
+        short_score = 50.0 if shorts else 0.0
+        insider_score = 50.0 if insiders else 0.0
+        congress_score = 50.0 if congress else 0.0
         overall = round(mean([
             buying,
             dark_pool,
@@ -83,18 +103,16 @@ class InstitutionalIntelligenceEngine:
             strike_score,
             expiry_score,
             vrp_rank,
+            greek_flow_score,
+            spot_gamma_score,
+            lit_flow_score,
+            market_tide_score,
+            sector_tide_score,
+            ownership_score,
+            short_score,
+            insider_score,
+            congress_score,
         ]), 2)
-
-        greek_flow_score = 50.0 if greek_flow else 0.0
-        spot_gamma_score = 50.0 if spot else 0.0
-        lit_flow_score = 50.0 if lit else 0.0
-        market_tide_score = 50.0 if market_tide else 0.0
-        sector_tide_score = 50.0 if sector_tide else 0.0
-        ownership_score = 50.0 if ownership else 0.0
-        short_score = 50.0 if shorts else 0.0
-        insider_score = 50.0 if insiders else 0.0
-        congress_score = 50.0 if congress else 0.0
-
         return {
             "symbol": symbol,
             "institutional_buying_score": round(buying,2),
@@ -105,6 +123,15 @@ class InstitutionalIntelligenceEngine:
             "strike_concentration_score": round(strike_score,2),
             "expiry_alignment_score": round(expiry_score,2),
             "variance_risk_score": round(vrp_rank,2),
+            "greek_flow_score": round(greek_flow_score,2),
+            "spot_gamma_score": round(spot_gamma_score,2),
+            "lit_flow_score": round(lit_flow_score,2),
+            "market_tide_score": round(market_tide_score,2),
+            "sector_tide_score": round(sector_tide_score,2),
+            "ownership_score": round(ownership_score,2),
+            "short_interest_score": round(short_score,2),
+            "insider_score": round(insider_score,2),
+            "congress_score": round(congress_score,2),
             "overall_institutional_score": overall,
             "execution_impact": "OBSERVATION_ONLY",
             "status": "INSTITUTIONAL_INTELLIGENCE_READY",
