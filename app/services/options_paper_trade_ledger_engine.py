@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 from pathlib import Path
 from app.services.regime_scoring_engine import RegimeScoringEngine
@@ -64,10 +64,23 @@ class OptionsPaperTradeLedgerEngine:
             quote = TradeStationQuoteLiveEngine().get_quote(symbol)
             row = ((quote.get("response_json") or {}).get("Quotes") or [{}])[0]
             price = float(row.get("Last") or row.get("Mid") or row.get("Bid") or row.get("Ask") or 0)
+            trade_time_raw = row.get("TradeTime")
+            quote_age_seconds = None
+
+            if trade_time_raw:
+                try:
+                    trade_time = datetime.fromisoformat(str(trade_time_raw).replace("Z", "+00:00"))
+                    quote_age_seconds = round((datetime.now(timezone.utc) - trade_time).total_seconds(), 2)
+                except Exception:
+                    quote_age_seconds = None
+
             return {
                 "underlying_quote_status": quote.get("status"),
                 "underlying_entry_price": price if price > 0 else None,
-                "underlying_entry_quote_time": row.get("TradeTime"),
+                "underlying_entry_quote_time": trade_time_raw,
+                "underlying_entry_quote_age_seconds": quote_age_seconds,
+                "underlying_entry_cache_hit": quote.get("cache_hit"),
+                "underlying_entry_cache_age_seconds": quote.get("cache_age_seconds"),
                 "underlying_entry_bid": row.get("Bid"),
                 "underlying_entry_ask": row.get("Ask"),
                 "underlying_entry_last": row.get("Last"),
@@ -199,6 +212,25 @@ class OptionsPaperTradeLedgerEngine:
                 "execution_enabled": False,
                 "order_placement_allowed": False,
                 "status": "OPTIONS_PAPER_TRADE_MARKET_CLOSED_BLOCKED",
+            }
+
+        quote_age = underlying_quote.get("underlying_entry_quote_age_seconds")
+        max_entry_quote_age_seconds = 30
+
+        if quote_age is None or quote_age > max_entry_quote_age_seconds:
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "system": "GreyLine",
+                "source": "OPTIONS_PAPER_TRADE_LEDGER",
+                "paper_trade_recorded": False,
+                "reason": "OPTIONS_NEW_ENTRY_STALE_UNDERLYING_QUOTE_BLOCK",
+                "underlying": underlying,
+                "quote_age_seconds": quote_age,
+                "max_entry_quote_age_seconds": max_entry_quote_age_seconds,
+                "underlying_quote": underlying_quote,
+                "execution_enabled": False,
+                "order_placement_allowed": False,
+                "status": "OPTIONS_PAPER_TRADE_STALE_UNDERLYING_QUOTE_BLOCKED",
             }
 
         sizing = OptionsPositionSizingEngine().evaluate(
