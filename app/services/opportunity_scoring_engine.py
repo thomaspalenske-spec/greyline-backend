@@ -16,6 +16,7 @@ from app.services.institutional_flow_momentum_engine import InstitutionalFlowMom
 from app.services.asymmetry_scoring_engine import AsymmetryScoringEngine
 from app.services.risk_state_scoring_engine import RiskStateScoringEngine
 from app.services.institutional.institutional_execution_gate_engine import InstitutionalExecutionGateEngine
+from app.services.institutional.institutional_attribution_engine import InstitutionalAttributionEngine
 from app.services.institutional_intelligence_engine import (
     InstitutionalIntelligenceEngine,
 )
@@ -308,7 +309,7 @@ class OpportunityScoringEngine:
             symbol_timings["total_symbol_seconds"] = round((symbol_completed_at - symbol_started_at).total_seconds(), 2)
             timings["per_symbol"].append(symbol_timings)
 
-            opportunities.append({
+            candidate = {
                 "symbol": symbol,
                 "quote_status": quote_status,
                 "market_data_score": market_data_score,
@@ -385,7 +386,20 @@ class OpportunityScoringEngine:
                 "order_placement_allowed": governor.get("order_placement_allowed"),
                 "governor_status": governor.get("status"),
                 "execution_enabled": False
-            })
+            }
+
+            try:
+                candidate["institutional_attribution"] = (
+                    InstitutionalAttributionEngine().attribute(candidate)
+                )
+            except Exception as exc:
+                candidate["institutional_attribution"] = {
+                    "symbol": symbol,
+                    "error": repr(exc),
+                    "status": "INSTITUTIONAL_ATTRIBUTION_DEGRADED",
+                }
+
+            opportunities.append(candidate)
 
         # Enrich only the strongest live candidates with direct Unusual
         # Whales intelligence. Do not call all 23 endpoints for every

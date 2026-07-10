@@ -75,3 +75,4 @@ app/data/institutional_memory/
 .env.local
 app/data/unusual_whales_api_usage.json
 app/data/unusual_whales_refresh_state.json
+app/data/institutional_attribution/
