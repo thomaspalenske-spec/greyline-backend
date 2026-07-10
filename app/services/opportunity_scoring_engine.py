@@ -27,6 +27,9 @@ from app.services.institutional.institutional_validation_engine import (
 from app.services.institutional.institutional_forecast_engine import (
     InstitutionalForecastEngine,
 )
+from app.services.unusual_whales_budget_governor import (
+    UnusualWhalesBudgetGovernor,
+)
 
 
 class OpportunityScoringEngine:
@@ -370,8 +373,17 @@ class OpportunityScoringEngine:
         institutional_intelligence_symbols = []
         institutional_intelligence_errors = {}
 
+        uw_budget_governor = UnusualWhalesBudgetGovernor()
+        uw_budget_policy = uw_budget_governor.evaluate()
+
+        eligible_for_intelligence = [
+            candidate
+            for candidate in opportunities
+            if uw_budget_governor.allow_candidate(candidate)
+        ]
+
         ranked_for_intelligence = sorted(
-            opportunities,
+            eligible_for_intelligence,
             key=lambda row: float(
                 row.get("composite_score") or 0
             ),
@@ -504,7 +516,8 @@ class OpportunityScoringEngine:
             "symbols_scored": len(opportunities),
             "opportunity_scoring_timings": timings,
             "opportunities": opportunities,
-            "institutional_intelligence_mode": "TOP_1_CONSERVATION_OBSERVATION_ONLY",
+            "institutional_intelligence_mode": "ADAPTIVE_BUDGET_OBSERVATION_ONLY",
+            "unusual_whales_budget_policy": uw_budget_policy,
             "institutional_intelligence_symbols": institutional_intelligence_symbols,
             "institutional_intelligence_errors": institutional_intelligence_errors,
             "execution_enabled": False,
