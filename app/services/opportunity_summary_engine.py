@@ -25,6 +25,34 @@ class OpportunitySummaryEngine:
                 "setup_score": item.get("setup_score"),
                 "bullish_setup_score": item.get("bullish_setup_score"),
                 "bearish_setup_score": item.get("bearish_setup_score"),
+                "regime": item.get("regime"),
+                "regime_score": item.get("regime_score"),
+                "risk_state": item.get("risk_state"),
+                "risk_state_score": item.get("risk_state_score"),
+                "breadth_score": item.get("breadth_score"),
+                "asymmetry_score": item.get("asymmetry_score"),
+                "volatility_score": item.get("volatility_score"),
+                "institutional_sponsorship_score": item.get(
+                    "institutional_sponsorship_score"
+                ),
+                "institutional_forecast_confidence": item.get(
+                    "institutional_forecast_confidence"
+                ),
+                "institutional_calibrated_forecast_confidence": item.get(
+                    "institutional_calibrated_forecast_confidence"
+                ),
+                "institutional_forecast_trust_state": item.get(
+                    "institutional_forecast_trust_state"
+                ),
+                "adaptive_institutional_weighting": item.get(
+                    "adaptive_institutional_weighting"
+                ),
+                "institutional_forecast": item.get(
+                    "institutional_forecast"
+                ),
+                "institutional_forecast_verification": item.get(
+                    "institutional_forecast_verification"
+                ),
                 "order_placement_allowed": item.get("order_placement_allowed"),
                 "governor_status": item.get("governor_status")
             })
