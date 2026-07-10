@@ -1,6 +1,7 @@
 from datetime import datetime
 import hashlib
 import json
+import threading
 from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import (
@@ -9,6 +10,8 @@ from app.services.tradestation_quote_live_engine import (
 
 
 class ForecastOutcomeCaptureEngine:
+    _capture_lock = threading.Lock()
+
     def __init__(self):
         self.outcome_path = Path(
             "app/data/forecast_outcomes.jsonl"
@@ -115,16 +118,6 @@ class ForecastOutcomeCaptureEngine:
         symbol = forecast.get("symbol")
         forecast_id = self._forecast_id(forecast)
 
-        if forecast_id in self._read_existing_ids():
-            return {
-                "timestamp": datetime.utcnow().isoformat(),
-                "forecast_id": forecast_id,
-                "symbol": symbol,
-                "captured": False,
-                "deduped": True,
-                "status": "FORECAST_OUTCOME_CAPTURE_DEDUPED",
-            }
-
         price_info = self._last_price(symbol)
 
         record = {
@@ -224,7 +217,22 @@ class ForecastOutcomeCaptureEngine:
             exist_ok=True,
         )
 
-        with self.outcome_path.open("a") as f:
-            f.write(json.dumps(record) + "\n")
+        # The dedupe check and append must occur under the same
+        # process-wide lock. Otherwise two concurrent scheduler or
+        # manual cycles can both pass the check before either writes.
+        with self._capture_lock:
+            if forecast_id in self._read_existing_ids():
+                return {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "forecast_id": forecast_id,
+                    "symbol": symbol,
+                    "captured": False,
+                    "deduped": True,
+                    "status": "FORECAST_OUTCOME_CAPTURE_DEDUPED",
+                }
+
+            with self.outcome_path.open("a") as f:
+                f.write(json.dumps(record) + "\n")
+                f.flush()
 
         return record
