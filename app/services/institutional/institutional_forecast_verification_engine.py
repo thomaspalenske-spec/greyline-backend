@@ -6,6 +6,9 @@ from typing import Any, Dict, List
 from app.services.institutional.institutional_memory_engine import (
     InstitutionalMemoryEngine,
 )
+from app.services.institutional.institutional_adaptive_ema_engine import (
+    InstitutionalAdaptiveEmaEngine,
+)
 
 
 class InstitutionalForecastVerificationEngine:
@@ -20,6 +23,9 @@ class InstitutionalForecastVerificationEngine:
 
     def __init__(self):
         self.memory = InstitutionalMemoryEngine()
+        self.ema_learning = (
+            InstitutionalAdaptiveEmaEngine()
+        )
 
     @staticmethod
     def _float(value: Any):
@@ -28,13 +34,17 @@ class InstitutionalForecastVerificationEngine:
         except (TypeError, ValueError):
             return None
 
-    def _ema(self, values: List[float]) -> float:
+    def _ema(
+        self,
+        values: List[float],
+        alpha: float,
+    ) -> float:
         ema = values[0]
 
         for value in values[1:]:
             ema = (
-                self.EMA_ALPHA * value
-                + (1.0 - self.EMA_ALPHA) * ema
+                alpha * value
+                + (1.0 - alpha) * ema
             )
 
         return ema
@@ -82,6 +92,9 @@ class InstitutionalForecastVerificationEngine:
             raise ValueError("symbol is required")
 
         scores = self._extract_scores(symbol, limit)
+        ema_alpha = self.ema_learning.alpha(
+            symbol
+        )
 
         if len(scores) < 3:
             return {
@@ -112,7 +125,10 @@ class InstitutionalForecastVerificationEngine:
             ]
 
             ema_delta = (
-                self._ema(deltas)
+                self._ema(
+                    deltas,
+                    ema_alpha,
+                )
                 if deltas
                 else 0.0
             )
@@ -273,6 +289,16 @@ class InstitutionalForecastVerificationEngine:
                 2,
             ),
             "forecast_trust_state": trust_state,
+            "ema_alpha": round(
+                ema_alpha,
+                3,
+            ),
+            "ema_alpha_source": (
+                "ADAPTIVE_EMA_PROFILE"
+                if ema_alpha
+                != self.EMA_ALPHA
+                else "DEFAULT_EMA_ALPHA"
+            ),
             "recent_verified_forecasts": public_forecasts,
             "execution_impact": "OBSERVATION_ONLY",
             "status": (

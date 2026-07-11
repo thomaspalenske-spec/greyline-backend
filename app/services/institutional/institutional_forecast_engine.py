@@ -3,6 +3,9 @@ from typing import Any, Dict, List
 from app.services.institutional.institutional_memory_engine import (
     InstitutionalMemoryEngine,
 )
+from app.services.institutional.institutional_adaptive_ema_engine import (
+    InstitutionalAdaptiveEmaEngine,
+)
 
 
 class InstitutionalForecastEngine:
@@ -11,6 +14,9 @@ class InstitutionalForecastEngine:
 
     def __init__(self):
         self.memory = InstitutionalMemoryEngine()
+        self.ema_learning = (
+            InstitutionalAdaptiveEmaEngine()
+        )
 
     @staticmethod
     def _float(value: Any):
@@ -19,13 +25,19 @@ class InstitutionalForecastEngine:
         except (TypeError, ValueError):
             return None
 
-    def _ema(self, values: List[float]) -> float:
+    def _ema(
+        self,
+        values: List[float],
+        alpha: float,
+    ) -> float:
         ema = values[0]
+
         for value in values[1:]:
             ema = (
-                self.EMA_ALPHA * value
-                + (1.0 - self.EMA_ALPHA) * ema
+                alpha * value
+                + (1.0 - alpha) * ema
             )
+
         return ema
 
     def evaluate(
@@ -60,6 +72,9 @@ class InstitutionalForecastEngine:
             }
 
         current_score = scores[-1]
+        ema_alpha = self.ema_learning.alpha(
+            symbol
+        )
 
         if len(scores) >= 2:
             deltas = [
@@ -72,7 +87,8 @@ class InstitutionalForecastEngine:
             ]
 
             average_delta = self._ema(
-                deltas
+                deltas,
+                ema_alpha,
             )
         else:
             average_delta = 0.0
@@ -126,6 +142,16 @@ class InstitutionalForecastEngine:
             ),
             "institutional_trend": trend,
             "forecast_confidence": confidence,
+            "ema_alpha": round(
+                ema_alpha,
+                3,
+            ),
+            "ema_alpha_source": (
+                "ADAPTIVE_EMA_PROFILE"
+                if ema_alpha
+                != self.EMA_ALPHA
+                else "DEFAULT_EMA_ALPHA"
+            ),
             "status": (
                 "INSTITUTIONAL_FORECAST_READY"
                 if len(scores) >= 2
