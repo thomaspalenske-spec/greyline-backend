@@ -8,6 +8,9 @@ from app.services.adaptive_weight_optimizer import AdaptiveWeightOptimizer
 from app.services.forecast_component_correlation_engine import (
     ForecastComponentCorrelationEngine,
 )
+from app.services.forecast_walk_forward_validation_engine import (
+    ForecastWalkForwardValidationEngine,
+)
 
 
 class ForecastAutoTuningEngine:
@@ -40,6 +43,18 @@ class ForecastAutoTuningEngine:
             .evaluate()
         )
 
+        walk_forward = (
+            ForecastWalkForwardValidationEngine()
+            .evaluate()
+        )
+
+        qualified_predictors = set(
+            walk_forward.get(
+                "qualified_predictors"
+            )
+            or []
+        )
+
         field_map = {
             "regime_score": "regime_weight",
             "risk_state_score": "risk_state_weight",
@@ -49,11 +64,42 @@ class ForecastAutoTuningEngine:
             "volatility_score": "volatility_weight",
         }
 
+        walk_forward_decisions = []
+
         for factor, weight_name in field_map.items():
-            if factor in learned:
-                weights[weight_name] = float(
-                    learned[factor].get("weight", 1.0)
-                )
+            learned_weight = float(
+                (
+                    learned.get(factor)
+                    or {}
+                ).get("weight", 1.0)
+            )
+
+            qualified = (
+                factor in qualified_predictors
+            )
+
+            weights[weight_name] = (
+                learned_weight
+                if qualified
+                else 1.0
+            )
+
+            walk_forward_decisions.append({
+                "factor": factor,
+                "weight_name": weight_name,
+                "learned_weight": learned_weight,
+                "applied_weight": weights[
+                    weight_name
+                ],
+                "walk_forward_qualified": (
+                    qualified
+                ),
+                "action": (
+                    "APPLY_LEARNED_WEIGHT"
+                    if qualified
+                    else "HOLD_NEUTRAL_WEIGHT"
+                ),
+            })
 
         components = component.get("components") or {}
 
@@ -233,6 +279,12 @@ class ForecastAutoTuningEngine:
             "component_correlation": correlation,
             "redundancy_decisions": (
                 redundancy_decisions
+            ),
+            "walk_forward_validation": (
+                walk_forward
+            ),
+            "walk_forward_decisions": (
+                walk_forward_decisions
             ),
             "regime_attribution": regime,
             "meta_learning": meta,
