@@ -44,7 +44,7 @@ class ForecastOutcomeCaptureEngine:
             "trade_time": row.get("TradeTime"),
         }
 
-    def _read_existing_ids(self, limit=500):
+    def _read_existing_ids(self, limit=1000):
         if not self.outcome_path.exists():
             return set()
 
@@ -62,6 +62,130 @@ class ForecastOutcomeCaptureEngine:
                 ids.add(str(forecast_id))
 
         return ids
+
+    def _read_existing_dedupe_keys(self, limit=1000):
+        if not self.outcome_path.exists():
+            return set()
+
+        keys = set()
+
+        for line in self.outcome_path.read_text().splitlines()[-limit:]:
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+
+            key = row.get("capture_dedupe_key")
+
+            if key:
+                keys.add(str(key))
+                continue
+
+            timestamp = (
+                row.get("forecast_timestamp")
+                or row.get("timestamp")
+            )
+
+            try:
+                row_time = datetime.fromisoformat(
+                    str(timestamp).replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+            except Exception:
+                continue
+
+            derived_forecast = {
+                "symbol": row.get("symbol"),
+                "directional_bias": (
+                    row.get("predicted_direction")
+                    or row.get("directional_bias")
+                ),
+                "option_type": row.get("option_type"),
+                "result": row.get("result"),
+                "regime": row.get("regime"),
+                "composite_score": (
+                    row.get("predicted_score")
+                    or row.get("composite_score")
+                    or row.get("score")
+                ),
+            }
+
+            keys.add(
+                self._capture_dedupe_key(
+                    derived_forecast,
+                    now=row_time,
+                )
+            )
+
+        return keys
+
+    @staticmethod
+    def _capture_dedupe_key(forecast, now=None):
+        forecast = forecast or {}
+        now = now or datetime.utcnow()
+
+        symbol = str(
+            forecast.get("symbol") or "UNKNOWN"
+        ).upper()
+
+        direction = str(
+            forecast.get("directional_bias")
+            or forecast.get("predicted_direction")
+            or "UNKNOWN"
+        ).upper()
+
+        option_type = str(
+            forecast.get("option_type") or "UNKNOWN"
+        ).upper()
+
+        result = str(
+            forecast.get("result") or "UNKNOWN"
+        ).upper()
+
+        regime = str(
+            forecast.get("regime") or "UNKNOWN"
+        ).upper()
+
+        try:
+            score = round(
+                float(
+                    forecast.get(
+                        "composite_score",
+                        forecast.get("score"),
+                    )
+                    or 0.0
+                )
+            )
+        except Exception:
+            score = 0
+
+        minute_bucket = (
+            now.minute // 15
+        ) * 15
+
+        bucket = now.replace(
+            minute=minute_bucket,
+            second=0,
+            microsecond=0,
+        ).isoformat()
+
+        raw = "|".join([
+            symbol,
+            direction,
+            option_type,
+            result,
+            regime,
+            str(score),
+            bucket,
+        ])
+
+        digest = hashlib.sha256(
+            raw.encode("utf-8")
+        ).hexdigest()[:20]
+
+        return (
+            f"{symbol}-{direction}-"
+            f"{bucket}-{digest}"
+        )
 
     @staticmethod
     def _forecast_id(forecast):
@@ -117,12 +241,16 @@ class ForecastOutcomeCaptureEngine:
 
         symbol = forecast.get("symbol")
         forecast_id = self._forecast_id(forecast)
+        capture_dedupe_key = (
+            self._capture_dedupe_key(forecast)
+        )
 
         price_info = self._last_price(symbol)
 
         record = {
             "timestamp": datetime.utcnow().isoformat(),
             "forecast_id": forecast_id,
+            "capture_dedupe_key": capture_dedupe_key,
             "symbol": symbol,
             "predicted_direction": (
                 forecast.get("directional_bias")
@@ -245,14 +373,33 @@ class ForecastOutcomeCaptureEngine:
         # process-wide lock. Otherwise two concurrent scheduler or
         # manual cycles can both pass the check before either writes.
         with self._capture_lock:
-            if forecast_id in self._read_existing_ids():
+            existing_ids = self._read_existing_ids()
+            existing_dedupe_keys = (
+                self._read_existing_dedupe_keys()
+            )
+
+            if (
+                forecast_id in existing_ids
+                or capture_dedupe_key
+                in existing_dedupe_keys
+            ):
                 return {
                     "timestamp": datetime.utcnow().isoformat(),
                     "forecast_id": forecast_id,
+                    "capture_dedupe_key": (
+                        capture_dedupe_key
+                    ),
                     "symbol": symbol,
                     "captured": False,
                     "deduped": True,
-                    "status": "FORECAST_OUTCOME_CAPTURE_DEDUPED",
+                    "dedupe_reason": (
+                        "FORECAST_ID_DUPLICATE"
+                        if forecast_id in existing_ids
+                        else "NEAR_IDENTICAL_FORECAST_15M"
+                    ),
+                    "status": (
+                        "FORECAST_OUTCOME_CAPTURE_DEDUPED"
+                    ),
                 }
 
             with self.outcome_path.open("a") as f:
