@@ -5,6 +5,9 @@ from app.services.forecast_component_attribution_engine import ForecastComponent
 from app.services.forecast_regime_attribution_engine import ForecastRegimeAttributionEngine
 from app.services.forecast_meta_learning_engine import ForecastMetaLearningEngine
 from app.services.adaptive_weight_optimizer import AdaptiveWeightOptimizer
+from app.services.forecast_component_correlation_engine import (
+    ForecastComponentCorrelationEngine,
+)
 
 
 class ForecastAutoTuningEngine:
@@ -32,6 +35,10 @@ class ForecastAutoTuningEngine:
         }
 
         learned = AdaptiveWeightOptimizer().load()
+        correlation = (
+            ForecastComponentCorrelationEngine()
+            .evaluate()
+        )
 
         field_map = {
             "regime_score": "regime_weight",
@@ -47,6 +54,129 @@ class ForecastAutoTuningEngine:
                 weights[weight_name] = float(
                     learned[factor].get("weight", 1.0)
                 )
+
+        components = component.get("components") or {}
+
+        redundant_pairs = [
+            pair
+            for pair in correlation.get(
+                "redundant_pairs",
+                [],
+            )
+            if (
+                pair.get("left") in field_map
+                and pair.get("right") in field_map
+            )
+        ]
+
+        parent = {}
+
+        def find(name):
+            parent.setdefault(name, name)
+
+            while parent[name] != name:
+                parent[name] = parent[parent[name]]
+                name = parent[name]
+
+            return name
+
+        def union(left, right):
+            left_root = find(left)
+            right_root = find(right)
+
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        for pair in redundant_pairs:
+            union(
+                pair.get("left"),
+                pair.get("right"),
+            )
+
+        clusters = {}
+
+        for name in parent:
+            clusters.setdefault(
+                find(name),
+                [],
+            ).append(name)
+
+        redundancy_decisions = []
+
+        for members in clusters.values():
+            if len(members) < 2:
+                continue
+
+            ranked_members = sorted(
+                members,
+                key=lambda name: (
+                    float(
+                        (
+                            components.get(name) or {}
+                        ).get(
+                            "absolute_predictive_score_pct"
+                        )
+                        or 0.0
+                    ),
+                    float(
+                        (
+                            components.get(name) or {}
+                        ).get(
+                            "predictive_score_pct"
+                        )
+                        or 0.0
+                    ),
+                    int(
+                        (
+                            components.get(name) or {}
+                        ).get("sample_size")
+                        or 0
+                    ),
+                    name,
+                ),
+                reverse=True,
+            )
+
+            retained = ranked_members[0]
+            suppressed = ranked_members[1:]
+
+            for name in suppressed:
+                weights[field_map[name]] = 1.0
+
+            correlations = [
+                pair
+                for pair in redundant_pairs
+                if (
+                    pair.get("left") in members
+                    and pair.get("right") in members
+                )
+            ]
+
+            redundancy_decisions.append({
+                "retained": retained,
+                "suppressed": suppressed,
+                "retained_predictive_score": float(
+                    (
+                        components.get(retained) or {}
+                    ).get(
+                        "absolute_predictive_score_pct"
+                    )
+                    or 0.0
+                ),
+                "maximum_absolute_correlation": max(
+                    (
+                        float(
+                            pair.get(
+                                "absolute_correlation"
+                            )
+                            or 0.0
+                        )
+                        for pair in correlations
+                    ),
+                    default=0.0,
+                ),
+                "cluster_members": sorted(members),
+            })
 
         recommendation = "HOLD_WEIGHTS"
         reason = "INSUFFICIENT_MATURE_FORECAST_SAMPLE"
@@ -100,6 +230,10 @@ class ForecastAutoTuningEngine:
             "reason": reason,
             "trust_score": trust,
             "component_attribution": component,
+            "component_correlation": correlation,
+            "redundancy_decisions": (
+                redundancy_decisions
+            ),
             "regime_attribution": regime,
             "meta_learning": meta,
             "status": "FORECAST_AUTO_TUNING_READY",
