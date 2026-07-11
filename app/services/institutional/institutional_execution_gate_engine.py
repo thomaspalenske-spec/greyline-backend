@@ -29,9 +29,23 @@ class InstitutionalExecutionGateEngine:
             validation.get("scored_record_count") or 0
         )
 
+        record_count_validated = (
+            validation.get(
+                "record_count_validated"
+            ) is True
+            and record_count
+            >= self.MINIMUM_VALIDATION_RECORDS
+        )
+
+        predictive_validated = (
+            validation.get(
+                "predictive_validated"
+            ) is True
+        )
+
         validated = (
-            validation.get("validated") is True
-            and record_count >= self.MINIMUM_VALIDATION_RECORDS
+            record_count_validated
+            and predictive_validated
         )
 
         forecast_available = (
@@ -62,7 +76,31 @@ class InstitutionalExecutionGateEngine:
         allow_execution = True
         multiplier = 1.0
         confidence_adjustment = 0.0
-        reason = "ADVISORY_ONLY_INSUFFICIENT_VALIDATION"
+        if not record_count_validated:
+            reason = (
+                "ADVISORY_ONLY_INSUFFICIENT_RECORDS"
+            )
+        elif not predictive_validated:
+            reason = (
+                "ADVISORY_ONLY_PREDICTIVE_"
+                "VALIDATION_INCOMPLETE"
+            )
+        elif not forecast_available:
+            reason = (
+                "ADVISORY_ONLY_FORECAST_UNAVAILABLE"
+            )
+        elif (
+            forecast_confidence
+            < self.MINIMUM_FORECAST_CONFIDENCE
+        ):
+            reason = (
+                "ADVISORY_ONLY_FORECAST_"
+                "CONFIDENCE_INSUFFICIENT"
+            )
+        else:
+            reason = (
+                "VALIDATED_INSTITUTIONAL_ADVISORY"
+            )
 
         if actionable:
             if trend in {"ACCELERATING", "IMPROVING"}:
@@ -92,6 +130,26 @@ class InstitutionalExecutionGateEngine:
             "confidence_adjustment": confidence_adjustment,
             "actionable": actionable,
             "validated": validated,
+            "record_count_validated": (
+                record_count_validated
+            ),
+            "predictive_validated": (
+                predictive_validated
+            ),
+            "promotion_state": validation.get(
+                "promotion_state"
+            ),
+            "promotion_reason": validation.get(
+                "promotion_reason"
+            ),
+            "calibrated_forecast_confidence": (
+                validation.get(
+                    "calibrated_forecast_confidence"
+                )
+            ),
+            "forecast_trust_state": validation.get(
+                "forecast_trust_state"
+            ),
             "validation_record_count": record_count,
             "minimum_validation_records":
                 self.MINIMUM_VALIDATION_RECORDS,
