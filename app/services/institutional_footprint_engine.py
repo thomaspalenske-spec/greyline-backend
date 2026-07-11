@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
+from app.services.institutional_flow_memory_engine import InstitutionalFlowMemoryEngine
 
 
 class InstitutionalFootprintEngine:
@@ -59,6 +60,32 @@ class InstitutionalFootprintEngine:
                 live_darkpool = self.uw.dark_pool(symbol)
             except Exception as e:
                 print("UW ERROR:", repr(e))
+
+            try:
+                memory = (
+                    InstitutionalFlowMemoryEngine()
+                )
+
+                options_memory = (
+                    memory.capture_options_flow(
+                        live_flow,
+                        symbol=symbol,
+                    )
+                )
+
+                dark_pool_memory = (
+                    memory.capture_dark_pool(
+                        live_darkpool,
+                        symbol=symbol,
+                    )
+                )
+            except Exception:
+                options_memory = None
+                dark_pool_memory = None
+        else:
+            options_memory = None
+            dark_pool_memory = None
+
         symbol = (symbol or "").upper().strip()
 
         last = self._float(last)
