@@ -4,6 +4,9 @@ from typing import Any, Dict, List
 from app.services.institutional.institutional_memory_engine import (
     InstitutionalMemoryEngine,
 )
+from app.services.institutional.institutional_forecast_verification_engine import (
+    InstitutionalForecastVerificationEngine,
+)
 
 
 class InstitutionalValidationEngine:
@@ -28,8 +31,17 @@ class InstitutionalValidationEngine:
         "overall_institutional_score",
     ]
 
+    MINIMUM_RECORDS = 20
+    MINIMUM_VERIFIED_FORECASTS = 10
+    PROMOTION_CONFIDENCE = 65.0
+    HIGH_PROMOTION_CONFIDENCE = 80.0
+    DEMOTION_CONFIDENCE = 50.0
+
     def __init__(self):
         self.memory = InstitutionalMemoryEngine()
+        self.forecast_verification = (
+            InstitutionalForecastVerificationEngine()
+        )
 
     @staticmethod
     def _float(value: Any):
@@ -101,19 +113,179 @@ class InstitutionalValidationEngine:
         else:
             institutional_trend = "INSUFFICIENT_HISTORY"
 
-        validated = len(overall_values) >= 20
+        record_count_validated = (
+            len(overall_values)
+            >= self.MINIMUM_RECORDS
+        )
+
+        try:
+            forecast_verification = (
+                self.forecast_verification.evaluate(
+                    symbol,
+                    limit=limit,
+                    minimum_verified_forecasts=(
+                        self.MINIMUM_VERIFIED_FORECASTS
+                    ),
+                )
+            )
+        except Exception as exc:
+            forecast_verification = {
+                "symbol": symbol,
+                "verified_forecast_count": 0,
+                "verification_available": False,
+                "calibrated_forecast_confidence": 0.0,
+                "forecast_trust_state": (
+                    "VERIFICATION_DEGRADED"
+                ),
+                "execution_impact": "OBSERVATION_ONLY",
+                "error": repr(exc),
+                "status": (
+                    "INSTITUTIONAL_FORECAST_"
+                    "VERIFICATION_DEGRADED"
+                ),
+            }
+
+        verified_forecast_count = int(
+            forecast_verification.get(
+                "verified_forecast_count"
+            )
+            or 0
+        )
+
+        calibrated_confidence = float(
+            forecast_verification.get(
+                "calibrated_forecast_confidence"
+            )
+            or 0.0
+        )
+
+        verification_available = bool(
+            forecast_verification.get(
+                "verification_available"
+            )
+        )
+
+        predictive_validated = bool(
+            record_count_validated
+            and verification_available
+            and verified_forecast_count
+            >= self.MINIMUM_VERIFIED_FORECASTS
+            and calibrated_confidence
+            >= self.PROMOTION_CONFIDENCE
+        )
+
+        if not record_count_validated:
+            promotion_state = "COLLECTING_RECORDS"
+            promotion_reason = (
+                "MINIMUM_RECORD_COUNT_NOT_REACHED"
+            )
+        elif not verification_available:
+            promotion_state = (
+                "COLLECTING_VERIFICATION"
+            )
+            promotion_reason = (
+                "MINIMUM_VERIFIED_FORECASTS_"
+                "NOT_REACHED"
+            )
+        elif (
+            calibrated_confidence
+            >= self.HIGH_PROMOTION_CONFIDENCE
+        ):
+            promotion_state = "HIGHLY_VALIDATED"
+            promotion_reason = (
+                "HIGH_FORECAST_CONFIDENCE"
+            )
+        elif (
+            calibrated_confidence
+            >= self.PROMOTION_CONFIDENCE
+        ):
+            promotion_state = "VALIDATED"
+            promotion_reason = (
+                "FORECAST_CONFIDENCE_VALIDATED"
+            )
+        elif (
+            calibrated_confidence
+            < self.DEMOTION_CONFIDENCE
+        ):
+            promotion_state = "DEMOTED"
+            promotion_reason = (
+                "FORECAST_CONFIDENCE_BELOW_"
+                "DEMOTION_THRESHOLD"
+            )
+        else:
+            promotion_state = "OBSERVATION_ONLY"
+            promotion_reason = (
+                "FORECAST_CONFIDENCE_NOT_YET_"
+                "PROMOTABLE"
+            )
+
+        execution_impact = (
+            "PREDICTIVE_VALIDATION_ELIGIBLE"
+            if predictive_validated
+            else "OBSERVATION_ONLY"
+        )
 
         return {
             "symbol": symbol,
             "record_count": len(records),
-            "scored_record_count": len(overall_values),
-            "validated": validated,
-            "minimum_validation_records": 20,
-            "institutional_trend": institutional_trend,
+            "scored_record_count": len(
+                overall_values
+            ),
+
+            # Preserve the existing record-count validation
+            # contract until the execution gate is upgraded
+            # in a separate, explicitly validated change.
+            "validated": record_count_validated,
+            "record_count_validated": (
+                record_count_validated
+            ),
+            "predictive_validated": (
+                predictive_validated
+            ),
+            "minimum_validation_records": (
+                self.MINIMUM_RECORDS
+            ),
+            "minimum_verified_forecasts": (
+                self.MINIMUM_VERIFIED_FORECASTS
+            ),
+            "promotion_confidence_threshold": (
+                self.PROMOTION_CONFIDENCE
+            ),
+            "high_promotion_confidence_threshold": (
+                self.HIGH_PROMOTION_CONFIDENCE
+            ),
+            "demotion_confidence_threshold": (
+                self.DEMOTION_CONFIDENCE
+            ),
+            "promotion_state": promotion_state,
+            "promotion_reason": promotion_reason,
+            "institutional_trend": (
+                institutional_trend
+            ),
             "signal_statistics": signal_statistics,
+            "forecast_verification": (
+                forecast_verification
+            ),
+            "verified_forecast_count": (
+                verified_forecast_count
+            ),
+            "calibrated_forecast_confidence": (
+                round(
+                    calibrated_confidence,
+                    2,
+                )
+            ),
+            "forecast_trust_state": (
+                forecast_verification.get(
+                    "forecast_trust_state"
+                )
+            ),
+            "execution_impact": execution_impact,
             "status": (
                 "INSTITUTIONAL_VALIDATION_READY"
-                if validated
-                else "INSTITUTIONAL_VALIDATION_COLLECTING_DATA"
+                if record_count_validated
+                else
+                "INSTITUTIONAL_VALIDATION_"
+                "COLLECTING_DATA"
             ),
         }
