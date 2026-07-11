@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.regime_learning_engine import (
@@ -9,6 +10,29 @@ from app.services.regime_learning_engine import (
 
 
 class ForecastOutcomeGraderEngine:
+
+    MARKET_TZ = ZoneInfo("America/New_York")
+
+    def _market_is_open(self, dt=None):
+        dt = dt or datetime.now(timezone.utc)
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        market_time = dt.astimezone(
+            self.MARKET_TZ
+        )
+
+        if market_time.weekday() >= 5:
+            return False
+
+        minutes = (
+            market_time.hour * 60
+            + market_time.minute
+        )
+
+        return 570 <= minutes < 960
+
     def __init__(self):
         self.outcome_path = Path("app/data/forecast_outcomes.jsonl")
         self.graded_path = Path("app/data/forecast_outcome_grades.jsonl")
@@ -185,7 +209,145 @@ class ForecastOutcomeGraderEngine:
                 graded.append(grade_record)
                 continue
 
-            if symbol in market_prices:
+            supplied_market_price = (
+                symbol in market_prices
+            )
+
+            if (
+                not supplied_market_price
+                and not self._market_is_open()
+            ):
+                grade_record = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "forecast_id": record.get(
+                        "forecast_id"
+                    ),
+                    "symbol": symbol,
+                    "predicted_direction": (
+                        predicted_direction
+                    ),
+                    "predicted_score": predicted_score,
+                    "forecast_confidence": record.get(
+                        "forecast_confidence"
+                    ),
+                    "direction_confidence": record.get(
+                        "direction_confidence"
+                    ),
+                    "regime": record.get("regime"),
+                    "regime_score": record.get(
+                        "regime_score"
+                    ),
+                    "forecast_regime_trust": record.get(
+                        "forecast_regime_trust"
+                    ),
+                    "forecast_regime_trust_actionable": (
+                        record.get(
+                            "forecast_regime_trust_actionable"
+                        )
+                    ),
+                    "forecast_regime_trust_sample_size": (
+                        record.get(
+                            "forecast_regime_trust_sample_size"
+                        )
+                    ),
+                    "forecast_regime_bayesian_accuracy_pct": (
+                        record.get(
+                            "forecast_regime_bayesian_accuracy_pct"
+                        )
+                    ),
+                    "forecast_regime_confidence_adjustment": (
+                        record.get(
+                            "forecast_regime_confidence_adjustment"
+                        )
+                    ),
+                    "forecast_regime_trust_impact": (
+                        record.get(
+                            "forecast_regime_trust_impact"
+                        )
+                    ),
+                    "regime_calibration": record.get(
+                        "regime_calibration"
+                    ),
+                    "regime_calibration_state": record.get(
+                        "regime_calibration_state"
+                    ),
+                    "regime_calibration_actionable": (
+                        record.get(
+                            "regime_calibration_actionable"
+                        )
+                    ),
+                    "regime_position_multiplier": (
+                        record.get(
+                            "regime_position_multiplier"
+                        )
+                    ),
+                    "regime_execution_allowed": (
+                        record.get(
+                            "regime_execution_allowed"
+                        )
+                    ),
+                    "regime_confidence_adjustment": (
+                        record.get(
+                            "regime_confidence_adjustment"
+                        )
+                    ),
+                    "regime_composite_adjustment": (
+                        record.get(
+                            "regime_composite_adjustment"
+                        )
+                    ),
+                    "risk_state": record.get(
+                        "risk_state"
+                    ),
+                    "risk_state_score": record.get(
+                        "risk_state_score"
+                    ),
+                    "breadth_score": record.get(
+                        "breadth_score"
+                    ),
+                    "setup_score": record.get(
+                        "setup_score"
+                    ),
+                    "asymmetry_score": record.get(
+                        "asymmetry_score"
+                    ),
+                    "volatility_score": record.get(
+                        "volatility_score"
+                    ),
+                    "snapshot_price": record.get(
+                        "snapshot_price"
+                    ),
+                    "current_price": None,
+                    "return_pct": None,
+                    "forecast_grade": (
+                        "PENDING_MARKET_SESSION"
+                    ),
+                    "forecast_correct": None,
+                    "quote_status": (
+                        "MARKET_CLOSED"
+                    ),
+                    "quote_trade_time": None,
+                    "forecast_age_minutes": (
+                        maturity.get(
+                            "forecast_age_minutes"
+                        )
+                    ),
+                    "eligible_for_grading": False,
+                    "maturity_status": (
+                        maturity.get(
+                            "maturity_status"
+                        )
+                    ),
+                    "status": (
+                        "FORECAST_OUTCOME_GRADE_"
+                        "PENDING_MARKET_SESSION"
+                    ),
+                }
+
+                graded.append(grade_record)
+                continue
+
+            if supplied_market_price:
                 price_info = {
                     "price": market_prices.get(symbol),
                     "quote_status": "SUPPLIED_MARKET_PRICE",
