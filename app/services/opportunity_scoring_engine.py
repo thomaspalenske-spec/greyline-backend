@@ -38,6 +38,9 @@ from app.services.institutional.institutional_forecast_engine import (
 from app.services.institutional.institutional_forecast_verification_engine import (
     InstitutionalForecastVerificationEngine,
 )
+from app.services.institutional.institutional_model_status_engine import (
+    InstitutionalModelStatusEngine,
+)
 from app.services.unusual_whales_budget_governor import (
     UnusualWhalesBudgetGovernor,
 )
@@ -705,6 +708,14 @@ class OpportunityScoringEngine:
                 "option_type": option_type,
                 "direction_confidence": direction_confidence,
                 "institutional_execution_gate": institutional_gate,
+                "institutional_model_status": (
+                    InstitutionalModelStatusEngine()
+                    .evaluate(symbol)
+                ),
+                "institutional_model_actionable": False,
+                "institutional_model_execution_impact": (
+                    "OBSERVATION_ONLY"
+                ),
                 "adaptive_institutional_weighting": (
                     bullish_adaptive_weighting
                     if option_type == "CALL"
