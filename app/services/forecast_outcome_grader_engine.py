@@ -187,7 +187,8 @@ class ForecastOutcomeGraderEngine:
                     "direction_confidence"
                 ),
 
-                # Preserve market regime metadata
+                # Preserve market regime and centralized
+                # regime-calibration metadata.
                 "regime": record.get("regime"),
                 "regime_score": record.get("regime_score"),
                 "forecast_regime_trust": record.get(
@@ -208,8 +209,27 @@ class ForecastOutcomeGraderEngine:
                 "forecast_regime_trust_impact": record.get(
                     "forecast_regime_trust_impact"
                 ),
-                "regime": record.get("regime"),
-                "regime_score": record.get("regime_score"),
+                "regime_calibration": record.get(
+                    "regime_calibration"
+                ),
+                "regime_calibration_state": record.get(
+                    "regime_calibration_state"
+                ),
+                "regime_calibration_actionable": record.get(
+                    "regime_calibration_actionable"
+                ),
+                "regime_position_multiplier": record.get(
+                    "regime_position_multiplier"
+                ),
+                "regime_execution_allowed": record.get(
+                    "regime_execution_allowed"
+                ),
+                "regime_confidence_adjustment": record.get(
+                    "regime_confidence_adjustment"
+                ),
+                "regime_composite_adjustment": record.get(
+                    "regime_composite_adjustment"
+                ),
                 "risk_state": record.get("risk_state"),
                 "risk_state_score": record.get(
                     "risk_state_score"

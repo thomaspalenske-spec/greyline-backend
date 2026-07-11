@@ -205,6 +205,30 @@ class ForecastOutcomeCaptureEngine:
             "forecast_regime_trust_impact": forecast.get(
                 "forecast_regime_trust_impact"
             ),
+            "regime_calibration": forecast.get(
+                "regime_calibration"
+            ),
+            "regime_calibration_state": forecast.get(
+                "regime_calibration_state"
+            ),
+            "regime_calibration_actionable": forecast.get(
+                "regime_calibration_actionable"
+            ),
+            "regime_position_multiplier": forecast.get(
+                "regime_position_multiplier"
+            ),
+            "regime_execution_allowed": forecast.get(
+                "regime_execution_allowed"
+            ),
+            "regime_confidence_adjustment": (
+                (
+                    forecast.get("regime_calibration")
+                    or {}
+                ).get("confidence_adjustment")
+            ),
+            "regime_composite_adjustment": forecast.get(
+                "regime_composite_adjustment"
+            ),
             "captured": True,
             "deduped": False,
             "status": (
