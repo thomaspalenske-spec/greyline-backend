@@ -7,6 +7,7 @@ from app.services.signal_reliability_engine import SignalReliabilityEngine
 from app.services.institutional_trade_lifecycle_engine import InstitutionalTradeLifecycleEngine
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
 from app.services.execution_authority_engine import ExecutionAuthorityEngine
+from app.services.regime_calibration_engine import RegimeCalibrationEngine
 
 
 class OptionsPaperExecutionSweepEngine:
@@ -66,13 +67,38 @@ class OptionsPaperExecutionSweepEngine:
                 "institutional_conviction_score": c.get("institutional_conviction_score"),
             })
 
+            regime_calibration = (
+                RegimeCalibrationEngine().evaluate(
+                    c.get("regime") or "UNKNOWN"
+                )
+            )
+
             max_position_pct = (
                 OptionsDynamicPositionSizingEngine().max_position_pct(
                     score,
                     reliability.get("signal_reliability_score"),
                 )
                 * lifecycle.get("position_multiplier", 1.0)
+                * regime_calibration.get(
+                    "position_multiplier",
+                    1.0,
+                )
             )
+
+            if not regime_calibration.get(
+                "execution_allowed",
+                True,
+            ):
+                results.append({
+                    "symbol": symbol,
+                    "option_type": option_type,
+                    "candidate_result": result,
+                    "paper_trade_recorded": False,
+                    "reason": "REGIME_CALIBRATION_BLOCKED",
+                    "regime_calibration": regime_calibration,
+                    "status": "OPTIONS_PAPER_SWEEP_BLOCKED",
+                })
+                continue
             r = OptionsCycleEngine().run(
                 symbol=symbol,
                 option_type=option_type,
@@ -116,6 +142,13 @@ class OptionsPaperExecutionSweepEngine:
                 "trade_action": lifecycle.get("trade_action"),
                 "stop_adjustment": lifecycle.get("stop_adjustment"),
                 "position_multiplier": lifecycle.get("position_multiplier"),
+                "regime_calibration": regime_calibration,
+                "regime_position_multiplier": (
+                    regime_calibration.get("position_multiplier")
+                ),
+                "regime_execution_allowed": (
+                    regime_calibration.get("execution_allowed")
+                ),
                 "engine_status": r.get("status"),
                 "status": "OPTIONS_PAPER_SWEEP_EVALUATED",
             })
