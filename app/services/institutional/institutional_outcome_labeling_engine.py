@@ -80,6 +80,15 @@ class InstitutionalOutcomeLabelingEngine:
         self,
         snapshot: Dict[str, Any],
     ) -> Optional[float]:
+        direct_price = self._float(
+            snapshot.get(
+                "snapshot_price"
+            )
+        )
+
+        if direct_price is not None:
+            return direct_price
+
         providers = (
             snapshot.get("providers")
             or {}

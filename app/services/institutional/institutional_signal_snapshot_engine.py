@@ -10,6 +10,9 @@ from typing import Any, Dict, Iterable, Optional
 from app.services.institutional.institutional_signal_collection_engine import (
     InstitutionalSignalCollectionEngine,
 )
+from app.services.tradestation_quote_live_engine import (
+    TradeStationQuoteLiveEngine,
+)
 
 
 class InstitutionalSignalSnapshotEngine:
@@ -31,6 +34,9 @@ class InstitutionalSignalSnapshotEngine:
     def __init__(self):
         self.collector = (
             InstitutionalSignalCollectionEngine()
+        )
+        self.quote_engine = (
+            TradeStationQuoteLiveEngine()
         )
 
         self.DATA_DIR.mkdir(
@@ -130,6 +136,121 @@ class InstitutionalSignalSnapshotEngine:
             else None
         )
 
+    @staticmethod
+    def _float(
+        value,
+    ):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        return (
+            parsed
+            if parsed > 0
+            else None
+        )
+
+    def _underlying_price(
+        self,
+        symbol,
+        collection,
+    ):
+        providers = (
+            collection.get("providers")
+            or {}
+        )
+
+        tradestation = (
+            providers.get("TRADESTATION")
+            or {}
+        )
+
+        signals = (
+            tradestation.get("signals")
+            or {}
+        )
+
+        quote = (
+            signals.get("quote")
+            or {}
+        )
+
+        fields = (
+            quote.get("fields")
+            or {}
+        )
+
+        collected_price = self._float(
+            fields.get("Last")
+            or fields.get("Close")
+        )
+
+        if collected_price is not None:
+            return {
+                "price": collected_price,
+                "price_source": (
+                    "TRADESTATION_COLLECTION_QUOTE"
+                ),
+                "trade_time": fields.get(
+                    "TradeTime"
+                ),
+                "quote_status": quote.get(
+                    "source_status"
+                ),
+            }
+
+        try:
+            result = self.quote_engine.get_quote(
+                symbol
+            )
+        except Exception as exc:
+            return {
+                "price": None,
+                "price_source": None,
+                "trade_time": None,
+                "quote_status": (
+                    "TRADESTATION_SNAPSHOT_QUOTE_"
+                    "DEGRADED"
+                ),
+                "error": repr(exc),
+            }
+
+        quotes = (
+            (result.get("response_json") or {})
+            .get("Quotes")
+            or []
+        )
+
+        row = (
+            quotes[0]
+            if quotes
+            and isinstance(quotes[0], dict)
+            else {}
+        )
+
+        return {
+            "price": self._float(
+                row.get("Last")
+                or row.get("Close")
+            ),
+            "price_source": (
+                "TRADESTATION_SNAPSHOT_QUOTE"
+            ),
+            "trade_time": row.get(
+                "TradeTime"
+            ),
+            "quote_status": result.get(
+                "status"
+            ),
+            "cache_hit": result.get(
+                "cache_hit"
+            ),
+            "cache_age_seconds": result.get(
+                "cache_age_seconds"
+            ),
+        }
+
     def capture(
         self,
         symbol: str,
@@ -180,6 +301,11 @@ class InstitutionalSignalSnapshotEngine:
             force_refresh=force_refresh,
         )
 
+        underlying = self._underlying_price(
+            symbol,
+            collection,
+        )
+
         latency_seconds = round(
             perf_counter() - started_at,
             4,
@@ -196,6 +322,24 @@ class InstitutionalSignalSnapshotEngine:
                 "InstitutionalSignalSnapshotEngine"
             ),
             "symbol": symbol,
+            "snapshot_price": underlying.get(
+                "price"
+            ),
+            "snapshot_price_source": (
+                underlying.get(
+                    "price_source"
+                )
+            ),
+            "snapshot_price_trade_time": (
+                underlying.get(
+                    "trade_time"
+                )
+            ),
+            "snapshot_price_quote_status": (
+                underlying.get(
+                    "quote_status"
+                )
+            ),
             "collection_latency_seconds": (
                 latency_seconds
             ),
@@ -321,6 +465,16 @@ class InstitutionalSignalSnapshotEngine:
             "provider_health": (
                 snapshot.get(
                     "provider_health"
+                )
+            ),
+            "snapshot_price": (
+                snapshot.get(
+                    "snapshot_price"
+                )
+            ),
+            "snapshot_price_source": (
+                snapshot.get(
+                    "snapshot_price_source"
                 )
             ),
             "requested_provider_count": (
