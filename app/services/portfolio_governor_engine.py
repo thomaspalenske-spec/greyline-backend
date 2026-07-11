@@ -80,6 +80,16 @@ class PortfolioGovernorEngine:
 
         ack_required = decision in ["REDUCE", "BLOCK"]
 
+        current_drawdown_pct = float(
+            allocation.get("current_drawdown_pct")
+            or allocation.get("drawdown_pct")
+            or 0.0
+        )
+        recommended_position_pct = round(
+            float(recommended_size or 0.0),
+            2,
+        )
+
         OperatorEventBusEngine().publish(
             source="PortfolioGovernorEngine",
             category="PORTFOLIO_GOVERNOR",

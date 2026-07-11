@@ -71,6 +71,24 @@ class OpportunitySummaryEngine:
                 "forecast_regime_trust_impact": item.get(
                     "forecast_regime_trust_impact"
                 ),
+                "regime_calibration": item.get(
+                    "regime_calibration"
+                ),
+                "regime_calibration_state": item.get(
+                    "regime_calibration_state"
+                ),
+                "regime_calibration_actionable": item.get(
+                    "regime_calibration_actionable"
+                ),
+                "regime_position_multiplier": item.get(
+                    "regime_position_multiplier"
+                ),
+                "regime_execution_allowed": item.get(
+                    "regime_execution_allowed"
+                ),
+                "regime_composite_adjustment": item.get(
+                    "regime_composite_adjustment"
+                ),
                 "order_placement_allowed": item.get("order_placement_allowed"),
                 "governor_status": item.get("governor_status")
             })
