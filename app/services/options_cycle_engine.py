@@ -7,7 +7,16 @@ from app.services.execution_authority_engine import ExecutionAuthorityEngine
 
 class OptionsCycleEngine:
 
-    def run(self, symbol="NVDA", option_type="CALL", expiration="2026-07-17", max_position_pct=0.05, candidate_score=None, enforce_authority=False):
+    def run(
+        self,
+        symbol="NVDA",
+        option_type="CALL",
+        expiration="2026-07-17",
+        max_position_pct=0.05,
+        candidate_score=None,
+        regime_calibration=None,
+        enforce_authority=False,
+    ):
         if enforce_authority:
             authority = ExecutionAuthorityEngine().evaluate()
             if not authority.get("paper_execution_allowed"):
@@ -102,6 +111,7 @@ class OptionsCycleEngine:
                     top,
                     max_position_pct=max_position_pct,
                     candidate_score=candidate_score,
+                    regime_calibration=regime_calibration,
                 )
                 paper_trade_recorded = paper_trade.get("paper_trade_recorded") is True
 
@@ -118,6 +128,17 @@ class OptionsCycleEngine:
             "affordable_contracts_found": len(affordable_candidates),
             "max_position_pct": max_position_pct,
             "max_position_dollars": round(max_position_dollars, 2),
+            "regime_calibration": regime_calibration,
+            "regime_position_multiplier": (
+                (regime_calibration or {}).get(
+                    "position_multiplier"
+                )
+            ),
+            "regime_execution_allowed": (
+                (regime_calibration or {}).get(
+                    "execution_allowed"
+                )
+            ),
             "top_candidate": top,
             "paper_trade_recorded": paper_trade_recorded,
             "duplicate_blocked": duplicate_blocked,

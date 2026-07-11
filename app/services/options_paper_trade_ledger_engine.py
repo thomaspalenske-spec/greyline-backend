@@ -182,7 +182,14 @@ class OptionsPaperTradeLedgerEngine:
                 realized += float(trade.get("realized_pnl") or 0)
         return round(realized, 2)
 
-    def record_trade(self, candidate, source="OPTIONS_CYCLE_ENGINE", max_position_pct=0.05, candidate_score=None):
+    def record_trade(
+        self,
+        candidate,
+        source="OPTIONS_CYCLE_ENGINE",
+        max_position_pct=0.05,
+        candidate_score=None,
+        regime_calibration=None,
+    ):
         legs = candidate.get("Legs") or [{}]
         leg = legs[0]
 
@@ -321,10 +328,14 @@ class OptionsPaperTradeLedgerEngine:
                 "system": "GreyLine",
                 "source": "OPTIONS_PAPER_TRADE_LEDGER",
                 "paper_trade_recorded": False,
-                "reason": sizing.get("sizing_action") or "POSITION_SIZE_ZERO",
+                "reason": (
+                    sizing.get("sizing_action")
+                    or "POSITION_SIZE_ZERO"
+                ),
                 "candidate_score": candidate_score,
-            "max_position_pct_used": max_position_pct,
-            "position_sizing": sizing,
+                "max_position_pct_used": max_position_pct,
+                "position_sizing": sizing,
+                "regime_calibration": regime_calibration,
                 "entry_quality_gate": entry_quality_gate,
                 "execution_enabled": False,
                 "order_placement_allowed": False,
@@ -375,6 +386,33 @@ class OptionsPaperTradeLedgerEngine:
             "candidate_score": candidate_score,
             "max_position_pct_used": max_position_pct,
             "position_sizing": sizing,
+            "regime_calibration": regime_calibration,
+            "regime_calibration_state": (
+                (regime_calibration or {}).get("state")
+            ),
+            "regime_calibration_actionable": (
+                (regime_calibration or {}).get("actionable")
+            ),
+            "regime_position_multiplier": (
+                (regime_calibration or {}).get(
+                    "position_multiplier"
+                )
+            ),
+            "regime_execution_allowed": (
+                (regime_calibration or {}).get(
+                    "execution_allowed"
+                )
+            ),
+            "regime_confidence_adjustment": (
+                (regime_calibration or {}).get(
+                    "confidence_adjustment"
+                )
+            ),
+            "regime_composite_adjustment": (
+                (regime_calibration or {}).get(
+                    "composite_adjustment"
+                )
+            ),
             "entry_quality_gate": entry_quality_gate,
             "source": source,
             "status": "OPEN",

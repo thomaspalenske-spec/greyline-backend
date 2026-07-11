@@ -104,6 +104,7 @@ class OptionsPaperExecutionSweepEngine:
                 option_type=option_type,
                 max_position_pct=max_position_pct,
                 candidate_score=score,
+                regime_calibration=regime_calibration,
             )
             ledger_result = r.get("paper_trade") or {}
 
