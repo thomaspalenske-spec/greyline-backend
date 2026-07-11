@@ -6,6 +6,9 @@ from typing import Any, Dict, Iterable, Optional
 from app.services.data_providers.unusual_whales_provider import (
     UnusualWhalesProvider,
 )
+from app.services.data_providers.tradestation_observation_provider import (
+    TradeStationObservationProvider,
+)
 
 
 class InstitutionalSignalCollectionEngine:
@@ -32,6 +35,13 @@ class InstitutionalSignalCollectionEngine:
             )
         except Exception:
             self.unusual_whales = None
+
+        try:
+            self.tradestation = (
+                TradeStationObservationProvider()
+            )
+        except Exception:
+            self.tradestation = None
 
     @staticmethod
     def _symbol(value: str) -> str:
@@ -182,11 +192,96 @@ class InstitutionalSignalCollectionEngine:
             ),
         }
 
+    def _collect_tradestation(
+        self,
+        symbol: str,
+        include_option_chain: bool = False,
+        expiration=None,
+        option_type: str = "All",
+        max_contracts: int = 10,
+    ) -> Dict[str, Any]:
+        if self.tradestation is None:
+            return {
+                "connected": False,
+                "requested": True,
+                "signals": {},
+                "status": (
+                    "TRADESTATION_PROVIDER_"
+                    "UNAVAILABLE"
+                ),
+            }
+
+        try:
+            bundle = (
+                self.tradestation
+                .observation_bundle(
+                    symbol,
+                    include_option_chain=(
+                        include_option_chain
+                    ),
+                    expiration=expiration,
+                    option_type=option_type,
+                    max_contracts=max_contracts,
+                )
+            )
+        except Exception as exc:
+            return {
+                "connected": False,
+                "requested": True,
+                "signals": {},
+                "error": repr(exc),
+                "status": (
+                    "TRADESTATION_COLLECTION_"
+                    "DEGRADED"
+                ),
+            }
+
+        available_components = (
+            bundle.get(
+                "available_components"
+            )
+            or []
+        )
+
+        return {
+            "connected": bool(
+                available_components
+            ),
+            "requested": True,
+            "available_component_count": (
+                bundle.get(
+                    "available_component_count"
+                )
+            ),
+            "available_components": (
+                available_components
+            ),
+            "signals": {
+                "quote": bundle.get(
+                    "quote"
+                ),
+                "expirations": bundle.get(
+                    "expirations"
+                ),
+                "option_chain": bundle.get(
+                    "option_chain"
+                ),
+            },
+            "status": bundle.get(
+                "status"
+            ),
+        }
+
     def collect(
         self,
         symbol: str,
         collect_unusual_whales: bool = False,
         unusual_whales_signals=None,
+        collect_tradestation: bool = False,
+        include_tradestation_option_chain: bool = False,
+        tradestation_expiration=None,
+        tradestation_option_type: str = "All",
+        tradestation_max_contracts: int = 10,
         force_refresh: bool = False,
     ) -> Dict[str, Any]:
         symbol = self._symbol(symbol)
@@ -228,15 +323,36 @@ class InstitutionalSignalCollectionEngine:
                 "signals": {},
             }
 
-        tradestation = {
-            "connected": False,
-            "requested": False,
-            "status": (
-                "TRADESTATION_COLLECTION_"
-                "NOT_IMPLEMENTED"
-            ),
-            "signals": {},
-        }
+        if collect_tradestation:
+            tradestation = (
+                self._collect_tradestation(
+                    symbol,
+                    include_option_chain=(
+                        include_tradestation_option_chain
+                    ),
+                    expiration=(
+                        tradestation_expiration
+                    ),
+                    option_type=(
+                        tradestation_option_type
+                    ),
+                    max_contracts=(
+                        tradestation_max_contracts
+                    ),
+                )
+            )
+        else:
+            tradestation = {
+                "connected": bool(
+                    self.tradestation
+                ),
+                "requested": False,
+                "status": (
+                    "TRADESTATION_COLLECTION_"
+                    "NOT_REQUESTED"
+                ),
+                "signals": {},
+            }
 
         provider_results = {
             "UNUSUAL_WHALES": (
