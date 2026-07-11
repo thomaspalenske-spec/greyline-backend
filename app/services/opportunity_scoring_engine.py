@@ -309,6 +309,71 @@ class OpportunityScoringEngine:
                 2,
             )
 
+            # Apply mature regime-specific trust before the
+            # EXECUTE/WATCH threshold is evaluated.
+            current_regime_for_decision = (
+                regime_result.get("regime") or "UNKNOWN"
+            )
+            regime_confidence_adjustment_applied = 0.0
+
+            try:
+                regime_trust_for_decision = (
+                    ForecastRegimeTrustEngine().evaluate()
+                )
+                regime_history_for_decision = (
+                    regime_trust_for_decision.get("regimes")
+                    or {}
+                ).get(current_regime_for_decision) or {}
+
+                regime_sample_for_decision = int(
+                    regime_history_for_decision.get(
+                        "sample_size"
+                    )
+                    or 0
+                )
+                regime_accuracy_for_decision = float(
+                    regime_history_for_decision.get(
+                        "bayesian_accuracy_pct"
+                    )
+                    or 0.0
+                )
+                regime_lower_for_decision = float(
+                    (
+                        regime_history_for_decision.get(
+                            "credible_interval_95"
+                        )
+                        or {}
+                    ).get("lower_pct")
+                    or 0.0
+                )
+
+                if (
+                    current_regime_for_decision != "UNKNOWN"
+                    and regime_sample_for_decision >= 10
+                ):
+                    if (
+                        regime_accuracy_for_decision >= 65.0
+                        and regime_lower_for_decision >= 55.0
+                    ):
+                        regime_confidence_adjustment_applied = 2.0
+                    elif (
+                        regime_accuracy_for_decision < 45.0
+                        or regime_lower_for_decision < 35.0
+                    ):
+                        regime_confidence_adjustment_applied = -2.0
+
+            except Exception:
+                regime_confidence_adjustment_applied = 0.0
+
+            direction_confidence = round(
+                max(
+                    0.0,
+                    direction_confidence
+                    + regime_confidence_adjustment_applied,
+                ),
+                2,
+            )
+
             if (
                 institutional_gate["allow_execution"]
                 and composite_score >= 85
@@ -347,13 +412,6 @@ class OpportunityScoringEngine:
 
             if institutional_flow_momentum.get("institutional_flow_decay") is True and result == "EXECUTE":
                 result = "WATCH"
-
-            if (
-                regime_result.get("regime") == "WEAK_LIVE"
-                or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
-            ):
-                if result == "EXECUTE":
-                    result = "WATCH"
 
             if (
                 regime_result.get("regime") == "WEAK_LIVE"
