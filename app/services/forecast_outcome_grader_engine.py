@@ -487,8 +487,31 @@ class ForecastOutcomeGraderEngine:
         for row in graded:
             forecast_id = row.get("forecast_id")
 
-            if forecast_id:
-                existing_grades[str(forecast_id)] = row
+            if not forecast_id:
+                continue
+
+            key = str(forecast_id)
+            existing = existing_grades.get(key)
+
+            existing_completed = bool(
+                existing
+                and existing.get(
+                    "forecast_correct"
+                ) is not None
+            )
+
+            incoming_pending = (
+                row.get("forecast_correct")
+                is None
+            )
+
+            if (
+                existing_completed
+                and incoming_pending
+            ):
+                continue
+
+            existing_grades[key] = row
 
         ordered_grades = list(existing_grades.values())
 
