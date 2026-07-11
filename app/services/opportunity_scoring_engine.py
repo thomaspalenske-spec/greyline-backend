@@ -19,8 +19,8 @@ from app.services.institutional.institutional_execution_gate_engine import Insti
 from app.services.institutional.adaptive_institutional_weight_engine import (
     AdaptiveInstitutionalWeightEngine,
 )
-from app.services.forecast_regime_trust_engine import (
-    ForecastRegimeTrustEngine,
+from app.services.regime_calibration_engine import (
+    RegimeCalibrationEngine,
 )
 from app.services.institutional.institutional_attribution_engine import InstitutionalAttributionEngine
 from app.services.institutional_intelligence_engine import (
@@ -309,73 +309,72 @@ class OpportunityScoringEngine:
                 2,
             )
 
-            # Apply mature regime-specific trust before the
-            # EXECUTE/WATCH threshold is evaluated.
             current_regime_for_decision = (
                 regime_result.get("regime") or "UNKNOWN"
             )
-            regime_confidence_adjustment_applied = 0.0
 
             try:
-                regime_trust_for_decision = (
-                    ForecastRegimeTrustEngine().evaluate()
-                )
-                regime_history_for_decision = (
-                    regime_trust_for_decision.get("regimes")
-                    or {}
-                ).get(current_regime_for_decision) or {}
-
-                regime_sample_for_decision = int(
-                    regime_history_for_decision.get(
-                        "sample_size"
+                regime_calibration = (
+                    RegimeCalibrationEngine().evaluate(
+                        current_regime_for_decision
                     )
-                    or 0
                 )
-                regime_accuracy_for_decision = float(
-                    regime_history_for_decision.get(
-                        "bayesian_accuracy_pct"
-                    )
-                    or 0.0
-                )
-                regime_lower_for_decision = float(
-                    (
-                        regime_history_for_decision.get(
-                            "credible_interval_95"
-                        )
-                        or {}
-                    ).get("lower_pct")
-                    or 0.0
-                )
-
-                if (
-                    current_regime_for_decision != "UNKNOWN"
-                    and regime_sample_for_decision >= 10
-                ):
-                    if (
-                        regime_accuracy_for_decision >= 65.0
-                        and regime_lower_for_decision >= 55.0
-                    ):
-                        regime_confidence_adjustment_applied = 2.0
-                    elif (
-                        regime_accuracy_for_decision < 45.0
-                        or regime_lower_for_decision < 35.0
-                    ):
-                        regime_confidence_adjustment_applied = -2.0
-
-            except Exception:
-                regime_confidence_adjustment_applied = 0.0
+            except Exception as exc:
+                regime_calibration = {
+                    "regime": current_regime_for_decision,
+                    "sample_size": 0,
+                    "actionable": False,
+                    "confidence_adjustment": 0.0,
+                    "composite_adjustment": 0.0,
+                    "position_multiplier": 1.0,
+                    "execution_allowed": True,
+                    "state": "DEGRADED",
+                    "execution_impact": "OBSERVATION_ONLY",
+                    "error": repr(exc),
+                    "status": "REGIME_CALIBRATION_DEGRADED",
+                }
 
             direction_confidence = round(
                 max(
                     0.0,
                     direction_confidence
-                    + regime_confidence_adjustment_applied,
+                    + float(
+                        regime_calibration.get(
+                            "confidence_adjustment"
+                        )
+                        or 0.0
+                    ),
                 ),
                 2,
             )
 
+            composite_score = round(
+                max(
+                    0.0,
+                    min(
+                        100.0,
+                        composite_score
+                        + float(
+                            regime_calibration.get(
+                                "composite_adjustment"
+                            )
+                            or 0.0
+                        ),
+                    ),
+                ),
+                2,
+            )
+
+            regime_execution_allowed = bool(
+                regime_calibration.get(
+                    "execution_allowed",
+                    True,
+                )
+            )
+
             if (
                 institutional_gate["allow_execution"]
+                and regime_execution_allowed
                 and composite_score >= 85
                 and direction_confidence >= 5
             ):
@@ -434,124 +433,59 @@ class OpportunityScoringEngine:
                 regime_result.get("regime") or "UNKNOWN"
             )
 
-            try:
-                regime_trust_all = (
-                    ForecastRegimeTrustEngine().evaluate()
-                )
-                regime_trust = (
-                    regime_trust_all.get("regimes") or {}
-                ).get(current_regime)
-
-                if regime_trust is None:
-                    regime_trust = {
-                        "regime": current_regime,
-                        "sample_size": 0,
-                        "actionable": False,
-                        "confidence_adjustment": 0.0,
-                        "execution_impact": "OBSERVATION_ONLY",
-                        "reason": "NO_MATURE_REGIME_HISTORY",
-                        "status": (
-                            "FORECAST_REGIME_TRUST_COLLECTING_DATA"
-                        ),
-                    }
-                else:
-                    regime_trust = dict(regime_trust)
-                    regime_sample_size = int(
-                        regime_trust.get("sample_size") or 0
+            regime_trust = {
+                "regime": current_regime,
+                "sample_size": regime_calibration.get(
+                    "sample_size"
+                ),
+                "bayesian_accuracy_pct": (
+                    regime_calibration.get(
+                        "bayesian_accuracy_pct"
                     )
-                    regime_lower_bound = float(
-                        (
-                            regime_trust.get(
-                                "credible_interval_95"
-                            )
-                            or {}
-                        ).get("lower_pct") or 0.0
+                ),
+                "credible_interval_95": (
+                    regime_calibration.get(
+                        "credible_interval_95"
                     )
-                    regime_bayesian_accuracy = float(
-                        regime_trust.get(
-                            "bayesian_accuracy_pct"
-                        )
-                        or 0.0
+                ),
+                "actionable": regime_calibration.get(
+                    "actionable",
+                    False,
+                ),
+                "confidence_adjustment": (
+                    regime_calibration.get(
+                        "confidence_adjustment",
+                        0.0,
                     )
-
-                    regime_actionable = (
-                        current_regime != "UNKNOWN"
-                        and regime_sample_size >= 10
+                ),
+                "composite_adjustment": (
+                    regime_calibration.get(
+                        "composite_adjustment",
+                        0.0,
                     )
-
-                    if not regime_actionable:
-                        regime_confidence_adjustment = 0.0
-                        regime_reason = (
-                            "INSUFFICIENT_MATURE_REGIME_SAMPLE"
-                        )
-                        regime_impact = "OBSERVATION_ONLY"
-                        regime_status = (
-                            "FORECAST_REGIME_TRUST_COLLECTING_DATA"
-                        )
-                    elif (
-                        regime_bayesian_accuracy >= 65.0
-                        and regime_lower_bound >= 55.0
-                    ):
-                        regime_confidence_adjustment = 2.0
-                        regime_reason = (
-                            "REGIME_FORECAST_EDGE_VERIFIED"
-                        )
-                        regime_impact = (
-                            "REGIME_CONFIDENCE_SUPPORT_ACTIVE"
-                        )
-                        regime_status = (
-                            "FORECAST_REGIME_TRUST_READY"
-                        )
-                    elif (
-                        regime_bayesian_accuracy < 45.0
-                        or regime_lower_bound < 35.0
-                    ):
-                        regime_confidence_adjustment = -2.0
-                        regime_reason = (
-                            "REGIME_FORECAST_EDGE_WEAK"
-                        )
-                        regime_impact = (
-                            "REGIME_CONFIDENCE_REDUCTION_ACTIVE"
-                        )
-                        regime_status = (
-                            "FORECAST_REGIME_TRUST_READY"
-                        )
-                    else:
-                        regime_confidence_adjustment = 0.0
-                        regime_reason = (
-                            "REGIME_FORECAST_EDGE_NEUTRAL"
-                        )
-                        regime_impact = (
-                            "REGIME_CONFIDENCE_HOLD"
-                        )
-                        regime_status = (
-                            "FORECAST_REGIME_TRUST_READY"
-                        )
-
-                    regime_trust.update({
-                        "regime": current_regime,
-                        "actionable": regime_actionable,
-                        "confidence_adjustment": (
-                            regime_confidence_adjustment
-                        ),
-                        "execution_impact": regime_impact,
-                        "reason": regime_reason,
-                        "status": regime_status,
-                    })
-
-            except Exception as exc:
-                regime_trust = {
-                    "regime": current_regime,
-                    "sample_size": 0,
-                    "actionable": False,
-                    "confidence_adjustment": 0.0,
-                    "execution_impact": "OBSERVATION_ONLY",
-                    "reason": "REGIME_TRUST_ENGINE_DEGRADED",
-                    "error": repr(exc),
-                    "status": (
-                        "FORECAST_REGIME_TRUST_DEGRADED"
-                    ),
-                }
+                ),
+                "position_multiplier": (
+                    regime_calibration.get(
+                        "position_multiplier",
+                        1.0,
+                    )
+                ),
+                "execution_allowed": (
+                    regime_calibration.get(
+                        "execution_allowed",
+                        True,
+                    )
+                ),
+                "state": regime_calibration.get("state"),
+                "execution_impact": (
+                    regime_calibration.get(
+                        "execution_impact"
+                    )
+                ),
+                "status": regime_calibration.get(
+                    "status"
+                ),
+            }
 
             candidate = {
                 "symbol": symbol,
@@ -564,6 +498,32 @@ class OpportunityScoringEngine:
                 "regime_score": regime_score,
                 "bear_regime_score": bear_regime_score,
                 "regime": regime_result.get("regime"),
+                "regime_calibration": regime_calibration,
+                "regime_calibration_state": (
+                    regime_calibration.get("state")
+                ),
+                "regime_calibration_actionable": (
+                    regime_calibration.get("actionable")
+                    is True
+                ),
+                "regime_position_multiplier": (
+                    regime_calibration.get(
+                        "position_multiplier",
+                        1.0,
+                    )
+                ),
+                "regime_execution_allowed": (
+                    regime_calibration.get(
+                        "execution_allowed",
+                        True,
+                    )
+                ),
+                "regime_composite_adjustment": (
+                    regime_calibration.get(
+                        "composite_adjustment",
+                        0.0,
+                    )
+                ),
                 "forecast_regime_trust": regime_trust,
                 "forecast_regime_trust_actionable": (
                     regime_trust.get("actionable") is True
