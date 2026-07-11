@@ -58,14 +58,29 @@ class AdaptiveWeightOptimizer:
 
             previous_factor = previous.get(factor, {})
 
+            if d.get("actionable") is not True:
+                learned[factor] = {
+                    "weight": 1.0,
+                    "sample_size": sample,
+                    "actionable": False,
+                }
+                continue
+
             if int(previous_factor.get("sample_size") or 0) == int(sample):
                 learned[factor] = previous_factor
                 continue
 
-            wr = float(
-                d.get("high_signal_accuracy_pct")
-                if int(d.get("high_signal_sample_size") or 0) >= MIN_SAMPLE
-                else d.get("accuracy_pct", 50)
+            predictive_score = float(
+                d.get("predictive_score_pct")
+                or 0.0
+            )
+
+            wr = max(
+                0.0,
+                min(
+                    100.0,
+                    50.0 + predictive_score,
+                ),
             )
 
             target = (

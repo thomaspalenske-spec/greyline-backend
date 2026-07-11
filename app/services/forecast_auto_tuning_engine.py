@@ -66,19 +66,18 @@ class ForecastAutoTuningEngine:
                 "volatility_score": "volatility_weight",
             }
 
-            if best in field_to_weight:
-                weight_name = field_to_weight[best]
-                weights[weight_name] = round(
-                    min(1.30, weights[weight_name] + 0.02),
-                    3,
-                )
+            actionable_components = [
+                name
+                for name, data in components.items()
+                if data.get("actionable") is True
+            ]
 
-            if worst in field_to_weight and worst != best:
-                weight_name = field_to_weight[worst]
-                weights[weight_name] = round(
-                    max(0.75, weights[weight_name] - 0.02),
-                    3,
-                )
+            if not actionable_components:
+                if best in field_to_weight:
+                    weights[field_to_weight[best]] = 1.02
+
+                if worst in field_to_weight and worst != best:
+                    weights[field_to_weight[worst]] = 0.98
 
             if confidence_level in ["HIGHLY_TRUSTED", "TRUSTED"]:
                 recommendation = "APPLY_CONFIDENCE_WEIGHT_TUNING"
