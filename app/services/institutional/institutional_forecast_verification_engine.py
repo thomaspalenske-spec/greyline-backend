@@ -9,6 +9,8 @@ from app.services.institutional.institutional_memory_engine import (
 
 
 class InstitutionalForecastVerificationEngine:
+    EMA_ALPHA = 0.35
+
     """
     Backtests one-snapshot institutional forecasts against realized
     institutional scores already stored in InstitutionalMemoryEngine.
@@ -25,6 +27,17 @@ class InstitutionalForecastVerificationEngine:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    def _ema(self, values: List[float]) -> float:
+        ema = values[0]
+
+        for value in values[1:]:
+            ema = (
+                self.EMA_ALPHA * value
+                + (1.0 - self.EMA_ALPHA) * ema
+            )
+
+        return ema
 
     @staticmethod
     def _clamp_score(value: float) -> float:
@@ -92,17 +105,20 @@ class InstitutionalForecastVerificationEngine:
             deltas = [
                 training_scores[index]
                 - training_scores[index - 1]
-                for index in range(1, len(training_scores))
+                for index in range(
+                    1,
+                    len(training_scores),
+                )
             ]
 
-            average_delta = (
-                sum(deltas) / len(deltas)
+            ema_delta = (
+                self._ema(deltas)
                 if deltas
                 else 0.0
             )
 
             predicted_score = self._clamp_score(
-                prior_score + average_delta
+                prior_score + ema_delta
             )
 
             error = predicted_score - actual_score
