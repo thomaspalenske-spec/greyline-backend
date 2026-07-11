@@ -16,6 +16,12 @@ from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngin
 from app.routes.paper_trade_executor import run_paper_trade_executor
 from app.services.market_hours_engine import MarketHoursEngine
 from app.services.forecast_outcome_grader_engine import ForecastOutcomeGraderEngine
+from app.services.institutional.institutional_signal_snapshot_sweep_engine import (
+    InstitutionalSignalSnapshotSweepEngine,
+)
+from app.services.institutional.institutional_retraining_orchestrator_engine import (
+    InstitutionalRetrainingOrchestratorEngine,
+)
 
 
 class BackgroundSchedulerService:
@@ -149,6 +155,55 @@ class BackgroundSchedulerService:
 
         forward = ForwardOutcomeCaptureEngine().capture(limit=1)
         learning = DecisionLearningMemoryEngine().record_current_learning()
+
+        try:
+            institutional_snapshot_sweep = (
+                InstitutionalSignalSnapshotSweepEngine()
+                .run(
+                    limit=10,
+                    collect_unusual_whales=False,
+                    collect_tradestation=False,
+                    include_tradestation_option_chain=False,
+                    deduplicate=True,
+                )
+            )
+        except Exception as exc:
+            institutional_snapshot_sweep = {
+                "symbol_count": 0,
+                "snapshot_recorded_count": 0,
+                "deduplicated_count": 0,
+                "degraded_count": 1,
+                "error": repr(exc),
+                "execution_impact": "OBSERVATION_ONLY",
+                "status": (
+                    "INSTITUTIONAL_SIGNAL_"
+                    "SNAPSHOT_SWEEP_DEGRADED"
+                ),
+            }
+
+        try:
+            institutional_retraining = (
+                InstitutionalRetrainingOrchestratorEngine()
+                .run(
+                    limit=10,
+                    min_age_minutes=60,
+                    persist=True,
+                )
+            )
+        except Exception as exc:
+            institutional_retraining = {
+                "symbol_count": 0,
+                "model_ready_count": 0,
+                "collecting_count": 0,
+                "actionable_count": 0,
+                "degraded_count": 1,
+                "error": repr(exc),
+                "execution_impact": "OBSERVATION_ONLY",
+                "status": (
+                    "INSTITUTIONAL_RETRAINING_"
+                    "ORCHESTRATOR_DEGRADED"
+                ),
+            }
         paper_executor = run_paper_trade_executor()
         options_executor = OptionsPaperExecutionSweepEngine().run(limit=10)
         paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
@@ -177,6 +232,51 @@ class BackgroundSchedulerService:
                 ),
                 "forward_outcome_status": forward.get("status"),
                 "learning_memory_status": learning.get("status"),
+                "institutional_snapshot_sweep_status": (
+                    institutional_snapshot_sweep.get(
+                        "status"
+                    )
+                ),
+                "institutional_snapshots_recorded": (
+                    institutional_snapshot_sweep.get(
+                        "snapshot_recorded_count"
+                    )
+                ),
+                "institutional_snapshots_deduplicated": (
+                    institutional_snapshot_sweep.get(
+                        "deduplicated_count"
+                    )
+                ),
+                "institutional_snapshot_degraded_count": (
+                    institutional_snapshot_sweep.get(
+                        "degraded_count"
+                    )
+                ),
+                "institutional_retraining_status": (
+                    institutional_retraining.get(
+                        "status"
+                    )
+                ),
+                "institutional_models_ready": (
+                    institutional_retraining.get(
+                        "model_ready_count"
+                    )
+                ),
+                "institutional_models_collecting": (
+                    institutional_retraining.get(
+                        "collecting_count"
+                    )
+                ),
+                "institutional_models_actionable": (
+                    institutional_retraining.get(
+                        "actionable_count"
+                    )
+                ),
+                "institutional_retraining_degraded_count": (
+                    institutional_retraining.get(
+                        "degraded_count"
+                    )
+                ),
                 "paper_executor_status": paper_executor.get("status"),
                 "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
                 "options_executor_status": options_executor.get("status"),
@@ -212,6 +312,12 @@ class BackgroundSchedulerService:
             ),
             "forward_outcome_status": forward.get("status"),
             "learning_memory_status": learning.get("status"),
+            "institutional_snapshot_sweep": (
+                institutional_snapshot_sweep
+            ),
+            "institutional_retraining": (
+                institutional_retraining
+            ),
             "paper_executor_status": paper_executor.get("status"),
             "paper_trade_recorded": paper_executor.get("paper_trade_recorded"),
             "options_executor_status": options_executor.get("status"),
