@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -16,6 +15,9 @@ from app.services.institutional.institutional_pattern_learning_engine import (
 )
 from app.services.institutional.institutional_signal_history_engine import (
     InstitutionalSignalHistoryEngine,
+)
+from app.services.institutional.institutional_model_repository_engine import (
+    InstitutionalModelRepositoryEngine,
 )
 
 
@@ -35,10 +37,6 @@ class InstitutionalRetrainingOrchestratorEngine:
         "app/data/institutional_memory"
     )
 
-    MODEL_DIR = Path(
-        "app/data/runtime/institutional_models"
-    )
-
     DEFAULT_LIMIT = 10
     MAXIMUM_LIMIT = 50
     SCHEMA_VERSION = 1
@@ -56,10 +54,8 @@ class InstitutionalRetrainingOrchestratorEngine:
         self.inference = (
             InstitutionalInferenceEngine()
         )
-
-        self.MODEL_DIR.mkdir(
-            parents=True,
-            exist_ok=True,
+        self.repository = (
+            InstitutionalModelRepositoryEngine()
         )
 
     @staticmethod
@@ -101,35 +97,6 @@ class InstitutionalRetrainingOrchestratorEngine:
             })
 
         return sorted(symbols)
-
-    def _model_path(
-        self,
-        symbol: str,
-    ) -> Path:
-        return (
-            self.MODEL_DIR
-            / f"{symbol}.json"
-        )
-
-    def _persist_model(
-        self,
-        symbol: str,
-        model: Dict[str, Any],
-    ) -> str:
-        path = self._model_path(
-            symbol
-        )
-
-        path.write_text(
-            json.dumps(
-                model,
-                indent=2,
-                sort_keys=True,
-                default=str,
-            )
-        )
-
-        return str(path)
 
     def retrain_symbol(
         self,
@@ -303,20 +270,41 @@ class InstitutionalRetrainingOrchestratorEngine:
             ),
         }
 
-        model_path = None
+        repository_result = {
+            "model_saved": False,
+            "path": None,
+            "status": (
+                "INSTITUTIONAL_MODEL_"
+                "PERSISTENCE_NOT_REQUESTED"
+            ),
+        }
 
         if persist:
-            model_path = self._persist_model(
-                symbol,
-                model,
+            repository_result = (
+                self.repository.save(
+                    symbol,
+                    model,
+                )
             )
 
         return {
             **model,
-            "model_persisted": bool(
-                persist
+            "model_persisted": (
+                repository_result.get(
+                    "model_saved"
+                )
+                is True
             ),
-            "model_path": model_path,
+            "model_path": (
+                repository_result.get(
+                    "path"
+                )
+            ),
+            "model_repository_status": (
+                repository_result.get(
+                    "status"
+                )
+            ),
         }
 
     def run(
