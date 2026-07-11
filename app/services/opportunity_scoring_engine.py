@@ -175,10 +175,20 @@ class OpportunityScoringEngine:
 
             t0 = datetime.utcnow()
             bull_conviction = InstitutionalConvictionEngine().score(
-                "CALL", setup_result, regime_result, trend_persistence_result, equity_flow_result
+                "CALL",
+                setup_result,
+                regime_result,
+                trend_persistence_result,
+                equity_flow_result,
+                symbol=symbol,
             )
             bear_conviction = InstitutionalConvictionEngine().score(
-                "PUT", setup_result, regime_result, trend_persistence_result, equity_flow_result
+                "PUT",
+                setup_result,
+                regime_result,
+                trend_persistence_result,
+                equity_flow_result,
+                symbol=symbol,
             )
             institutional_conviction_score = bull_conviction.get("institutional_conviction_score", 50)
             bear_institutional_conviction_score = bear_conviction.get("institutional_conviction_score", 50)
@@ -412,6 +422,47 @@ class OpportunityScoringEngine:
                 "institutional_flow_direction": institutional_flow_direction,
                 "institutional_flow_confidence": equity_flow_result.get("institutional_flow_confidence"),
                 "institutional_conviction_score": institutional_conviction_score if option_type == "CALL" else bear_institutional_conviction_score,
+                "institutional_conviction": (
+                    bull_conviction
+                    if option_type == "CALL"
+                    else bear_conviction
+                ),
+                "institutional_memory_actionable": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_actionable"
+                    )
+                ),
+                "institutional_memory_score": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_score"
+                    )
+                ),
+                "institutional_memory_direction": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_direction"
+                    )
+                ),
+                "institutional_memory_execution_impact": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_execution_impact"
+                    )
+                ),
                 "institutional_flow_gate": institutional_flow_gate,
             }
             institutional_flow_momentum = InstitutionalFlowMomentumEngine().update(momentum_input)
@@ -578,6 +629,47 @@ class OpportunityScoringEngine:
                 "institutional_flow_aligned": institutional_flow_aligned,
                 "institutional_flow_gate": institutional_flow_gate,
                 "institutional_conviction_score": institutional_conviction_score if option_type == "CALL" else bear_institutional_conviction_score,
+                "institutional_conviction": (
+                    bull_conviction
+                    if option_type == "CALL"
+                    else bear_conviction
+                ),
+                "institutional_memory_actionable": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_actionable"
+                    )
+                ),
+                "institutional_memory_score": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_score"
+                    )
+                ),
+                "institutional_memory_direction": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_direction"
+                    )
+                ),
+                "institutional_memory_execution_impact": (
+                    (
+                        bull_conviction
+                        if option_type == "CALL"
+                        else bear_conviction
+                    ).get(
+                        "institutional_memory_execution_impact"
+                    )
+                ),
                 "institutional_conviction_state": bull_conviction.get("institutional_conviction_state") if option_type == "CALL" else bear_conviction.get("institutional_conviction_state"),
                 "institutional_conviction_reasons": bull_conviction.get("institutional_conviction_reasons") if option_type == "CALL" else bear_conviction.get("institutional_conviction_reasons"),
                 "institutional_conviction_components": bull_conviction.get("institutional_conviction_components") if option_type == "CALL" else bear_conviction.get("institutional_conviction_components"),

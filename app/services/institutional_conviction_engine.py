@@ -1,5 +1,9 @@
 from datetime import datetime
 
+from app.services.institutional_flow_memory_analytics_engine import (
+    InstitutionalFlowMemoryAnalyticsEngine,
+)
+
 
 class InstitutionalConvictionEngine:
     """
@@ -15,12 +19,47 @@ class InstitutionalConvictionEngine:
         except (TypeError, ValueError):
             return default
 
-    def score(self, option_type, setup, regime, trend, equity_flow):
+    def score(
+        self,
+        option_type,
+        setup,
+        regime,
+        trend,
+        equity_flow,
+        symbol=None,
+    ):
         option_type = str(option_type or "").upper()
 
         flow_direction = equity_flow.get("institutional_flow_direction")
         flow_confidence = self._num(equity_flow.get("institutional_flow_confidence"), 0)
         context = equity_flow.get("institutional_flow_context") or {}
+
+        try:
+            institutional_memory = (
+                InstitutionalFlowMemoryAnalyticsEngine()
+                .evaluate(symbol)
+                if symbol
+                else {
+                    "symbol": None,
+                    "actionable": False,
+                    "execution_impact": "OBSERVATION_ONLY",
+                    "status": (
+                        "INSTITUTIONAL_FLOW_MEMORY_"
+                        "SYMBOL_UNAVAILABLE"
+                    ),
+                }
+            )
+        except Exception as exc:
+            institutional_memory = {
+                "symbol": symbol,
+                "actionable": False,
+                "execution_impact": "OBSERVATION_ONLY",
+                "error": repr(exc),
+                "status": (
+                    "INSTITUTIONAL_FLOW_MEMORY_"
+                    "ANALYTICS_DEGRADED"
+                ),
+            }
 
         volume_ratio = self._num(context.get("volume_ratio"), 1.0)
         close_location = self._num(context.get("close_location"), 0.5)
@@ -95,5 +134,26 @@ class InstitutionalConvictionEngine:
                 "movement_score": round(movement_score, 2),
                 "flow_aligned": flow_aligned,
             },
+            "institutional_memory": institutional_memory,
+            "institutional_memory_actionable": bool(
+                institutional_memory.get(
+                    "actionable"
+                )
+            ),
+            "institutional_memory_score": (
+                institutional_memory.get(
+                    "institutional_memory_score"
+                )
+            ),
+            "institutional_memory_direction": (
+                institutional_memory.get(
+                    "institutional_memory_direction"
+                )
+            ),
+            "institutional_memory_execution_impact": (
+                institutional_memory.get(
+                    "execution_impact"
+                )
+            ),
             "status": "INSTITUTIONAL_CONVICTION_SCORE_READY",
         }
