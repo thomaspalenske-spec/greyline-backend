@@ -102,6 +102,78 @@ class InstitutionalConvictionEngine:
             conviction -= 20
             reasons.append("FLOW_MISALIGNED_WITH_TRADE_DIRECTION")
 
+        memory_actionable = bool(
+            institutional_memory.get("actionable")
+        )
+
+        memory_score = self._num(
+            institutional_memory.get(
+                "institutional_memory_score"
+            ),
+            50,
+        )
+
+        memory_direction = str(
+            institutional_memory.get(
+                "institutional_memory_direction"
+            )
+            or "NEUTRAL"
+        ).upper()
+
+        memory_aligned = (
+            (
+                option_type == "CALL"
+                and memory_direction == "BULLISH"
+            )
+            or (
+                option_type == "PUT"
+                and memory_direction == "BEARISH"
+            )
+            or memory_direction == "NEUTRAL"
+        )
+
+        memory_adjustment = 0.0
+
+        if memory_actionable:
+            memory_edge = (
+                memory_score - 50.0
+            )
+
+            if option_type == "PUT":
+                memory_edge = -memory_edge
+
+            memory_adjustment = round(
+                max(
+                    -10.0,
+                    min(
+                        10.0,
+                        memory_edge * 0.20,
+                    ),
+                ),
+                2,
+            )
+
+            if not memory_aligned:
+                memory_adjustment = min(
+                    memory_adjustment,
+                    -5.0,
+                )
+
+            conviction += memory_adjustment
+
+            if memory_aligned:
+                reasons.append(
+                    "ACTIONABLE_INSTITUTIONAL_MEMORY_ALIGNED"
+                )
+            else:
+                reasons.append(
+                    "ACTIONABLE_INSTITUTIONAL_MEMORY_MISALIGNED"
+                )
+        else:
+            reasons.append(
+                "INSTITUTIONAL_MEMORY_OBSERVATION_ONLY"
+            )
+
         if volume_ratio >= 1.25:
             reasons.append("ELEVATED_VOLUME_CONFIRMS_PARTICIPATION")
         if spread_pct <= 0.05:
@@ -133,6 +205,21 @@ class InstitutionalConvictionEngine:
                 "spread_score": spread_score,
                 "movement_score": round(movement_score, 2),
                 "flow_aligned": flow_aligned,
+                "institutional_memory_actionable": (
+                    memory_actionable
+                ),
+                "institutional_memory_score": (
+                    memory_score
+                ),
+                "institutional_memory_direction": (
+                    memory_direction
+                ),
+                "institutional_memory_aligned": (
+                    memory_aligned
+                ),
+                "institutional_memory_adjustment": (
+                    memory_adjustment
+                ),
             },
             "institutional_memory": institutional_memory,
             "institutional_memory_actionable": bool(
