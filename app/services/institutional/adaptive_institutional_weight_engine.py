@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.services.institutional.institutional_forecast_verification_engine import (
-    InstitutionalForecastVerificationEngine,
+from app.services.institutional.institutional_validation_engine import (
+    InstitutionalValidationEngine,
 )
 
 
@@ -57,7 +57,7 @@ class AdaptiveInstitutionalWeightEngine:
     MAX_INSTITUTIONAL_TOTAL_WEIGHT = 0.12
 
     def __init__(self):
-        self.verification = InstitutionalForecastVerificationEngine()
+        self.validation = InstitutionalValidationEngine()
 
     @staticmethod
     def _float(value: Any, default: float = 0.0) -> float:
@@ -123,11 +123,14 @@ class AdaptiveInstitutionalWeightEngine:
         baseline = self._baseline(side)
 
         try:
-            verification = self.verification.evaluate(
-                symbol,
-                minimum_verified_forecasts=(
-                    self.MINIMUM_VERIFIED_FORECASTS
-                ),
+            validation = self.validation.evaluate(
+                symbol
+            )
+            verification = (
+                validation.get(
+                    "forecast_verification"
+                )
+                or {}
             )
         except Exception as exc:
             return {
@@ -149,12 +152,41 @@ class AdaptiveInstitutionalWeightEngine:
             }
 
         verified_count = int(
-            verification.get("verified_forecast_count") or 0
+            verification.get(
+                "verified_forecast_count"
+            )
+            or 0
         )
+
         available = (
-            verification.get("verification_available") is True
+            verification.get(
+                "verification_available"
+            ) is True
         )
-        trust_state = verification.get("forecast_trust_state")
+
+        trust_state = verification.get(
+            "forecast_trust_state"
+        )
+
+        record_count_validated = (
+            validation.get(
+                "record_count_validated"
+            ) is True
+        )
+
+        predictive_validated = (
+            validation.get(
+                "predictive_validated"
+            ) is True
+        )
+
+        promotion_state = validation.get(
+            "promotion_state"
+        )
+
+        promotion_reason = validation.get(
+            "promotion_reason"
+        )
         calibrated_confidence = self._float(
             verification.get(
                 "calibrated_forecast_confidence"
@@ -168,9 +200,13 @@ class AdaptiveInstitutionalWeightEngine:
         )
 
         if (
-            not available
-            or verified_count < self.MINIMUM_VERIFIED_FORECASTS
-            or trust_state == "INSUFFICIENT_VERIFICATION"
+            not record_count_validated
+            or not predictive_validated
+            or not available
+            or verified_count
+            < self.MINIMUM_VERIFIED_FORECASTS
+            or trust_state
+            == "INSUFFICIENT_VERIFICATION"
         ):
             return {
                 "symbol": symbol,
@@ -178,8 +214,24 @@ class AdaptiveInstitutionalWeightEngine:
                 "actionable": False,
                 "weights": baseline,
                 "baseline_weights": baseline,
-                "verified_forecast_count": verified_count,
-                "forecast_trust_state": trust_state,
+                "verified_forecast_count": (
+                    verified_count
+                ),
+                "record_count_validated": (
+                    record_count_validated
+                ),
+                "predictive_validated": (
+                    predictive_validated
+                ),
+                "promotion_state": (
+                    promotion_state
+                ),
+                "promotion_reason": (
+                    promotion_reason
+                ),
+                "forecast_trust_state": (
+                    trust_state
+                ),
                 "calibrated_forecast_confidence": (
                     calibrated_confidence
                 ),
@@ -189,7 +241,12 @@ class AdaptiveInstitutionalWeightEngine:
                     6,
                 ),
                 "weight_multiplier": 1.0,
-                "reason": "INSUFFICIENT_VERIFIED_FORECASTS",
+                "reason": (
+                    "PREDICTIVE_VALIDATION_INCOMPLETE"
+                    if not predictive_validated
+                    else
+                    "INSUFFICIENT_VERIFIED_FORECASTS"
+                ),
                 "execution_impact": "BASELINE_ONLY",
                 "status": (
                     "ADAPTIVE_INSTITUTIONAL_WEIGHT_COLLECTING_DATA"
@@ -274,7 +331,21 @@ class AdaptiveInstitutionalWeightEngine:
             "actionable": True,
             "weights": adjusted,
             "baseline_weights": baseline,
-            "verified_forecast_count": verified_count,
+            "verified_forecast_count": (
+                verified_count
+            ),
+            "record_count_validated": (
+                record_count_validated
+            ),
+            "predictive_validated": (
+                predictive_validated
+            ),
+            "promotion_state": (
+                promotion_state
+            ),
+            "promotion_reason": (
+                promotion_reason
+            ),
             "forecast_accuracy_score": round(
                 accuracy_score,
                 2,
