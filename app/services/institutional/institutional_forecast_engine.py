@@ -7,6 +7,8 @@ from app.services.institutional.institutional_memory_engine import (
 
 class InstitutionalForecastEngine:
 
+    EMA_ALPHA = 0.35
+
     def __init__(self):
         self.memory = InstitutionalMemoryEngine()
 
@@ -16,6 +18,15 @@ class InstitutionalForecastEngine:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    def _ema(self, values: List[float]) -> float:
+        ema = values[0]
+        for value in values[1:]:
+            ema = (
+                self.EMA_ALPHA * value
+                + (1.0 - self.EMA_ALPHA) * ema
+            )
+        return ema
 
     def evaluate(
         self,
@@ -52,16 +63,27 @@ class InstitutionalForecastEngine:
 
         if len(scores) >= 2:
             deltas = [
-                scores[index] - scores[index - 1]
-                for index in range(1, len(scores))
+                scores[index]
+                - scores[index - 1]
+                for index in range(
+                    1,
+                    len(scores),
+                )
             ]
-            average_delta = sum(deltas) / len(deltas)
+
+            average_delta = self._ema(
+                deltas
+            )
         else:
             average_delta = 0.0
 
         projected_score_1 = max(
             0.0,
-            min(100.0, current_score + average_delta),
+            min(
+                100.0,
+                current_score
+                + average_delta,
+            ),
         )
         projected_score_3 = max(
             0.0,
