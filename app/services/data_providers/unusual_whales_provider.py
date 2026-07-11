@@ -259,6 +259,262 @@ class UnusualWhalesProvider:
         r.raise_for_status()
         return yaml.safe_load(r.text)
 
+    # Exact paths verified from the live Unusual Whales
+    # OpenAPI specification. Observation/research only.
+    # These signals are not connected to scoring or execution.
+    OBSERVATION_ONLY_ENDPOINTS = {
+        "greek_exposure_by_expiry": (
+            "/api/stock/{ticker}/"
+            "greek-exposure/expiry"
+        ),
+        "greek_exposure_by_strike": (
+            "/api/stock/{ticker}/"
+            "greek-exposure/strike"
+        ),
+        "greek_exposure_by_strike_expiry": (
+            "/api/stock/{ticker}/"
+            "greek-exposure/strike-expiry"
+        ),
+        "spot_exposure_expiry_strike": (
+            "/api/stock/{ticker}/"
+            "spot-exposures/expiry-strike"
+        ),
+        "spot_exposure_by_strike": (
+            "/api/stock/{ticker}/"
+            "spot-exposures/strike"
+        ),
+        "market_oi_change": (
+            "/api/market/oi-change"
+        ),
+        "flow_per_strike_intraday": (
+            "/api/stock/{ticker}/"
+            "flow-per-strike-intraday"
+        ),
+        "historical_risk_reversal_skew": (
+            "/api/stock/{ticker}/"
+            "historical-risk-reversal-skew"
+        ),
+        "iv_rank": (
+            "/api/stock/{ticker}/iv-rank"
+        ),
+        "volatility_anomaly": (
+            "/api/stock/{ticker}/"
+            "volatility/anomaly"
+        ),
+        "volatility_character": (
+            "/api/stock/{ticker}/"
+            "volatility/character"
+        ),
+        "volatility_realized": (
+            "/api/stock/{ticker}/"
+            "volatility/realized"
+        ),
+        "volatility_stats": (
+            "/api/stock/{ticker}/"
+            "volatility/stats"
+        ),
+        "volatility_term_structure": (
+            "/api/stock/{ticker}/"
+            "volatility/term-structure"
+        ),
+        "lit_flow_recent": (
+            "/api/lit-flow/recent"
+        ),
+        "etf_exposure": (
+            "/api/etfs/{ticker}/exposure"
+        ),
+        "etf_holdings": (
+            "/api/etfs/{ticker}/holdings"
+        ),
+        "etf_info": (
+            "/api/etfs/{ticker}/info"
+        ),
+        "etf_weights": (
+            "/api/etfs/{ticker}/weights"
+        ),
+        "market_sector_etfs": (
+            "/api/market/sector-etfs"
+        ),
+        "etf_tide": (
+            "/api/market/{ticker}/etf-tide"
+        ),
+        "congress_late_reports": (
+            "/api/congress/late-reports"
+        ),
+        "congress_unusual_trades": (
+            "/api/congress/unusual-trades"
+        ),
+        "insider_transactions_all": (
+            "/api/insider/transactions"
+        ),
+        "insider_ticker_flow": (
+            "/api/insider/{ticker}/ticker-flow"
+        ),
+        "market_insider_buy_sells": (
+            "/api/market/insider-buy-sells"
+        ),
+        "stock_insider_buy_sells": (
+            "/api/stock/{ticker}/"
+            "insider-buy-sells"
+        ),
+        "short_data": (
+            "/api/shorts/{ticker}/data"
+        ),
+        "short_failures_to_deliver": (
+            "/api/shorts/{ticker}/ftds"
+        ),
+        "short_interest_float": (
+            "/api/shorts/{ticker}/"
+            "interest-float"
+        ),
+        "short_interest_float_v2": (
+            "/api/shorts/{ticker}/"
+            "interest-float/v2"
+        ),
+        "short_volumes_by_exchange": (
+            "/api/shorts/{ticker}/"
+            "volumes-by-exchange"
+        ),
+    }
+
+    def observation_signal(
+        self,
+        signal_name,
+        ticker=None,
+        params=None,
+        force_refresh=False,
+    ):
+        path_template = (
+            self.OBSERVATION_ONLY_ENDPOINTS.get(
+                signal_name
+            )
+        )
+
+        if not path_template:
+            raise ValueError(
+                "UNKNOWN_UNUSUAL_WHALES_"
+                f"OBSERVATION_SIGNAL: {signal_name}"
+            )
+
+        requires_ticker = (
+            "{ticker}" in path_template
+        )
+
+        normalized_ticker = (
+            str(ticker or "")
+            .upper()
+            .strip()
+        )
+
+        if (
+            requires_ticker
+            and not normalized_ticker
+        ):
+            raise ValueError(
+                f"ticker is required for {signal_name}"
+            )
+
+        path = path_template.format(
+            ticker=normalized_ticker
+        )
+
+        return self._get(
+            path,
+            params=params,
+            allow_forbidden=True,
+            force_refresh=force_refresh,
+        )
+
+    def observation_bundle(
+        self,
+        ticker,
+        signal_names=None,
+        force_refresh=False,
+    ):
+        ticker = (
+            str(ticker or "")
+            .upper()
+            .strip()
+        )
+
+        selected = (
+            list(signal_names)
+            if signal_names is not None
+            else list(
+                self.OBSERVATION_ONLY_ENDPOINTS
+            )
+        )
+
+        signals = {}
+        available = []
+        unavailable = []
+        degraded = []
+
+        for signal_name in selected:
+            try:
+                value = self.observation_signal(
+                    signal_name,
+                    ticker=ticker,
+                    force_refresh=force_refresh,
+                )
+
+                signals[signal_name] = value
+
+                if value is None:
+                    unavailable.append(
+                        signal_name
+                    )
+                else:
+                    available.append(
+                        signal_name
+                    )
+
+            except Exception as exc:
+                signals[signal_name] = {
+                    "error": repr(exc),
+                    "status": (
+                        "UNUSUAL_WHALES_SIGNAL_"
+                        "COLLECTION_DEGRADED"
+                    ),
+                }
+
+                degraded.append(
+                    signal_name
+                )
+
+        return {
+            "timestamp": (
+                datetime.now(
+                    timezone.utc
+                ).isoformat()
+            ),
+            "provider": "UNUSUAL_WHALES",
+            "ticker": ticker,
+            "requested_signal_count": len(
+                selected
+            ),
+            "available_signal_count": len(
+                available
+            ),
+            "unavailable_signal_count": len(
+                unavailable
+            ),
+            "degraded_signal_count": len(
+                degraded
+            ),
+            "available_signals": available,
+            "unavailable_signals": unavailable,
+            "degraded_signals": degraded,
+            "signals": signals,
+            "execution_impact": (
+                "OBSERVATION_ONLY"
+            ),
+            "status": (
+                "UNUSUAL_WHALES_OBSERVATION_"
+                "BUNDLE_READY"
+            ),
+        }
+
     def dark_pool(self, ticker):
         return self._get(f"/api/darkpool/{ticker}")
 
