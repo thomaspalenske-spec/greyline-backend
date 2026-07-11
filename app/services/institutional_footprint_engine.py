@@ -298,5 +298,9 @@ class InstitutionalFootprintEngine:
             },
             "flow_source": source,
             "direct_flow_feeds_connected": direct_flow_feeds_connected,
+            "institutional_memory_capture": {
+                "options_flow": options_memory,
+                "dark_pool": dark_pool_memory,
+            },
             "status": "INSTITUTIONAL_FOOTPRINT_READY",
         }
