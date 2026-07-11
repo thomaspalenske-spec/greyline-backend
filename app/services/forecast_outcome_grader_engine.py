@@ -7,6 +7,9 @@ from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEng
 from app.services.regime_learning_engine import (
     RegimeLearningEngine,
 )
+from app.services.forecast_quality_learning_engine import (
+    ForecastQualityLearningEngine,
+)
 
 
 class ForecastOutcomeGraderEngine:
@@ -556,6 +559,27 @@ class ForecastOutcomeGraderEngine:
                 "status": "REGIME_LEARNING_DEGRADED",
             }
 
+        try:
+            forecast_quality_learning = (
+                ForecastQualityLearningEngine()
+                .evaluate(
+                    completed_grades
+                )
+            )
+        except Exception as exc:
+            forecast_quality_learning = {
+                "sample_size": 0,
+                "average_return_pct": 0.0,
+                "average_absolute_return_pct": 0.0,
+                "average_win_pct": 0.0,
+                "average_loss_pct": 0.0,
+                "quality_score": 0.0,
+                "error": repr(exc),
+                "status": (
+                    "FORECAST_QUALITY_DEGRADED"
+                ),
+            }
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "ForecastOutcomeGraderEngine",
@@ -570,6 +594,14 @@ class ForecastOutcomeGraderEngine:
             "regime_learning": regime_learning,
             "regime_learning_status": (
                 regime_learning.get("status")
+            ),
+            "forecast_quality_learning": (
+                forecast_quality_learning
+            ),
+            "forecast_quality_learning_status": (
+                forecast_quality_learning.get(
+                    "status"
+                )
             ),
             "status": "FORECAST_OUTCOME_GRADER_READY",
         }
