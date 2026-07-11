@@ -76,3 +76,5 @@ app/data/institutional_memory/
 app/data/unusual_whales_api_usage.json
 app/data/unusual_whales_refresh_state.json
 app/data/institutional_attribution/
+
+app/data/institutional/*.json
