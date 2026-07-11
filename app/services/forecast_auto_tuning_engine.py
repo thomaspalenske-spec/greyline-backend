@@ -4,12 +4,18 @@ from app.services.forecast_trust_score_engine import ForecastTrustScoreEngine
 from app.services.forecast_component_attribution_engine import ForecastComponentAttributionEngine
 from app.services.forecast_regime_attribution_engine import ForecastRegimeAttributionEngine
 from app.services.forecast_meta_learning_engine import ForecastMetaLearningEngine
+from app.services.adaptive_weight_optimizer import AdaptiveWeightOptimizer
 
 
 class ForecastAutoTuningEngine:
     def evaluate(self):
         trust = ForecastTrustScoreEngine().evaluate()
         component = ForecastComponentAttributionEngine().evaluate()
+
+        AdaptiveWeightOptimizer().optimize(
+            component.get("components", {})
+        )
+
         regime = ForecastRegimeAttributionEngine().evaluate()
         meta = ForecastMetaLearningEngine().evaluate()
 
@@ -24,6 +30,23 @@ class ForecastAutoTuningEngine:
             "asymmetry_weight": 1.00,
             "volatility_weight": 1.00,
         }
+
+        learned = AdaptiveWeightOptimizer().load()
+
+        field_map = {
+            "regime_score": "regime_weight",
+            "risk_state_score": "risk_state_weight",
+            "breadth_score": "breadth_weight",
+            "setup_score": "setup_weight",
+            "asymmetry_score": "asymmetry_weight",
+            "volatility_score": "volatility_weight",
+        }
+
+        for factor, weight_name in field_map.items():
+            if factor in learned:
+                weights[weight_name] = float(
+                    learned[factor].get("weight", 1.0)
+                )
 
         recommendation = "HOLD_WEIGHTS"
         reason = "INSUFFICIENT_MATURE_FORECAST_SAMPLE"
@@ -44,10 +67,18 @@ class ForecastAutoTuningEngine:
             }
 
             if best in field_to_weight:
-                weights[field_to_weight[best]] = 1.10
+                weight_name = field_to_weight[best]
+                weights[weight_name] = round(
+                    min(1.30, weights[weight_name] + 0.02),
+                    3,
+                )
 
             if worst in field_to_weight and worst != best:
-                weights[field_to_weight[worst]] = 0.90
+                weight_name = field_to_weight[worst]
+                weights[weight_name] = round(
+                    max(0.75, weights[weight_name] - 0.02),
+                    3,
+                )
 
             if confidence_level in ["HIGHLY_TRUSTED", "TRUSTED"]:
                 recommendation = "APPLY_CONFIDENCE_WEIGHT_TUNING"

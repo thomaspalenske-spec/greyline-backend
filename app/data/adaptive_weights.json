@@ -1,0 +1,44 @@
+{
+  "breadth_score": {
+    "sample_size": 79,
+    "updated": "2026-07-11T11:26:05.490686",
+    "weight": 0.8,
+    "win_rate": 17.72
+  },
+  "direction_confidence": {
+    "weight": 1.0
+  },
+  "forecast_confidence": {
+    "weight": 1.0
+  },
+  "institutional_sponsorship_score": {
+    "weight": 1.0
+  },
+  "liquidity_score": {
+    "weight": 1.0
+  },
+  "regime_score": {
+    "sample_size": 79,
+    "updated": "2026-07-11T11:26:05.490697",
+    "weight": 0.8,
+    "win_rate": 17.72
+  },
+  "risk_state_score": {
+    "sample_size": 79,
+    "updated": "2026-07-11T11:26:05.490694",
+    "weight": 0.8,
+    "win_rate": 17.72
+  },
+  "setup_score": {
+    "sample_size": 82,
+    "updated": "2026-07-11T11:26:05.490691",
+    "weight": 0.8,
+    "win_rate": 19.51
+  },
+  "volatility_score": {
+    "sample_size": 79,
+    "updated": "2026-07-11T11:26:05.490701",
+    "weight": 0.8,
+    "win_rate": 20.97
+  }
+}

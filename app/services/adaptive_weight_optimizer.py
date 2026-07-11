@@ -49,11 +49,24 @@ class AdaptiveWeightOptimizer:
             if sample < MIN_SAMPLE:
                 learned[factor] = previous.get(
                     factor,
-                    {"weight": 1.0}
+                    {
+                        "weight": 1.0,
+                        "sample_size": sample,
+                    }
                 )
                 continue
 
-            wr = d.get("win_rate", 50)
+            previous_factor = previous.get(factor, {})
+
+            if int(previous_factor.get("sample_size") or 0) == int(sample):
+                learned[factor] = previous_factor
+                continue
+
+            wr = float(
+                d.get("high_signal_accuracy_pct")
+                if int(d.get("high_signal_sample_size") or 0) >= MIN_SAMPLE
+                else d.get("accuracy_pct", 50)
+            )
 
             target = (
                 1.30 if wr >= 80 else

@@ -44,6 +44,7 @@ from app.services.unusual_whales_budget_governor import (
 from app.services.unusual_whales_refresh_decision_engine import (
     UnusualWhalesRefreshDecisionEngine,
 )
+from app.services.forecast_auto_tuning_engine import ForecastAutoTuningEngine
 
 
 class OpportunityScoringEngine:
@@ -53,6 +54,12 @@ class OpportunityScoringEngine:
         timings = {
             "per_symbol": []
         }
+
+        forecast_weights = (
+            ForecastAutoTuningEngine()
+            .evaluate()
+            .get("weights", {})
+        )
 
         t0 = datetime.utcnow()
         quote_scan = LiveUniverseQuoteScanner().scan_safe_subset()
@@ -200,17 +207,17 @@ class OpportunityScoringEngine:
                     + liquidity_score
                     * bullish_weights["liquidity"]
                     + bullish_setup_score
-                    * bullish_weights["setup"]
+                    * bullish_weights["setup"] * forecast_weights.get("setup_weight", 1.0)
                     + regime_score
-                    * bullish_weights["regime"]
+                    * bullish_weights["regime"] * forecast_weights.get("regime_weight", 1.0)
                     + volatility_score
-                    * bullish_weights["volatility"]
+                    * bullish_weights["volatility"] * forecast_weights.get("volatility_weight", 1.0)
                     + expected_value_score
                     * bullish_weights["expected_value"]
                     + trend_persistence_score
                     * bullish_weights["trend"]
                     + breadth_score
-                    * bullish_weights["breadth"]
+                    * bullish_weights["breadth"] * forecast_weights.get("breadth_weight", 1.0)
                     + institutional_inflow_score
                     * bullish_weights["institutional_flow"]
                     + institutional_conviction_score
@@ -218,9 +225,9 @@ class OpportunityScoringEngine:
                         "institutional_conviction"
                     ]
                     + asymmetry_score
-                    * bullish_weights["asymmetry"]
+                    * bullish_weights["asymmetry"] * forecast_weights.get("asymmetry_weight", 1.0)
                     + risk_state_score
-                    * bullish_weights["risk"]
+                    * bullish_weights["risk"] * forecast_weights.get("risk_state_weight", 1.0)
                 ),
                 2,
             )
@@ -257,17 +264,17 @@ class OpportunityScoringEngine:
                     + liquidity_score
                     * bearish_weights["liquidity"]
                     + bear_setup_score
-                    * bearish_weights["setup"]
+                    * bearish_weights["setup"] * forecast_weights.get("setup_weight", 1.0)
                     + bear_regime_score
-                    * bearish_weights["regime"]
+                    * bearish_weights["regime"] * forecast_weights.get("regime_weight", 1.0)
                     + volatility_score
-                    * bearish_weights["volatility"]
+                    * bearish_weights["volatility"] * forecast_weights.get("volatility_weight", 1.0)
                     + bear_expected_value_score
                     * bearish_weights["expected_value"]
                     + bear_trend_score
                     * bearish_weights["trend"]
                     + bear_breadth_score
-                    * bearish_weights["breadth"]
+                    * bearish_weights["breadth"] * forecast_weights.get("breadth_weight", 1.0)
                     + bear_sponsorship_score
                     * bearish_weights["institutional_flow"]
                     + bear_institutional_conviction_score
@@ -275,9 +282,9 @@ class OpportunityScoringEngine:
                         "institutional_conviction"
                     ]
                     + bear_asymmetry_score
-                    * bearish_weights["asymmetry"]
+                    * bearish_weights["asymmetry"] * forecast_weights.get("asymmetry_weight", 1.0)
                     + bear_risk_score
-                    * bearish_weights["risk"]
+                    * bearish_weights["risk"] * forecast_weights.get("risk_state_weight", 1.0)
                 ),
                 2,
             )
