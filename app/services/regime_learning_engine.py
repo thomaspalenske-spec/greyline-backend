@@ -1,36 +1,68 @@
-from collections import defaultdict
 from datetime import datetime
+from collections import defaultdict
 
 
 class RegimeLearningEngine:
-    def evaluate(self, one_hour_performance):
-        rows = one_hour_performance.get("latest_scored") or []
+    """
+    Learns regime performance from graded forecast outcomes.
 
+    This engine is read-only. It never changes calibration values directly.
+    It produces learned statistics that RegimeCalibrationEngine can consume.
+    """
+
+    def evaluate(self, graded_records):
         buckets = defaultdict(list)
 
-        for r in rows:
-            regime = r.get("regime") or "UNKNOWN"
-            buckets[regime].append(float(r.get("directional_return_pct") or 0))
+        for r in graded_records or []:
+            state = (
+                r.get("regime_calibration_state")
+                or r.get("regime")
+            )
 
-        leaderboard = []
+            if not state:
+                continue
 
-        for regime, values in buckets.items():
-            leaderboard.append({
-                "regime": regime,
-                "samples": len(values),
-                "average_directional_return_pct": round(sum(values) / len(values), 4)
-            })
+            buckets[state].append(r)
 
-        leaderboard.sort(
-            key=lambda x: x["average_directional_return_pct"],
-            reverse=True
-        )
+        learning = {}
+
+        for state, rows in buckets.items():
+            total = len(rows)
+
+            wins = sum(
+                1
+                for x in rows
+                if x.get("forecast_correct")
+            )
+
+            win_rate = (
+                wins / total
+                if total
+                else 0.0
+            )
+
+            returns = [
+                float(x.get("return_pct") or 0)
+                for x in rows
+            ]
+
+            expectancy = (
+                sum(returns) / len(returns)
+                if returns
+                else 0.0
+            )
+
+            learning[state] = {
+                "sample_size": total,
+                "wins": wins,
+                "losses": total - wins,
+                "win_rate": round(win_rate * 100, 2),
+                "expectancy_pct": round(expectancy, 2),
+            }
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
-            "system": "GreyLine",
             "engine": "RegimeLearningEngine",
-            "record_count": sum(len(v) for v in buckets.values()),
-            "regime_leaderboard": leaderboard,
-            "status": "REGIME_LEARNING_READY"
+            "learning": learning,
+            "status": "REGIME_LEARNING_READY",
         }

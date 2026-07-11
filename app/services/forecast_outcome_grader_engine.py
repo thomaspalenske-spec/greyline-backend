@@ -3,6 +3,9 @@ import json
 from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.regime_learning_engine import (
+    RegimeLearningEngine,
+)
 
 
 class ForecastOutcomeGraderEngine:
@@ -111,8 +114,50 @@ class ForecastOutcomeGraderEngine:
                     "direction_confidence": record.get(
                         "direction_confidence"
                     ),
+
+                    # Preserve regime calibration metadata even while pending.
                     "regime": record.get("regime"),
                     "regime_score": record.get("regime_score"),
+                    "forecast_regime_trust": record.get(
+                        "forecast_regime_trust"
+                    ),
+                    "forecast_regime_trust_actionable": record.get(
+                        "forecast_regime_trust_actionable"
+                    ),
+                    "forecast_regime_trust_sample_size": record.get(
+                        "forecast_regime_trust_sample_size"
+                    ),
+                    "forecast_regime_bayesian_accuracy_pct": record.get(
+                        "forecast_regime_bayesian_accuracy_pct"
+                    ),
+                    "forecast_regime_confidence_adjustment": record.get(
+                        "forecast_regime_confidence_adjustment"
+                    ),
+                    "forecast_regime_trust_impact": record.get(
+                        "forecast_regime_trust_impact"
+                    ),
+                    "regime_calibration": record.get(
+                        "regime_calibration"
+                    ),
+                    "regime_calibration_state": record.get(
+                        "regime_calibration_state"
+                    ),
+                    "regime_calibration_actionable": record.get(
+                        "regime_calibration_actionable"
+                    ),
+                    "regime_position_multiplier": record.get(
+                        "regime_position_multiplier"
+                    ),
+                    "regime_execution_allowed": record.get(
+                        "regime_execution_allowed"
+                    ),
+                    "regime_confidence_adjustment": record.get(
+                        "regime_confidence_adjustment"
+                    ),
+                    "regime_composite_adjustment": record.get(
+                        "regime_composite_adjustment"
+                    ),
+
                     "risk_state": record.get("risk_state"),
                     "risk_state_score": record.get(
                         "risk_state_score"
@@ -301,6 +346,31 @@ class ForecastOutcomeGraderEngine:
             for row in ordered_grades:
                 f.write(json.dumps(row) + "\n")
 
+        completed_grades = [
+            row
+            for row in ordered_grades
+            if (
+                row.get("forecast_correct") is not None
+                and row.get("regime_calibration_state")
+                and row.get("forecast_regime_trust") is not None
+            )
+        ]
+
+        try:
+            regime_learning = (
+                RegimeLearningEngine().evaluate(
+                    completed_grades
+                )
+            )
+        except Exception as exc:
+            regime_learning = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "engine": "RegimeLearningEngine",
+                "learning": {},
+                "error": repr(exc),
+                "status": "REGIME_LEARNING_DEGRADED",
+            }
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "ForecastOutcomeGraderEngine",
@@ -309,5 +379,12 @@ class ForecastOutcomeGraderEngine:
                 ordered_grades
             ),
             "grades": graded,
+            "completed_grade_count": len(
+                completed_grades
+            ),
+            "regime_learning": regime_learning,
+            "regime_learning_status": (
+                regime_learning.get("status")
+            ),
             "status": "FORECAST_OUTCOME_GRADER_READY",
         }
