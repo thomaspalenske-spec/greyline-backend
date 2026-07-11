@@ -1,7 +1,6 @@
 {
   "breadth_score": {
-    "actionable": false,
-    "sample_size": 84,
+    "sample_size": 32,
     "weight": 1.0
   },
   "direction_confidence": {
@@ -21,26 +20,19 @@
     "weight": 1.0
   },
   "regime_score": {
-    "sample_size": 84,
-    "updated": "2026-07-11T11:45:26.539870",
-    "weight": 1.0,
-    "win_rate": 58.18
+    "sample_size": 32,
+    "weight": 1.0
   },
   "risk_state_score": {
-    "sample_size": 84,
-    "updated": "2026-07-11T11:45:26.539863",
-    "weight": 1.06,
-    "win_rate": 65.87
+    "sample_size": 32,
+    "weight": 1.0
   },
   "setup_score": {
-    "actionable": false,
-    "sample_size": 87,
+    "sample_size": 35,
     "weight": 1.0
   },
   "volatility_score": {
-    "sample_size": 84,
-    "updated": "2026-07-11T11:45:26.539874",
-    "weight": 1.08,
-    "win_rate": 65.87
+    "sample_size": 32,
+    "weight": 1.0
   }
 }
