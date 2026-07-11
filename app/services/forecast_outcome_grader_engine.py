@@ -74,13 +74,24 @@ class ForecastOutcomeGraderEngine:
             "maturity_status": "FORECAST_MATURED" if age_minutes >= min_age_minutes else "FORECAST_NOT_MATURED",
         }
 
-    def grade_pending(self, market_prices=None, min_age_minutes=60):
+    def grade_pending(
+        self,
+        market_prices=None,
+        min_age_minutes=60,
+        limit=500,
+    ):
         market_prices = market_prices or {}
         outcomes = self._read_outcomes()
         graded = []
         price_cache = {}
 
-        for record in outcomes[-25:]:
+        records = (
+            outcomes[-limit:]
+            if limit is not None
+            else outcomes
+        )
+
+        for record in records:
             symbol = record.get("symbol")
             predicted_direction = record.get("predicted_direction")
             predicted_score = record.get("predicted_score")
