@@ -3,11 +3,13 @@ from datetime import datetime
 from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.price_history_store import PriceHistoryStore
 
 
 class ForwardOutcomeCaptureEngine:
     def __init__(self):
         self.ledger_file = Path("app/data/opportunity_memory/opportunity_outcome_ledger.jsonl")
+        self.price_store = PriceHistoryStore()
 
     def _last_price(self, symbol):
         quote_result = TradeStationQuoteLiveEngine().get_quote(symbol)
@@ -40,6 +42,17 @@ class ForwardOutcomeCaptureEngine:
 
         symbols = sorted(set(r.get("symbol") for r in records if r.get("symbol")))
         prices = {symbol: self._last_price(symbol) for symbol in symbols}
+
+        # Feed the forward-price time series. Fixed-horizon grading needs a price near
+        # T+horizon for each decision, which only exists if we record prices as the
+        # market moves forward. These quotes were already fetched above, so recording
+        # them here is free — and it is the fuel the FixedHorizonGraderEngine was missing
+        # (nothing was writing live points, so it could only ever grade PENDING).
+        recorded_points = 0
+        for symbol, p in prices.items():
+            if (p.get("price") or 0) > 0 and not p.get("is_delayed"):
+                if self.price_store.record(symbol, p["price"]):
+                    recorded_points += 1
 
         outcomes = []
         for r in records:
@@ -92,6 +105,7 @@ class ForwardOutcomeCaptureEngine:
             "engine": "ForwardOutcomeCaptureEngine",
             "records_checked": len(records),
             "symbols_checked": symbols,
+            "price_points_recorded": recorded_points,
             "outcomes": outcomes,
             "status": "FORWARD_OUTCOME_CAPTURE_READY",
         }

@@ -145,19 +145,6 @@ class ForecastOutcomeCaptureEngine:
             forecast.get("regime") or "UNKNOWN"
         ).upper()
 
-        try:
-            score = round(
-                float(
-                    forecast.get(
-                        "composite_score",
-                        forecast.get("score"),
-                    )
-                    or 0.0
-                )
-            )
-        except Exception:
-            score = 0
-
         minute_bucket = (
             now.minute // 15
         ) * 15
@@ -168,13 +155,17 @@ class ForecastOutcomeCaptureEngine:
             microsecond=0,
         ).isoformat()
 
+        # Deliberately excludes the composite score. The score drifts by fractions on
+        # every cycle (86.59 -> 86.61 -> ...), so including it fragmented one standing
+        # forecast into a new "observation" every cycle — the same symbol was captured
+        # dozens of times in a 15-minute window. Identity is the directional call for a
+        # symbol in a regime within a time bucket, NOT its exact score that instant.
         raw = "|".join([
             symbol,
             direction,
             option_type,
             result,
             regime,
-            str(score),
             bucket,
         ])
 

@@ -11,6 +11,8 @@ from app.services.tradestation_token_maintenance_engine import TradeStationToken
 from app.services.decision_scheduler_engine import DecisionSchedulerEngine
 from app.services.forward_outcome_capture_engine import ForwardOutcomeCaptureEngine
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
+from app.services.fixed_horizon_grader_engine import FixedHorizonGraderEngine
+from app.services.persistence.json_store import append_jsonl
 from app.services.paper_position_manager_engine import PaperPositionManagerEngine
 from app.services.options_position_manager_engine import OptionsPositionManagerEngine
 from app.services.options_paper_execution_sweep_engine import OptionsPaperExecutionSweepEngine
@@ -208,8 +210,28 @@ class BackgroundSchedulerService:
                 ),
             }
 
-        forward = ForwardOutcomeCaptureEngine().capture(limit=1)
+        # limit was 1 — so only ONE symbol's forward price was recorded per cycle, far too
+        # sparse to grade against. Quotes are deduped by distinct symbol, so a higher limit
+        # widens universe coverage without extra quote calls.
+        forward = ForwardOutcomeCaptureEngine().capture(limit=60)
         learning = DecisionLearningMemoryEngine().record_current_learning()
+
+        # Drift-free skill read, persisted as a time series so the edge (or its absence)
+        # becomes visible as data accumulates. Grades each decision at T+horizon against the
+        # forward price the step above now records — not against "price whenever we ran".
+        try:
+            fh = FixedHorizonGraderEngine().grade()
+            fixed_horizon = {k: fh[k] for k in (
+                "horizon_hours", "counts", "graded_count",
+                "per_direction", "balanced_accuracy_precision_based",
+            )}
+            fixed_horizon["mcc"] = (fh.get("skill") or {}).get("mcc")
+            append_jsonl(
+                Path("app/data/skill/fixed_horizon_history.jsonl"),
+                {"timestamp": started, **fixed_horizon},
+            )
+        except Exception as exc:
+            fixed_horizon = {"error": repr(exc), "status": "FIXED_HORIZON_GRADER_DEGRADED"}
 
         try:
             institutional_snapshot_sweep = (
@@ -289,7 +311,9 @@ class BackgroundSchedulerService:
                     forecast_grading.get("graded_count")
                 ),
                 "forward_outcome_status": forward.get("status"),
+                "forward_price_points_recorded": forward.get("price_points_recorded"),
                 "learning_memory_status": learning.get("status"),
+                "fixed_horizon_skill": fixed_horizon,
                 "institutional_snapshot_sweep_status": (
                     institutional_snapshot_sweep.get(
                         "status"

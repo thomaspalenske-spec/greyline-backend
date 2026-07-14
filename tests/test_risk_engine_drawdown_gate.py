@@ -120,9 +120,14 @@ def test_master_decision_blocks_on_risk_halt():
          patch.object(md, "ExecutionGovernor") as MockGov, \
          patch.object(md, "ReliabilityGovernorEngine") as MockRel, \
          patch.object(md, "InstitutionalFlowEngine"), \
+         patch.object(md, "MarketHoursEngine") as MockHours, \
          patch.object(md, "ForecastOutcomeCaptureEngine"), \
          patch.object(md, "OperatorEventBusEngine") as MockBus, \
          patch.object(md, "MasterDecisionEventLog") as MockLog:
+        # Market open, so the decision reaches the risk gate this test exercises
+        # (the market-closed guard correctly short-circuits before it otherwise).
+        MockHours.return_value.status.return_value = {
+            "is_regular_session": True, "state": "MARKET_OPEN_REGULAR_SESSION"}
         MockBroker.return_value.evaluate.return_value = {"health_score": 100}
         MockRisk.return_value.evaluate.return_value = {"risk_state": "DEFENSIVE", "risk_inputs": {}}
         MockOpp.return_value.get_summary.return_value = {

@@ -188,6 +188,9 @@ app.include_router(fast_quote_heartbeat.router)
 from app.routes import flat_day_diagnostics
 app.include_router(flat_day_diagnostics.router)
 
+from app.routes import data_integrity
+app.include_router(data_integrity.router)
+
 from app.routes import opportunity_balance
 app.include_router(opportunity_balance.router)
 
