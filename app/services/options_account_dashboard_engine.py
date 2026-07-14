@@ -428,10 +428,13 @@ class OptionsAccountDashboardEngine:
             "open_positions": open_trades,
             "execution_permission": execution_permission,
             "paper_execution_permission": paper_execution_permission,
-            "execution_enabled": paper_execution_permission.get("execution_allowed"),
-            "paper_execution_enabled": paper_execution_permission.get("execution_allowed"),
+            # execution_enabled / paper_execution_enabled must reflect the kill-switch
+            # (ExecutionGovernor), the same gate the executors obey — NOT reliability
+            # readiness, which stays green even when the kill-switch is disengaged.
+            "execution_enabled": execution_permission.get("execution_enabled"),
+            "paper_execution_enabled": execution_permission.get("paper_execution_enabled"),
             "paper_new_entries_allowed": paper_execution_permission.get("new_entries_allowed"),
             "order_placement_allowed": execution_permission.get("order_placement_allowed"),
-            "live_order_placement_allowed": execution_permission.get("order_placement_allowed"),
+            "live_order_placement_allowed": execution_permission.get("live_order_placement_allowed"),
             "status": "OPTIONS_ACCOUNT_DASHBOARD_READY",
         }

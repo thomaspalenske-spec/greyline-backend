@@ -20,7 +20,7 @@ class TradeStationAccountDiscoveryLiveEngine:
 
     def discover_accounts(self):
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
-        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://api.tradestation.com")
+        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com")
 
         if not access_token:
             return {

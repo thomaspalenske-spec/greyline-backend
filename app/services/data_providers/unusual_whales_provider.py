@@ -21,7 +21,10 @@ class UnusualWhalesProvider:
     _usage_path = Path("app/data/unusual_whales_api_usage.json")
 
     def __init__(self):
-        self.api_key = os.environ["UNUSUAL_WHALES_API_KEY"]
+        # Graceful: don't crash on construction when the key is absent (it lives in
+        # .env.local and may be missing). A missing key surfaces as a clear, catchable
+        # error only when a request is actually attempted (see _get).
+        self.api_key = os.getenv("UNUSUAL_WHALES_API_KEY")
         self.session = requests.Session()
         self.session.headers.update({
             "Authorization": f"Bearer {self.api_key}",
@@ -185,6 +188,11 @@ class UnusualWhalesProvider:
             if cached and now - cached["timestamp"] < ttl:
                 self._record_cache_hit()
                 return cached["value"]
+
+        if not self.api_key:
+            raise RuntimeError(
+                "UNUSUAL_WHALES_API_KEY not configured (set it in .env.local)."
+            )
 
         self._consume_budget()
 

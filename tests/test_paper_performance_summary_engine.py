@@ -6,51 +6,40 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.paper_performance_summary_engine import PaperPerformanceSummaryEngine
 
+MODULE = "app.services.paper_performance_summary_engine"
+
+
+def _summarize(trades, max_drawdown_pct=0.0):
+    # The engine derives equity from ledger trade PnL (starting equity 10000),
+    # and drawdown from PaperDrawdownEngine. Mock both for a deterministic test.
+    with patch(f"{MODULE}.PaperTradeLedgerEngine") as MockLedger, \
+         patch(f"{MODULE}.PaperDrawdownEngine") as MockDrawdown:
+        MockLedger.return_value.history.return_value = {"trades": trades}
+        MockDrawdown.return_value.calculate.return_value = {"max_drawdown_pct": max_drawdown_pct}
+        return PaperPerformanceSummaryEngine().summarize()
+
 
 def test_performance_summary_calculates_return_and_drawdown():
-    with patch("app.services.paper_performance_summary_engine.PaperEquityTimelineEngine") as MockTimeline:
-        with patch("app.services.paper_performance_summary_engine.PaperDrawdownEngine") as MockDrawdown:
-            MockTimeline.return_value.build_timeline.return_value = {
-                "timeline": [
-                    {"equity": 10000},
-                    {"equity": 11000}
-                ],
-                "latest_equity": 11000,
-                "highest_equity": 11000,
-                "snapshot_count": 2
-            }
+    # One closed trade of +1000 realized PnL -> equity 10000 -> 11000 (+10%).
+    result = _summarize(
+        [{"status": "CLOSED", "symbol": "NVDA", "realized_pnl": 1000}],
+        max_drawdown_pct=5.0,
+    )
 
-            MockDrawdown.return_value.calculate.return_value = {
-                "max_drawdown_pct": 5.0
-            }
-
-            result = PaperPerformanceSummaryEngine().summarize()
-
-    assert result["starting_equity"] == 10000
-    assert result["latest_equity"] == 11000
-    assert result["highest_equity"] == 11000
+    assert result["starting_equity"] == 10000.0
+    assert result["latest_equity"] == 11000.0
+    assert result["highest_equity"] == 11000.0
     assert result["total_return_pct"] == 10.0
     assert result["max_drawdown_pct"] == 5.0
-    assert result["snapshot_count"] == 2
+    assert result["closed_trade_count"] == 1
+    assert result["win_count"] == 1
 
 
-def test_performance_summary_handles_empty_timeline():
-    with patch("app.services.paper_performance_summary_engine.PaperEquityTimelineEngine") as MockTimeline:
-        with patch("app.services.paper_performance_summary_engine.PaperDrawdownEngine") as MockDrawdown:
-            MockTimeline.return_value.build_timeline.return_value = {
-                "timeline": [],
-                "latest_equity": 0,
-                "highest_equity": 0,
-                "snapshot_count": 0
-            }
+def test_performance_summary_handles_empty_ledger():
+    result = _summarize([], max_drawdown_pct=0)
 
-            MockDrawdown.return_value.calculate.return_value = {
-                "max_drawdown_pct": 0
-            }
-
-            result = PaperPerformanceSummaryEngine().summarize()
-
-    assert result["starting_equity"] == 0
-    assert result["latest_equity"] == 0
-    assert result["total_return_pct"] == 0
+    assert result["starting_equity"] == 10000.0
+    assert result["latest_equity"] == 10000.0
+    assert result["total_return_pct"] == 0.0
+    assert result["paper_trade_count"] == 0
     assert result["status"] == "PERFORMANCE_SUMMARY_READY"

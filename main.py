@@ -1,3 +1,9 @@
+# Load .env into the process environment BEFORE any engine reads getenv(), so
+# execution-governance flags (GREYLINE_*) and broker credentials are file-controlled.
+# override=False keeps standard precedence: a real shell `export` still wins over .env.
+from dotenv import load_dotenv
+load_dotenv(override=False)
+
 from app.routes import portfolio_governor
 from fastapi import FastAPI
 from app.routes import operator_notifications
@@ -128,11 +134,8 @@ from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)
 
-from app.services.background_scheduler_service import BackgroundSchedulerService
-
-@app.on_event("startup")
-def auto_start_background_scheduler():
-    BackgroundSchedulerService.start()
+from app.startup_events import register_startup_events
+register_startup_events(app)
 
 from app.routes import greyline_connection_watchdog
 app.include_router(greyline_connection_watchdog.router)
@@ -155,31 +158,35 @@ app.include_router(deployment_governance.router)
 
 app.include_router(paper_trade_history.router)
 
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from fastapi import Request
-
-templates = Jinja2Templates(directory="app/templates")
-
-@app.get("/operator-dashboard", response_class=HTMLResponse)
-async def operator_dashboard(request: Request):
-    return templates.TemplateResponse("operator_dashboard.html", {"request": request})
+from app.routes import operator_dashboard
+app.include_router(operator_dashboard.router)
 
 from app.routes import greyline_reliability_core
 app.include_router(greyline_reliability_core.router)
 
+from app.routes import ops_metrics
+app.include_router(ops_metrics.router)
+
+from app.routes import strategy_validation
+app.include_router(strategy_validation.router)
+
+from app.routes import fixed_horizon_validation
+app.include_router(fixed_horizon_validation.router)
+
+from app.routes import flow_skill_validation
+app.include_router(flow_skill_validation.router)
+
+from app.routes import shadow_comparison
+app.include_router(shadow_comparison.router)
+
+from app.routes import feature_skill
+app.include_router(feature_skill.router)
+
 from app.routes import fast_quote_heartbeat
 app.include_router(fast_quote_heartbeat.router)
 
-from app.services.fast_quote_heartbeat_service import FastQuoteHeartbeatService
-
-@app.on_event("startup")
-def auto_start_fast_quote_heartbeat():
-    FastQuoteHeartbeatService.start(
-        symbols=["AMD", "NVDA"],
-        interval_market_open_seconds=5,
-        interval_market_closed_seconds=300,
-    )
+from app.routes import flat_day_diagnostics
+app.include_router(flat_day_diagnostics.router)
 
 from app.routes import opportunity_balance
 app.include_router(opportunity_balance.router)
@@ -219,43 +226,8 @@ app.include_router(forecast_reliability_dashboard.router)
 
 app.include_router(portfolio_governor.router)
 
-from app.services.position_alert_ack_engine import PositionAlertAckEngine
-
-@app.get("/position-alerts")
-def position_alerts():
-    return PositionAlertAckEngine().unacknowledged_alerts()
-
-@app.post("/position-alerts/ack/{trade_id}")
-def acknowledge_position_alert(trade_id: str):
-    return PositionAlertAckEngine().acknowledge(trade_id)
-
-from app.services.operator_notification_engine import OperatorNotificationEngine
-
-@app.get("/operator-notifications")
-def operator_notifications():
-    return OperatorNotificationEngine().unread()
-
-@app.post("/operator-notifications/ack/{notification_id}")
-def acknowledge_operator_notification(notification_id: str):
-    return OperatorNotificationEngine().acknowledge(notification_id)
-
-from app.services.operator_event_bus_engine import OperatorEventBusEngine
-
-@app.get("/operator-events")
-def operator_events():
-    return OperatorEventBusEngine().recent()
-
-@app.post("/operator-events/test")
-def operator_events_test():
-    return OperatorEventBusEngine().publish(
-        source="MANUAL_TEST",
-        category="SYSTEM_TEST",
-        severity="WARNING",
-        title="Operator Event Bus Test",
-        message="Manual operator event bus test notification.",
-        ack_required=True,
-        payload={"test": True},
-    )
+from app.routes import position_alert_acks
+app.include_router(position_alert_acks.router)
 
 from app.routes import operator_cockpit_status
 app.include_router(operator_cockpit_status.router)

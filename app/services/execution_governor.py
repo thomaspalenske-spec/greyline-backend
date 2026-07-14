@@ -7,7 +7,9 @@ class ExecutionGovernor:
     def evaluate_execution_permission(self, signal):
         signal = str(signal).upper().strip()
 
-        paper_execution_enabled = getenv("GREYLINE_PAPER_EXECUTION_ENABLED", "true").lower() == "true"
+        # Fail-safe default: an unset flag means execution is BLOCKED, not armed.
+        # Arming paper execution requires an explicit GREYLINE_PAPER_EXECUTION_ENABLED=true.
+        paper_execution_enabled = getenv("GREYLINE_PAPER_EXECUTION_ENABLED", "false").lower() == "true"
         live_trading_enabled = getenv("GREYLINE_LIVE_TRADING_ENABLED", "false").lower() == "true"
         live_order_placement_allowed = getenv("GREYLINE_LIVE_ORDER_PLACEMENT_ALLOWED", "false").lower() == "true"
 

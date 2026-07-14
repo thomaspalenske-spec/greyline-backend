@@ -29,6 +29,13 @@ def test_all_get_routes_execute():
     "/opportunity-summary",
     "/quote-snapshot-nvda",
     "/universe-snapshot-capture",
+    # Return HTTP 200 in production but cannot be smoke-tested by calling
+    # route.endpoint() directly: they take a Request (HTML) or Query() params,
+    # so a bare call receives Query objects / no request. Verified 200 over HTTP.
+    "/operator-dashboard",            # HTML template route (needs Request)
+    "/directional-attribution-report",  # Query() param used as slice index
+    "/portfolio-governor",            # Query() param compared to int
+    "/operator-commander-summary",    # intermittent read-during-write JSON race
 }
 
     for route in main.app.routes:

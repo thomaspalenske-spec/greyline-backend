@@ -1,30 +1,31 @@
-import json
 from pathlib import Path
 from datetime import datetime
+
+from app.services.persistence.json_store import atomic_write_json, read_json
+
+
+def _normalize_ledger(data):
+    if not isinstance(data, dict):
+        return {"created": datetime.utcnow().isoformat(), "trades": []}
+    data.setdefault("trades", [])
+    return data
 
 
 class LedgerEngine:
     def __init__(self):
         self.ledger_path = Path("app/data/trade_ledger.json")
 
-        if not self.ledger_path.exists():
-            self.ledger_path.write_text(
-                json.dumps(
-                    {
-                        "created": datetime.utcnow().isoformat(),
-                        "trades": []
-                    },
-                    indent=4
-                )
-            )
-
     def load(self):
-        with open(self.ledger_path, "r") as f:
-            return json.load(f)
+        # Self-healing: missing/empty/corrupt -> fresh ledger, never crashes.
+        return read_json(
+            self.ledger_path,
+            default=lambda: {"created": datetime.utcnow().isoformat(), "trades": []},
+            normalizer=_normalize_ledger,
+        )
 
     def save(self, data):
-        with open(self.ledger_path, "w") as f:
-            json.dump(data, f, indent=4)
+        # Atomic + durable: a crash mid-write can never truncate the trade ledger.
+        atomic_write_json(self.ledger_path, data, indent=4)
 
     def _existing_trade_ids(self, ledger):
         return {

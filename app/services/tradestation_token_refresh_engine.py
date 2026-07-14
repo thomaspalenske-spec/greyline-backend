@@ -16,7 +16,7 @@ class TradeStationTokenRefreshEngine:
         api_key = getenv("TRADESTATION_API_KEY", "")
         api_secret = getenv("TRADESTATION_API_SECRET", "")
         refresh_token = getenv("TRADESTATION_REFRESH_TOKEN", "")
-        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://api.tradestation.com")
+        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com")
 
         if not api_key or not api_secret or not refresh_token:
             return {

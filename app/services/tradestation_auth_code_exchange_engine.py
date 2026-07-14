@@ -16,7 +16,7 @@ class TradeStationAuthCodeExchangeEngine:
         api_secret = getenv("TRADESTATION_API_SECRET", "")
         auth_code = getenv("TRADESTATION_AUTH_CODE", "")
         callback_url = getenv("TRADESTATION_CALLBACK_URL", "")
-        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://api.tradestation.com")
+        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com")
 
         if not api_key or not api_secret or not auth_code or not callback_url:
             return {

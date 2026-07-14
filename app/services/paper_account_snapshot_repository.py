@@ -1,40 +1,35 @@
-import json
 from pathlib import Path
+
+from app.services.persistence.json_store import atomic_write_json, read_json
+
+
+def _normalize_snapshots(data):
+    # Tolerate a legacy/top-level list format (the file was found on disk as a bare
+    # JSON array). Normalize to {"snapshots": [...]} so callers never crash with
+    # 'list' object has no attribute 'get'.
+    if isinstance(data, list):
+        return {"snapshots": data}
+    if not isinstance(data, dict):
+        return {"snapshots": []}
+    data.setdefault("snapshots", [])
+    return data
 
 
 class PaperAccountSnapshotRepository:
 
     def __init__(self):
-        self.path = Path(
-            "app/data/paper_account_snapshots.json"
-        )
-
-        if not self.path.exists():
-            self.path.parent.mkdir(
-                parents=True,
-                exist_ok=True
-            )
-
-            self.path.write_text(
-                json.dumps(
-                    {
-                        "snapshots": []
-                    },
-                    indent=4
-                )
-            )
+        self.path = Path("app/data/paper_account_snapshots.json")
 
     def load(self):
-        with open(self.path, "r") as f:
-            return json.load(f)
+        # Missing/empty/corrupt file -> {"snapshots": []} (self-healing, no crash).
+        return read_json(
+            self.path,
+            default=lambda: {"snapshots": []},
+            normalizer=_normalize_snapshots,
+        )
 
     def save(self, data):
-        with open(self.path, "w") as f:
-            json.dump(
-                data,
-                f,
-                indent=4
-            )
+        atomic_write_json(self.path, data, indent=4)
 
     def append_snapshot(
         self,

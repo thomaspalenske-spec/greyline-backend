@@ -5,6 +5,7 @@ from app.services.tradestation_balance_live_engine import TradeStationBalanceLiv
 from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
 from app.services.options_account_dashboard_engine import OptionsAccountDashboardEngine
 from app.services.background_scheduler_service import BackgroundSchedulerService
+from app.services.execution_governor import ExecutionGovernor
 
 
 class GreyLineReliabilityCoreEngine:
@@ -24,6 +25,7 @@ class GreyLineReliabilityCoreEngine:
         positions = TradeStationPositionsLiveEngine().get_positions()
         options_dashboard = OptionsAccountDashboardEngine().get_dashboard()
         scheduler = BackgroundSchedulerService.status()
+        execution_permission = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
 
         token_ok = token.get("ready_for_read_only") is True
         balance_ok = balance.get("status") == "BALANCE_READ_SUCCESS"
@@ -90,8 +92,12 @@ class GreyLineReliabilityCoreEngine:
             "source": "GREYLINE_RELIABILITY_CORE",
             "health_score": score,
             "execution_ready": execution_ready,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            # execution_enabled / order_placement_allowed reflect the actual kill-switch
+            # (ExecutionGovernor), consistent with every other status surface. The core
+            # still does not itself enable execution — execution_ready is its own read-only
+            # readiness signal, kept separate from whether the governor has armed execution.
+            "execution_enabled": execution_permission.get("execution_enabled"),
+            "order_placement_allowed": execution_permission.get("order_placement_allowed"),
             "checks": checks,
             "broker_truth": {
                 "broker": "TradeStation",

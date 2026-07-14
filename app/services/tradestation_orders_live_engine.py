@@ -21,7 +21,7 @@ class TradeStationOrdersLiveEngine:
     def get_orders(self):
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
         account_id = getenv("TRADESTATION_MARGIN_ACCOUNT_ID", "")
-        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://api.tradestation.com")
+        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com")
 
         if not access_token or not account_id:
             return {

@@ -1,9 +1,11 @@
-import json
 import threading
 import time
 from datetime import datetime
+from os import getenv
 from app.services.execution_governor import ExecutionGovernor
 from pathlib import Path
+
+from app.services.persistence.json_store import atomic_write_json, read_json
 
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
 from app.services.decision_scheduler_engine import DecisionSchedulerEngine
@@ -32,26 +34,67 @@ class BackgroundSchedulerService:
     _last_run = None
     _last_status = None
     _cycle_count = 0
+    # Cycle-health observability (previously only last_status was tracked, so
+    # transient/flapping failures were invisible).
+    _success_count = 0
+    _failure_count = 0
+    _consecutive_failures = 0
+    _last_error = None
+    _last_error_at = None
+    _last_duration_ms = None
+    _recent_cycles = []
+    _RECENT_CAP = 20
+
+    @classmethod
+    def _record_result(cls, status, started, error=None):
+        try:
+            start_dt = datetime.fromisoformat(started) if isinstance(started, str) else started
+            duration_ms = int((datetime.utcnow() - start_dt).total_seconds() * 1000)
+        except Exception:
+            duration_ms = None
+
+        cls._last_duration_ms = duration_ms
+        if status == "COMPLETE":
+            cls._success_count += 1
+            cls._consecutive_failures = 0
+        else:
+            cls._failure_count += 1
+            cls._consecutive_failures += 1
+            cls._last_error = error
+            cls._last_error_at = datetime.utcnow().isoformat()
+
+        entry = {"status": status, "at": datetime.utcnow().isoformat(), "duration_ms": duration_ms, "error": error}
+        cls._recent_cycles = (cls._recent_cycles + [entry])[-cls._RECENT_CAP:]
 
     @classmethod
     def _load_state(cls):
+        data = read_json(cls._state_file, default=dict) or {}
         try:
-            if cls._state_file.exists():
-                data = json.loads(cls._state_file.read_text())
-                cls._last_run = data.get("last_run")
-                cls._last_status = data.get("last_status")
-                cls._cycle_count = int(data.get("cycle_count", 0))
-        except Exception:
+            cls._last_run = data.get("last_run")
+            cls._last_status = data.get("last_status")
+            cls._cycle_count = int(data.get("cycle_count", 0) or 0)
+            cls._success_count = int(data.get("success_count", 0) or 0)
+            cls._failure_count = int(data.get("failure_count", 0) or 0)
+            cls._consecutive_failures = int(data.get("consecutive_failures", 0) or 0)
+            cls._last_error = data.get("last_error")
+            cls._last_error_at = data.get("last_error_at")
+            cls._recent_cycles = data.get("recent_cycles", []) or []
+        except (AttributeError, ValueError, TypeError):
             pass
 
     @classmethod
     def _save_state(cls):
-        cls._state_file.parent.mkdir(parents=True, exist_ok=True)
-        cls._state_file.write_text(json.dumps({
+        atomic_write_json(cls._state_file, {
             "last_run": cls._last_run,
             "last_status": cls._last_status,
             "cycle_count": cls._cycle_count,
-        }, indent=2))
+            "success_count": cls._success_count,
+            "failure_count": cls._failure_count,
+            "consecutive_failures": cls._consecutive_failures,
+            "last_error": cls._last_error,
+            "last_error_at": cls._last_error_at,
+            "recent_cycles": cls._recent_cycles,
+        })
 
     @classmethod
     def start(cls, interval_seconds=300):
@@ -100,6 +143,17 @@ class BackgroundSchedulerService:
             "last_run": cls._last_run,
             "last_status": cls._last_status,
             "thread_alive": bool(cls._thread and cls._thread.is_alive()),
+            "success_count": cls._success_count,
+            "failure_count": cls._failure_count,
+            "consecutive_failures": cls._consecutive_failures,
+            "cycle_success_rate_pct": (
+                round(cls._success_count / (cls._success_count + cls._failure_count) * 100, 2)
+                if (cls._success_count + cls._failure_count) else None
+            ),
+            "last_error": cls._last_error,
+            "last_error_at": cls._last_error_at,
+            "last_duration_ms": cls._last_duration_ms,
+            "recent_cycles": cls._recent_cycles[-10:],
             "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
             "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
             "status": "BACKGROUND_SCHEDULER_STATUS_READY",
@@ -118,6 +172,7 @@ class BackgroundSchedulerService:
             except Exception as exc:
                 cls._last_run = datetime.utcnow().isoformat()
                 cls._last_status = f"BACKGROUND_SCHEDULER_CYCLE_FAILED: {exc}"
+                cls._record_result("FAILED", cls._last_run, error=str(exc))
                 cls._save_state()
                 ImmutableAuditLedgerEngine().record(
                     "BACKGROUND_SCHEDULER_CYCLE_FAILED",
@@ -161,7 +216,9 @@ class BackgroundSchedulerService:
                 InstitutionalSignalSnapshotSweepEngine()
                 .run(
                     limit=10,
-                    collect_unusual_whales=False,
+                    # Auto-on when a UW key is configured: the mission's real
+                    # institutional-flow collection. No key -> stays off (no wasted budget).
+                    collect_unusual_whales=bool(getenv("UNUSUAL_WHALES_API_KEY")),
                     collect_tradestation=False,
                     include_tradestation_option_chain=False,
                     deduplicate=True,
@@ -214,6 +271,7 @@ class BackgroundSchedulerService:
         cls._cycle_count += 1
         cls._last_run = started
         cls._last_status = "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+        cls._record_result("COMPLETE", started)
         cls._save_state()
 
         ImmutableAuditLedgerEngine().record(

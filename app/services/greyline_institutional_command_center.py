@@ -38,7 +38,7 @@ class GreyLineInstitutionalCommandCenter:
             "institutional_focus": institutional_focus,
             "opportunity_summary": opportunity_summary,
             "execution_governor": governor,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "execution_enabled": governor.get("execution_enabled"),
+            "order_placement_allowed": governor.get("order_placement_allowed"),
             "status": "GREYLINE_INSTITUTIONAL_COMMAND_CENTER_READY"
         }

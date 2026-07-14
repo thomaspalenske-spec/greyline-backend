@@ -29,13 +29,12 @@ class ReadinessScoringEngine:
         elif score >= 50:
             state = "PARTIAL"
         else:
-            state = "READY" if os.getenv("DEV_MODE") == "true" else "BLOCKED" if not os.getenv("DEV_MODE") else "READY"
+            # A failing (<50) score is BLOCKED unless DEV_MODE is explicitly "true".
+            # (Previously any non-"true" DEV_MODE value, e.g. "false", masked BLOCKED as READY.)
+            state = "READY" if os.getenv("DEV_MODE") == "true" else "BLOCKED"
 
         return {
             "readiness_score": score,
             "state": state,
             "raw": data
         }
-
-echo test
-print("hello")

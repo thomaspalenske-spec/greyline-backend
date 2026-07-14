@@ -21,14 +21,22 @@ from app.services.paper_trading_final_gate_engine import PaperTradingFinalGateEn
 from app.services.paper_trading_phase_summary_engine import PaperTradingPhaseSummaryEngine
 
 
+from app.services.greyline_reliability_core_engine import GreyLineReliabilityCoreEngine
+
+
 @router.get("/paper-trading-prep-gate")
 def paper_trading_prep_gate():
+    # Derive the five prep inputs from real readiness signals instead of hardcoded
+    # True, so prep_gate_passed reflects actual state (and fails safe when not ready).
+    readiness = PaperTradingBlockerEngine().evaluate_blockers().get("readiness", {})
+    reliability = GreyLineReliabilityCoreEngine().evaluate()
+
     return PaperTradingPrepGateEngine().evaluate_prep_gate(
-        backend_ready=True,
-        broker_safety_ready=True,
-        credential_safety_ready=True,
-        authority_gate_ready=True,
-        kill_switch_ready=True
+        backend_ready=reliability.get("status") == "RELIABILITY_CORE_HEALTHY",
+        broker_safety_ready=readiness.get("broker_sandbox_connected") is True,
+        credential_safety_ready=readiness.get("api_credentials_configured") is True,
+        authority_gate_ready=readiness.get("manual_approval_granted") is True,
+        kill_switch_ready=readiness.get("kill_switch_testing_complete") is True,
     )
 
 

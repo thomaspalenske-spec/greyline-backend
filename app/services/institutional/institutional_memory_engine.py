@@ -27,6 +27,7 @@ class InstitutionalMemoryEngine:
         snapshot: Dict[str, Any],
         source: str = "INSTITUTIONAL_INTELLIGENCE_ENGINE",
         minimum_interval_seconds: int = 60,
+        price: Optional[float] = None,
     ) -> Dict[str, Any]:
         symbol = self._symbol(symbol)
 
@@ -35,6 +36,17 @@ class InstitutionalMemoryEngine:
 
         now = datetime.now(timezone.utc)
         path = self._path(symbol)
+
+        # Accumulate a price point on EVERY cycle we were handed a fresh price, even if
+        # the flow snapshot itself is about to be deduped/interval-skipped below. Flow
+        # signals are often constant (so snapshots rarely change), but the fixed-horizon
+        # join needs a dense price series — a price near both T and T+horizon. Decoupling
+        # price recording from snapshot novelty is what makes the join actually succeed.
+        if price is not None:
+            try:
+                self._co_record_price(symbol, now.isoformat(), price)
+            except Exception:
+                pass
 
         normalized_snapshot = dict(snapshot)
         normalized_snapshot.pop("timestamp", None)
@@ -106,6 +118,17 @@ class InstitutionalMemoryEngine:
                 json.dumps(record, separators=(",", ":")) + "\n"
             )
 
+        # Co-record the symbol's price at the SAME timestamp so every flow snapshot
+        # has a joinable price for fixed-horizon / flow-skill validation. Never let a
+        # price failure affect snapshot recording (the snapshot is already written).
+        # When an explicit price was provided it was already recorded above (before the
+        # dedup/interval gates); only fall back to a live quote fetch when none was given.
+        if price is None:
+            try:
+                self._co_record_price(symbol, now.isoformat(), None)
+            except Exception:
+                pass
+
         return {
             "recorded": True,
             "symbol": symbol,
@@ -113,6 +136,20 @@ class InstitutionalMemoryEngine:
             "path": str(path),
             "status": "INSTITUTIONAL_MEMORY_RECORDED",
         }
+
+    @staticmethod
+    def _co_record_price(symbol, timestamp, price=None):
+        try:
+            from app.services.price_history_store import PriceHistoryStore
+            if price is None:
+                from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+                q = TradeStationQuoteLiveEngine().get_quote(symbol)
+                quotes = (q.get("response_json") or {}).get("Quotes") or []
+                price = float((quotes[0] if quotes else {}).get("Last") or 0)
+            if price and float(price) > 0:
+                PriceHistoryStore().record(symbol, price, timestamp)
+        except Exception:
+            pass
 
     def history(
         self,

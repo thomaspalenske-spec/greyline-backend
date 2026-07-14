@@ -31,7 +31,9 @@ class ReadinessFixEngine:
             recommendations.append("Enable paper trading mode")
 
         return {
-            "state": data.get("state", "UNKNOWN"),
+            # ReadinessAggregationEngine exposes readiness under "status", not "state";
+            # the old key never matched and this field was permanently "UNKNOWN".
+            "state": data.get("status", "UNKNOWN"),
             "missing_fields": missing,
             "fix_recommendations": recommendations
         }

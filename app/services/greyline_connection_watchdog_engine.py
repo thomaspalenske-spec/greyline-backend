@@ -1,4 +1,5 @@
 from datetime import datetime
+from os import getenv
 
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
 from app.services.tradestation_account_discovery_live_engine import TradeStationAccountDiscoveryLiveEngine
@@ -18,7 +19,10 @@ class GreyLineConnectionWatchdogEngine:
         orders = TradeStationOrdersLiveEngine().get_orders()
         scheduler = BackgroundSchedulerService.status()
 
-        account_ok = summary.get("account_id") == "12052606"
+        # Expected account comes from config, not a hardcoded id. Fail-safe: if it
+        # is not configured, account_ok is False and the watchdog reports degraded.
+        expected_account_id = getenv("TRADESTATION_MARGIN_ACCOUNT_ID") or getenv("TS_MARGIN_ACCOUNT_ID")
+        account_ok = bool(expected_account_id) and summary.get("account_id") == expected_account_id
         summary_ok = summary.get("status") == "LIVE_ACCOUNT_READY"
         scheduler_ok = scheduler.get("scheduler_enabled") is True and scheduler.get("thread_alive") is True
 

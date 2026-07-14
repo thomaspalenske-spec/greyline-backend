@@ -29,6 +29,7 @@ from app.services.institutional_intelligence_engine import (
 from app.services.institutional.institutional_memory_engine import (
     InstitutionalMemoryEngine,
 )
+from app.services.decision_shadow_log_engine import DecisionShadowLogEngine
 from app.services.institutional.institutional_validation_engine import (
     InstitutionalValidationEngine,
 )
@@ -329,8 +330,24 @@ class OpportunityScoringEngine:
                 2,
             )
 
+            # Direction-aware regime: a bearish (PUT) candidate must be judged against the
+            # BEARISH regime, not the bullish one. Judging puts by the bullish regime vetoed
+            # every aligned bearish setup on weak/down days — the root cause of the
+            # 2026-07-13 zero-trade session (all 3,929 EXECUTE-qualified puts demoted to WATCH
+            # because the bullish tape read WEAK_LIVE, which for a put is the thesis).
+            directional_regime_label = (
+                regime_result.get("bearish_regime")
+                if option_type == "PUT"
+                else regime_result.get("regime")
+            )
+            directional_regime_weak = (
+                directional_regime_label == "WEAK_BEARISH_LIVE"
+                if option_type == "PUT"
+                else directional_regime_label == "WEAK_LIVE"
+            )
+
             current_regime_for_decision = (
-                regime_result.get("regime") or "UNKNOWN"
+                directional_regime_label or "UNKNOWN"
             )
 
             try:
@@ -474,7 +491,7 @@ class OpportunityScoringEngine:
                 result = "WATCH"
 
             if (
-                regime_result.get("regime") == "WEAK_LIVE"
+                directional_regime_weak
                 or risk_state_result.get("risk_state") in ["DEFENSIVE", "STRESSED"]
             ):
                 if result == "EXECUTE":
@@ -559,6 +576,9 @@ class OpportunityScoringEngine:
                 "regime_score": regime_score,
                 "bear_regime_score": bear_regime_score,
                 "regime": regime_result.get("regime"),
+                "bearish_regime": regime_result.get("bearish_regime"),
+                "directional_regime": directional_regime_label,
+                "directional_regime_weak": directional_regime_weak,
                 "regime_calibration": regime_calibration,
                 "regime_calibration_state": (
                     regime_calibration.get("state")
@@ -941,7 +961,15 @@ class OpportunityScoringEngine:
                     intelligence,
                     source="OPPORTUNITY_SCORING_ENGINE",
                     minimum_interval_seconds=300,
+                    # Pass the price already fetched this cycle so the flow↔price
+                    # co-record is deterministic instead of relying on a second live
+                    # quote fetch that fails silently (root cause of ungradable snapshots).
+                    price=item.get("last"),
                 )
+
+                # Shadow A/B: log momentum-proxy vs flow-implied direction (no effect
+                # on the live decision) so we can grade which predicts better this session.
+                DecisionShadowLogEngine().log(candidate_symbol, candidate, intelligence)
 
                 refresh_engine.mark_refreshed(candidate)
 

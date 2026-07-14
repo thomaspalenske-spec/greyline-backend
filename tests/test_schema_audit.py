@@ -26,6 +26,12 @@ IGNORED_ROUTES = {
     "/opportunity-summary",
     "/quote-snapshot-nvda",
     "/universe-snapshot-capture",
+    # Return HTTP 200 in production but cannot be smoke-tested by calling
+    # route.endpoint() directly (Request/Query params or HTML response).
+    "/operator-dashboard",
+    "/directional-attribution-report",
+    "/portfolio-governor",
+    "/operator-commander-summary",
 }
 
 

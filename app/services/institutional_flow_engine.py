@@ -1,7 +1,43 @@
 from datetime import datetime
 
+from app.services.equity_institutional_flow_engine import EquityInstitutionalFlowEngine
+
 
 class InstitutionalFlowEngine:
+    def evaluate_symbol(self, symbol):
+        """
+        Per-symbol institutional flow in the {institutional_flow_score,
+        institutional_flow_state} shape consumed by the accumulation / distribution /
+        summary dashboards. This class's own evaluate() is universe-level (inferred from
+        the opportunity set), not per-symbol, so the per-symbol read is delegated to
+        EquityInstitutionalFlowEngine (the real inferred equity proxy) and adapted here.
+        """
+        equity = EquityInstitutionalFlowEngine().evaluate_symbol(symbol)
+
+        # net_institutional_flow_score is inflow-minus-outflow in [-100, 100]; map it to a
+        # 0-100 buying-strength score (50 = neutral) as the consuming engines expect.
+        net = equity.get("net_institutional_flow_score", 0) or 0
+        flow_score = max(0, min(100, round(50 + net / 2)))
+        direction = equity.get("institutional_flow_direction", "UNKNOWN")
+        state = {
+            "INFLOW": "INSTITUTIONAL_INFLOW",
+            "OUTFLOW": "INSTITUTIONAL_OUTFLOW",
+            "NEUTRAL": "NEUTRAL_FLOW",
+        }.get(direction, "FLOW_UNKNOWN")
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "symbol": symbol.upper().strip(),
+            "institutional_flow_score": flow_score,
+            "institutional_flow_state": state,
+            "institutional_flow_direction": direction,
+            "institutional_flow_confidence": equity.get("institutional_flow_confidence", 0),
+            "net_institutional_flow_score": net,
+            "flow_source": equity.get("flow_source", "INFERRED_EQUITY_PROXY"),
+            "direct_flow_feeds_connected": equity.get("direct_flow_feeds_connected", False),
+            "status": "INSTITUTIONAL_FLOW_SYMBOL_READY",
+        }
+
     def evaluate(self, context=None):
         context = context or {}
 

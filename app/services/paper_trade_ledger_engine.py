@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from app.services.persistence.json_store import atomic_write_text
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.tp_state_tracking_engine import TPStateTrackingEngine
@@ -123,9 +124,11 @@ class PaperTradeLedgerEngine:
             else:
                 remaining.append(t)
 
-        with self.ledger_file.open("w") as f:
-            for t in remaining:
-                f.write(json.dumps(t) + "\n")
+        # Atomic full rewrite: a crash mid-write can never truncate the trade ledger.
+        atomic_write_text(
+            self.ledger_file,
+            "".join(json.dumps(t) + "\n" for t in remaining),
+        )
 
         audit = ImmutableAuditLedgerEngine().record("PAPER_TRADE_LEDGER_CLOSED", trade)
 

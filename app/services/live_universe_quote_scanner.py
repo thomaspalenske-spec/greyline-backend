@@ -6,6 +6,16 @@ from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEng
 
 class LiveUniverseQuoteScanner:
 
+    @staticmethod
+    def _extract_last(quote):
+        """Pull the numeric Last price out of a TradeStation quote result, or None."""
+        try:
+            quotes = (quote.get("response_json") or {}).get("Quotes") or []
+            last = float((quotes[0] if quotes else {}).get("Last") or 0)
+            return last if last > 0 else None
+        except (TypeError, ValueError, AttributeError, IndexError):
+            return None
+
     def scan_safe_subset(self):
         universe = MarketUniverseEngine().get_universe()
 
@@ -27,6 +37,10 @@ class LiveUniverseQuoteScanner:
                 "symbol": symbol,
                 "http_status": quote.get("http_status"),
                 "quote_status": quote.get("status"),
+                # Surface the last price already fetched in this quote so downstream
+                # consumers (flow↔price co-record) don't have to make a second, redundant
+                # live fetch that fails silently and leaves snapshots ungradable.
+                "last": self._extract_last(quote),
                 "execution_enabled": False
             })
 

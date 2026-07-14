@@ -1,4 +1,5 @@
 from datetime import datetime
+from os import getenv
 
 from app.services.greyline_connection_watchdog_engine import GreyLineConnectionWatchdogEngine
 from app.services.live_broker_summary_engine import LiveBrokerSummaryEngine
@@ -13,9 +14,13 @@ class PreTradeRiskGateEngine:
         equity = float(account.get("equity") or 0)
         buying_power = float(account.get("buying_power") or 0)
 
+        # Expected trading account comes from config, not a hardcoded id. Fail-safe:
+        # if it is not configured, default_account_ok is False and the gate blocks.
+        expected_account_id = getenv("TRADESTATION_MARGIN_ACCOUNT_ID") or getenv("TS_MARGIN_ACCOUNT_ID")
+
         checks = {
             "connection_ready": watchdog.get("overall_ready") is True,
-            "default_account_ok": account.get("account_id") == "12052606",
+            "default_account_ok": bool(expected_account_id) and account.get("account_id") == expected_account_id,
             "snapshot_healthy": account.get("snapshot_healthy") is True,
             "execution_currently_disabled": account.get("execution_enabled") is False,
             "order_placement_currently_disabled": account.get("order_placement_allowed") is False,

@@ -6,57 +6,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.paper_position_manager_engine import PaperPositionManagerEngine
 
-
-def test_get_active_positions_returns_only_active_trades():
-    trades = [
-        {"trade_id": "GL-1", "state": "ACTIVE"},
-        {"trade_id": "GL-2", "state": "CLOSED"},
-    ]
-
-    with patch("app.services.paper_position_manager_engine.LedgerEngine") as MockLedger:
-        MockLedger.return_value.get_all_trades.return_value = trades
-
-        result = PaperPositionManagerEngine().get_active_positions()
-
-    assert result["position_count"] == 1
-    assert result["positions"][0]["trade_id"] == "GL-1"
-    assert result["status"] == "ACTIVE_POSITIONS_LOADED"
+MOD = "app.services.paper_position_manager_engine"
 
 
-def test_close_position_updates_matching_trade():
-    ledger = {
-        "trades": [
-            {"trade_id": "GL-1", "state": "ACTIVE"}
-        ]
-    }
-
-    with patch("app.services.paper_position_manager_engine.LedgerEngine") as MockLedger:
-        mock_instance = MockLedger.return_value
-        mock_instance.load.return_value = ledger
-
-        result = PaperPositionManagerEngine().close_position("GL-1")
-
-        mock_instance.save.assert_called_once()
-
-    assert result["position_closed"] is True
-    assert ledger["trades"][0]["state"] == "CLOSED"
-    assert result["status"] == "POSITION_CLOSED"
+# NOTE: the previous tests here targeted a removed API (get_active_positions /
+# close_position / LedgerEngine). The engine now exposes manage_open_positions().
 
 
-def test_close_position_returns_not_found_for_missing_trade():
-    ledger = {
-        "trades": [
-            {"trade_id": "GL-1", "state": "ACTIVE"}
-        ]
-    }
+def test_manage_open_positions_no_trades():
+    with patch(f"{MOD}.PaperTradeLedgerEngine") as MockLedger:
+        MockLedger.return_value.history.return_value = {"trades": []}
+        result = PaperPositionManagerEngine().manage_open_positions()
 
-    with patch("app.services.paper_position_manager_engine.LedgerEngine") as MockLedger:
-        mock_instance = MockLedger.return_value
-        mock_instance.load.return_value = ledger
+    assert result["positions_checked"] == 0
+    assert result["positions_closed"] == 0
+    assert result["status"] == "PAPER_POSITION_MANAGER_NO_TRADES"
 
-        result = PaperPositionManagerEngine().close_position("GL-999")
 
-        mock_instance.save.assert_not_called()
-
-    assert result["position_closed"] is False
-    assert result["status"] == "POSITION_NOT_FOUND"
+def test_manage_open_positions_does_not_quote_closed_trades():
+    # A non-OPEN trade must be skipped without triggering live quote I/O.
+    with patch(f"{MOD}.PaperTradeLedgerEngine") as MockLedger, \
+         patch(f"{MOD}.MarketHoursEngine") as MockMH, \
+         patch(f"{MOD}.TradeStationQuoteLiveEngine") as MockQuote:
+        MockLedger.return_value.history.return_value = {
+            "trades": [{"trade_id": "GL-2", "status": "CLOSED"}]
+        }
+        MockMH.return_value.status.return_value = {"is_regular_session": False}
+        PaperPositionManagerEngine().manage_open_positions()
+        MockQuote.return_value.get_quote.assert_not_called()

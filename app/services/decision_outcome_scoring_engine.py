@@ -7,7 +7,11 @@ class DecisionOutcomeScoringEngine:
 
     def score(self, limit=50):
         captured = ForwardOutcomeCaptureEngine().capture(limit=limit)
-        captures = captured.get("captures", [])
+        # ForwardOutcomeCaptureEngine emits its per-record list under "outcomes",
+        # with a directional schema (outcome_state / directional_return_pct /
+        # directional_bias). Score against that; the capture engine has already
+        # computed the directionally-adjusted return, so we classify off it.
+        outcomes = captured.get("outcomes", [])
 
         scored = []
 
@@ -17,69 +21,62 @@ class DecisionOutcomeScoringEngine:
         pending_count = 0
         skipped_count = 0
 
-        for item in captures:
+        for item in outcomes:
             symbol = item.get("symbol")
-            decision = item.get("decision")
-            capture_status = item.get("capture_status")
+            decision = item.get("candidate_result")
+            decision_timestamp = item.get("candidate_timestamp")
+            directional_return_pct = item.get("directional_return_pct")
 
-            if capture_status != "FORWARD_OUTCOME_CAPTURED" or not symbol:
+            if item.get("outcome_state") != "PRICE_CAPTURED" or not symbol:
                 skipped_count += 1
                 scored.append({
-                    "decision_timestamp": item.get("decision_timestamp"),
+                    "decision_timestamp": decision_timestamp,
                     "symbol": symbol,
                     "decision": decision,
                     "score_status": "SKIPPED",
-                    "score_result": item.get("capture_status"),
-                    "score_reason": item.get("capture_reason", "No captured forward quote available"),
+                    "score_result": item.get("outcome_state"),
+                    "score_reason": "No captured forward price available",
                     "execution_enabled": False,
                     "order_placement_allowed": False,
                 })
                 continue
 
-            try:
-                last = float(item.get("last"))
-                previous_close = float(item.get("previous_close"))
-                move_pct = round(((last - previous_close) / previous_close) * 100, 4)
-            except Exception:
+            if directional_return_pct is None:
                 pending_count += 1
                 scored.append({
-                    "decision_timestamp": item.get("decision_timestamp"),
+                    "decision_timestamp": decision_timestamp,
                     "symbol": symbol,
                     "decision": decision,
                     "score_status": "PENDING",
-                    "score_result": "PRICE_DATA_INCOMPLETE",
-                    "score_reason": "Captured quote missing last or previous_close",
+                    "score_result": "NON_DIRECTIONAL_OUTCOME_PENDING_RULES",
+                    "score_reason": "Outcome lacks a directional bias to score",
                     "execution_enabled": False,
                     "order_placement_allowed": False,
                 })
                 continue
 
-            if decision == "EXECUTE_SIGNAL_BLOCKED_READ_ONLY":
-                if move_pct >= 1.0:
-                    score_result = "FAVORABLE_EXECUTE_SIGNAL"
-                    score_reason = "Price moved at least +1% versus previous close"
-                    favorable_count += 1
-                elif move_pct <= -1.0:
-                    score_result = "UNFAVORABLE_EXECUTE_SIGNAL"
-                    score_reason = "Price moved at least -1% versus previous close"
-                    unfavorable_count += 1
-                else:
-                    score_result = "NEUTRAL_EXECUTE_SIGNAL"
-                    score_reason = "Price move stayed inside +/-1% neutral band"
-                    neutral_count += 1
+            if directional_return_pct >= 1.0:
+                score_result = "FAVORABLE_EXECUTE_SIGNAL"
+                score_reason = "Directional move at least +1% in the predicted direction"
+                favorable_count += 1
+            elif directional_return_pct <= -1.0:
+                score_result = "UNFAVORABLE_EXECUTE_SIGNAL"
+                score_reason = "Directional move at least -1% against the predicted direction"
+                unfavorable_count += 1
             else:
-                score_result = "NON_EXECUTE_DECISION_PENDING_RULES"
-                score_reason = "Scoring rules for this decision type are not yet active"
-                pending_count += 1
+                score_result = "NEUTRAL_EXECUTE_SIGNAL"
+                score_reason = "Directional move stayed inside +/-1% neutral band"
+                neutral_count += 1
 
             scored.append({
-                "decision_timestamp": item.get("decision_timestamp"),
-                "capture_timestamp": item.get("capture_timestamp"),
+                "decision_timestamp": decision_timestamp,
+                "capture_timestamp": item.get("timestamp"),
                 "symbol": symbol,
                 "decision": decision,
-                "last": item.get("last"),
-                "previous_close": item.get("previous_close"),
-                "move_pct": move_pct,
+                "directional_bias": item.get("directional_bias"),
+                "snapshot_price": item.get("snapshot_price"),
+                "current_price": item.get("current_price"),
+                "move_pct": directional_return_pct,
                 "score_status": "SCORED",
                 "score_result": score_result,
                 "score_reason": score_reason,

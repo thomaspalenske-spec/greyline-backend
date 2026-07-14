@@ -142,7 +142,7 @@ class TradeStationOptionChainLiveEngine:
         TradeStationTokenMaintenanceEngine().evaluate()
 
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
-        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://api.tradestation.com")
+        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com")
         symbol = symbol.upper().strip()
 
         url = (

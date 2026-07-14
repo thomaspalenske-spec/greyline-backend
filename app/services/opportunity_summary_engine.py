@@ -21,12 +21,33 @@ class OpportunitySummaryEngine:
                 "directional_bias": item.get("directional_bias"),
                 "option_type": item.get("option_type"),
                 "direction_confidence": item.get("direction_confidence"),
+                # Dashboard Top-5 table columns (Flow / Conviction / Gate). These
+                # exist on the full candidate but were dropped by this projection,
+                # so the UI rendered "--". Pass them through.
+                "institutional_flow_direction": item.get(
+                    "institutional_flow_direction"
+                ),
+                "institutional_flow_confidence": item.get(
+                    "institutional_flow_confidence"
+                ),
+                "institutional_flow_gate": item.get(
+                    "institutional_flow_gate"
+                ),
+                "institutional_conviction_score": item.get(
+                    "institutional_conviction_score"
+                ),
+                "institutional_conviction_state": item.get(
+                    "institutional_conviction_state"
+                ),
                 "liquidity_score": item.get("liquidity_score"),
                 "setup_score": item.get("setup_score"),
                 "bullish_setup_score": item.get("bullish_setup_score"),
                 "bearish_setup_score": item.get("bearish_setup_score"),
                 "regime": item.get("regime"),
                 "regime_score": item.get("regime_score"),
+                "bearish_regime": item.get("bearish_regime"),
+                "directional_regime": item.get("directional_regime"),
+                "directional_regime_weak": item.get("directional_regime_weak"),
                 "risk_state": item.get("risk_state"),
                 "risk_state_score": item.get("risk_state_score"),
                 "breadth_score": item.get("breadth_score"),

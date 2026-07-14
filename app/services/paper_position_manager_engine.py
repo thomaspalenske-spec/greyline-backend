@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.services.persistence.json_store import atomic_write_text
 from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.dynamic_exit_policy_engine import DynamicExitPolicyEngine
@@ -145,8 +146,11 @@ class PaperPositionManagerEngine:
 
             updated.append(trade)
 
-        self.ledger_file.write_text(
-            "\n".join(json.dumps(t) for t in updated) + ("\n" if updated else "")
+        # Atomic + durable (also creates parent dir): a crash mid-write can never
+        # truncate the ledger, and the write no longer assumes the dir exists.
+        atomic_write_text(
+            self.ledger_file,
+            "\n".join(json.dumps(t) for t in updated) + ("\n" if updated else ""),
         )
 
         return {

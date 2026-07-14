@@ -1,3 +1,4 @@
+import math
 from statistics import mean
 
 from app.services.unusual_whales_operational_environment_engine import (
@@ -27,6 +28,70 @@ class InstitutionalIntelligenceEngine:
 
         return []
 
+    @staticmethod
+    def _activity_intensity(value, reference):
+        """
+        Bounded [0,100] magnitude gauge — NOT directional. tanh-shaped so it rises
+        smoothly with activity and never hard-pins at the ceiling (the old
+        premium/1e9*25 scaling pinned near 0 for anything under a few $B). `reference`
+        is the premium level treated as 'notably active'. This is a within-name relative
+        activity gauge, not a cross-name absolute (UW returns only the most-recent ~500
+        prints, so absolute dollars are truncated and non-comparable across tickers).
+        """
+        ref = float(reference) or 1.0
+        v = max(0.0, float(value or 0))
+        return round(100.0 * math.tanh(v / ref), 2)
+
+    @staticmethod
+    def _directional_score(rows, field):
+        """
+        0-100 directional score from a signed flow field: net directional imbalance
+        mapped around 50 (all-bullish -> 100, all-bearish -> 0, balanced/no-data -> 50).
+        Replaces the old binary 50/0 "data present?" flags for real flow signals.
+        """
+        if not rows:
+            return 50.0
+        net = 0.0
+        total = 0.0
+        for row in rows:
+            try:
+                v = float(row.get(field) or 0)
+            except (TypeError, ValueError):
+                v = 0.0
+            net += v
+            total += abs(v)
+        if total <= 0:
+            return 50.0
+        return max(0.0, min(100.0, 50 + 50 * (net / total)))
+
+    @staticmethod
+    def _signed_premium_score(rows):
+        """
+        0-100 directional score from lit/dark prints: premium executed at/above the
+        NBBO midpoint counts bullish, below counts bearish; net premium imbalance
+        mapped around 50. No prints -> 50.
+        """
+        if not rows:
+            return 50.0
+        net = 0.0
+        total = 0.0
+        for row in rows:
+            try:
+                price = float(row.get("price") or 0)
+                prem = float(row.get("premium") or 0)
+                bid = float(row.get("nbbo_bid") or 0)
+                ask = float(row.get("nbbo_ask") or 0)
+            except (TypeError, ValueError):
+                continue
+            if prem <= 0 or price <= 0:
+                continue
+            mid = (bid + ask) / 2 if (bid > 0 and ask > 0) else price
+            net += prem if price >= mid else -prem
+            total += prem
+        if total <= 0:
+            return 50.0
+        return max(0.0, min(100.0, 50 + 50 * (net / total)))
+
     def analyze(self, symbol: str):
         data = self.uw.analyze(symbol)
 
@@ -55,20 +120,24 @@ class InstitutionalIntelligenceEngine:
         insiders = self._rows(data.get("insider_transactions"))
         congress = self._rows(data.get("congress_trades"))
 
-        buying = self._clamp(
-            50
-            + float(strike.get("directional_score") or 0)
+        # Bounded directional signal: the old formula was unbounded and pinned buying to
+        # 100 (selling 0) for any strong-flow symbol, losing all granularity. Scale the
+        # strike-weighted-2x-vs-flow signal into [-50, +50] so buying stays granular in
+        # [0, 100]. Direction is preserved (bullish stays bullish); only magnitude changes.
+        _dir_signal = (
+            float(strike.get("directional_score") or 0)
             + float(options_flow.get("directional_score") or 0) / 2
-        )
+        ) / 3.0
+        buying = self._clamp(50 + _dir_signal)
+        selling = self._clamp(50 - _dir_signal)
 
-        selling = self._clamp(
-            50
-            - float(strike.get("directional_score") or 0)
-            - float(options_flow.get("directional_score") or 0) / 2
-        )
-
-        dark_pool = self._clamp(
-            (float(dark.get("total_premium") or 0) / 1_000_000_000) * 25
+        # Dark-pool premium is a NON-DIRECTIONAL activity/conviction gauge: the aggregate
+        # carries no aggressor side (can't tell buy vs sell), and the dollar total is
+        # truncated to the most-recent ~500 prints. Bounded tanh intensity — reported for
+        # context, but EXCLUDED from the directional composite below so a low value can't
+        # masquerade as bearish (the old scaling pinned it near 0 and dragged the mean down).
+        dark_pool = self._activity_intensity(
+            float(dark.get("total_premium") or 0), 200_000_000
         )
 
         dealer_gamma = 50.0
@@ -96,9 +165,10 @@ class InstitutionalIntelligenceEngine:
             float((vrp.get("latest") or {}).get("rank") or 0) * 100
         )
 
-        greek_flow_score = 50.0 if greek_flow else 0.0
-        spot_gamma_score = 50.0 if spot else 0.0
-        lit_flow_score = 50.0 if lit else 0.0
+        # Real directional scores from the signed flow fields (was binary 50/0).
+        greek_flow_score = self._directional_score(greek_flow, "dir_delta_flow")
+        spot_gamma_score = self._directional_score(spot, "gamma_per_one_percent_move_dir")
+        lit_flow_score = self._signed_premium_score(lit)
         market_tide_score = 50.0
         if market_tide:
             latest_tide = market_tide[-1]
@@ -257,16 +327,21 @@ class InstitutionalIntelligenceEngine:
                     * 50
                 )
 
-        overall = round(mean([
+        # DIRECTIONAL institutional composite = the mission signal (inflow vs outflow).
+        # Only feeds that carry a bullish/bearish sign are averaged. The five NON-directional
+        # feeds are deliberately excluded so they can't inject false direction or pin the
+        # composite via saturation:
+        #   dark_pool     -> activity magnitude (no aggressor side)
+        #   dealer_gamma  -> volatility regime (long/short gamma), not up/down
+        #   spot_gamma    -> volatility regime; was saturating to 100
+        #   oi_score      -> open-interest activity count; was saturating to 100
+        #   vrp_rank      -> variance-risk-premium level, not direction
+        # They remain reported below (non_directional_context) as conviction/regime context.
+        directional_components = [
             buying,
-            dark_pool,
-            dealer_gamma,
-            oi_score,
             strike_score,
             expiry_score,
-            vrp_rank,
             greek_flow_score,
-            spot_gamma_score,
             lit_flow_score,
             market_tide_score,
             sector_tide_score,
@@ -274,7 +349,8 @@ class InstitutionalIntelligenceEngine:
             short_score,
             insider_score,
             congress_score,
-        ]), 2)
+        ]
+        overall = round(mean(directional_components), 2)
 
         return {
             "symbol": (symbol or "").upper().strip(),
@@ -296,6 +372,19 @@ class InstitutionalIntelligenceEngine:
             "insider_score": round(insider_score, 2),
             "congress_score": round(congress_score, 2),
             "overall_institutional_score": overall,
+            "overall_score_basis": "DIRECTIONAL_FEEDS_ONLY",
+            "directional_component_count": len(directional_components),
+            "non_directional_context": {
+                "dark_pool_intensity": round(dark_pool, 2),
+                "dealer_gamma_regime": round(dealer_gamma, 2),
+                "spot_gamma_regime": round(spot_gamma_score, 2),
+                "open_interest_activity": round(oi_score, 2),
+                "variance_risk_level": round(vrp_rank, 2),
+                "note": (
+                    "Magnitude / volatility-regime signals — conviction & regime context, "
+                    "not directional. Excluded from overall_institutional_score."
+                ),
+            },
             "execution_impact": "OBSERVATION_ONLY",
             "status": "INSTITUTIONAL_INTELLIGENCE_READY",
         }

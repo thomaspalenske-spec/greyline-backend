@@ -24,3 +24,21 @@ def acknowledge_operator_notification(notification_id: str):
 @router.post("/operator-notifications/ack-all")
 def acknowledge_all_operator_notifications():
     return OperatorNotificationEngine().acknowledge_all()
+
+
+@router.post("/operator-notifications/ack/{notification_id}")
+def acknowledge_operator_notification_by_id(notification_id: str):
+    return OperatorNotificationEngine().acknowledge(notification_id)
+
+
+@router.post("/operator-events/test")
+def operator_events_test():
+    return OperatorEventBusEngine().publish(
+        source="MANUAL_TEST",
+        category="SYSTEM_TEST",
+        severity="WARNING",
+        title="Operator Event Bus Test",
+        message="Manual operator event bus test notification.",
+        ack_required=True,
+        payload={"test": True},
+    )
