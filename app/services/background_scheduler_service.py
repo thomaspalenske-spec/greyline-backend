@@ -68,6 +68,16 @@ class BackgroundSchedulerService:
         entry = {"status": status, "at": datetime.utcnow().isoformat(), "duration_ms": duration_ms, "error": error}
         cls._recent_cycles = (cls._recent_cycles + [entry])[-cls._RECENT_CAP:]
 
+        # Durable per-cycle heartbeat. recent_cycles is capped in memory/state, so it
+        # can't reveal multi-day gaps. This append-only beat lets ContinuityMonitorEngine
+        # detect when accumulation actually stopped — a laptop sleep, a reboot, a crash —
+        # so a gap in the data can't masquerade as "nothing happened".
+        try:
+            append_jsonl(Path("app/data/continuity/heartbeat.jsonl"),
+                         {"at": entry["at"], "status": status})
+        except Exception:
+            pass
+
     @classmethod
     def _load_state(cls):
         data = read_json(cls._state_file, default=dict) or {}

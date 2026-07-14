@@ -4,6 +4,7 @@ from pathlib import Path
 from app.services.persistence.json_store import read_jsonl
 from app.services.price_history_store import PriceHistoryStore
 from app.services.fixed_horizon_grader_engine import FixedHorizonGraderEngine
+from app.services.continuity_monitor_engine import ContinuityMonitorEngine
 
 
 class DataIntegrityEngine:
@@ -123,8 +124,19 @@ class DataIntegrityEngine:
                 "T+horizon yet. Edge is unmeasurable until the price feed accumulates."
             )
 
+        # --- continuity (a gap means the data has holes, not that markets were quiet) ---
+        continuity = ContinuityMonitorEngine().diagnose()
+        if continuity.get("verdict") == "RED":
+            reasons.append(f"Continuity: {continuity.get('headline')}")
+        elif continuity.get("verdict") == "AMBER":
+            reasons.append(
+                f"Continuity: {continuity.get('gap_count')} accumulation gap(s), "
+                f"largest {continuity.get('largest_gap_minutes')} min — that data is missing, not quiet."
+            )
+
         # --- verdict ---
-        if any("distinct day" in r or "0 matured" in r or "coverage" in r for r in reasons):
+        if any("distinct day" in r or "0 matured" in r or "coverage" in r
+               or "STALLED" in r for r in reasons):
             verdict = "RED"
             headline = "Data is not yet trustworthy enough to draw conclusions from."
         elif reasons:
@@ -164,6 +176,13 @@ class DataIntegrityEngine:
                 "balanced_accuracy": fh.get("balanced_accuracy_precision_based"),
                 "mcc": mcc,
                 "note": "MCC > 0 (significant) = real directional skill; ~0 = none; < 0 = anti-skill.",
+            },
+            "continuity": {
+                "verdict": continuity.get("verdict"),
+                "currently_live": continuity.get("currently_live"),
+                "uptime_pct": continuity.get("uptime_pct"),
+                "gap_count": continuity.get("gap_count"),
+                "largest_gap_minutes": continuity.get("largest_gap_minutes"),
             },
             "status": "DATA_INTEGRITY_READY",
         }
