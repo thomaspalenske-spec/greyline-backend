@@ -2,7 +2,7 @@ from datetime import datetime
 from app.services.operator_event_bus_engine import OperatorEventBusEngine
 
 from app.services.live_broker_health_engine import LiveBrokerHealthEngine
-from app.services.risk_engine import RiskEngine
+from app.services.risk_engine import RiskEngine, entry_allowed
 from app.services.opportunity_summary_engine import OpportunitySummaryEngine
 from app.services.execution_governor import ExecutionGovernor
 from app.services.master_decision_event_log import MasterDecisionEventLog
@@ -11,13 +11,29 @@ from app.services.institutional_flow_engine import InstitutionalFlowEngine
 from app.services.bear_market_opportunity_engine import BearMarketOpportunityEngine
 from app.services.reliability_governor_engine import ReliabilityGovernorEngine
 from app.services.forecast_outcome_capture_engine import ForecastOutcomeCaptureEngine
+from app.services.market_hours_engine import MarketHoursEngine
+
+
+def _candidate_direction(candidate):
+    if not candidate:
+        return None
+    bias = str(candidate.get("directional_bias") or "").upper()
+    if bias in ("BULLISH", "BEARISH"):
+        return bias
+    ot = str(candidate.get("option_type") or "").upper()
+    if ot in ("CALL", "C"):
+        return "BULLISH"
+    if ot in ("PUT", "P"):
+        return "BEARISH"
+    return None
 
 
 class GreyLineMasterDecisionEngine:
 
     def evaluate(self):
         broker_health = LiveBrokerHealthEngine().evaluate()
-        risk_state = RiskEngine().evaluate_risk_state()
+        risk = RiskEngine().evaluate()
+        risk_state = risk["risk_state"]
         opportunity_summary = OpportunitySummaryEngine().get_summary(limit=50)
 
         opportunities = opportunity_summary.get("opportunities", [])
@@ -45,7 +61,10 @@ class GreyLineMasterDecisionEngine:
             )[0]
 
         broker_ready = broker_health.get("health_score") == 100
-        risk_allows = risk_state == "NORMAL"
+        # Direction-aware risk gate: hard blocks stop all entries; a directional-only
+        # block still permits opposite/neutral rebalancing entries.
+        candidate_direction = _candidate_direction(top_candidate)
+        risk_allows, risk_gate_reason = entry_allowed(risk, candidate_direction)
         candidate_available = top_candidate is not None
         execute_candidate_available = top_candidate is not None and top_candidate.get("result") == "EXECUTE"
 
@@ -62,7 +81,21 @@ class GreyLineMasterDecisionEngine:
         new_entries_allowed = bool(reliability_governor.get("new_entries_allowed"))
         order_placement_allowed = bool(governor.get("order_placement_allowed"))
 
-        if execute_candidate_available and broker_ready and risk_allows and execution_allowed and new_entries_allowed and order_placement_allowed:
+        # Never decide EXECUTE against a closed market. The engine was emitting EXECUTE
+        # overnight (3,930 of them between 22:00 and 03:00 local on 2026-07-14 alone) on
+        # stale quotes. Nothing could fill, but each one was recorded as a decision and
+        # captured as a forecast — so the closed-market noise fed straight back into the
+        # regime trust stats the system judges itself by.
+        session = MarketHoursEngine().status()
+        market_open = session.get("is_regular_session") is True
+
+        if not market_open:
+            decision = "NO_ACTION"
+            reason = (
+                f"Market is closed ({session.get('state')}); no new entries "
+                f"outside the regular session"
+            )
+        elif execute_candidate_available and broker_ready and risk_allows and execution_allowed and new_entries_allowed and order_placement_allowed:
             decision = "EXECUTE"
             reason = "Best EXECUTE candidate meets criteria; paper execution allowed"
         elif execute_candidate_available and broker_ready and risk_allows:
@@ -73,7 +106,7 @@ class GreyLineMasterDecisionEngine:
             reason = "Broker health is not ready"
         elif execute_candidate_available and not risk_allows:
             decision = "NO_ACTION"
-            reason = f"Risk state does not allow execution: {risk_state}"
+            reason = f"Risk state does not allow execution: {risk_gate_reason}"
         elif candidate_available:
             decision = "NO_ACTION"
             reason = f"Best candidate is {top_candidate.get('result')}, not EXECUTE"
@@ -145,6 +178,9 @@ class GreyLineMasterDecisionEngine:
             "broker_ready": broker_ready,
             "broker_health": broker_health,
             "risk_state": risk_state,
+            "risk_state_detail": risk,
+            "risk_gate_reason": risk_gate_reason,
+            "candidate_direction": candidate_direction,
             "symbols_scored": opportunity_summary.get("symbols_scored", 0),
             "top_candidate": top_candidate,
             "candidate_available": candidate_available,

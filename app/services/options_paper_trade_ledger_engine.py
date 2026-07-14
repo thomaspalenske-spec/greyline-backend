@@ -8,6 +8,7 @@ from app.services.expected_value_scoring_engine import ExpectedValueScoringEngin
 from app.services.options_position_sizing_engine import OptionsPositionSizingEngine
 from app.services.options_entry_quality_gate_engine import OptionsEntryQualityGateEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.market_hours_engine import MarketHoursEngine
 from app.services.equity_institutional_flow_engine import EquityInstitutionalFlowEngine
 
 
@@ -200,13 +201,29 @@ class OptionsPaperTradeLedgerEngine:
         expiration_raw = leg.get("Expiration")
         contract_metrics = self._contract_metrics(now.isoformat(), expiration_raw)
 
+        # Session state comes from MarketHoursEngine, the system's authority on whether
+        # the market is open (it is what the background scheduler gates on).
+        #
+        # This previously read market_state off the underlying quote snapshot, which has
+        # never carried that key — so it resolved to "UNKNOWN" on every call, never
+        # equalled "MARKET_OPEN", and blocked EVERY options entry unconditionally. That
+        # is why no options paper trade was ever recorded, in the entire life of the
+        # ledger. Still honor an explicit quote market_state if the feed ever supplies
+        # one; otherwise ask the engine that actually knows.
         quote_market_state = (
             underlying_quote.get("market_state")
             or underlying_quote.get("underlying_market_state")
-            or "UNKNOWN"
         )
 
-        if quote_market_state != "MARKET_OPEN":
+        if quote_market_state:
+            market_open = quote_market_state == "MARKET_OPEN"
+            quote_market_state = quote_market_state
+        else:
+            session = MarketHoursEngine().status()
+            market_open = session.get("is_regular_session") is True
+            quote_market_state = session.get("state") or "UNKNOWN"
+
+        if not market_open:
             return {
                 "timestamp": datetime.utcnow().isoformat(),
                 "system": "GreyLine",
@@ -357,6 +374,14 @@ class OptionsPaperTradeLedgerEngine:
 
         trade = {
             "timestamp": now.isoformat(),
+            # `timestamp` is naive UTC with no offset, so a 09:27 fill reads as "14:27"
+            # and looks like an afternoon trade that hasn't happened yet — it misled us
+            # for real on 2026-07-14. The stored field can't safely change format (this
+            # runs on Python 3.9, whose fromisoformat() cannot parse a "Z" suffix, and
+            # these strings are parsed and compared all over), so publish market time
+            # alongside it for anyone reading the ledger.
+            "timestamp_market": MarketHoursEngine().status().get("market_time"),
+            "timestamp_tz": "UTC (timestamp) / America/New_York (timestamp_market)",
             "asset_type": "OPTION",
             "contract_type": "OPTION",
             "contract_start_date": now.date().isoformat(),

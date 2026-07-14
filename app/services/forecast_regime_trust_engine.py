@@ -28,6 +28,14 @@ class ForecastRegimeTrustEngine:
 
         buckets = {}
 
+        # The decision cycle re-forecasts the same symbol many times an hour (and every
+        # route that evaluated the master decision added more), so the same market moment
+        # lands in this file over and over. Counting raw records as independent trials
+        # wildly overstates the evidence: one bad hour x ~30 symbols x repeated cycles
+        # looked like hundreds of independent failures and was enough to brand a whole
+        # regime NEGATIVE_EDGE. One symbol at one snapshot price is ONE observation.
+        seen_moments = set()
+
         for line in self.path.read_text().splitlines()[-limit:]:
 
             if not line.strip():
@@ -43,13 +51,30 @@ class ForecastRegimeTrustEngine:
 
             regime = row.get("regime") or "UNKNOWN"
 
+            moment = (regime, row.get("symbol"), row.get("snapshot_price"))
+            if moment in seen_moments:
+                continue
+            seen_moments.add(moment)
+
             b = buckets.setdefault(
                 regime,
                 {
                     "correct": 0,
                     "incorrect": 0,
+                    "days": set(),
                 },
             )
+
+            # Symbols within one hour all ride the same tape, so they fail and succeed
+            # together. Distinct days are the honest unit of independent evidence.
+            day = str(
+                row.get("candidate_timestamp")
+                or row.get("forecast_timestamp")
+                or row.get("timestamp")
+                or ""
+            )[:10]
+            if day:
+                b["days"].add(day)
 
             if row.get("forecast_correct"):
                 b["correct"] += 1
@@ -80,6 +105,7 @@ class ForecastRegimeTrustEngine:
 
             regimes[regime] = {
                 "sample_size": correct + incorrect,
+                "distinct_days": len(stats["days"]),
                 "correct": correct,
                 "incorrect": incorrect,
                 "bayesian_accuracy_pct": round(

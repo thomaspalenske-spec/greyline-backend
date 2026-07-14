@@ -3,8 +3,24 @@ from fastapi import APIRouter
 from app.routes.greyline_market_battlefield import greyline_market_battlefield
 from app.services.market_battlefield_snapshot_cache import MarketBattlefieldSnapshotCache
 from app.services.battlefield_history_engine import BattlefieldHistoryEngine
+from app.services.master_decision_history_engine import MasterDecisionHistoryEngine
 
 router = APIRouter()
+
+
+def _recorded_master_decision():
+    """The decision GreyLineMasterDecisionEngine last recorded.
+
+    Read-only tail of the decision log: authoritative (it is the same record that
+    gates execution) and cheap, so rendering it costs nothing and cannot drift from
+    the engine. Never re-evaluates the engine — doing so from a display route would
+    both cost a full scoring cycle and append a spurious decision event.
+    """
+    try:
+        events = MasterDecisionHistoryEngine().get_history(limit=1).get("events") or []
+        return events[-1] if events else {}
+    except Exception:
+        return {}
 
 
 @router.get("/greyline-market-battlefield-summary")
@@ -49,19 +65,26 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
     ready_put_count = puts.get("ready_count") or 0
     direct_flow_ready = flow.get("direct_ready") is True
 
-    actionable_candidates = [
-        c for c in [best_call, best_put]
-        if (c or {}).get("result") == "EXECUTE"
-    ]
-
-    if actionable_candidates:
-        battlefield_master_decision = "EXECUTE_SIGNAL_BLOCKED_READ_ONLY"
-        battlefield_master_reason = "Battlefield best candidate is EXECUTE; live order placement remains disabled."
+    # The master decision belongs to GreyLineMasterDecisionEngine. This route renders
+    # it; it does not make one. greyline_market_battlefield() skips the decision engine
+    # for speed (include_master_decision=False, -> "SKIPPED_FAST_BATTLEFIELD"), and this
+    # route used to fill that gap by synthesizing EXECUTE_SIGNAL_BLOCKED_READ_ONLY from
+    # raw candidate scores. That is why the dashboard could show an EXECUTE candidate
+    # while the engine that actually gates trading had decided WATCH.
+    #
+    # Read the decision the engine last recorded instead: same record that gates
+    # execution, cheap to read, and it cannot drift from the engine.
+    engine_decision = _recorded_master_decision()
+    if engine_decision:
+        master_decision = engine_decision.get("decision")
+        master_reason = engine_decision.get("decision_reason")
     else:
-        battlefield_master_decision = decision.get("decision")
-        battlefield_master_reason = decision.get("reason")
+        master_decision = decision.get("decision")
+        master_reason = decision.get("reason")
 
-    master_decision = battlefield_master_decision
+    # Authoritative top candidate — the one the engine decided on, not a client-side
+    # or route-side pick across best_call/best_put.
+    engine_top_candidate = (engine_decision.get("top_candidate") or {}) if engine_decision else {}
 
     if (ready_call_count > 0 or ready_put_count > 0) and direct_flow_ready:
         battlefield_health = "GREEN"
@@ -81,6 +104,11 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
         "battlefield_health": battlefield_health,
         "battlefield_health_reason": battlefield_health_reason,
         "endpoint": "/greyline-market-battlefield-summary",
+        # The engine's own decision and candidate. Display surfaces render THIS —
+        # they do not re-derive a top pick from best_call/best_put.
+        "top_candidate": engine_top_candidate,
+        "master_decision_at": (engine_decision or {}).get("timestamp"),
+        "master_decision_risk_state": (engine_decision or {}).get("risk_state"),
         "battlefield_started_at": battlefield.get("battlefield_started_at"),
         "battlefield_completed_at": battlefield.get("battlefield_completed_at"),
         "battlefield_timings": battlefield.get("battlefield_timings"),
@@ -140,8 +168,8 @@ def greyline_market_battlefield_summary(force_refresh: bool = False):
         "institutional_flow_mode": flow.get("mode"),
         "direct_institutional_flow_ready": flow.get("direct_ready"),
         "missing_high_priority_flow_feeds": flow.get("missing_high_priority_feeds"),
-        "master_decision": battlefield_master_decision,
-        "master_reason": battlefield_master_reason,
+        "master_decision": master_decision,
+        "master_reason": master_reason,
         "summary_mode": "FORCE_REFRESH" if force_refresh else "CACHE_MISS_REFRESH",
         "status": "GREYLINE_MARKET_BATTLEFIELD_SUMMARY_READY",
     }

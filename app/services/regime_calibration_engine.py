@@ -13,6 +13,15 @@ class RegimeCalibrationEngine:
 
     MINIMUM_SAMPLE_SIZE = 20
 
+    # Symbols inside a single hour all ride the same tape, so they are not independent
+    # trials. Without a floor on distinct DAYS, one bad session x ~30 symbols clears any
+    # record-count threshold and permanently condemns a regime to NEGATIVE_EDGE — which
+    # is exactly what happened: STRONG_LIVE_TREND was vetoed on ~2 days of data dominated
+    # by a single hour. A regime must be observed across this many distinct days before
+    # its edge is treated as established; until then it stays LEARNING and tradeable, so
+    # the system can actually gather the evidence it is being judged on.
+    MINIMUM_DISTINCT_DAYS = 5
+
     def evaluate(self, regime: str):
         regime = (regime or "UNKNOWN").upper().strip()
 
@@ -24,6 +33,7 @@ class RegimeCalibrationEngine:
         )
 
         sample = int(trust.get("sample_size") or 0)
+        distinct_days = int(trust.get("distinct_days") or 0)
         bayes = trust.get("bayesian_accuracy_pct")
 
         calibration = {
@@ -37,6 +47,7 @@ class RegimeCalibrationEngine:
         actionable = (
             regime != "UNKNOWN"
             and sample >= self.MINIMUM_SAMPLE_SIZE
+            and distinct_days >= self.MINIMUM_DISTINCT_DAYS
             and bayes is not None
         )
 
@@ -100,6 +111,8 @@ class RegimeCalibrationEngine:
             "regime": regime,
             "sample_size": sample,
             "minimum_sample_size": self.MINIMUM_SAMPLE_SIZE,
+            "distinct_days": distinct_days,
+            "minimum_distinct_days": self.MINIMUM_DISTINCT_DAYS,
             "bayesian_accuracy_pct": bayes,
             "credible_interval_95": trust.get(
                 "credible_interval_95"

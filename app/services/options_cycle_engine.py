@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
 from app.services.options_paper_trade_ledger_engine import OptionsPaperTradeLedgerEngine
@@ -7,11 +7,44 @@ from app.services.execution_authority_engine import ExecutionAuthorityEngine
 
 class OptionsCycleEngine:
 
+    # OptionsEntryQualityGateEngine rejects any entry under 7 DTE, so the contract we
+    # pick must clear that floor or the trade is dead on arrival.
+    MIN_ENTRY_DTE = 7
+
+    def _select_expiration(self, symbol, min_dte=None, today=None):
+        """Nearest listed expiration that satisfies the minimum-DTE entry rule.
+
+        The expiration used to be hardcoded ("2026-07-17"), and the sweep never passed
+        one. Once the calendar drifted inside the 7-DTE floor, that frozen date meant
+        the quality gate rejected EVERY options entry no matter how strong the signal.
+        An expiry has to be chosen relative to today, not pinned to a literal.
+        """
+        min_dte = self.MIN_ENTRY_DTE if min_dte is None else min_dte
+        today = today or datetime.now(timezone.utc).date()
+
+        listing = TradeStationOptionChainLiveEngine().get_expirations(symbol)
+        candidates = []
+        for raw in listing.get("expirations") or []:
+            try:
+                d = datetime.fromisoformat(str(raw).replace("Z", "+00:00")).date()
+            except (ValueError, TypeError):
+                continue
+            candidates.append(((d - today).days, d))
+
+        eligible = sorted(d for dte, d in candidates if dte >= min_dte)
+        if eligible:
+            return eligible[0].isoformat()
+
+        # No expiry clears the floor (thin/short chain). Return the furthest one we
+        # know of and let the quality gate make the call — better than a stale literal.
+        furthest = sorted(d for _, d in candidates)
+        return furthest[-1].isoformat() if furthest else None
+
     def run(
         self,
         symbol="NVDA",
         option_type="CALL",
-        expiration="2026-07-17",
+        expiration=None,
         max_position_pct=0.05,
         candidate_score=None,
         regime_calibration=None,
@@ -32,6 +65,19 @@ class OptionsCycleEngine:
 
         symbol = (symbol or "NVDA").upper().strip()
         option_type = (option_type or "CALL").upper().strip()
+
+        if not expiration:
+            expiration = self._select_expiration(symbol)
+            if not expiration:
+                return {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "system": "GreyLine",
+                    "symbol": symbol,
+                    "option_type": option_type,
+                    "paper_trade_recorded": False,
+                    "reason": "NO_ELIGIBLE_EXPIRATION",
+                    "status": "OPTIONS_CYCLE_NO_EXPIRATION",
+                }
 
         chain = TradeStationOptionChainLiveEngine().get_chain_snapshot(
             symbol=symbol,

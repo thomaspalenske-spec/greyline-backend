@@ -1,12 +1,27 @@
 import json
 from datetime import datetime
+from os import getenv
 from pathlib import Path
 
 
 class PortfolioExposureEngine:
+    # Concentration must be measured against the capital base, not against the
+    # notional already deployed. Share-of-book is degenerate on a small book: a
+    # single position is always 100% of the book, so a percent-of-book limit
+    # hard-blocks every new entry the moment the first one fills.
+    DEFAULT_CAPITAL_BASE = 10000.0
+
     def __init__(self):
         self.equity_ledger = Path("app/data/paper_trading/paper_trade_ledger.jsonl")
         self.option_ledger = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
+
+    def _capital_base(self):
+        try:
+            base = float(getenv("GREYLINE_ACCOUNT_CAPITAL_BASE", self.DEFAULT_CAPITAL_BASE))
+        except (TypeError, ValueError):
+            base = self.DEFAULT_CAPITAL_BASE
+        # A zero/negative base would divide the circuit breaker out of existence.
+        return base if base > 0 else self.DEFAULT_CAPITAL_BASE
 
     def _read_jsonl(self, path):
         if not path.exists():
@@ -48,6 +63,26 @@ class PortfolioExposureEngine:
             "AMZN": "CONSUMER_DISCRETIONARY",
             "TSM": "TECHNOLOGY",
             "PLTR": "TECHNOLOGY",
+            "AAPL": "TECHNOLOGY",
+            "SMH": "TECHNOLOGY",
+            "TSLA": "CONSUMER_DISCRETIONARY",
+
+            # Crypto. These four are one bet, not four: a spot bitcoin ETF, the exchange,
+            # an ether trust, and a company whose equity is a levered bitcoin proxy. They
+            # were all falling through to UNKNOWN, so a book that was 40% long bitcoin
+            # four different ways read as diversified to the concentration limit.
+            "IBIT": "CRYPTO",
+            "COIN": "CRYPTO",
+            "ETHE": "CRYPTO",
+            "MSTR": "CRYPTO",
+
+            # Index futures track the ETFs we already hold, so they must share a bucket
+            # with them or index exposure gets double-counted as two "sectors".
+            "ES": "BROAD_MARKET",
+            "NQ": "TECH_GROWTH",
+
+            "CL": "ENERGY",
+            "GC": "PRECIOUS_METALS",
         }
 
         return sector_map.get(symbol, "UNKNOWN")
@@ -101,16 +136,30 @@ class PortfolioExposureEngine:
             sector_exposure.setdefault(sector, 0.0)
             sector_exposure[sector] += p["notional"]
 
+        capital_base = self._capital_base()
+
         sector_exposure = {
             k: {
                 "notional": round(v, 2),
+                # Share of the open book — what dominates the portfolio right now.
+                # Used for composition/exit prioritization, NOT for the hard limit.
                 "pct_of_portfolio": round((v / total_notional) * 100, 2) if total_notional else 0,
+                # Share of the account's capital — what the risk limit is about.
+                "pct_of_capital": round((v / capital_base) * 100, 2),
             }
             for k, v in sorted(sector_exposure.items())
         }
 
-        max_sector_pct = max(
+        max_sector_pct_of_book = max(
             [v["pct_of_portfolio"] for v in sector_exposure.values()],
+            default=0,
+        )
+
+        # The limit engines consume max_sector_exposure_pct. It must be
+        # capital-relative so that concentration is measured against what the
+        # account can deploy, not against what it happens to hold.
+        max_sector_pct = max(
+            [v["pct_of_capital"] for v in sector_exposure.values()],
             default=0,
         )
 
@@ -128,8 +177,17 @@ class PortfolioExposureEngine:
             "engine": "PortfolioExposureEngine",
             "open_position_count": len(open_positions),
             "total_notional": total_notional,
+            "capital_base": capital_base,
+            # An unmapped symbol is a concentration blind spot, not a harmless default:
+            # everything unclassified pools into one "UNKNOWN" bucket that means nothing,
+            # so correlated names can stack up while the limit reads them as diversified.
+            # Surface them rather than letting the next universe addition do this quietly.
+            "unmapped_symbols": sorted(
+                {p["symbol"] for p in open_positions if p["sector"] == "UNKNOWN" and p["symbol"]}
+            ),
             "sector_exposure": sector_exposure,
             "max_sector_exposure_pct": max_sector_pct,
+            "max_sector_exposure_pct_of_book": max_sector_pct_of_book,
             "concentration_risk": concentration_risk,
             "positions": open_positions,
             "status": "PORTFOLIO_EXPOSURE_READY",

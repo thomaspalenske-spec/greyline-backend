@@ -547,6 +547,21 @@ table {
   white-space: nowrap;
 }
 
+.auth-reason {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Authority identifiers can be long (e.g. EXECUTE_SIGNAL_BLOCKED_READ_ONLY);
+   let them wrap inside their tile instead of overflowing into the next one. */
+#execution_authority_panel .readiness-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
 @media (max-width: 1700px) {
   .readiness-grid { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
 }
@@ -604,6 +619,17 @@ table {
         <div class="cockpit-tile"><div class="label">Reliability</div><div class="cockpit-value" id="cockpit_reliability">--</div></div>
         <div class="cockpit-tile"><div class="label">Unread Alerts</div><div class="cockpit-value" id="cockpit_unread">--</div></div>
         <div class="cockpit-tile"><div class="label">Last Decision</div><div class="cockpit-value" id="cockpit_decision">--</div></div>
+      </div>
+
+      <div class="execution-readiness" id="execution_authority_panel">
+        <div class="readiness-title">EXECUTION AUTHORITY</div>
+        <div class="readiness-grid">
+          <div class="readiness-tile"><div class="label">Signal</div><div class="readiness-value" id="auth_signal">--</div></div>
+          <div class="readiness-tile"><div class="label">Authority Verdict</div><div class="readiness-value" id="auth_verdict">--</div></div>
+          <div class="readiness-tile"><div class="label">Governor Mode</div><div class="readiness-value" id="auth_mode">--</div></div>
+          <div class="readiness-tile"><div class="label">Paper Kill-Switch</div><div class="readiness-value" id="auth_killswitch">--</div></div>
+        </div>
+        <div class="auth-reason" id="auth_reason">--</div>
       </div>
 
       <div class="execution-readiness">
@@ -667,7 +693,7 @@ table {
             </div>
 
             <div class="card" style="margin-top:14px;">
-              <div class="section-title">Top 5 Calls</div>
+              <div class="section-title">Top 5 Candidates</div>
               <table>
                 <thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Flow</th><th>Conviction</th><th>Gate</th><th>Result</th><th>Status</th></tr></thead>
                 <tbody id="top_calls"></tbody>
@@ -864,6 +890,25 @@ async function refreshCockpitBanner() {
     setText("cockpit_unread", summary.unread_notifications ?? "--");
     setText("cockpit_decision", summary.master_decision || "--");
 
+    // Execution authority (richer ExecutionAuthorityEngine state).
+    const verdict = summary.execution_authority || "--";
+    setText("auth_signal", summary.signal_decision || summary.master_decision || "--");
+    setText("auth_verdict", verdict);
+    setText("auth_mode", summary.operating_mode || "--");
+
+    const paperEnabled = summary.paper_execution_enabled;
+    setText("auth_killswitch", paperEnabled === true ? "ARMED" : paperEnabled === false ? "BLOCKED" : "--");
+    setText("auth_reason", summary.execution_authority_reason || "--");
+
+    const verdictEl = document.getElementById("auth_verdict");
+    if (verdictEl) {
+      const blocked = verdict === "KILL_SWITCH_BLOCKED" || verdict === "BLOCKED";
+      const executing = verdict === "PAPER_EXECUTE" || verdict === "LIVE_EXECUTE";
+      verdictEl.className = "readiness-value " + (blocked ? "red" : executing ? "green" : "yellow");
+    }
+    const killEl = document.getElementById("auth_killswitch");
+    if (killEl) killEl.className = "readiness-value " + (paperEnabled === true ? "green" : paperEnabled === false ? "red" : "yellow");
+
     const banner = document.getElementById("cockpit_banner");
     const headline = document.getElementById("cockpit_headline");
     const statusEl = document.getElementById("cockpit_status");
@@ -923,7 +968,12 @@ async function refreshAll() {
 
   if (battlefield.status === "fulfilled") {
     const b = battlefield.value;
-    const top = b.best_call || b.top_candidates?.[0] || {};
+    // The engine decides; this dashboard only renders. b.top_candidate is the
+    // candidate GreyLineMasterDecisionEngine actually decided on. Do NOT re-derive a
+    // top pick here from best_call/best_put — a display surface that computes its own
+    // recommendation will sooner or later disagree with the engine that gates trading,
+    // and the operator will be looking at the wrong one.
+    const top = b.top_candidate || {};
 
     setText("battlefield_health", b.battlefield_health || "--");
     setText("market_bias", String(b.market_bias || "--").replaceAll("_", " "));
@@ -938,7 +988,12 @@ async function refreshAll() {
     setText("ready_calls", b.ready_call_count ?? "--");
     setText("ready_puts", b.ready_put_count ?? "--");
 
-    const rows = (b.top_calls || []).slice(0, 5).map((c, i) => {
+    // top_candidates is the engine's ranking across both sides, already ordered.
+    // Render it as given — no client-side re-sorting. (Reading only top_calls was
+    // what showed "No candidates" on a bearish day while top_puts held EXECUTE setups.)
+    const ranked = b.top_candidates || [];
+
+    const rows = ranked.slice(0, 5).map((c, i) => {
       const flow = String(c.institutional_flow_direction || "--").replaceAll("_", " ");
       const flowClass = c.institutional_flow_direction === "INFLOW" ? "green" : c.institutional_flow_direction === "OUTFLOW" ? "red" : "yellow";
       const gate = String(c.institutional_flow_gate || "--").replaceAll("_", " ");
