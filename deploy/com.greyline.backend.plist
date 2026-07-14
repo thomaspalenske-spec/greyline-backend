@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  GreyLine backend as a macOS user service (LaunchAgent).
+
+  What this buys over `nohup uvicorn ...`:
+    - RunAtLoad  : starts automatically when you log in.
+    - KeepAlive  : if the process crashes OR exits, launchd restarts it. GreyLine
+                   is no longer dead-until-noticed.
+    - caffeinate -i : while GreyLine runs, the Mac will not IDLE-sleep, so you stop
+                   losing data every time the machine dozes off on your desk.
+
+  The hard ceiling this does NOT solve: closing the lid still sleeps the Mac (on
+  battery), which pauses every process. True 24/7 continuity needs an always-on
+  host — see deploy/README-service.md.
+
+  Because KeepAlive is on, `kill` will NOT stop GreyLine (launchd relaunches it).
+  Stop it with:  launchctl unload ~/Library/LaunchAgents/com.greyline.backend.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.greyline.backend</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-i</string>
+        <string>/Users/thomaspalenske/GreyLine/greyline-backend/.venv/bin/uvicorn</string>
+        <string>main:app</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/thomaspalenske/GreyLine/greyline-backend</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/thomaspalenske/GreyLine/greyline-backend/logs/launchd.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/thomaspalenske/GreyLine/greyline-backend/logs/launchd.err.log</string>
+</dict>
+</plist>
