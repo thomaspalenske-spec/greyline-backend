@@ -18,6 +18,7 @@ from app.services.options_position_manager_engine import OptionsPositionManagerE
 from app.services.options_paper_execution_sweep_engine import OptionsPaperExecutionSweepEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.routes.paper_trade_executor import run_paper_trade_executor
+from app.services.momentum_reversal_rebalance_engine import MomentumReversalRebalanceEngine
 from app.services.market_hours_engine import MarketHoursEngine
 from app.services.forecast_outcome_grader_engine import ForecastOutcomeGraderEngine
 from app.services.institutional.institutional_signal_snapshot_sweep_engine import (
@@ -295,6 +296,15 @@ class BackgroundSchedulerService:
             }
         paper_executor = run_paper_trade_executor()
         options_executor = OptionsPaperExecutionSweepEngine().run(limit=10)
+
+        # The rebuilt, validated strategy, traded forward. Self-gates: no-op unless the
+        # market is open, it's due (~weekly), and execution is enabled. On the first due
+        # cycle it opens the top-N; thereafter it realizes and re-selects each cycle it fires.
+        try:
+            momentum_reversal = MomentumReversalRebalanceEngine().rebalance()
+        except Exception as exc:
+            momentum_reversal = {"rebalanced": False, "error": repr(exc),
+                                 "status": "MOMENTUM_REVERSAL_REBALANCE_DEGRADED"}
         paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
         options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
         from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
@@ -324,6 +334,7 @@ class BackgroundSchedulerService:
                 "forward_price_points_recorded": forward.get("price_points_recorded"),
                 "learning_memory_status": learning.get("status"),
                 "fixed_horizon_skill": fixed_horizon,
+                "momentum_reversal_rebalance": momentum_reversal,
                 "institutional_snapshot_sweep_status": (
                     institutional_snapshot_sweep.get(
                         "status"
