@@ -1,13 +1,20 @@
 import bisect
 import csv
 import glob
+import json
 import os
 from datetime import datetime
 from os import getenv
+from pathlib import Path
+
+import requests
 
 from app.services.directional_signal_engine import DirectionalSignalEngine
 from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
 from app.services.position_exposure_limit_engine import PositionExposureLimitEngine
+from app.services.tradestation_token_maintenance_engine import (
+    TradeStationTokenMaintenanceEngine,
+)
 
 
 class MomentumReversalStrategyEngine:
@@ -32,6 +39,9 @@ class MomentumReversalStrategyEngine:
     CAPITAL_BASE = 10000.0
     TOP_N = 5
     HISTORICAL_DIR = "app/data/historical"
+    LIVE_CACHE = Path("app/data/price_history/live_universe_cache.json")
+    LIVE_BARS_BACK = 320          # ~14 months of daily bars, > the 253 the signal needs
+    CACHE_TTL_SECONDS = 6 * 3600  # refetch live bars at most every 6h
 
     def __init__(self, top_n=None, capital_base=None):
         self.top_n = int(top_n) if top_n else self.TOP_N
@@ -76,6 +86,10 @@ class MomentumReversalStrategyEngine:
         return confirmed[:self.top_n], confirmed
 
     # --- data feed -------------------------------------------------------------
+    def _symbols(self):
+        return sorted(os.path.basename(p).replace("_daily.csv", "")
+                      for p in glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv"))
+
     def _csv_universe(self):
         series, asof = {}, None
         for p in sorted(glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv")):
@@ -94,10 +108,81 @@ class MomentumReversalStrategyEngine:
                     asof = last
         return series, asof, "HISTORICAL_CSV"
 
-    def universe(self):
-        # Production should prepend a live TradeStation daily-bars fetch (fetch_bars in
-        # backfill_price_history.py) so the series ends today. Absent a token, the deep
-        # CSV history is used and the as-of date is reported honestly.
+    def _fetch_daily_closes(self, symbol, base_url, token):
+        """Current daily closes (oldest->newest) from TradeStation BarCharts, or []."""
+        url = base_url.rstrip("/") + f"/v3/marketdata/barcharts/{symbol}"
+        resp = requests.get(
+            url,
+            params={"unit": "Daily", "barsback": self.LIVE_BARS_BACK},
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        bars = (resp.json() or {}).get("Bars", []) or []
+        out = []
+        for b in bars:
+            ts = b.get("TimeStamp") or b.get("Timestamp")
+            c = b.get("Close")
+            try:
+                c = float(c)
+            except (TypeError, ValueError):
+                continue
+            if ts and c > 0:
+                out.append((str(ts)[:10], c))
+        out.sort(key=lambda x: x[0])
+        return out
+
+    def _live_universe(self):
+        # Serve from cache if fresh — a daily strategy doesn't need to re-pull 98 symbols
+        # on every request, and it keeps API usage bounded.
+        if self.LIVE_CACHE.exists():
+            try:
+                cached = json.loads(self.LIVE_CACHE.read_text())
+                age = (datetime.utcnow() - datetime.fromisoformat(cached["fetched_at"])).total_seconds()
+                if age < self.CACHE_TTL_SECONDS and cached.get("series"):
+                    return cached["series"], cached.get("as_of"), "TRADESTATION_LIVE_CACHED"
+            except Exception:
+                pass
+
+        TradeStationTokenMaintenanceEngine().evaluate()   # refresh access token
+        token = getenv("TRADESTATION_ACCESS_TOKEN", "")
+        base_url = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com")
+        if not token:
+            raise RuntimeError("no TradeStation access token")
+
+        series, asof, failed = {}, None, []
+        for sym in self._symbols():
+            try:
+                bars = self._fetch_daily_closes(sym, base_url, token)
+            except Exception:
+                failed.append(sym)
+                continue
+            closes = [c for _, c in bars]
+            if len(closes) >= self.signal.MIN_BARS:
+                series[sym] = closes
+                last = bars[-1][0]
+                if last and (asof is None or last > asof):
+                    asof = last
+            else:
+                failed.append(sym)
+
+        if not series:
+            raise RuntimeError("live fetch produced no usable series")
+
+        self.LIVE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        self.LIVE_CACHE.write_text(json.dumps(
+            {"fetched_at": datetime.utcnow().isoformat(), "as_of": asof,
+             "failed": failed, "series": series}))
+        return series, asof, "TRADESTATION_LIVE"
+
+    def universe(self, prefer_live=True):
+        # Live daily bars (series ends today) with a per-run cache; fall back to the deep
+        # CSV history if the live feed is unavailable, reporting the source honestly.
+        if prefer_live:
+            try:
+                return self._live_universe()
+            except Exception:
+                pass
         return self._csv_universe()
 
     # --- recommendation (dry run; no trades) -----------------------------------
