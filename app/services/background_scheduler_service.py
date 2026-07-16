@@ -15,9 +15,7 @@ from app.services.fixed_horizon_grader_engine import FixedHorizonGraderEngine
 from app.services.persistence.json_store import append_jsonl
 from app.services.paper_position_manager_engine import PaperPositionManagerEngine
 from app.services.options_position_manager_engine import OptionsPositionManagerEngine
-from app.services.options_paper_execution_sweep_engine import OptionsPaperExecutionSweepEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
-from app.routes.paper_trade_executor import run_paper_trade_executor
 from app.services.momentum_reversal_rebalance_engine import MomentumReversalRebalanceEngine
 from app.services.market_hours_engine import MarketHoursEngine
 from app.services.forecast_outcome_grader_engine import ForecastOutcomeGraderEngine
@@ -294,8 +292,13 @@ class BackgroundSchedulerService:
                     "ORCHESTRATOR_DEGRADED"
                 ),
             }
-        paper_executor = run_paper_trade_executor()
-        options_executor = OptionsPaperExecutionSweepEngine().run(limit=10)
+        # RETIRED: the old coin-flip signal's execution paths. 28 years / 90k samples
+        # proved that signal is noise (core_backtest.py), yet these kept opening equity
+        # and options trades on it — competing for the risk budget and contaminating the
+        # forward edge measurement. Only the validated MomentumReversalRebalanceEngine
+        # trades now. Kept as inert status so the cycle-result shape stays stable.
+        paper_executor = {"status": "RETIRED_DEAD_SIGNAL", "paper_trade_recorded": False}
+        options_executor = {"status": "RETIRED_DEAD_SIGNAL", "paper_trades_recorded": 0}
 
         # The rebuilt, validated strategy, traded forward. Self-gates: no-op unless the
         # market is open, it's due (~weekly), and execution is enabled. On the first due
