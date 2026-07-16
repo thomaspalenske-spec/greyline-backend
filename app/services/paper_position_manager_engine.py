@@ -97,8 +97,13 @@ class PaperPositionManagerEngine:
                 updated.append(trade)
                 continue
 
-            pnl = (current_price - entry_price) * quantity
-            pnl_pct = ((current_price / entry_price) - 1) * 100
+            # Direction-aware P&L. This was long-only math: for a SHORT it inverted the
+            # sign, so a winning short (price falling) read as a loss and tripped the
+            # stop-loss on a profitable trade — which is exactly what closed the MSTR
+            # short at a reported -$34.45 when it was really a +$34.45 gain.
+            direction = -1 if str(trade.get("side") or "").upper() in ("SELL", "SELL_SHORT", "SHORT") else 1
+            pnl = (current_price - entry_price) * quantity * direction
+            pnl_pct = ((current_price / entry_price) - 1) * 100 * direction
 
             if not market_open:
                 trade["current_price"] = current_price
