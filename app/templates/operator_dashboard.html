@@ -664,7 +664,7 @@ table {
 
     <section class="content">
       <div class="card">
-        <div class="section-title">BATTLEFIELD SUMMARY</div>
+        <div class="section-title">BATTLEFIELD SUMMARY <span style="font-size:11px;font-weight:800;color:#ffb32c;background:rgba(255,179,44,.12);padding:3px 9px;border-radius:6px;margin-left:10px;letter-spacing:.5px;">RETIRED SIGNAL — NOT TRADING</span></div><div style="background:rgba(255,179,44,.08);border:1px solid rgba(255,179,44,.35);color:#ffb32c;border-radius:9px;padding:9px 12px;font-size:12.5px;margin-bottom:14px;line-height:1.5;">These candidates come from the legacy options signal, which backtested as a coin flip (bal. accuracy 0.49 over 28 years) and was <b>retired from execution</b>. It still scores, but it <b>cannot open trades</b>. Your live positions below are from the momentum-reversal strategy.</div>
         <div class="battlefield">
           <div class="card">
             <div class="label">Top Candidate</div>
@@ -1089,9 +1089,9 @@ async function refreshAll() {
     setText("unrealized", fmtMoney(acct ? acct.unrealized_pnl : unrealized));
     setText("total_return", fmtPct(acct ? acct.total_return_pct : totalReturn));
     setText("open_trades", acct ? acct.open_position_count : open.length);
-    setText("total_trades", l.option_trade_count ?? trades.length);
-    setText("open_trade_count", l.open_option_trade_count ?? open.length);
-    setText("closed_trade_count", l.closed_option_trade_count ?? 0);
+    setText("total_trades", acct ? acct.total_trade_count : (l.option_trade_count ?? trades.length));
+    setText("open_trade_count", acct ? acct.open_position_count : (l.open_option_trade_count ?? open.length));
+    setText("closed_trade_count", acct ? acct.closed_trade_count : (l.closed_option_trade_count ?? 0));
     setText("realized_pnl", fmtMoney(acct ? acct.realized_pnl : (l.realized_pnl || 0)));
 
     setClassBySign("unrealized", unrealized);
@@ -1119,7 +1119,7 @@ async function refreshAll() {
       </tr>`;
     }).join("") || `<tr><td colspan="8">No open positions</td></tr>`;
 
-    drawCurve(trades);
+    drawCurve(rowsAll);   // real open book, not the retired options ledger
   }
 }
 
