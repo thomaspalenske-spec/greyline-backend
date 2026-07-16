@@ -45,6 +45,14 @@ class PaperPositionManagerEngine:
                 updated.append(trade)
                 continue
 
+            # Momentum-reversal positions are owned by MomentumReversalRebalanceEngine,
+            # which exits on a fixed ~5-day schedule. This manager's take-profit/stop-loss
+            # doctrine is a different, conflicting exit rule — left unguarded it closed the
+            # strategy's positions out from under it (e.g. the MSTR short). Leave them be.
+            if trade.get("trade_intent") == "MOMENTUM_REVERSAL":
+                updated.append(trade)
+                continue
+
             symbol = trade.get("symbol")
             entry_price = float(trade.get("entry_price") or 0)
             quantity = float(trade.get("quantity") or 0)
