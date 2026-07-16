@@ -928,12 +928,13 @@ async function refreshAll() {
   await refreshCockpitBanner();
   await refreshCommanderSummary();
 
-  const [battlefield, ledger, scheduler, positionAlerts, cockpit] = await Promise.allSettled([
+  const [battlefield, ledger, scheduler, positionAlerts, cockpit, book] = await Promise.allSettled([
     getJSON("/greyline-market-battlefield-summary"),
     getJSON("/options-account-dashboard"),
     getJSON("/background-scheduler/status"),
     getJSON("/position-alerts"),
-    getJSON("/operator-cockpit-status")
+    getJSON("/operator-cockpit-status"),
+    getJSON("/open-positions")
   ]);
 
   if (arguments[0]) {}
@@ -1092,86 +1093,24 @@ async function refreshAll() {
     setClassBySign("total_return", totalReturn);
     setClassBySign("realized_pnl", l.realized_pnl || 0);
 
-    document.getElementById("positions").innerHTML = open.map(t => {
-      const cv = t.commander_view || {};
-      const rb = cv.risk_box || {};
-      const tp = cv.tp_underlying_ladder || [];
-      const tp1 = tp[0] || {};
-      const tp2 = tp[1] || {};
-      const tp3 = tp[2] || {};
-      const currentUnderlying = Number(cv.current_underlying_price || t.current_underlying_price || t.current_price || 0);
-      const optionType = String(t.option_type || "").toUpperCase();
-
-      function tpHit(target) {
-        const v = Number(target || 0);
-        if (!v || !currentUnderlying) return false;
-        return optionType === "PUT" ? currentUnderlying <= v : currentUnderlying >= v;
-      }
-
-      function tpClass(target) {
-        return tpHit(target) ? "tp-hit" : "green";
-      }
-
-      function tpLabel(name, target) {
-        return `${name}${tpHit(target) ? " HIT ✓" : ""}:`;
-      }
-
+    // Render the WHOLE book from /open-positions (equity + options). This panel used
+    // to read only the options ledger, so it reported "No open positions" while real
+    // equity was held — a position could hide simply by being in the other ledger.
+    const bk = (book.status === "fulfilled" ? book.value : {}) || {};
+    const rowsAll = bk.open_positions || [];
+    document.getElementById("positions").innerHTML = rowsAll.map(p => {
+      const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
+      const sideCls = p.side === "SHORT" ? "red" : "green";
       return `
       <tr>
-        <td><strong>${cv.underlying || t.underlying || t.symbol}</strong><br><span class="green">${t.option_type || ""}</span></td>
-        <td class="green">${t.side || "--"}</td>
-        <td>${fmtMoney(cv.estimated_entry_underlying_price || t.underlying_entry_price || t.entry_underlying_price || t.entry_price)}</td>
-        <td>${fmtMoney(cv.current_underlying_price || t.current_underlying_price || t.current_price)}</td>
-        <td class="${Number(t.unrealized_pnl || 0) >= 0 ? "green" : "red"}">${fmtMoney(t.unrealized_pnl)}</td>
-        <td class="${Number(t.unrealized_pnl_pct || 0) >= 0 ? "green" : "red"}">${fmtPct(t.unrealized_pnl_pct)}</td>
-        <td><span class="badge">${t.position_action || t.status}</span></td>
-        <td>${String(t.tp_state_stage || t.position_stage || "--").replaceAll("_", " ")}</td>
-      </tr>
-      <tr>
-        <td colspan="8" style="background:rgba(255,255,255,.035); color:#9aa7b8;">
-          <strong>Underlying Plan:</strong>
-          Entry ${fmtMoney(cv.estimated_entry_underlying_price)}
-          &nbsp; | &nbsp;
-          Current ${fmtMoney(cv.current_underlying_price)}
-          &nbsp; | &nbsp;
-          <strong class="red">SL:</strong> ${fmtMoney(rb.estimated_stop_underlying_price)}
-          &nbsp; | &nbsp;
-          <strong class="${tpClass(tp1.estimated_underlying_target_price)}">${tpLabel("TP1", tp1.estimated_underlying_target_price)}</strong> ${fmtMoney(tp1.estimated_underlying_target_price)}
-          &nbsp;
-          <strong class="${tpClass(tp2.estimated_underlying_target_price)}">${tpLabel("TP2", tp2.estimated_underlying_target_price)}</strong> ${fmtMoney(tp2.estimated_underlying_target_price)}
-          &nbsp;
-          <strong class="${tpClass(tp3.estimated_underlying_target_price)}">${tpLabel("TP3", tp3.estimated_underlying_target_price)}</strong> ${fmtMoney(tp3.estimated_underlying_target_price)}
-          &nbsp;
-          <strong class="${tpClass(t.tp4_price)}">${t.tp4_mode === "DYNAMIC_RUNNER_NO_FIXED_TARGET" || t.tp4_runner ? "TP4 RUNNER" : tpLabel("TP4", t.tp4_price)}</strong> ${t.tp4_mode === "DYNAMIC_RUNNER_NO_FIXED_TARGET" || t.tp4_runner ? "" : fmtMoney(t.tp4_price)}
-        </td>
-      </tr>
-      <tr>
-        <td colspan="8" style="background:rgba(255,255,255,.025); color:#9aa7b8;">
-          <strong>Option Contract:</strong>
-          ${cv.option_symbol || t.option_symbol || t.symbol}
-          &nbsp; | &nbsp;
-          Strike ${fmtMoney(cv.strike || t.strike)}
-          &nbsp; | &nbsp;
-          Exp ${cv.expiration || t.expiration || "--"}
-          &nbsp; | &nbsp;
-          Entry Stock ${fmtMoney(cv.estimated_entry_underlying_price || t.underlying_entry_price)}
-          &nbsp; | &nbsp;
-          Current Stock ${fmtMoney(cv.current_underlying_price || t.current_underlying_price || t.underlying_last)}
-          &nbsp; | &nbsp;
-          Days ${cv.days_remaining ?? "--"}
-          &nbsp; | &nbsp;
-          Forced Exit ${t.forced_liquidation_deadline || "--"}
-          &nbsp; | &nbsp;
-          Thesis ${t.thesis_status || "--"} ${t.thesis_integrity_score ? "(" + t.thesis_integrity_score + "%)" : ""}
-        </td>
-      </tr>
-      <tr>
-        <td colspan="8" style="background:rgba(255,255,255,.02); color:#9aa7b8;">
-          <strong>Commander:</strong>
-          ${String(cv.commander_action || "--").replaceAll("_", " ")}
-          &nbsp; | &nbsp;
-          ${cv.commander_reason || "No commander view available."}
-        </td>
+        <td><strong>${p.symbol}</strong><br><span class="sub">${p.asset_type}</span></td>
+        <td><span class="${sideCls}">${p.side}</span><br><span class="sub">${p.quantity}</span></td>
+        <td>${fmtMoney(p.entry_price)}</td>
+        <td>${fmtMoney(p.current_price)}</td>
+        <td class="${sign}">${fmtMoney(p.unrealized_pnl)}</td>
+        <td class="${sign}">${p.unrealized_pnl_pct > 0 ? "+" : ""}${p.unrealized_pnl_pct}%</td>
+        <td>${p.status}</td>
+        <td><span class="sub">${p.stage}</span></td>
       </tr>`;
     }).join("") || `<tr><td colspan="8">No open positions</td></tr>`;
 

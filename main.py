@@ -197,6 +197,9 @@ app.include_router(continuity.router)
 from app.routes import momentum_reversal_strategy
 app.include_router(momentum_reversal_strategy.router)
 
+from app.routes import open_positions
+app.include_router(open_positions.router)
+
 from app.routes import opportunity_balance
 app.include_router(opportunity_balance.router)
 
