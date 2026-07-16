@@ -646,7 +646,7 @@ table {
     </section>
 
     <section class="grid metrics">
-      <div class="card"><div class="label">Current Options Equity</div><div class="value" id="equity">$--</div></div>
+      <div class="card"><div class="label">Account Equity</div><div class="value" id="equity">$--</div></div>
       <div class="card"><div class="label">Cash On Hand</div><div class="value" id="cash">$--</div></div>
       <div class="card"><div class="label">Buying Power</div><div class="value" id="buying_power">$--</div></div>
       <div class="card"><div class="label">Deployed Capital</div><div class="value" id="deployed">$--</div><div class="sub" id="deployed_pct">--</div></div>
@@ -655,7 +655,7 @@ table {
     </section>
 
     <section class="grid health">
-      <div class="card"><div class="label">Open Option Trades</div><div class="value yellow" id="open_trades">--</div></div>
+      <div class="card"><div class="label">Open Positions</div><div class="value yellow" id="open_trades">--</div></div>
       <div class="card"><div class="label">Paper Execution Enabled</div><div class="value red" id="execution_enabled">NO</div></div>
       <div class="card"><div class="label">Live Order Placement Allowed</div><div class="value red" id="orders_allowed">NO</div></div>
       <div class="card"><div class="label">Battlefield Health</div><div class="value yellow" id="battlefield_health">--</div></div>
@@ -928,13 +928,14 @@ async function refreshAll() {
   await refreshCockpitBanner();
   await refreshCommanderSummary();
 
-  const [battlefield, ledger, scheduler, positionAlerts, cockpit, book] = await Promise.allSettled([
+  const [battlefield, ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/greyline-market-battlefield-summary"),
     getJSON("/options-account-dashboard"),
     getJSON("/background-scheduler/status"),
     getJSON("/position-alerts"),
     getJSON("/operator-cockpit-status"),
-    getJSON("/open-positions")
+    getJSON("/open-positions"),
+    getJSON("/account-summary")
   ]);
 
   if (arguments[0]) {}
@@ -1076,18 +1077,22 @@ async function refreshAll() {
     const cash = Number(l.cash_on_hand || 0);
     const totalReturn = Number(l.total_return_pct || 0);
 
-    setText("equity", fmtMoney(equity));
-    setText("cash", fmtMoney(cash));
-    setText("buying_power", fmtMoney(cash));
-    setText("deployed", fmtMoney(deployed));
+    // Account cards now come from /account-summary (BOTH books). They previously read
+    // the options-only engine, so they showed $0 deployed / $0 unrealized while real
+    // equity was held, and a Total Return that belonged entirely to the RETIRED signal.
+    const acct = (typeof acctRes !== "undefined" && acctRes.status === "fulfilled") ? acctRes.value : null;
+    setText("equity", fmtMoney(acct ? acct.total_equity : equity));
+    setText("cash", fmtMoney(acct ? acct.cash_on_hand : cash));
+    setText("buying_power", fmtMoney(acct ? acct.buying_power : cash));
+    setText("deployed", fmtMoney(acct ? acct.deployed_capital : deployed));
     setText("deployed_pct", `${fmtPct((deployed / Math.max(equity, 1)) * 100)} of Equity`);
-    setText("unrealized", fmtMoney(unrealized));
-    setText("total_return", fmtPct(totalReturn));
-    setText("open_trades", open.length);
+    setText("unrealized", fmtMoney(acct ? acct.unrealized_pnl : unrealized));
+    setText("total_return", fmtPct(acct ? acct.total_return_pct : totalReturn));
+    setText("open_trades", acct ? acct.open_position_count : open.length);
     setText("total_trades", l.option_trade_count ?? trades.length);
     setText("open_trade_count", l.open_option_trade_count ?? open.length);
     setText("closed_trade_count", l.closed_option_trade_count ?? 0);
-    setText("realized_pnl", fmtMoney(l.realized_pnl || 0));
+    setText("realized_pnl", fmtMoney(acct ? acct.realized_pnl : (l.realized_pnl || 0)));
 
     setClassBySign("unrealized", unrealized);
     setClassBySign("total_return", totalReturn);
