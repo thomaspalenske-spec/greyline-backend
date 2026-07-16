@@ -29,6 +29,7 @@ IGNORED_ROUTES = {
     # Return HTTP 200 in production but cannot be smoke-tested by calling
     # route.endpoint() directly (Request/Query params or HTML response).
     "/operator-dashboard",
+        "/strategy-dashboard",            # HTML template route (needs Request)
     "/directional-attribution-report",
     "/portfolio-governor",
     "/operator-commander-summary",

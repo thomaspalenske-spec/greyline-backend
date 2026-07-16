@@ -33,6 +33,7 @@ def test_all_get_routes_execute():
     # route.endpoint() directly: they take a Request (HTML) or Query() params,
     # so a bare call receives Query objects / no request. Verified 200 over HTTP.
     "/operator-dashboard",            # HTML template route (needs Request)
+        "/strategy-dashboard",            # HTML template route (needs Request)
     "/directional-attribution-report",  # Query() param used as slice index
     "/portfolio-governor",            # Query() param compared to int
     "/operator-commander-summary",    # intermittent read-during-write JSON race
