@@ -29,6 +29,8 @@ class MomentumReversalRebalanceEngine:
     MIN_CALENDAR_DAYS = 7          # ~5 trading days
     GROSS_TARGET = 0.5            # deploy ~50% of capital across top-N
     TRADE_INTENT = "MOMENTUM_REVERSAL"
+    LIVE_SOURCES = ("TRADESTATION_LIVE", "TRADESTATION_LIVE_CACHED")
+    MAX_STALE_DAYS = 4            # allows a 3-day holiday weekend; beyond it, refuse to trade
 
     def __init__(self, top_n=5):
         self.strategy = MomentumReversalStrategyEngine(top_n=top_n)
@@ -57,6 +59,25 @@ class MomentumReversalRebalanceEngine:
         return {"timestamp": datetime.utcnow().isoformat(),
                 "engine": "MomentumReversalRebalanceEngine", "status": status, **extra}
 
+    def _staleness(self, source, asof, now):
+        """Why the data is unfit to trade on, or None if it's current.
+
+        universe() falls back to the stale CSV feed silently when the live TradeStation
+        fetch fails (e.g. token expired). Trading on that would open/close positions at
+        two-week-old prices and corrupt both the book and the forward edge measurement —
+        the exact silent stale-data failure that has bitten this system repeatedly.
+        """
+        if source not in self.LIVE_SOURCES:
+            return f"live feed unavailable (data source is {source})"
+        try:
+            bar_date = datetime.fromisoformat(str(asof)[:10]).date()
+        except (ValueError, TypeError):
+            return f"unusable as-of date: {asof!r}"
+        age = (now.date() - bar_date).days
+        if age > self.MAX_STALE_DAYS:
+            return f"latest bar {asof} is {age} calendar days old (max {self.MAX_STALE_DAYS})"
+        return None
+
     def rebalance(self, force=False):
         now = datetime.utcnow()
 
@@ -73,6 +94,15 @@ class MomentumReversalRebalanceEngine:
 
         # One universe fetch drives both selection and exit pricing.
         series, asof, source = self.strategy.universe()
+
+        # Refuse to trade on stale data — even when forced. `force` may override the
+        # timing gates (market-open, cadence), but never the data-quality gate: opening
+        # or closing at stale prices is always wrong. Hold the current book instead.
+        stale = self._staleness(source, asof, now)
+        if stale:
+            return self._result("REBALANCE_SKIPPED_STALE_DATA", rebalanced=False,
+                                as_of=asof, data_source=source, reason=stale)
+
         targets, _ = self.strategy.select(series)
         last_close = {sym: closes[-1] for sym, closes in series.items() if closes}
 

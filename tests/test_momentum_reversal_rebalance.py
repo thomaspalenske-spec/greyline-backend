@@ -46,8 +46,11 @@ def _sandbox(tmp_path, monkeypatch, universe):
     led = PaperTradeLedgerEngine()
     led.ledger_file = tmp_path / "ledger.jsonl"
     eng.ledger = led
+    # Use a live source + recent as-of so the stale-data guard lets the trade through.
+    from datetime import datetime, timedelta
+    fresh = (datetime.utcnow() - timedelta(days=1)).date().isoformat()
     monkeypatch.setattr(eng.strategy, "universe",
-                        lambda prefer_live=True: (universe, "2026-07-15", "TEST"))
+                        lambda prefer_live=True: (universe, fresh, "TRADESTATION_LIVE"))
     m = patch(f"{MOD}.MarketHoursEngine")
     lim = patch(f"{MOD}.PositionExposureLimitEngine")
     mm, ll = m.start(), lim.start()
