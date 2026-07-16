@@ -83,6 +83,53 @@ class PortfolioExposureEngine:
 
             "CL": "ENERGY",
             "GC": "PRECIOUS_METALS",
+
+            # Full scan-universe coverage. The momentum-reversal strategy trades all 98
+            # names, so an unmapped name is a real concentration blind spot — correlated
+            # positions could stack while the limit reads them as diversified. Grouped by
+            # what actually moves together, not strict GICS (e.g. big-box retail together,
+            # defense primes under industrials, semis under technology).
+            "ADBE": "TECHNOLOGY", "CRM": "TECHNOLOGY", "CSCO": "TECHNOLOGY",
+            "INTC": "TECHNOLOGY", "ORCL": "TECHNOLOGY", "QCOM": "TECHNOLOGY",
+            "SHOP": "TECHNOLOGY", "SNOW": "TECHNOLOGY", "TXN": "TECHNOLOGY",
+            "UBER": "TECHNOLOGY",
+
+            "AXP": "FINANCIALS", "BAC": "FINANCIALS", "C": "FINANCIALS",
+            "GS": "FINANCIALS", "JPM": "FINANCIALS", "KRE": "FINANCIALS",
+            "MA": "FINANCIALS", "MS": "FINANCIALS", "V": "FINANCIALS",
+            "WFC": "FINANCIALS",
+
+            "ABBV": "HEALTHCARE", "ABT": "HEALTHCARE", "DHR": "HEALTHCARE",
+            "IBB": "HEALTHCARE", "JNJ": "HEALTHCARE", "LLY": "HEALTHCARE",
+            "MRK": "HEALTHCARE", "PFE": "HEALTHCARE", "TMO": "HEALTHCARE",
+            "UNH": "HEALTHCARE",
+
+            "BA": "INDUSTRIALS", "CAT": "INDUSTRIALS", "DE": "INDUSTRIALS",
+            "GE": "INDUSTRIALS", "HON": "INDUSTRIALS", "LMT": "INDUSTRIALS",
+            "NOC": "INDUSTRIALS", "RTX": "INDUSTRIALS",
+
+            "COP": "ENERGY", "CVX": "ENERGY", "EOG": "ENERGY",
+            "SLB": "ENERGY", "USO": "ENERGY", "XOM": "ENERGY",
+
+            "ABNB": "CONSUMER_DISCRETIONARY", "HD": "CONSUMER_DISCRETIONARY",
+            "LOW": "CONSUMER_DISCRETIONARY", "MCD": "CONSUMER_DISCRETIONARY",
+            "NKE": "CONSUMER_DISCRETIONARY", "SBUX": "CONSUMER_DISCRETIONARY",
+
+            "COST": "CONSUMER_STAPLES", "KO": "CONSUMER_STAPLES",
+            "MO": "CONSUMER_STAPLES", "PEP": "CONSUMER_STAPLES",
+            "PG": "CONSUMER_STAPLES", "PM": "CONSUMER_STAPLES",
+            "TGT": "CONSUMER_STAPLES", "WMT": "CONSUMER_STAPLES",
+
+            "AEP": "UTILITIES", "DUK": "UTILITIES", "NEE": "UTILITIES",
+            "SO": "UTILITIES",
+
+            "CMCSA": "COMMUNICATIONS", "DIS": "COMMUNICATIONS",
+            "GOOG": "COMMUNICATIONS", "GOOGL": "COMMUNICATIONS",
+            "NFLX": "COMMUNICATIONS",
+
+            "DIA": "BROAD_MARKET",
+            "GLD": "PRECIOUS_METALS", "SLV": "PRECIOUS_METALS",
+            "TLT": "TREASURIES",
         }
 
         return sector_map.get(symbol, "UNKNOWN")

@@ -27,6 +27,19 @@ def test_index_futures_share_the_bucket_of_the_etf_they_track():
     assert e._sector("NQ") == e._sector("QQQ")
 
 
+def test_full_traded_universe_is_mapped():
+    # The momentum-reversal strategy trades every name with price history; an unmapped
+    # one is a concentration blind spot the risk limit can't see.
+    import glob
+    import os
+
+    e = PortfolioExposureEngine()
+    syms = [os.path.basename(p).replace("_daily.csv", "")
+            for p in glob.glob("app/data/historical/*_daily.csv")]
+    unmapped = sorted(s for s in syms if e._sector(s) == "UNKNOWN")
+    assert unmapped == [], f"unmapped names in traded universe: {unmapped}"
+
+
 def test_entire_scan_universe_is_mapped():
     # A symbol added to the universe without a sector silently reopens the blind spot.
     import re
