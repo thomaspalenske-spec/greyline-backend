@@ -98,7 +98,7 @@ async function refresh(){
   try{
     const [reb,pos,strat,integ,perf] = await Promise.all([
       j("/momentum-reversal-rebalance"), j("/momentum-reversal-positions"),
-      j("/momentum-reversal-strategy?top_n=5"), j("/data-integrity"), j("/strategy-performance")
+      j("/momentum-reversal-strategy"), j("/data-integrity"), j("/strategy-performance")
     ]);
 
     $("live").style.color = pos.open_count>0 ? "var(--up)" : "var(--faint)";

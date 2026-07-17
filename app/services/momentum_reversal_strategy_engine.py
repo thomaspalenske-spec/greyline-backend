@@ -37,8 +37,17 @@ class MomentumReversalStrategyEngine:
     """
 
     CAPITAL_BASE = 10000.0
-    TOP_N = 5
+    # Breadth. A thin edge only survives diversification (the portfolio backtest showed it
+    # emerges in a basket, not a single name), and more names per rebalance is also the
+    # only lever on time-to-verdict: 30 closed trades is ~6 weeks at 5/week, ~3 at 10.
+    TOP_N = 10
     HISTORICAL_DIR = "app/data/historical"
+
+    # Round-trip transaction cost (spread + slippage; retail commissions are ~0).
+    # NOT cosmetic: the backtest's out-of-sample Sharpe went 0.42 gross -> 0.25 @5bps ->
+    # 0.08 @10bps. A verdict computed on frictionless fills would be fantasy, so 10bps is
+    # the conservative default and the track record is judged net of it.
+    COST_BPS_ROUND_TRIP = float(getenv("GREYLINE_COST_BPS_ROUND_TRIP", "10"))
     LIVE_CACHE = Path("app/data/price_history/live_universe_cache.json")
     LIVE_BARS_BACK = 320          # ~14 months of daily bars, > the 253 the signal needs
     CACHE_TTL_SECONDS = 6 * 3600  # refetch live bars at most every 6h
@@ -192,7 +201,10 @@ class MomentumReversalStrategyEngine:
         per_name = self.capital_base / self.top_n if self.top_n else 0
         for t in targets:
             t["target_notional"] = round(per_name, 2)
-            t["target_quantity"] = int(per_name / t["last_close"]) if t["last_close"] > 0 else 0
+            # Fractional. Integer truncation silently dropped any name priced above the
+            # per-name budget (LLY at $1,142 was skipped outright) — a price bias the
+            # backtest never had, since it weighted exactly. Fractional sizing removes it.
+            t["target_quantity"] = round(per_name / t["last_close"], 4) if t["last_close"] > 0 else 0
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "MomentumReversalStrategyEngine",

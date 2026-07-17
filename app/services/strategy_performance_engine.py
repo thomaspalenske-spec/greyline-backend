@@ -41,16 +41,23 @@ class StrategyPerformanceEngine:
         except Exception:
             last = {}
 
+        cost_bps = MomentumReversalStrategyEngine.COST_BPS_ROUND_TRIP
         rows, total = [], 0.0
         for t in open_trades:
             entry = float(t.get("entry_price") or 0)
             qty = float(t.get("quantity") or 0)
             cur = float(last.get(t.get("symbol"), entry) or entry)
             direction = -1 if str(t.get("side") or "").upper() in ("SELL", "SELL_SHORT", "SHORT") else 1
-            pnl = (cur - entry) * qty * direction
+            gross = (cur - entry) * qty * direction
+            # Net of the round trip it takes to be in and out of this position — i.e.
+            # what you'd actually keep if you closed it now.
+            cost = abs(entry * qty) * (cost_bps / 10000.0)
+            pnl = gross - cost
             total += pnl
             rows.append({"symbol": t.get("symbol"), "side": t.get("side"),
                          "entry_price": entry, "current_price": round(cur, 2),
+                         "unrealized_pnl_gross": round(gross, 2),
+                         "transaction_cost": round(cost, 2),
                          "unrealized_pnl": round(pnl, 2)})
         return rows, total
 
@@ -60,13 +67,28 @@ class StrategyPerformanceEngine:
         closed = sorted([t for t in trades if t.get("status") == "CLOSED"], key=self._closed_at)
         open_trades = [t for t in trades if t.get("status") == "OPEN"]
 
-        pnls = [float(t.get("realized_pnl") or 0) for t in closed]
+        # Net of transaction cost. The ledger's realized_pnl is the raw price move — a
+        # frictionless number. Judging the edge on that would be fantasy: the backtest's
+        # out-of-sample Sharpe fell 0.42 -> 0.08 once 10bps of round-trip cost was charged.
+        # Cost is derived from entry notional (not stamped on the trade), so this applies
+        # retroactively to fills already recorded.
+        cost_bps = MomentumReversalStrategyEngine.COST_BPS_ROUND_TRIP
+
+        def _cost(t):
+            notional = abs(float(t.get("entry_price") or 0) * float(t.get("quantity") or 0))
+            return notional * (cost_bps / 10000.0)
+
+        gross_pnls = [float(t.get("realized_pnl") or 0) for t in closed]
+        costs = [_cost(t) for t in closed]
+        pnls = [g - c for g, c in zip(gross_pnls, costs)]     # net — everything below uses this
         n = len(pnls)
         wins = [p for p in pnls if p > 0]
         losses = [p for p in pnls if p < 0]
+        realized_gross = round(sum(gross_pnls), 2)
+        total_costs = round(sum(costs), 2)
         realized = round(sum(pnls), 2)
 
-        # Equity curve over closed trades (cumulative realized).
+        # Equity curve over closed trades (cumulative NET realized).
         curve, cum = [], 0.0
         for t, p in zip(closed, pnls):
             cum += p
@@ -110,6 +132,9 @@ class StrategyPerformanceEngine:
             "wins": len(wins),
             "losses": len(losses),
             "win_rate_pct": round(100 * len(wins) / n, 1) if n else None,
+            "cost_bps_round_trip": cost_bps,
+            "realized_pnl_gross": realized_gross,
+            "transaction_costs": total_costs,
             "realized_pnl": realized,
             "unrealized_pnl": round(unrealized, 2),
             "total_pnl": total,
@@ -123,8 +148,9 @@ class StrategyPerformanceEngine:
             "capital_base": self.capital_base,
             "open_positions": open_rows,
             "equity_curve": curve,
-            "note": ("Realized is from closed trades; unrealized marks the open book to the "
-                     "latest close. A t-stat beyond +/-2 is the bar for a real edge — and "
-                     "only once the sample is large enough to trust."),
+            "note": (f"All P&L is NET of {cost_bps}bps round-trip cost — the verdict is judged "
+                     f"on what you'd actually keep, not a frictionless fill. A t-stat beyond "
+                     f"+/-2 is the bar for a real edge, and only once the sample is large "
+                     f"enough to trust."),
             "status": "STRATEGY_PERFORMANCE_READY",
         }

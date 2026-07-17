@@ -32,7 +32,7 @@ class MomentumReversalRebalanceEngine:
     LIVE_SOURCES = ("TRADESTATION_LIVE", "TRADESTATION_LIVE_CACHED")
     MAX_STALE_DAYS = 4            # allows a 3-day holiday weekend; beyond it, refuse to trade
 
-    def __init__(self, top_n=5):
+    def __init__(self, top_n=None):
         self.strategy = MomentumReversalStrategyEngine(top_n=top_n)
         self.ledger = PaperTradeLedgerEngine()
 
@@ -127,7 +127,10 @@ class MomentumReversalRebalanceEngine:
                 skipped_risk = len(targets) - len(opened)
                 break
             px = t.get("last_close") or 0
-            qty = int(per_name / px) if px > 0 else 0
+            # Fractional sizing: integer truncation dropped any name priced above the
+            # per-name budget, which is a price bias (and gets worse as breadth rises and
+            # the budget shrinks). Weight exactly, like the backtest did.
+            qty = round(per_name / px, 4) if px > 0 else 0
             if qty <= 0:
                 continue
             self.ledger.open_trade(

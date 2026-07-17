@@ -23,13 +23,13 @@ async def strategy_dashboard(request: Request):
 
 
 @router.get("/momentum-reversal-strategy")
-def momentum_reversal_strategy(top_n: int = 5):
+def momentum_reversal_strategy(top_n: int = None):
     """The rebuilt validated strategy's current target positions (dry run, no trades)."""
     return MomentumReversalStrategyEngine(top_n=top_n).run()
 
 
 @router.get("/momentum-reversal-rebalance")
-def momentum_reversal_rebalance(force: bool = False, top_n: int = 5):
+def momentum_reversal_rebalance(force: bool = False, top_n: int = None):
     """Rebalance status; ?force=true realizes prior holdings and opens the current top-N now."""
     eng = MomentumReversalRebalanceEngine(top_n=top_n)
     return eng.rebalance(force=True) if force else eng.status()
