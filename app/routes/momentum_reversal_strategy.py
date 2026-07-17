@@ -4,9 +4,16 @@ from fastapi.templating import Jinja2Templates
 
 from app.services.momentum_reversal_strategy_engine import MomentumReversalStrategyEngine
 from app.services.momentum_reversal_rebalance_engine import MomentumReversalRebalanceEngine
+from app.services.strategy_performance_engine import StrategyPerformanceEngine
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/strategy-performance")
+def strategy_performance():
+    """The strategy's forward track record: realized/unrealized P&L, equity curve, edge verdict."""
+    return StrategyPerformanceEngine().evaluate()
 
 
 @router.get("/strategy-dashboard", response_class=HTMLResponse)
