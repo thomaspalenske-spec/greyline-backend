@@ -81,6 +81,9 @@
     <tbody id="targets"></tbody>
   </table>
 
+  <div class="sec">Track record <span class="muted" style="text-transform:none;letter-spacing:0">does this strategy actually make money?</span></div>
+  <div class="health" id="track"></div>
+
   <div class="sec">Data health</div>
   <div class="health" id="health"></div>
 </div>
@@ -93,9 +96,9 @@ async function j(u){const r=await fetch(u);return r.json();}
 
 async function refresh(){
   try{
-    const [reb,pos,strat,integ] = await Promise.all([
+    const [reb,pos,strat,integ,perf] = await Promise.all([
       j("/momentum-reversal-rebalance"), j("/momentum-reversal-positions"),
-      j("/momentum-reversal-strategy?top_n=5"), j("/data-integrity")
+      j("/momentum-reversal-strategy?top_n=5"), j("/data-integrity"), j("/strategy-performance")
     ]);
 
     $("live").style.color = pos.open_count>0 ? "var(--up)" : "var(--faint)";
@@ -138,6 +141,26 @@ async function refresh(){
         <span class="pill ${cont.verdict||'UNKNOWN'}">${cont.verdict||'—'}</span></div>
       <div class="item" style="flex:1"><div class="l">Reading</div>
         <div class="why">${integ.headline||''} ${(integ.reasons||[]).join(" · ")}</div></div>`;
+
+    // Track record — the verdict instrument. Deliberately shows the sample size next to
+    // the P&L so a lucky streak never reads as an edge.
+    const vcls = {POSITIVE_EDGE_EMERGING:"GREEN", NEGATIVE_EDGE_EMERGING:"RED",
+                  NO_DETECTABLE_EDGE:"AMBER", INSUFFICIENT_SAMPLE:"UNKNOWN"}[perf.verdict]||"UNKNOWN";
+    $("track").innerHTML = `
+      <div class="item"><div class="l">Edge verdict</div>
+        <span class="pill ${vcls}">${(perf.verdict||'—').replace(/_/g," ")}</span></div>
+      <div class="item"><div class="l">Closed trades</div>
+        <div class="mono" style="font-size:19px;font-weight:600">${perf.closed_trades} <span class="muted" style="font-size:11px">/ ${perf.min_trades_for_signal} needed</span></div></div>
+      <div class="item"><div class="l">Realized</div>
+        <div class="mono ${cls(perf.realized_pnl)}" style="font-size:19px;font-weight:600">${money(perf.realized_pnl||0)}</div></div>
+      <div class="item"><div class="l">Total P&L</div>
+        <div class="mono ${cls(perf.total_pnl)}" style="font-size:19px;font-weight:600">${money(perf.total_pnl||0)}</div>
+        <div class="muted" style="font-size:11px">${perf.return_pct_on_capital ?? 0}% of capital</div></div>
+      <div class="item"><div class="l">Expectancy</div>
+        <div class="mono ${cls(perf.expectancy_per_trade)}" style="font-size:19px;font-weight:600">${money(perf.expectancy_per_trade||0)}</div>
+        <div class="muted" style="font-size:11px">t=${perf.expectancy_t_stat ?? "—"} (need |t|>2)</div></div>
+      <div class="item" style="flex:1;min-width:220px"><div class="l">Reading</div>
+        <div class="why">${perf.headline||''}</div></div>`;
   }catch(e){ $("ts").textContent = "fetch error"; }
 }
 refresh(); setInterval(refresh, 30000);
