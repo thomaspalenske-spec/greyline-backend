@@ -47,6 +47,27 @@ tail -f logs/launchd.err.log             # live logs
 curl -s localhost:8000/data-integrity    # is it actually working
 ```
 
+## Credentials MUST live in `.env` — not your shell profile
+
+**This bit us.** `launchd` does not source `~/.zshrc`, `~/.zprofile`, or any shell profile.
+When the backend was started by hand (`nohup uvicorn ...`) it inherited whatever your
+interactive shell had exported. The moment it became a launchd service, those exports
+vanished — and the failure was **silent**: the Unusual Whales key disappeared, every UW
+call started returning `401 authentication_required`, and institutional-flow collection
+stopped dead. No crash, no alert, just data quietly no longer arriving.
+
+`main.py` calls `load_dotenv(override=False)`, so anything in `.env` is picked up under
+*every* launch method — launchd, a shell, or a systemd unit on a VM. That makes `.env`
+the only correct home for credentials.
+
+```bash
+# check for creds that only exist in your shell (they will not survive the service)
+grep -lE "export (UNUSUAL_WHALES_API_KEY|TRADESTATION_)" ~/.zshrc ~/.zprofile 2>/dev/null
+```
+
+If anything turns up there, move it into `.env`. `.env` is gitignored, so the secret stays
+local. This is also the #1 thing to get right when migrating to an always-on host.
+
 ## The ceiling: this is still a laptop
 
 `caffeinate -i` stops *idle* sleep, but closing the lid on battery sleeps the whole
