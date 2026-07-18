@@ -189,6 +189,9 @@ app.include_router(continuity.router)
 from app.routes import uw_retention
 app.include_router(uw_retention.router)
 
+from app.routes import uw_flow_edge
+app.include_router(uw_flow_edge.router)
+
 from app.routes import momentum_reversal_strategy
 app.include_router(momentum_reversal_strategy.router)
 
