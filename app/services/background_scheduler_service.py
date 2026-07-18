@@ -308,6 +308,15 @@ class BackgroundSchedulerService:
         except Exception as exc:
             momentum_reversal = {"rebalanced": False, "error": repr(exc),
                                  "status": "MOMENTUM_REVERSAL_REBALANCE_DEGRADED"}
+
+        # Age out raw UW snapshots past the retention window (compacting flow first).
+        # Self-gates to ~once/day, so this is a no-op most cycles. Best-effort.
+        try:
+            from app.services.uw_snapshot_retention_engine import UWSnapshotRetentionEngine
+            uw_retention = UWSnapshotRetentionEngine().prune()
+        except Exception as exc:
+            uw_retention = {"pruned": False, "error": repr(exc),
+                            "status": "UW_RETENTION_DEGRADED"}
         paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
         options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
         from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
@@ -338,6 +347,7 @@ class BackgroundSchedulerService:
                 "learning_memory_status": learning.get("status"),
                 "fixed_horizon_skill": fixed_horizon,
                 "momentum_reversal_rebalance": momentum_reversal,
+                "uw_snapshot_retention": uw_retention,
                 "institutional_snapshot_sweep_status": (
                     institutional_snapshot_sweep.get(
                         "status"

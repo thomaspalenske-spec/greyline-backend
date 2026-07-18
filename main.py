@@ -186,6 +186,9 @@ app.include_router(data_integrity.router)
 from app.routes import continuity
 app.include_router(continuity.router)
 
+from app.routes import uw_retention
+app.include_router(uw_retention.router)
+
 from app.routes import momentum_reversal_strategy
 app.include_router(momentum_reversal_strategy.router)
 
