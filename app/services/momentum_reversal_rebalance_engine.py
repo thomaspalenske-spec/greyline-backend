@@ -104,32 +104,27 @@ class MomentumReversalRebalanceEngine:
                                 as_of=asof, data_source=source, reason=stale)
 
         targets, _ = self.strategy.select(series)
-        last_close = {sym: closes[-1] for sym, closes in series.items() if closes}
 
-        # 1) Close prior strategy holdings at the current close (realize the hold).
+        # Exits are owned by MomentumExitManagerEngine (validated H2 doctrine), NOT the
+        # rebalance. So the rebalance no longer closes the book — it only TOPS UP: fills
+        # empty slots (top_n minus what's still open) with the strongest fresh signals not
+        # already held. Positions leave the book when H2 stops or fully scales them out.
         trades = self.ledger._read_all()
-        open_positions = [t for t in trades
-                          if t.get("status") == "OPEN" and t.get("trade_intent") == self.TRADE_INTENT]
-        closed = []
-        for pos in open_positions:
-            px = last_close.get(pos.get("symbol"))
-            if px is None:
-                continue
-            r = self.ledger.close_latest(pos["symbol"], exit_price=px)
-            if r.get("status") != "NO_OPEN_PAPER_TRADE":
-                closed.append({"symbol": pos["symbol"], "realized_pnl": r.get("realized_pnl")})
+        held = {t.get("symbol") for t in trades
+                if t.get("status") == "OPEN" and t.get("trade_intent") == self.TRADE_INTENT}
+        free_slots = max(0, self.strategy.top_n - len(held))
 
-        # 2) Open the current top-N, in conviction order, stopping before a risk breach.
         per_name = (self.strategy.capital_base * self.GROSS_TARGET) / max(1, self.strategy.top_n)
         opened, skipped_risk = [], 0
         for t in targets:
+            if len(opened) >= free_slots:
+                break
+            if t["symbol"] in held:
+                continue
             if not PositionExposureLimitEngine().evaluate().get("limits_ok", False):
-                skipped_risk = len(targets) - len(opened)
+                skipped_risk = free_slots - len(opened)
                 break
             px = t.get("last_close") or 0
-            # Fractional sizing: integer truncation dropped any name priced above the
-            # per-name budget, which is a price bias (and gets worse as breadth rises and
-            # the budget shrinks). Weight exactly, like the backtest did.
             qty = round(per_name / px, 4) if px > 0 else 0
             if qty <= 0:
                 continue
@@ -140,13 +135,12 @@ class MomentumReversalRebalanceEngine:
             )
             opened.append({"symbol": t["symbol"], "side": t["side"], "quantity": qty, "entry_price": px})
 
-        realized = round(sum(c["realized_pnl"] or 0 for c in closed), 2)
         self._save_state({
             "last_rebalance_at": now.isoformat(), "as_of": asof, "data_source": source,
-            "closed": len(closed), "opened": len(opened), "realized_pnl": realized,
+            "held_before": len(held), "free_slots": free_slots, "opened": len(opened),
         })
         return self._result("REBALANCE_COMPLETE", rebalanced=True, as_of=asof, data_source=source,
-                            closed=closed, opened=opened, realized_pnl=realized,
+                            held_before=len(held), free_slots=free_slots, opened=opened,
                             skipped_for_risk=skipped_risk)
 
     def status(self):

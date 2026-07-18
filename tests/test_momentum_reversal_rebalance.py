@@ -61,7 +61,8 @@ def _sandbox(tmp_path, monkeypatch, universe):
     return eng, led, (m, lim)
 
 
-def test_rebalance_opens_then_realizes(tmp_path, monkeypatch):
+def test_rebalance_opens_into_free_slots_only(tmp_path, monkeypatch):
+    # top_n=3 (set in _sandbox); two confirmed signals -> open both, 1 slot left.
     uni = {"AAA": _confirmed_bullish(), "BBB": _confirmed_bullish()}
     eng, led, patches = _sandbox(tmp_path, monkeypatch, uni)
     try:
@@ -72,11 +73,13 @@ def test_rebalance_opens_then_realizes(tmp_path, monkeypatch):
         assert len(opens) == 2
         assert all(t["trade_intent"] == "MOMENTUM_REVERSAL" for t in opens)
 
-        # second rebalance realizes the prior two and re-opens
+        # H2 owns exits now: the rebalance does NOT close held positions, and it does
+        # NOT re-open symbols already held. AAA/BBB are held -> nothing new to open.
         r2 = eng.rebalance(force=True)
-        assert len(r2["closed"]) == 2
+        assert r2["opened"] == []
+        assert r2["held_before"] == 2
         still_open = [t for t in led._read_all() if t.get("status") == "OPEN"]
-        assert len(still_open) == 2   # re-opened fresh
+        assert len(still_open) == 2   # unchanged — not churned
     finally:
         for p in patches:
             p.stop()

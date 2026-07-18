@@ -17,6 +17,7 @@ from app.services.paper_position_manager_engine import PaperPositionManagerEngin
 from app.services.options_position_manager_engine import OptionsPositionManagerEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.services.momentum_reversal_rebalance_engine import MomentumReversalRebalanceEngine
+from app.services.momentum_exit_manager_engine import MomentumExitManagerEngine
 from app.services.market_hours_engine import MarketHoursEngine
 from app.services.forecast_outcome_grader_engine import ForecastOutcomeGraderEngine
 from app.services.institutional.institutional_signal_snapshot_sweep_engine import (
@@ -309,6 +310,17 @@ class BackgroundSchedulerService:
             momentum_reversal = {"rebalanced": False, "error": repr(exc),
                                  "status": "MOMENTUM_REVERSAL_REBALANCE_DEGRADED"}
 
+        # Validated H2 exit doctrine, applied to open momentum positions every cycle while
+        # the market is open (marks to live quotes; stale closed-market marks would misfire
+        # stops). This owns exits now — the rebalance only tops up empty slots.
+        try:
+            if market_hours.get("is_regular_session") is True:
+                momentum_exit = MomentumExitManagerEngine().manage_open_positions()
+            else:
+                momentum_exit = {"managed": 0, "status": "MOMENTUM_EXIT_MARKET_CLOSED"}
+        except Exception as exc:
+            momentum_exit = {"error": repr(exc), "status": "MOMENTUM_EXIT_MANAGER_DEGRADED"}
+
         # Age out raw UW snapshots past the retention window (compacting flow first).
         # Self-gates to ~once/day, so this is a no-op most cycles. Best-effort.
         try:
@@ -347,6 +359,7 @@ class BackgroundSchedulerService:
                 "learning_memory_status": learning.get("status"),
                 "fixed_horizon_skill": fixed_horizon,
                 "momentum_reversal_rebalance": momentum_reversal,
+                "momentum_exit_manager": momentum_exit,
                 "uw_snapshot_retention": uw_retention,
                 "institutional_snapshot_sweep_status": (
                     institutional_snapshot_sweep.get(

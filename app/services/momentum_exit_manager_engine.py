@@ -1,0 +1,188 @@
+import csv
+import glob
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+
+from app.services.trade_doctrine_engine import TradeDoctrineEngine
+from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.persistence.json_store import atomic_write_text
+
+HIST_DIR = "app/data/historical"
+ATR_N = 14
+
+
+def atr_for(symbol):
+    """14-day ATR from the symbol's daily OHLC (slow-moving; CSV staleness is fine)."""
+    path = os.path.join(HIST_DIR, f"{str(symbol).upper()}_daily.csv")
+    if not os.path.exists(path):
+        return None
+    rows = []
+    with open(path) as f:
+        for r in csv.DictReader(f):
+            try:
+                rows.append((float(r["high"]), float(r["low"]), float(r["close"])))
+            except (ValueError, KeyError, TypeError):
+                pass
+    if len(rows) < ATR_N + 1:
+        return None
+    trs = []
+    for i in range(len(rows) - ATR_N, len(rows)):
+        h, l, _ = rows[i]
+        pc = rows[i - 1][2]
+        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+    return round(sum(trs) / len(trs), 6)
+
+
+class MomentumExitManagerEngine:
+    """
+    Live application of the validated H2 exit doctrine to open momentum positions,
+    replacing the plain 5-day-hold. Per position, each cycle: mark to the current quote,
+    ratchet the stop, bank 25% at each of three targets, then trail the final runner.
+
+    Pure core (`decide`) is snapshot-based: it manages on the current quote each cycle
+    (~14 min granularity), not intraday high/low — so live fills can differ slightly from
+    the daily-bar backtest. A MAX_HOLD backstop matches the backtest's 20-day cap.
+    """
+
+    MAX_HOLD_DAYS = 20
+    TRADE_INTENT = "MOMENTUM_REVERSAL"
+
+    def __init__(self):
+        self.doctrine = TradeDoctrineEngine()
+        self.ledger_file = Path("app/data/paper_trading/paper_trade_ledger.jsonl")
+
+    def _ensure_doctrine(self, trade):
+        """Lazily attach the H2 exit plan to a momentum position that lacks one, so entry
+        (the rebalance) stays simple and this engine owns the whole exit lifecycle.
+        Returns True if the trade is now managed, False if ATR is unavailable."""
+        if trade.get("exit_doctrine"):
+            return True
+        atr = atr_for(trade.get("symbol"))
+        entry = float(trade.get("entry_price") or 0)
+        if not atr or entry <= 0:
+            return False
+        direction = "LONG" if trade.get("side") == "BUY" else "SHORT"
+        plan = self.doctrine.exit_plan(entry, direction, atr)
+        if not plan:
+            return False
+        qty = float(trade.get("quantity") or 0)
+        trade["exit_doctrine"] = plan
+        trade["original_quantity"] = qty
+        trade["doctrine_state"] = {
+            "tps_filled": 0, "extreme": entry, "remaining_quantity": qty,
+            "opened_at": trade.get("timestamp"),
+        }
+        return True
+
+    # ---- pure decision core (testable in isolation) ----
+    def decide(self, trade, price, now):
+        """Return (actions, new_state). actions: list of {type, qty, price, reason, realized}."""
+        plan = trade.get("exit_doctrine")
+        state = dict(trade.get("doctrine_state") or {})
+        if not plan or not state:
+            return [], state
+        sign = 1 if plan["direction"] == "LONG" else -1
+        remaining = float(state.get("remaining_quantity") or 0)
+        if remaining <= 0:
+            return [], state
+        entry = float(plan["entry_price"])
+        tps = state.get("tps_filled", 0)
+        extreme = float(state.get("extreme", entry))
+        extreme = max(extreme, price) if sign > 0 else min(extreme, price)
+        state["extreme"] = extreme
+
+        def pnl(qty, px):
+            return round((px - entry) * qty * sign, 2)
+
+        actions = []
+        # bank targets crossed since last cycle (a gap can cross several)
+        while tps < 3:
+            tp = plan["targets"][tps]
+            if (price >= tp) if sign > 0 else (price <= tp):
+                qty = round(float(trade["original_quantity"]) * plan["scale_out"][tps], 6)
+                qty = min(qty, remaining)
+                actions.append({"type": "SCALE", "qty": qty, "price": price,
+                                "reason": f"TP{tps+1}", "realized": pnl(qty, price)})
+                remaining = round(remaining - qty, 6)
+                tps += 1
+            else:
+                break
+        state["tps_filled"] = tps
+        state["remaining_quantity"] = remaining
+        if remaining <= 1e-9:
+            state["remaining_quantity"] = 0
+            return actions, state
+
+        stop = self.doctrine.current_stop(plan, tps, extreme)
+        state["current_stop"] = stop
+        stopped = (price <= stop) if sign > 0 else (price >= stop)
+        opened = state.get("opened_at")
+        held = 0
+        try:
+            held = (now.date() - datetime.fromisoformat(opened).date()).days
+        except Exception:
+            pass
+        if stopped or held >= self.MAX_HOLD_DAYS:
+            actions.append({"type": "CLOSE", "qty": remaining, "price": price,
+                            "reason": "STOP" if stopped else "MAX_HOLD",
+                            "realized": pnl(remaining, price)})
+            state["remaining_quantity"] = 0
+        return actions, state
+
+    # ---- live application over the ledger ----
+    def manage_open_positions(self):
+        led = PaperTradeLedgerEngine()
+        trades = led._read_all()
+        now = datetime.utcnow()
+        quote = TradeStationQuoteLiveEngine()
+        managed, closed, scaled = 0, 0, 0
+
+        def last(sym):
+            r = quote.get_quote(sym)
+            q = ((r.get("response_json") or {}).get("Quotes") or [{}])[0]
+            try:
+                return float(q.get("Last") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        changed = False
+        for t in trades:
+            if t.get("status") != "OPEN" or t.get("trade_intent") != self.TRADE_INTENT:
+                continue
+            if not self._ensure_doctrine(t):
+                continue
+            changed = changed or bool(t.get("exit_doctrine"))
+            price = last(t.get("symbol"))
+            if price <= 0:
+                continue
+            managed += 1
+            actions, state = self.decide(t, price, now)
+            if not actions:
+                if state != t.get("doctrine_state"):
+                    t["doctrine_state"] = state
+                    changed = True
+                continue
+            realized = sum(a["realized"] for a in actions)
+            t["realized_pnl"] = round(float(t.get("realized_pnl") or 0) + realized, 2)
+            t["doctrine_state"] = state
+            t["quantity"] = state["remaining_quantity"]
+            t.setdefault("exit_events", []).extend(
+                {**a, "at": now.isoformat()} for a in actions)
+            scaled += sum(1 for a in actions if a["type"] == "SCALE")
+            if state["remaining_quantity"] <= 0:
+                t["status"] = "CLOSED"
+                t["exit_price"] = actions[-1]["price"]
+                t["exit_timestamp"] = now.isoformat()
+                t["exit_reason"] = actions[-1]["reason"]
+                closed += 1
+            changed = True
+
+        if changed:
+            atomic_write_text(self.ledger_file,
+                              "".join(json.dumps(t) + "\n" for t in trades))
+        return {"timestamp": now.isoformat(), "engine": "MomentumExitManagerEngine",
+                "managed": managed, "scaled_out": scaled, "closed": closed,
+                "status": "MOMENTUM_EXIT_MANAGER_COMPLETE"}
