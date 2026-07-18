@@ -13,10 +13,14 @@ class UWFlowGradingEngine:
     Does Unusual Whales flow predict forward returns? Measured, not assumed.
 
     For each symbol and day, aggregate the day's flow to a directional reading, then grade
-    it against the NEXT day's underlying return. Two candidate features are graded in
-    parallel — nobody knows which predicts, so the data decides:
+    it against the NEXT day's underlying return. Several DISTINCT candidate features are
+    graded in parallel — nobody knows which predicts, so the data decides:
       * directional_flow : ask-side call-vs-put premium imbalance (aggressive buying)
       * net_premium      : total signed premium (all flow, incl. sells)
+      * skew             : 25-delta risk reversal (call vs put demand / hedging pressure)
+      * dealer_gex       : net dealer gamma exposure (pinning vs amplifying regime)
+      * dealer_delta     : net directional dealer positioning
+    A feature absent from older records simply accumulates from the day it was added.
 
     Same discipline that rescued the price signal, so this can't fool us the way the old
     system fooled itself:
@@ -34,6 +38,14 @@ class UWFlowGradingEngine:
     HORIZON_DAYS = 1
     MIN_DISTINCT_DAYS = 20
     DECISIVE_PCT = 0.5   # |move| below this (%) is intraday noise, excluded from accuracy
+    # (feature, aggregation). Levels average across the day's snapshots; flows sum.
+    FEATURES = (
+        ("directional_flow", "mean"),
+        ("net_premium", "sum"),
+        ("skew", "mean"),
+        ("dealer_gex", "mean"),
+        ("dealer_delta", "mean"),
+    )
 
     def __init__(self):
         self.price = PriceHistoryStore()
@@ -42,11 +54,16 @@ class UWFlowGradingEngine:
         return sorted(os.path.basename(p)[:-6] for p in glob.glob(str(self.FLOW_DIR / "*.jsonl")))
 
     def _daily_flow(self, symbol):
-        """{date: {directional_flow: mean, net_premium: sum}} from the compact series."""
+        """{date: {feature: aggregated value or None}} from the compact series.
+
+        A feature missing from a record contributes nothing; a day with no values for a
+        feature yields None for it, and grading skips it — so newly added features simply
+        start accumulating the day they appear, without corrupting the older ones.
+        """
         path = self.FLOW_DIR / f"{symbol}.jsonl"
         if not path.exists():
             return {}
-        agg = {}
+        acc = {}
         for line in path.read_text().splitlines():
             if not line.strip():
                 continue
@@ -57,12 +74,29 @@ class UWFlowGradingEngine:
             day = str(r.get("ts") or "")[:10]
             if not day:
                 continue
-            a = agg.setdefault(day, {"df": [], "np": 0.0})
-            a["df"].append(float(r.get("directional_flow") or 0))
-            a["np"] += float(r.get("net_premium") or 0)
-        return {d: {"directional_flow": sum(a["df"]) / len(a["df"]) if a["df"] else 0,
-                    "net_premium": a["np"]}
-                for d, a in agg.items()}
+            a = acc.setdefault(day, {})
+            for feat, mode in self.FEATURES:
+                if r.get(feat) is None:
+                    continue
+                try:
+                    v = float(r[feat])
+                except (TypeError, ValueError):
+                    continue
+                if mode == "sum":
+                    a[feat] = a.get(feat, 0.0) + v
+                else:
+                    a.setdefault(feat + "#", []).append(v)
+        out = {}
+        for day, a in acc.items():
+            row = {}
+            for feat, mode in self.FEATURES:
+                if mode == "sum":
+                    row[feat] = a.get(feat)
+                else:
+                    lst = a.get(feat + "#")
+                    row[feat] = (sum(lst) / len(lst)) if lst else None
+            out[day] = row
+        return out
 
     def _daily_close(self, symbol):
         """{date: last recorded price that day} from the forward price feed."""
@@ -106,7 +140,7 @@ class UWFlowGradingEngine:
                 "mcc": mcc, "verdict": verdict}
 
     def grade(self):
-        features = ("directional_flow", "net_premium")
+        features = [f for f, _ in self.FEATURES]
         samples = {f: [] for f in features}
 
         for symbol in self._symbols():
@@ -121,7 +155,9 @@ class UWFlowGradingEngine:
                 raw = (closes[fwd] / closes[d] - 1) * 100
                 decisive = abs(raw) >= self.DECISIVE_PCT
                 for f in features:
-                    val = flow[d][f]
+                    val = flow[d].get(f)
+                    if val is None or val == 0:
+                        continue   # feature absent (or flat) that day -> not a directional call
                     bias = "BULLISH" if val > 0 else "BEARISH"
                     dir_ret = raw if bias == "BULLISH" else -raw
                     samples[f].append({"symbol": symbol, "day": d, "bias": bias,
