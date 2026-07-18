@@ -446,6 +446,16 @@ class InstitutionalSignalSnapshotEngine:
             )
         )
 
+        # Distil the raw 5 MB blob to a compact directional-flow record as it lands, so
+        # the queryable UW flow series accumulates forward automatically (no separate
+        # backfill needed going forward). Best-effort: a failure here must never break
+        # the observation-only sweep.
+        try:
+            from app.services.uw_flow_signal_engine import UWFlowSignalEngine
+            UWFlowSignalEngine().record(snapshot)
+        except Exception:
+            pass
+
         return {
             "timestamp": (
                 captured_at.isoformat()
