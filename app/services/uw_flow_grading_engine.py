@@ -17,9 +17,14 @@ class UWFlowGradingEngine:
     graded in parallel — nobody knows which predicts, so the data decides:
       * directional_flow : ask-side call-vs-put premium imbalance (aggressive buying)
       * net_premium      : total signed premium (all flow, incl. sells)
+      * volume_flow      : ask-side call-vs-put VOLUME imbalance (breadth of aggression)
       * skew             : 25-delta risk reversal (call vs put demand / hedging pressure)
       * dealer_gex       : net dealer gamma exposure (pinning vs amplifying regime)
       * dealer_delta     : net directional dealer positioning
+      * dark_pool_flow   : off-exchange premium imbalance vs NBBO (institutional accum/distrib)
+      * oi_flow          : net call-vs-put open-interest change (opening positioning)
+      * sweep_flow       : ask-side call-vs-put premium among SWEEP alerts (urgent conviction)
+      * opening_flow     : same among OPENING alerts (fresh money, not closing)
     A feature absent from older records simply accumulates from the day it was added.
 
     Same discipline that rescued the price signal, so this can't fool us the way the old
@@ -42,9 +47,14 @@ class UWFlowGradingEngine:
     FEATURES = (
         ("directional_flow", "mean"),
         ("net_premium", "sum"),
+        ("volume_flow", "mean"),
         ("skew", "mean"),
         ("dealer_gex", "mean"),
         ("dealer_delta", "mean"),
+        ("dark_pool_flow", "mean"),
+        ("oi_flow", "mean"),
+        ("sweep_flow", "mean"),
+        ("opening_flow", "mean"),
     )
 
     def __init__(self):
