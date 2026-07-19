@@ -78,3 +78,7 @@ app/data/unusual_whales_refresh_state.json
 app/data/institutional_attribution/
 
 app/data/institutional/*.json
+
+# Research artifacts: multi-GB price pulls and universe snapshots, regenerable from UW+Yahoo.
+app/data/research/universe/
+app/data/research/prices/
