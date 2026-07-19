@@ -1,5 +1,13 @@
+from os import getenv
+
 import requests
 from datetime import datetime
+
+from app.services.live_order_safety_guard_engine import (
+    LiveOrderSafetyGuard,
+    LiveOrderSafetyError,
+    classify_broker_endpoint,
+)
 
 class GreyLineLiveBrokerClientEngine:
 
@@ -10,6 +18,30 @@ class GreyLineLiveBrokerClientEngine:
         self.access_token = access_token
 
     def submit_order(self, symbol, quantity, side, price=None):
+
+        # ------------------------------------------------------------------
+        # FAIL-CLOSED LIVE-ORDER INTERLOCK
+        # This is the ONLY code path that POSTs a real order to TradeStation,
+        # and its base_url defaults to PRODUCTION. It previously fired on
+        # nothing more than "has a token" — a live-money landmine. No real
+        # order may leave this method unless the operator has explicitly
+        # authorized live trading, and never against a PRODUCTION target
+        # without a conscious production confirmation. (Simulated/paper
+        # trading goes through TradeStationSimBookingEngine, not this class.)
+        # ------------------------------------------------------------------
+        LiveOrderSafetyGuard().assert_safe_to_place_live_order()
+        target_env = classify_broker_endpoint(self.base_url)
+        if target_env == "PRODUCTION" and getenv(
+            "GREYLINE_LIVE_PRODUCTION_CONFIRMED", "false"
+        ).lower() != "true":
+            raise LiveOrderSafetyError(
+                f"Refusing to POST to PRODUCTION target {self.base_url} "
+                "without GREYLINE_LIVE_PRODUCTION_CONFIRMED=true"
+            )
+        if target_env == "UNKNOWN":
+            raise LiveOrderSafetyError(
+                f"Refusing to POST to unrecognized broker target {self.base_url}"
+            )
 
         # ----------------------------
         # HARD GATE: OAuth REQUIRED

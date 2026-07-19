@@ -135,13 +135,24 @@ class MomentumReversalRebalanceEngine:
             )
             opened.append({"symbol": t["symbol"], "side": t["side"], "quantity": qty, "entry_price": px})
 
+        # Mirror the decided opens into the TradeStation SIM account as real paper orders,
+        # sized whole-share to the $10k book. No-op unless GREYLINE_SIM_BOOKING_ENABLED=true.
+        # Best-effort: a SIM/broker hiccup must never break the (validated) decision path.
+        sim_booking = {"status": "SIM_BOOKING_DISABLED", "placed": 0}
+        try:
+            from app.services.greyline_sim_execution_engine import GreyLineSimExecutionEngine
+            sim_booking = GreyLineSimExecutionEngine().book_opens(opened, per_name)
+        except Exception as e:
+            sim_booking = {"status": "SIM_BOOKING_ERROR", "error": str(e)[:200], "placed": 0}
+
         self._save_state({
             "last_rebalance_at": now.isoformat(), "as_of": asof, "data_source": source,
             "held_before": len(held), "free_slots": free_slots, "opened": len(opened),
+            "sim_placed": sim_booking.get("placed", 0), "sim_status": sim_booking.get("status"),
         })
         return self._result("REBALANCE_COMPLETE", rebalanced=True, as_of=asof, data_source=source,
                             held_before=len(held), free_slots=free_slots, opened=opened,
-                            skipped_for_risk=skipped_risk)
+                            skipped_for_risk=skipped_risk, sim_booking=sim_booking)
 
     def status(self):
         return self._result("REBALANCE_STATUS_READY", rebalanced=False, **self._state())

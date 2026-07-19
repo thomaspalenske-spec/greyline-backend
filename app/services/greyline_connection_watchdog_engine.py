@@ -21,7 +21,8 @@ class GreyLineConnectionWatchdogEngine:
 
         # Expected account comes from config, not a hardcoded id. Fail-safe: if it
         # is not configured, account_ok is False and the watchdog reports degraded.
-        expected_account_id = getenv("TRADESTATION_MARGIN_ACCOUNT_ID") or getenv("TS_MARGIN_ACCOUNT_ID")
+        expected_account_id = (getenv("TRADESTATION_SIM_ACCOUNT_ID")
+                               or getenv("TRADESTATION_MARGIN_ACCOUNT_ID") or getenv("TS_MARGIN_ACCOUNT_ID"))
         account_ok = bool(expected_account_id) and summary.get("account_id") == expected_account_id
         summary_ok = summary.get("status") == "LIVE_ACCOUNT_READY"
         scheduler_ok = scheduler.get("scheduler_enabled") is True and scheduler.get("thread_alive") is True

@@ -20,7 +20,9 @@ class TradeStationPositionsLiveEngine:
 
     def get_positions(self):
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
-        account_id = getenv("TRADESTATION_MARGIN_ACCOUNT_ID", "")
+        # Prefer the simulated account so reads resolve on the sandbox host. The real
+        # margin account is only a fallback (and only reachable via the production URL).
+        account_id = getenv("TRADESTATION_SIM_ACCOUNT_ID") or getenv("TRADESTATION_MARGIN_ACCOUNT_ID", "")
         base_url = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com")
 
         if not access_token or not account_id:

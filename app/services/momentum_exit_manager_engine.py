@@ -132,6 +132,42 @@ class MomentumExitManagerEngine:
             state["remaining_quantity"] = 0
         return actions, state
 
+    def _sim_exec(self):
+        if getattr(self, "_sim", None) is None:
+            from app.services.greyline_sim_execution_engine import GreyLineSimExecutionEngine
+            self._sim = GreyLineSimExecutionEngine()
+        return self._sim
+
+    def _mirror_exits_to_sim(self, trade, actions):
+        """Mirror the doctrine's exit actions into the SIM account as real orders.
+        No-op unless SIM booking is enabled and a SIM position exists for the symbol.
+        CLOSE flattens the whole SIM position (exact); SCALE removes the same fraction of
+        the ORIGINAL SIM shares the doctrine banks (whole-share, so tiny positions may not
+        quarter cleanly — those slices round to 0 and are reported, never guessed)."""
+        sim = self._sim_exec()
+        if not sim.enabled() or not actions:
+            return
+        symbol = trade.get("symbol")
+        position_long = trade.get("side") == "BUY"
+        state = trade.setdefault("doctrine_state", {})
+        if "sim_shares_original" not in state:
+            qty, _ = sim.sim_position(symbol)
+            if qty <= 0:
+                return   # no SIM counterpart (sub-share entry, or opened before booking was on)
+            state["sim_shares_original"] = qty
+        sim_orig = float(state.get("sim_shares_original") or 0)
+        original_internal = float(trade.get("original_quantity") or 0) or 1.0
+        events = trade.setdefault("sim_exit_events", [])
+        for a in actions:
+            if a["type"] == "SCALE":
+                shares = int(sim_orig * (a["qty"] / original_internal))
+                res = sim.book_exit(symbol, shares, position_long, reason=a["reason"])
+            else:  # CLOSE — flatten the remaining SIM position exactly
+                res = sim.close_position(symbol, position_long, reason=a["reason"])
+            events.append({"at": datetime.utcnow().isoformat(), "reason": a["reason"],
+                           "type": a["type"], "result": res.get("status"),
+                           "shares": res.get("shares"), "order_id": res.get("order_id")})
+
     # ---- live application over the ledger ----
     def manage_open_positions(self):
         led = PaperTradeLedgerEngine()
@@ -171,6 +207,11 @@ class MomentumExitManagerEngine:
             t["quantity"] = state["remaining_quantity"]
             t.setdefault("exit_events", []).extend(
                 {**a, "at": now.isoformat()} for a in actions)
+            # Mirror the same exit actions into the SIM account (best-effort, gated).
+            try:
+                self._mirror_exits_to_sim(t, actions)
+            except Exception:
+                pass
             scaled += sum(1 for a in actions if a["type"] == "SCALE")
             if state["remaining_quantity"] <= 0:
                 t["status"] = "CLOSED"

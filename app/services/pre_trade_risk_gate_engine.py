@@ -16,7 +16,8 @@ class PreTradeRiskGateEngine:
 
         # Expected trading account comes from config, not a hardcoded id. Fail-safe:
         # if it is not configured, default_account_ok is False and the gate blocks.
-        expected_account_id = getenv("TRADESTATION_MARGIN_ACCOUNT_ID") or getenv("TS_MARGIN_ACCOUNT_ID")
+        expected_account_id = (getenv("TRADESTATION_SIM_ACCOUNT_ID")
+                               or getenv("TRADESTATION_MARGIN_ACCOUNT_ID") or getenv("TS_MARGIN_ACCOUNT_ID"))
 
         checks = {
             "connection_ready": watchdog.get("overall_ready") is True,
