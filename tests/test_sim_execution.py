@@ -174,3 +174,40 @@ def test_reconciler_normalizes_sim_state(monkeypatch):
     assert snap["account_id"] == "SIM123" and snap["equity"] == 1000000.0
     assert snap["position_count"] == 1 and snap["positions"][0]["symbol"] == "AAPL"
     assert snap["working_order_count"] == 1     # only the Received one
+
+
+def test_scale_sizing_is_cumulative_not_per_slice():
+    """Flooring each 25% slice independently threw the remainder away every time: a
+    2-share SIM position banked nothing at any target, though the second target covers a
+    whole share. Cumulative sizing banks it — and 1-share positions still bank nothing,
+    which is a real constraint of a $10k book, not an artifact to round away."""
+    from app.services.momentum_exit_manager_engine import MomentumExitManagerEngine
+
+    def bank(sim_shares):
+        class FakeSim:
+            def __init__(self):
+                self.orders = []
+            def enabled(self):
+                return True
+            def sim_position(self, symbol):
+                return float(sim_shares), True
+            def book_exit(self, symbol, shares, position_long, reason=""):
+                if shares <= 0:
+                    return {"shares": 0, "status": "SKIPPED_ZERO_SHARES"}
+                self.orders.append((shares, reason)); return {"shares": shares, "status": "SIM_EXIT_BOOKED"}
+            def close_position(self, symbol, position_long=None, reason="", already_booked=0):
+                return {"status": "SIM_EXIT_BOOKED"}
+
+        mgr = MomentumExitManagerEngine()
+        mgr._sim = FakeSim()
+        trade = {"symbol": "AMZN", "side": "BUY", "original_quantity": 100.0, "doctrine_state": {}}
+        for i, tp in enumerate(("TP1", "TP2", "TP3")):        # one target per cycle, as live
+            mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 25.0, "reason": tp}])
+        return mgr._sim.orders
+
+    # 2 shares: 25% floors to 0, but the cumulative 50% at TP2 is a whole share
+    assert bank(2) == [(1, "TP2")]
+    # 8 shares quarter exactly — one share per target, unchanged
+    assert bank(8) == [(2, "TP1"), (2, "TP2"), (2, "TP3")]
+    # 1 share cannot be quartered by anyone; the runner keeps it until CLOSE
+    assert bank(1) == []

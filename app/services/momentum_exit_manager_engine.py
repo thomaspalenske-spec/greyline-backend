@@ -142,8 +142,17 @@ class MomentumExitManagerEngine:
         """Mirror the doctrine's exit actions into the SIM account as real orders.
         No-op unless SIM booking is enabled and a SIM position exists for the symbol.
         CLOSE flattens the whole SIM position (exact); SCALE removes the same fraction of
-        the ORIGINAL SIM shares the doctrine banks (whole-share, so tiny positions may not
-        quarter cleanly — those slices round to 0 and are reported, never guessed)."""
+        the ORIGINAL SIM shares the doctrine banks.
+
+        Scale sizing is CUMULATIVE, not per-slice: each target books
+        floor(sim_original * banked_fraction_so_far) minus what is already banked. Flooring
+        each 25% slice independently threw away the remainder every time — on a 2-share
+        position all three targets floored to 0 and nothing was ever banked, though the
+        second target legitimately covers a whole share. Cumulative sizing banks it.
+
+        What remains is a real constraint, not an artifact: a position of 1 share cannot be
+        quartered, and on a $10k book many names are 1-3 shares. Those slices round to 0 and
+        are reported as SKIPPED_ZERO_SHARES — never guessed, never silently dropped."""
         sim = self._sim_exec()
         if not sim.enabled() or not actions:
             return
@@ -161,11 +170,21 @@ class MomentumExitManagerEngine:
         # Scale-outs booked in this pass are still in flight when CLOSE reads the live
         # position, so the close must net them out or it oversells into a short.
         booked_in_pass = 0
+        # Cumulative across cycles: targets are hit in different passes, so the running
+        # totals live in doctrine_state alongside sim_shares_original.
+        banked_fraction = float(state.get("sim_internal_banked") or 0)
+        banked_shares = int(state.get("sim_shares_banked") or 0)
         for a in actions:
             if a["type"] == "SCALE":
-                shares = int(sim_orig * (a["qty"] / original_internal))
+                banked_fraction += float(a["qty"])
+                target = int(sim_orig * (banked_fraction / original_internal))
+                shares = max(0, target - banked_shares)
                 res = sim.book_exit(symbol, shares, position_long, reason=a["reason"])
-                booked_in_pass += int(res.get("shares") or 0)
+                booked = int(res.get("shares") or 0)
+                banked_shares += booked
+                booked_in_pass += booked
+                state["sim_internal_banked"] = banked_fraction
+                state["sim_shares_banked"] = banked_shares
             else:  # CLOSE — flatten the remaining SIM position exactly
                 res = sim.close_position(symbol, position_long, reason=a["reason"],
                                          already_booked=booked_in_pass)
