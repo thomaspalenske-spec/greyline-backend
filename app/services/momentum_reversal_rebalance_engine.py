@@ -19,15 +19,26 @@ class MomentumReversalRebalanceEngine:
       * at least ~5 trading days since the last rebalance (weekly cadence),
       * paper execution enabled, and risk limits respected (opens stop before a breach).
 
-    Sizing is deliberately conservative — ~50% gross exposure — so a cluster of same-sector
-    momentum names doesn't instantly trip the sector-concentration limit, and there's cash
-    headroom. The forward pipeline (fixed-horizon grader, data-integrity) measures the real,
+    Sizing is ~75% gross across top-N ($750/name on the $10k book). It was 50%, chosen to
+    keep a same-sector cluster clear of the concentration limit — but at $500/name the five
+    names priced above $500 (SPY, QQQ, META, SMH, AMD) could not buy a single whole share
+    and were dropped as SKIPPED_SUB_SHARE_NOTIONAL. That exclusion is price-correlated, so
+    the forward record was measuring a systematically cheaper basket than the strategy the
+    backtest validated. At $750/name every universe name is holdable.
+
+    The concentration limit moves with it: at 50% gross a same-sector cluster only breached
+    at 10 of 10 names, at 75% it would breach at 7, and TECHNOLOGY is the largest bucket in
+    the universe by far — the rebalance stops opening before a breach, so the cap would have
+    silently truncated the book and replaced one selection bias with another. Hence
+    GREYLINE_MAX_SECTOR_EXPOSURE_PCT=70, which preserves the same 9-of-10 headroom.
+
+    The forward pipeline (fixed-horizon grader, data-integrity) measures the real,
     survivorship-free result from the first fill.
     """
 
     STATE = Path("app/data/momentum_reversal/rebalance_state.json")
     MIN_CALENDAR_DAYS = 7          # ~5 trading days
-    GROSS_TARGET = 0.5            # deploy ~50% of capital across top-N
+    GROSS_TARGET = 0.75           # deploy ~75% of capital across top-N
     TRADE_INTENT = "MOMENTUM_REVERSAL"
     LIVE_SOURCES = ("TRADESTATION_LIVE", "TRADESTATION_LIVE_CACHED")
     MAX_STALE_DAYS = 4            # allows a 3-day holiday weekend; beyond it, refuse to trade
