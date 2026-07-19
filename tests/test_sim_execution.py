@@ -24,9 +24,13 @@ def test_size_shares_is_whole_share():
     assert GreyLineSimExecutionEngine.size_shares(500, 900.0) == 0     # sub-share notional
 
 
-def test_disabled_by_default_places_nothing(monkeypatch):
-    monkeypatch.delenv("GREYLINE_SIM_BOOKING_ENABLED", raising=False)
+def test_disabled_flag_places_nothing(monkeypatch):
+    # Construct BEFORE clearing the flag: __init__ calls reload_env(), which would refresh
+    # the key straight back from .env — and .env now says true, since SIM booking went live
+    # on 2026-07-19. The engine reads the flag at call time, so clearing it after
+    # construction is what actually exercises the disabled path.
     eng = GreyLineSimExecutionEngine()
+    monkeypatch.delenv("GREYLINE_SIM_BOOKING_ENABLED", raising=False)
     eng.booking = FakeBooking()
     out = eng.book_opens([{"symbol": "AAPL", "side": "BUY", "entry_price": 333.0}], 500)
     assert out["status"] == "SIM_BOOKING_DISABLED"
