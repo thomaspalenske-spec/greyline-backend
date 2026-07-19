@@ -6,10 +6,14 @@ from pathlib import Path
 from threading import Lock
 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv('.env')
-load_dotenv('.env.local', override=True)
+from app.services.env_reload import reload_env
+
+# .env.local layers over .env — the UW key lives in both and the local one wins (see the
+# credential trap in f514f1f). Applied in order, later file wins; neither overrides a
+# variable the operator actually exported.
+reload_env('.env')
+reload_env('.env.local')
 
 
 class UnusualWhalesProvider:
