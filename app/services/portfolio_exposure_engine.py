@@ -132,7 +132,25 @@ class PortfolioExposureEngine:
             "TLT": "TREASURIES",
         }
 
-        return sector_map.get(symbol, "UNKNOWN")
+        if symbol in sector_map:
+            return sector_map[symbol]
+        # Fall back to the generated map (app/scripts/build_sector_map.py). The literal
+        # above covers the ETFs and predates the universe; the generated file covers the
+        # S&P 500 names added on 2026-07-19, 9 of whose first 10 selections resolved to
+        # UNKNOWN and so pooled into one meaningless bucket the sector cap could not see.
+        # Hand-written entries win: they are the deliberate ones.
+        return self._generated_sectors().get(symbol, "UNKNOWN")
+
+    @classmethod
+    def _generated_sectors(cls):
+        cached = getattr(cls, "_generated_sector_cache", None)
+        if cached is None:
+            try:
+                cached = json.loads(Path("app/data/sector_map.json").read_text()).get("sectors") or {}
+            except Exception:
+                cached = {}     # absent or unreadable: degrade to the literal map, never crash
+            cls._generated_sector_cache = cached
+        return cached
 
     def _notional(self, trade):
         qty = float(trade.get("quantity") or trade.get("contracts") or 0)
