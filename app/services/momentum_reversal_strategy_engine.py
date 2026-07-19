@@ -1,6 +1,7 @@
 import bisect
 import csv
 import glob
+import hashlib
 import json
 import os
 from datetime import datetime
@@ -8,6 +9,7 @@ from os import getenv
 from pathlib import Path
 
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 from app.services.directional_signal_engine import DirectionalSignalEngine
 from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
@@ -50,7 +52,13 @@ class MomentumReversalStrategyEngine:
     COST_BPS_ROUND_TRIP = float(getenv("GREYLINE_COST_BPS_ROUND_TRIP", "10"))
     LIVE_CACHE = Path("app/data/price_history/live_universe_cache.json")
     LIVE_BARS_BACK = 320          # ~14 months of daily bars, > the 253 the signal needs
-    CACHE_TTL_SECONDS = 6 * 3600  # refetch live bars at most every 6h
+    # 13h, not 6h: at 6h a cache warmed before the 08:30 CDT open expires around 14:00,
+    # forcing a multi-minute refetch of the whole S&P 500 mid-session. 13h lets one
+    # pre-open warm cover the entire trading day. Bars are DAILY, so an intraday-aged
+    # cache holds the same closes either way; the data-quality gate that actually
+    # matters is _staleness(), which checks the latest BAR date, not the cache age.
+    CACHE_TTL_SECONDS = 13 * 3600
+    FETCH_WORKERS = 8             # TradeStation throttles ~2 req/s regardless; see _live_universe
 
     def __init__(self, top_n=None, capital_base=None):
         self.top_n = int(top_n) if top_n else self.TOP_N
@@ -141,14 +149,23 @@ class MomentumReversalStrategyEngine:
         out.sort(key=lambda x: x[0])
         return out
 
+    def _universe_key(self):
+        """Identity of the symbol set the cache was built from."""
+        return hashlib.sha256("|".join(self._symbols()).encode()).hexdigest()[:16]
+
     def _live_universe(self):
-        # Serve from cache if fresh — a daily strategy doesn't need to re-pull 98 symbols
-        # on every request, and it keeps API usage bounded.
+        # Serve from cache if fresh AND built from the same symbol set. Age alone is not
+        # enough: expanding the universe from 98 names to the S&P 500 left a young cache
+        # holding the OLD 98 series, so the strategy would have gone on selecting from the
+        # old universe until the TTL happened to lapse — the expansion silently doing
+        # nothing. Keying on the symbol set makes a universe change invalidate the cache
+        # immediately, which is the only behaviour that cannot quietly mislead.
         if self.LIVE_CACHE.exists():
             try:
                 cached = json.loads(self.LIVE_CACHE.read_text())
                 age = (datetime.utcnow() - datetime.fromisoformat(cached["fetched_at"])).total_seconds()
-                if age < self.CACHE_TTL_SECONDS and cached.get("series"):
+                if (age < self.CACHE_TTL_SECONDS and cached.get("series")
+                        and cached.get("universe_key") == self._universe_key()):
                     return cached["series"], cached.get("as_of"), "TRADESTATION_LIVE_CACHED"
             except Exception:
                 pass
@@ -159,21 +176,34 @@ class MomentumReversalStrategyEngine:
         if not token:
             raise RuntimeError("no TradeStation access token")
 
+        # Fetched concurrently: the universe is the whole S&P 500, and serially that is ~8
+        # minutes of blocking inside rebalance() at the open — against an entry doctrine
+        # that validated MARKET entry precisely because delay adversely selects.
+        # TradeStation throttles server-side around 2 requests/sec no matter how many
+        # workers we use (measured: 1 worker 1.1/s, 6 workers 1.9/s, 12 workers 2.1/s with
+        # zero errors), so this roughly halves the wall time and no more. The real
+        # protection is a cache warmed before the open — see CACHE_TTL_SECONDS.
         series, asof, failed = {}, None, []
-        for sym in self._symbols():
+
+        def _one(sym):
             try:
-                bars = self._fetch_daily_closes(sym, base_url, token)
+                return sym, self._fetch_daily_closes(sym, base_url, token)
             except Exception:
-                failed.append(sym)
-                continue
-            closes = [c for _, c in bars]
-            if len(closes) >= self.signal.MIN_BARS:
-                series[sym] = closes
-                last = bars[-1][0]
-                if last and (asof is None or last > asof):
-                    asof = last
-            else:
-                failed.append(sym)
+                return sym, None
+
+        with ThreadPoolExecutor(max_workers=self.FETCH_WORKERS) as pool:
+            for sym, bars in pool.map(_one, self._symbols()):
+                if bars is None:
+                    failed.append(sym)
+                    continue
+                closes = [c for _, c in bars]
+                if len(closes) >= self.signal.MIN_BARS:
+                    series[sym] = closes
+                    last = bars[-1][0]
+                    if last and (asof is None or last > asof):
+                        asof = last
+                else:
+                    failed.append(sym)
 
         if not series:
             raise RuntimeError("live fetch produced no usable series")
@@ -181,6 +211,7 @@ class MomentumReversalStrategyEngine:
         self.LIVE_CACHE.parent.mkdir(parents=True, exist_ok=True)
         self.LIVE_CACHE.write_text(json.dumps(
             {"fetched_at": datetime.utcnow().isoformat(), "as_of": asof,
+             "universe_key": self._universe_key(), "symbols": len(self._symbols()),
              "failed": failed, "series": series}))
         return series, asof, "TRADESTATION_LIVE"
 

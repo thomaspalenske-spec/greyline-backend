@@ -10,20 +10,41 @@ import json
 DATA_DIR = Path("app/data/historical")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-SYMBOLS = [
+def sp500_symbols():
+    """Current S&P 500 constituents from Unusual Whales (SPY holdings).
+
+    This replaces a hand-typed list as the definition of the tradable universe.
+    MomentumReversalStrategyEngine._symbols() globs the CSVs this writes, so whatever
+    lands here IS what the strategy may select — the list was the shackle, not the code.
+
+    Returns ~504 tickers: the index holds 500 companies but several have dual share
+    classes (GOOG/GOOGL, FOX/FOXA, NWS/NWSA).
+    """
+    from dotenv import load_dotenv
+    load_dotenv(".env")
+    from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
+
+    resp = UnusualWhalesProvider()._get("/api/etfs/SPY/holdings", params={"limit": 600})
+    rows = (resp.get("data") if isinstance(resp, dict) else resp) or []
+    tickers = sorted({r.get("ticker") for r in rows
+                      if r.get("ticker") and str(r.get("type", "stock")).lower() == "stock"})
+    if len(tickers) < 400:
+        raise RuntimeError(
+            f"SPY holdings returned only {len(tickers)} tickers — refusing to shrink the "
+            "universe on a partial response. Check the UW plan/endpoint before rerunning."
+        )
+    return tickers
+
+
+# The ETFs the strategy trades alongside single names. Not in SPY holdings, so kept
+# explicitly — these are instruments, not an opinion about which companies matter.
+ETF_SYMBOLS = [
     "SPY", "QQQ", "IWM", "DIA",
-    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "TSLA", "AVGO", "AMD",
-    "JPM", "BAC", "WFC", "C", "GS", "MS", "V", "MA", "AXP",
-    "XOM", "CVX", "COP", "SLB", "EOG",
-    "UNH", "LLY", "JNJ", "MRK", "PFE", "ABBV", "TMO", "ABT", "DHR",
-    "WMT", "COST", "HD", "LOW", "TGT", "MCD", "SBUX", "NKE",
-    "NFLX", "DIS", "CMCSA", "ADBE", "CRM", "ORCL", "INTC", "CSCO", "QCOM", "TXN",
-    "BA", "CAT", "DE", "HON", "GE", "LMT", "RTX", "NOC",
-    "KO", "PEP", "PG", "PM", "MO", "CL",
-    "NEE", "DUK", "SO", "AEP",
-    "PLTR", "SNOW", "SHOP", "UBER", "ABNB", "COIN", "MSTR",
     "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC",
-    "SMH", "IBB", "KRE", "TLT", "GLD", "SLV", "USO"
+    "SMH", "IBB", "KRE", "TLT", "GLD", "SLV", "USO",
+    # Liquid non-S&P names the strategy already held; keeping them avoids silently
+    # dropping open positions when the universe definition changes.
+    "COIN", "MSTR",
 ]
 
 
@@ -104,8 +125,18 @@ def download(symbol):
 def main():
     ok = 0
     bad = 0
+    skipped = 0
 
-    for symbol in SYMBOLS:
+    symbols = sorted(set(sp500_symbols()) | set(ETF_SYMBOLS))
+    print(f"universe: {len(symbols)} symbols (S&P 500 constituents + {len(ETF_SYMBOLS)} ETFs)")
+
+    for symbol in symbols:
+        # Resumable: an existing file with real history is left alone, so a rerun only
+        # fetches what changed in the index.
+        existing = DATA_DIR / f"{symbol}_daily.csv"
+        if existing.exists() and existing.stat().st_size > 10_000:
+            skipped += 1
+            continue
         try:
             if download(symbol):
                 ok += 1
@@ -119,7 +150,8 @@ def main():
     print({
         "ok": ok,
         "bad": bad,
-        "symbol_count": len(SYMBOLS),
+        "already_had": skipped,
+        "symbol_count": len(symbols),
         "data_dir": str(DATA_DIR),
     })
 
