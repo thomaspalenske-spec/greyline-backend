@@ -81,11 +81,19 @@ class GreyLineSimExecutionEngine:
                 "action": action, "exit_reason": reason, "order_id": res.get("order_id"),
                 "ok": res.get("ok")}
 
-    def close_position(self, symbol, position_long=None, reason=""):
-        """Flatten the entire live SIM position for a symbol (exact — the stop/close path)."""
+    def close_position(self, symbol, position_long=None, reason="", already_booked=0):
+        """Flatten the entire live SIM position for a symbol (exact — the stop/close path).
+
+        `already_booked` nets out exit shares booked earlier in the same pass but not yet
+        reflected in the live position. A gap can cross several TPs and the stop in one
+        decide(), so the scale-outs are still in flight when this reads positions() —
+        flattening the unreduced quantity would sell more than is held and flip the
+        account short.
+        """
         if not self.enabled():
             return {"status": "SIM_BOOKING_DISABLED"}
         qty, is_long = self.sim_position(symbol)
+        qty = qty - max(0, int(already_booked or 0))
         if qty <= 0:
             return {"status": "NO_SIM_POSITION", "symbol": symbol}
         long_ = is_long if position_long is None else position_long

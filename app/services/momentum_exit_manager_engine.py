@@ -158,12 +158,17 @@ class MomentumExitManagerEngine:
         sim_orig = float(state.get("sim_shares_original") or 0)
         original_internal = float(trade.get("original_quantity") or 0) or 1.0
         events = trade.setdefault("sim_exit_events", [])
+        # Scale-outs booked in this pass are still in flight when CLOSE reads the live
+        # position, so the close must net them out or it oversells into a short.
+        booked_in_pass = 0
         for a in actions:
             if a["type"] == "SCALE":
                 shares = int(sim_orig * (a["qty"] / original_internal))
                 res = sim.book_exit(symbol, shares, position_long, reason=a["reason"])
+                booked_in_pass += int(res.get("shares") or 0)
             else:  # CLOSE — flatten the remaining SIM position exactly
-                res = sim.close_position(symbol, position_long, reason=a["reason"])
+                res = sim.close_position(symbol, position_long, reason=a["reason"],
+                                         already_booked=booked_in_pass)
             events.append({"at": datetime.utcnow().isoformat(), "reason": a["reason"],
                            "type": a["type"], "result": res.get("status"),
                            "shares": res.get("shares"), "order_id": res.get("order_id")})

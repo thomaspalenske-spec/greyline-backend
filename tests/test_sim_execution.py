@@ -99,8 +99,8 @@ def test_exit_manager_mirrors_scale_and_close():
             return 8.0, True            # 8 whole shares held in SIM
         def book_exit(self, symbol, shares, position_long, reason=""):
             self.exits.append((shares, reason)); return {"shares": shares, "status": "SIM_EXIT_BOOKED"}
-        def close_position(self, symbol, position_long=None, reason=""):
-            self.closes.append(reason); return {"status": "SIM_EXIT_BOOKED"}
+        def close_position(self, symbol, position_long=None, reason="", already_booked=0):
+            self.closes.append((reason, already_booked)); return {"status": "SIM_EXIT_BOOKED"}
 
     mgr = MomentumExitManagerEngine()
     mgr._sim = FakeSim()
@@ -109,8 +109,46 @@ def test_exit_manager_mirrors_scale_and_close():
     mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 25.0, "reason": "TP1"}])
     mgr._mirror_exits_to_sim(trade, [{"type": "CLOSE", "qty": 75.0, "reason": "STOP"}])
     assert mgr._sim.exits == [(2, "TP1")]        # 8 * 0.25 = 2 whole shares
-    assert mgr._sim.closes == ["STOP"]           # remainder flattened exactly
+    assert mgr._sim.closes == [("STOP", 0)]      # separate pass: TP1 has settled, nothing in flight
     assert trade["doctrine_state"]["sim_shares_original"] == 8.0
+
+
+def test_close_nets_out_scales_booked_in_the_same_pass():
+    """A gap can cross several TPs and the stop in one decide(). The scale-outs are still
+    in flight when CLOSE reads positions(), so the close must not flatten the unreduced
+    quantity — that sells more than is held and flips the SIM account short."""
+    from app.services.momentum_exit_manager_engine import MomentumExitManagerEngine
+
+    class FakeSim:
+        def __init__(self):
+            self.orders = []
+        def enabled(self):
+            return True
+        def sim_position(self, symbol):
+            return 4.0, True            # live position never updates mid-pass
+        def book_exit(self, symbol, shares, position_long, reason=""):
+            self.orders.append((shares, reason)); return {"shares": shares, "status": "SIM_EXIT_BOOKED"}
+        def close_position(self, symbol, position_long=None, reason="", already_booked=0):
+            qty = self.sim_position(symbol)[0] - already_booked
+            self.orders.append((qty, reason)); return {"shares": qty, "status": "SIM_EXIT_BOOKED"}
+
+    mgr = MomentumExitManagerEngine()
+    mgr._sim = FakeSim()
+    trade = {"symbol": "INTC", "side": "BUY", "original_quantity": 4.0, "doctrine_state": {}}
+    mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 1.0, "reason": "TP1"},
+                                     {"type": "SCALE", "qty": 1.0, "reason": "TP2"},
+                                     {"type": "CLOSE", "qty": 2.0, "reason": "STOP"}])
+    assert mgr._sim.orders == [(1, "TP1"), (1, "TP2"), (2.0, "STOP")]
+    assert sum(o[0] for o in mgr._sim.orders) == 4.0    # exactly flat, never short
+
+
+def test_close_position_skips_when_in_flight_exits_cover_the_position(monkeypatch):
+    monkeypatch.setenv("GREYLINE_SIM_BOOKING_ENABLED", "true")
+    eng = GreyLineSimExecutionEngine()
+    eng.enabled = lambda: True
+    eng.sim_position = lambda symbol: (2.0, True)
+    res = eng.close_position("INTC", True, reason="STOP", already_booked=2)
+    assert res["status"] == "NO_SIM_POSITION"
 
 
 def test_reconciler_normalizes_sim_state(monkeypatch):
