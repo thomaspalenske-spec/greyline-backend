@@ -1,15 +1,15 @@
 from datetime import datetime
 from os import getenv
-from pathlib import Path
+from app.services.env_reload import reload_env
 
 import requests
-from dotenv import load_dotenv, set_key
+from dotenv import set_key
 
 
 class TradeStationAuthCodeExchangeEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def exchange(self):
         api_key = getenv("TRADESTATION_API_KEY", "")

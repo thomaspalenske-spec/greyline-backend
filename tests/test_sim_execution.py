@@ -35,9 +35,10 @@ def test_disabled_by_default_places_nothing(monkeypatch):
 
 
 def test_enabled_places_sized_orders_with_correct_action(monkeypatch):
-    # Construct first: TradeStationSimBookingEngine.__init__ does load_dotenv(override=True),
-    # so .env would clobber an earlier setenv. Enable AFTER construction; enabled() reads
-    # the flag at call time. (In production the flag lives in .env, which is the source.)
+    # Construct first, enable after: __init__ calls reload_env(), which refreshes .env
+    # values for anything the process did not export. A monkeypatch.setenv is not in that
+    # snapshot, so setting the flag earlier would still be reverted to .env's false here.
+    # (An operator's real `export` IS protected — see tests/test_env_precedence.py.)
     eng = GreyLineSimExecutionEngine()
     eng.booking = FakeBooking()
     monkeypatch.setenv("GREYLINE_SIM_BOOKING_ENABLED", "true")

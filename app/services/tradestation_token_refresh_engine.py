@@ -1,16 +1,16 @@
 from datetime import datetime
 from os import getenv
-from pathlib import Path
 
 import requests
-from dotenv import load_dotenv, set_key
+from dotenv import set_key
+from app.services.env_reload import reload_env
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 
 
 class TradeStationTokenRefreshEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def refresh(self):
         api_key = getenv("TRADESTATION_API_KEY", "")

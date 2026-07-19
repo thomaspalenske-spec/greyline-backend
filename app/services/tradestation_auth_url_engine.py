@@ -1,15 +1,14 @@
 from datetime import datetime
 from os import getenv
-from pathlib import Path
 from urllib.parse import urlencode
+from app.services.env_reload import reload_env
 
-from dotenv import load_dotenv
 
 
 class TradeStationAuthUrlEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def generate(self):
         api_key = getenv("TRADESTATION_API_KEY", "")

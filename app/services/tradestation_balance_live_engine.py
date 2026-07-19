@@ -1,8 +1,7 @@
 from datetime import datetime
 from os import getenv
-from pathlib import Path
-from dotenv import load_dotenv
 import requests
+from app.services.env_reload import reload_env
 
 
 
@@ -16,7 +15,7 @@ def _safe_json(response):
 class TradeStationBalanceLiveEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def get_balance(self):
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")

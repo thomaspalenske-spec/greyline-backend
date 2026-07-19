@@ -1,18 +1,17 @@
 import json
 from datetime import datetime
 from os import getenv
-from pathlib import Path
 
 import requests
-from dotenv import load_dotenv
 
+from app.services.env_reload import reload_env
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
 
 
 class TradeStationOptionChainLiveEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def get_expirations(
         self,

@@ -1,6 +1,7 @@
 # Load .env into the process environment BEFORE any engine reads getenv(), so
 # execution-governance flags (GREYLINE_*) and broker credentials are file-controlled.
 # override=False keeps standard precedence: a real shell `export` still wins over .env.
+import app.services.env_reload  # noqa: F401 — snapshots the real process env; MUST precede any .env load
 from dotenv import load_dotenv
 load_dotenv(override=False)
 

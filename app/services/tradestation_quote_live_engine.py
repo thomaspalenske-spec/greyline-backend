@@ -1,10 +1,9 @@
 from datetime import datetime
 import time
 from os import getenv
-from pathlib import Path
-from dotenv import load_dotenv
 import requests
 
+from app.services.env_reload import reload_env
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
 
 
@@ -17,7 +16,7 @@ class TradeStationQuoteLiveEngine:
         cls._quote_cache = {}
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def get_quote(self, symbol):
         maintenance = TradeStationTokenMaintenanceEngine().evaluate()

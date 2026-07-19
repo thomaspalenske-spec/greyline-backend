@@ -1,16 +1,15 @@
 from datetime import datetime
 from os import getenv
-from pathlib import Path
 
-from dotenv import load_dotenv
 
+from app.services.env_reload import reload_env
 from app.services.tradestation_token_refresh_engine import TradeStationTokenRefreshEngine
 
 
 class TradeStationTokenMaintenanceEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def evaluate(self, refresh_buffer_seconds=900):
         token_saved_at = getenv("TRADESTATION_TOKEN_SAVED_AT")

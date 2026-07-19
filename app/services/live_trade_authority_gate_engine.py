@@ -1,8 +1,7 @@
 from datetime import datetime
 from os import getenv
-from pathlib import Path
 
-from dotenv import load_dotenv
+from app.services.env_reload import reload_env
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
 from app.services.live_order_safety_guard_engine import (
     broker_base_url,
@@ -12,7 +11,7 @@ from app.services.live_order_safety_guard_engine import (
 
 class LiveTradeAuthorityGateEngine:
     def evaluate(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
         live_execution_enabled = getenv("GREYLINE_LIVE_EXECUTION_ENABLED", "false").lower() == "true"
         order_placement_allowed = getenv("GREYLINE_ORDER_PLACEMENT_ALLOWED", "false").lower() == "true"

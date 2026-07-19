@@ -119,7 +119,7 @@ def test_authority_gate_locks_on_unconfirmed_production():
         }.get(key, default)
 
     with patch(f"{GATE}.getenv", side_effect=fake_getenv), \
-         patch(f"{GATE}.load_dotenv"), \
+         patch(f"{GATE}.reload_env"), \
          patch(f"{GATE}.broker_base_url", return_value="https://api.tradestation.com"), \
          patch(f"{GATE}.ImmutableAuditLedgerEngine"):
         result = gate_mod.LiveTradeAuthorityGateEngine().evaluate()

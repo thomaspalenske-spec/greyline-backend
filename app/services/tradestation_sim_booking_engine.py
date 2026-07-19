@@ -15,11 +15,10 @@ If either is false it raises — it is structurally incapable of touching the re
 
 from datetime import datetime
 from os import getenv
-from pathlib import Path
 
 import requests
-from dotenv import load_dotenv
 
+from app.services.env_reload import reload_env
 from app.services.live_order_safety_guard_engine import classify_broker_endpoint
 
 SIM_HOST = "https://sim-api.tradestation.com"   # hardcoded — never TRADESTATION_SANDBOX_URL
@@ -39,7 +38,7 @@ def _safe_json(response):
 class TradeStationSimBookingEngine:
 
     def __init__(self):
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     # --- fail-closed guard -------------------------------------------------
     def _account_id(self):
@@ -69,7 +68,7 @@ class TradeStationSimBookingEngine:
     def _refresh_token(self):
         from app.services.tradestation_token_refresh_engine import TradeStationTokenRefreshEngine
         TradeStationTokenRefreshEngine().refresh()
-        load_dotenv(dotenv_path=Path(".env"), override=True)
+        reload_env()
 
     def _request(self, method, url, json_body=None, _retried=False):
         """HTTP with a single transparent token-refresh retry on 401."""
