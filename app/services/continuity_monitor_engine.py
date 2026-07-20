@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.time_utils import parse_utc
 from pathlib import Path
 
 from app.services.persistence.json_store import read_jsonl
@@ -6,7 +7,7 @@ from app.services.persistence.json_store import read_jsonl
 
 def _parse(ts):
     try:
-        return datetime.fromisoformat(str(ts).replace("Z", "+00:00").split("+")[0])
+        return parse_utc(ts)
     except Exception:
         return None
 

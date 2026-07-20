@@ -34,7 +34,7 @@ class StrategyPerformanceEngine:
     def _mark_open(self, open_trades):
         """Mark open positions to the latest close. Returns (rows, total_unrealized)."""
         if not open_trades:
-            return [], 0.0
+            return [], 0.0, []
         try:
             series, _asof, _src = MomentumReversalStrategyEngine().universe()
             last = {s: c[-1] for s, c in series.items() if c}
@@ -43,10 +43,26 @@ class StrategyPerformanceEngine:
 
         cost_bps = MomentumReversalStrategyEngine.COST_BPS_ROUND_TRIP
         rows, total = [], 0.0
+        unpriced = []
         for t in open_trades:
             entry = float(t.get("entry_price") or 0)
             qty = float(t.get("quantity") or 0)
-            cur = float(last.get(t.get("symbol"), entry) or entry)
+            # An unavailable price is NOT "unchanged". This defaulted to the entry price
+            # via two silent paths — the bare except above setting last={}, and
+            # .get(sym, entry) or entry — so gross evaluated to exactly 0 and an open
+            # position contributed only -cost. Holding a loser looked free, and since
+            # universe() calls a live feed, an outage or an off-hours run marked the ENTIRE
+            # open book flat. The same defect was confirmed in
+            # paper_performance_summary_engine: unknown must be reported, not assumed.
+            quoted = last.get(t.get("symbol"))
+            priced = isinstance(quoted, (int, float)) and quoted > 0
+            if not priced:
+                unpriced.append(t.get("symbol"))
+                rows.append({"symbol": t.get("symbol"), "side": t.get("side"),
+                             "entry_price": entry, "current_price": None,
+                             "pnl": None, "priced": False})
+                continue
+            cur = float(quoted)
             direction = -1 if str(t.get("side") or "").upper() in ("SELL", "SELL_SHORT", "SHORT") else 1
             gross = (cur - entry) * qty * direction
             # Net of the round trip it takes to be in and out of this position — i.e.
@@ -58,8 +74,8 @@ class StrategyPerformanceEngine:
                          "entry_price": entry, "current_price": round(cur, 2),
                          "unrealized_pnl_gross": round(gross, 2),
                          "transaction_cost": round(cost, 2),
-                         "unrealized_pnl": round(pnl, 2)})
-        return rows, total
+                         "unrealized_pnl": round(pnl, 2), "priced": True})
+        return rows, total, unpriced
 
     def evaluate(self):
         trades = [t for t in PaperTradeLedgerEngine()._read_all()
@@ -96,21 +112,35 @@ class StrategyPerformanceEngine:
                           "pnl": round(p, 2), "cumulative": round(cum, 2)})
 
         expectancy = round(sum(pnls) / n, 2) if n else 0.0
-        # Is expectancy distinguishable from zero? t = mean / (sd / sqrt(n)).
+
+        # Independence. t = mean / (sd / sqrt(n)) assumes n INDEPENDENT trades, but
+        # record_paper_trades() opens top_n positions in a SINGLE call, all selected from
+        # one market snapshot on one day, and there is no duplicate-open guard so repeated
+        # cycles re-open the same names. Those P&Ls are dominated by one shared market move.
+        # Dividing by sqrt(row count) inflated t by roughly the square root of the
+        # correlation multiple — and t > 2 is exactly what prints POSITIVE_EDGE_EMERGING.
+        # A distinct symbol-day is the honest unit, matching fixed_horizon_grader_engine.
+        effective_n = len({(t.get("symbol"), self._closed_at(t)[:10]) for t in closed})
+
         t_stat = None
-        if n >= 2:
+        if n >= 2 and effective_n >= 2:
             mean = sum(pnls) / n
             var = sum((p - mean) ** 2 for p in pnls) / (n - 1)
             sd = math.sqrt(var)
-            t_stat = round(mean / (sd / math.sqrt(n)), 2) if sd > 0 else None
+            t_stat = round(mean / (sd / math.sqrt(effective_n)), 2) if sd > 0 else None
 
-        open_rows, unrealized = self._mark_open(open_trades)
+        open_rows, unrealized, unpriced_open = self._mark_open(open_trades)
         total = round(realized + unrealized, 2)
 
-        if n < self.MIN_TRADES_FOR_SIGNAL:
+        # The guard applies to the EFFECTIVE count. Thirty trades opened on three days is
+        # three observations, and clearing the threshold on row count is how a handful of
+        # correlated bets earns a verdict.
+        under_min = effective_n < self.MIN_TRADES_FOR_SIGNAL
+        if under_min:
             verdict = "INSUFFICIENT_SAMPLE"
-            headline = (f"{n} closed trade(s) — far too few to judge. Need ~"
-                        f"{self.MIN_TRADES_FOR_SIGNAL}+ before the P&L means anything.")
+            headline = (f"{n} closed trade(s) across {effective_n} independent symbol-day(s)"
+                        f" — far too few to judge. Need ~{self.MIN_TRADES_FOR_SIGNAL}+"
+                        " independent observations before the P&L means anything.")
         elif t_stat is not None and t_stat > 2:
             verdict = "POSITIVE_EDGE_EMERGING"
             headline = f"Expectancy ${expectancy}/trade over {n} trades is significantly > 0 (t={t_stat})."
@@ -131,20 +161,30 @@ class StrategyPerformanceEngine:
             "min_trades_for_signal": self.MIN_TRADES_FOR_SIGNAL,
             "wins": len(wins),
             "losses": len(losses),
-            "win_rate_pct": round(100 * len(wins) / n, 1) if n else None,
+            # Headline metrics are SUPPRESSED below the same minimum that gates the
+            # verdict. They were computed unconditionally, so a payload could carry
+            # win_rate_pct 100.0 and profit_factor 4.2 next to verdict INSUFFICIENT_SAMPLE,
+            # and any consumer reading the metrics rather than the verdict string saw a
+            # spectacular edge on n=1. Identical bypass to the one fixed in
+            # fixed_horizon_grader_engine.
+            "win_rate_pct": (round(100 * len(wins) / n, 1) if n and not under_min else None),
+            "effective_n_symbol_days": effective_n,
+            "suppressed_below_min_sample": under_min,
+            "unpriced_open_symbols": unpriced_open,
             "cost_bps_round_trip": cost_bps,
             "realized_pnl_gross": realized_gross,
             "transaction_costs": total_costs,
             "realized_pnl": realized,
             "unrealized_pnl": round(unrealized, 2),
             "total_pnl": total,
-            "return_pct_on_capital": round(100 * total / self.capital_base, 2) if self.capital_base else None,
-            "expectancy_per_trade": expectancy,
+            "return_pct_on_capital": (round(100 * total / self.capital_base, 2)
+                                      if self.capital_base and not under_min else None),
+            "expectancy_per_trade": (expectancy if not under_min else None),
             "expectancy_t_stat": t_stat,
             "avg_win": round(sum(wins) / len(wins), 2) if wins else None,
             "avg_loss": round(sum(losses) / len(losses), 2) if losses else None,
             "profit_factor": (round(sum(wins) / abs(sum(losses)), 2)
-                              if losses and sum(losses) != 0 else None),
+                              if losses and sum(losses) != 0 and not under_min else None),
             "capital_base": self.capital_base,
             "open_positions": open_rows,
             "equity_curve": curve,

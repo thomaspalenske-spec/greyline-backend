@@ -32,6 +32,12 @@ class PerFeedSkillEngine:
     def __init__(self, horizon_hours=24, tolerance_hours=6, band_pct=1.0, neutral_band=2.0):
         self.horizon_hours = float(horizon_hours)
         self.tolerance_hours = float(tolerance_hours)
+        # Tolerance was pinned at 6h while horizon_hours is caller-controlled from the
+        # route with no floor, so GET /feature-skill?horizon_hours=1 accepted a "forward"
+        # price from T-5h — an MCC computed on time-reversed data, reported as a 1-hour
+        # horizon. Clamp rather than raise so the public route degrades instead of 500ing.
+        if self.tolerance_hours >= self.horizon_hours:
+            self.tolerance_hours = self.horizon_hours / 4
         self.band_pct = float(band_pct)
         self.neutral_band = float(neutral_band)
         self.ledger = Path("app/data/decision_shadow/decision_shadow_log.jsonl")
@@ -63,8 +69,23 @@ class PerFeedSkillEngine:
             return
         idx.setdefault(str(symbol).upper(), []).append((dt, price))
 
-    def _price_at(self, idx, symbol, target_dt):
+    def _price_at(self, idx, symbol, target_dt, direction="nearest"):
+        """Price near target_dt. `direction` constrains which side is acceptable.
+
+        This duplicated PriceHistoryStore.price_at but dropped its direction= parameter —
+        the very thing that function documents as the fix. Two-sided matching let the
+        ENTRY price be sampled up to tolerance_hours AFTER the decision, so for
+        momentum_proxy and flow_direction (both derived from recent price action) the
+        entry already contained the move being graded. It also made the "24h" return span
+        anything from 12h to 36h, varying by which symbols happened to have points recorded.
+        """
         pts = idx.get(str(symbol).upper())
+        if not pts:
+            return None
+        if direction == "before":
+            pts = [p for p in pts if p[0] <= target_dt]
+        elif direction == "after":
+            pts = [p for p in pts if p[0] >= target_dt]
         if not pts:
             return None
         best = min(pts, key=lambda p: abs((p[0] - target_dt).total_seconds()))
@@ -106,31 +127,58 @@ class PerFeedSkillEngine:
             ts = _parse(e.get("timestamp"))
             if ts is None:
                 continue
-            cur = self._price_at(idx, e.get("symbol"), ts)
-            fwd = self._price_at(idx, e.get("symbol"), ts + horizon)
+            cur = self._price_at(idx, e.get("symbol"), ts, direction="before")
+            fwd = self._price_at(idx, e.get("symbol"), ts + horizon, direction="after")
             if not cur or not fwd:
                 continue
-            moves.append((e, (fwd / cur - 1) * 100))
+            moves.append((e, (fwd / cur - 1) * 100, str(e.get("symbol") or "").upper(),
+                          ts.date().isoformat()))
 
         feeds = {}
         for name, field in FEEDS:
             graded = []
-            for e, raw in moves:
+            for e, raw, _sym, _day in moves:
                 direction = self._feed_direction(e, field)
                 if direction not in (BULLISH, BEARISH):
                     continue
-                graded.append({"directional_bias": direction, "grade": self._grade(direction, raw)})
-            skill = SkillMetricsEngine().evaluate(graded)
+                graded.append({"directional_bias": direction,
+                               "grade": self._grade(direction, raw),
+                               "symbol": _sym, "day": _day})
+            # dedupe_by_symbol_time only collapses duplicates within the same MINUTE. It
+            # does nothing about the two real correlations: one symbol graded hourly over a
+            # 24h horizon produces rows whose forward windows overlap by 23/24ths, and all
+            # symbols in a cycle share one market move. Passing raw row counts let a feed
+            # with no edge post p<0.05 and earn DIRECTIONAL_SKILL_CONFIRMED — which this
+            # engine's own interpretation string then calls a candidate to wire into the
+            # live decision.
+            effective_n = len({(g["symbol"], g["day"]) for g in graded
+                               if g["grade"] in ("FAVORABLE", "UNFAVORABLE")})
+            skill = SkillMetricsEngine().evaluate(graded, effective_n=effective_n)
             feeds[name] = {
                 "mcc": skill.get("mcc"),
                 "verdict": skill.get("verdict"),
                 "n_decisive": skill["confusion_matrix"]["n_decisive"],
+                # Forwarded because the metrics engine added them precisely so the real
+                # sample size and the discard count stop being invisible.
+                "n_effective": skill.get("n_effective"),
+                "unrecognized_grade_rows": skill.get("unrecognized_grade_rows"),
                 "accuracy": skill.get("accuracy"),
             }
 
         rankable = [(n, f) for n, f in feeds.items() if f["verdict"] != "INSUFFICIENT_DATA"]
         ranked = [n for n, _ in sorted(rankable, key=lambda x: (x[1]["mcc"] if x[1]["mcc"] is not None else -9), reverse=True)]
-        best = ranked[0] if ranked else None
+
+        # best_feed is the MAXIMUM of len(FEEDS) MCCs, so under the null it clears p<0.05
+        # roughly 1 - 0.95**len(FEEDS) of the time — about 23% at five feeds. It also used
+        # to accept a feed whose own verdict was NO_DEMONSTRABLE_SKILL, so the winner of
+        # five coin flips was announced as the best signal and recommended for wiring in.
+        # Require the feed to have earned a verdict on its own, Bonferroni-corrected.
+        best = None
+        for name in ranked:
+            f = feeds[name]
+            if f.get("verdict") == "DIRECTIONAL_SKILL_CONFIRMED":
+                best = name
+                break
 
         return {
             "timestamp": datetime.utcnow().isoformat(),

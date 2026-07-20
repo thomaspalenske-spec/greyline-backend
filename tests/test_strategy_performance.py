@@ -31,7 +31,12 @@ def test_tiny_sample_never_claims_an_edge_even_when_winning():
     out = _run([_trade("A", 50.0), _trade("B", 40.0), _trade("C", 60.0)])
     assert out["verdict"] == "INSUFFICIENT_SAMPLE"
     assert out["realized_pnl"] == 150.0
-    assert out["win_rate_pct"] == 100.0
+    # Headline metrics are SUPPRESSED below the sample minimum, not published beside the
+    # guarded verdict. This line used to assert win_rate_pct == 100.0 while the same test
+    # asserted INSUFFICIENT_SAMPLE — i.e. it pinned the guard bypass in place. A dashboard
+    # reading the metric rather than the verdict string saw a 100% edge on a tiny sample.
+    assert out["win_rate_pct"] is None
+    assert out["suppressed_below_min_sample"] is True
 
 
 def test_realized_pnl_and_equity_curve_accumulate():
@@ -47,7 +52,9 @@ def test_win_loss_stats():
     out = _run([_trade("A", 10.0), _trade("B", -5.0)])
     assert out["avg_win"] == 10.0
     assert out["avg_loss"] == -5.0
-    assert out["profit_factor"] == 2.0
+    # Suppressed below the minimum, for the same reason as win_rate_pct above. avg_win and
+    # avg_loss remain, as raw descriptions of the trades rather than edge metrics.
+    assert out["profit_factor"] is None
 
 
 def test_large_positive_sample_reports_emerging_edge():
@@ -98,5 +105,8 @@ def test_costs_can_flip_a_marginal_edge_to_no_edge():
 
 def test_expectancy_and_curve_are_net_of_cost():
     out = _run([_trade("A", 30.0, entry=100.0, qty=100)], cost_bps=10)
-    assert out["expectancy_per_trade"] == 20.0          # not 30
+    # Net-of-cost arithmetic is still what matters here, but expectancy is an edge metric
+    # and is suppressed below the sample minimum. The cost is verified via realized_pnl,
+    # which is a fact about the fills rather than a claim about edge.
+    assert out["expectancy_per_trade"] is None
     assert out["equity_curve"][0]["cumulative"] == 20.0

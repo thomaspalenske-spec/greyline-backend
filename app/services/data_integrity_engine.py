@@ -119,15 +119,39 @@ class DataIntegrityEngine:
         mcc = (fh.get("skill") or {}).get("mcc")
 
         if decisive == 0:
-            reasons.append(
-                "Fixed-horizon grader has 0 matured decisions — no forward prices near "
-                "T+horizon yet. Edge is unmeasurable until the price feed accumulates."
-            )
+            # PENDING absorbs BOTH malformed records and genuinely immature ones, and the
+            # grader now exposes the split. Asserting "no forward prices yet" over a
+            # ledger that is actually writing snapshot_price 0.0 tells the operator to
+            # wait when no amount of waiting will help.
+            breakdown = fh.get("pending_breakdown") or {}
+            malformed = breakdown.get("malformed_record") or 0
+            immature = breakdown.get("no_forward_price_yet") or 0
+            if malformed and malformed >= immature:
+                reasons.append(
+                    f"Fixed-horizon grader has 0 matured decisions and {malformed} MALFORMED "
+                    f"records (vs {immature} merely immature) — this is broken input, not "
+                    "youth. Waiting will not fix it; check snapshot_price capture."
+                )
+            else:
+                reasons.append(
+                    f"Fixed-horizon grader has 0 matured decisions — {immature} awaiting a "
+                    f"forward price near T+horizon, {malformed} malformed. Edge is "
+                    "unmeasurable until the price feed accumulates."
+                )
 
         # --- continuity (a gap means the data has holes, not that markets were quiet) ---
         continuity = ContinuityMonitorEngine().diagnose()
         if continuity.get("verdict") == "RED":
             reasons.append(f"Continuity: {continuity.get('headline')}")
+        elif continuity.get("verdict") not in ("GREEN", "AMBER", "RED"):
+            # UNKNOWN matched neither branch and contributed silently to GREEN, so
+            # "could not measure" was reported as "passed" — the same vacuous-pass failure
+            # as the portfolio integrity check.
+            reasons.append(
+                f"CONTINUITY_UNMEASURABLE (verdict={continuity.get('verdict')!r}) — the "
+                "continuity monitor could not run, so its check did not pass, it did not "
+                "happen."
+            )
         elif continuity.get("verdict") == "AMBER":
             reasons.append(
                 f"Continuity: {continuity.get('gap_count')} accumulation gap(s), "
@@ -173,7 +197,13 @@ class DataIntegrityEngine:
                 "horizon_hours": fh.get("horizon_hours"),
                 "matured_decisions": decisive,
                 "pending": pending,
-                "balanced_accuracy": fh.get("balanced_accuracy_precision_based"),
+                # The grader labels balanced_accuracy_precision_based a deprecated, misnamed alias:
+            # it is the mean of per-direction PRECISIONS, not balanced accuracy (which
+            # averages recalls). Republishing it under the clean name was worse than the
+            # source — a drift-follower in a trending tape reads 0.62 in a report whose
+            # stated purpose is that "a spurious hit rate can't masquerade as edge".
+            "balanced_accuracy": (fh.get("skill") or {}).get("balanced_accuracy"),
+            "mean_per_direction_precision": fh.get("mean_per_direction_precision"),
                 "mcc": mcc,
                 "note": "MCC > 0 (significant) = real directional skill; ~0 = none; < 0 = anti-skill.",
             },

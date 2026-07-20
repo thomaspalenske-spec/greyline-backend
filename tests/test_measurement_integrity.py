@@ -278,3 +278,106 @@ def test_mixed_offset_points_can_be_sorted(tmp_path):
     s.record("AAA", 101.0, timestamp="2026-06-15T11:00:00Z")
     pts = s._load("AAA")                      # raised TypeError before the fix
     assert [p[1] for p in pts] == [100.0, 101.0]
+
+
+# --------------------------------------------------------- integrity checks that can fail
+
+def test_integrity_check_can_actually_fail(monkeypatch):
+    """It was a tautology: both statuses PortfolioStateEngine can return were allowlisted
+    and both hardcode execution_enabled False, so integrity_healthy was unconditionally
+    True — including with no snapshot at all. A check that cannot fail is worse than none."""
+    import app.services.portfolio_integrity_engine as mod
+
+    class NoSnapshotRepo:
+        def load_latest_snapshot(self):
+            return {"found": False}
+
+    class NoSnapshotState:
+        def evaluate_state(self):
+            return {"status": "NO_SNAPSHOT_FOUND", "state": None, "execution_enabled": False}
+
+    monkeypatch.setattr(mod, "PortfolioRepository", NoSnapshotRepo)
+    monkeypatch.setattr(mod, "PortfolioStateEngine", NoSnapshotState)
+
+    out = mod.PortfolioIntegrityEngine().evaluate_integrity()
+    assert out["integrity_healthy"] is False
+    assert out["status"] == "PORTFOLIO_INTEGRITY_ERROR"
+    assert any("NO_PORTFOLIO_SNAPSHOT" in f for f in out["failures"])
+
+    # Isolate state_valid: a snapshot EXISTS but the state is NO_SNAPSHOT_FOUND. The old
+    # allowlist accepted that status as valid, which is the tautology itself.
+    class HasSnapshot:
+        def load_latest_snapshot(self):
+            return {"found": True}
+
+    monkeypatch.setattr(mod, "PortfolioRepository", HasSnapshot)
+    out2 = mod.PortfolioIntegrityEngine().evaluate_integrity()
+    assert out2["state_valid"] is False, "NO_SNAPSHOT_FOUND must not count as a valid state"
+    assert out2["integrity_healthy"] is False
+
+
+def test_integrity_still_passes_when_genuinely_verified(monkeypatch):
+    import app.services.portfolio_integrity_engine as mod
+
+    class Repo:
+        def load_latest_snapshot(self):
+            return {"found": True}
+
+    class State:
+        def evaluate_state(self):
+            return {"status": "PORTFOLIO_STATE_ACTIVE", "state": "ACTIVE",
+                    "execution_enabled": False}
+
+    monkeypatch.setattr(mod, "PortfolioRepository", Repo)
+    monkeypatch.setattr(mod, "PortfolioStateEngine", State)
+    out = mod.PortfolioIntegrityEngine().evaluate_integrity()
+    assert out["integrity_healthy"] is True
+    assert out["failures"] == []
+
+
+# ------------------------------------------------------- correlated trades / effective_n
+
+def test_same_day_trades_are_not_thirty_independent_observations():
+    """record_paper_trades opens top_n positions in ONE call from ONE market snapshot, so
+    dividing by sqrt(row count) inflated the t-stat that prints POSITIVE_EDGE_EMERGING."""
+    from app.services.strategy_performance_engine import StrategyPerformanceEngine
+
+    def trade(sym, pnl, day):
+        return {"trade_intent": "MOMENTUM_REVERSAL", "status": "CLOSED", "symbol": sym,
+                "realized_pnl": pnl, "entry_price": 100.0, "quantity": 1,
+                "exit_timestamp": f"{day}T20:00:00"}
+
+    # 30 trades, all closed the same day across 30 symbols = ONE market moment repeated.
+    same_day = [trade(f"S{i}", 12.0, "2026-06-15") for i in range(30)]
+    eng = StrategyPerformanceEngine()
+    import app.services.strategy_performance_engine as mod
+
+    class Ledger:
+        def __init__(self, rows): self.rows = rows
+        def _read_all(self): return self.rows
+
+    mod.PaperTradeLedgerEngine = lambda: Ledger(same_day)
+    out = eng.evaluate()
+    assert out["effective_n_symbol_days"] == 30      # 30 symbols x 1 day
+    # and the same 30 trades spread over 30 days is also 30 — but 30 trades on ONE symbol
+    # across one day must collapse.
+    one_symbol = [trade("AAA", 12.0, "2026-06-15") for _ in range(30)]
+    mod.PaperTradeLedgerEngine = lambda: Ledger(one_symbol)
+    out2 = StrategyPerformanceEngine().evaluate()
+    assert out2["effective_n_symbol_days"] == 1
+    assert out2["verdict"] == "INSUFFICIENT_SAMPLE"
+    assert out2["win_rate_pct"] is None, "headline metric published below the guard"
+
+    # The t-stat must be computed on the EFFECTIVE count, not the row count. 30 trades
+    # across just TWO symbol-days: sqrt(30)=5.48 vs sqrt(2)=1.41, so the same P&L reads
+    # t~5.3 on rows (comfortably "significant") and t~1.4 on independent observations.
+    # effective_n must be >= 2 here, or the guard short-circuits and the test proves nothing.
+    mixed = [trade("AAA", 12.0 if i % 4 else -6.0, "2026-06-15") for i in range(15)]
+    mixed += [trade("AAA", 12.0 if i % 4 else -6.0, "2026-06-16") for i in range(15)]
+    mod.PaperTradeLedgerEngine = lambda: Ledger(mixed)
+    out3 = StrategyPerformanceEngine().evaluate()
+    assert out3["effective_n_symbol_days"] == 2
+    assert out3["expectancy_t_stat"] is not None
+    assert abs(out3["expectancy_t_stat"]) < 2, (
+        "t-stat computed on row count, not independent observations: "
+        f"{out3['expectancy_t_stat']}")

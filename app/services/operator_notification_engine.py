@@ -1,4 +1,5 @@
 import json
+from app.services.time_utils import parse_utc
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -70,7 +71,7 @@ class OperatorNotificationEngine:
 
             ts_raw = str(r.get("timestamp") or "")
             try:
-                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+                ts = parse_utc(ts_raw)
             except Exception:
                 ts = datetime.min
 
