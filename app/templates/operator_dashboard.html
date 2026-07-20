@@ -354,53 +354,64 @@ th {
 }
 
 
-/* ===== GREYLINE SURGICAL COMMAND CENTER FIX ===== */
-.app {
-  width: 100vw !important;
-  max-width: none !important;
-  grid-template-columns: 260px minmax(0, 1fr) !important;
-}
+/* ===== GREYLINE SURGICAL COMMAND CENTER FIX =====
+   Scoped to wide viewports. This block forces the desktop layout with !important on
+   .app/.main/.metrics/etc. Unscoped, that beat EVERY responsive breakpoint below it —
+   media queries add no specificity, so a later !important rule wins outright. The result
+   was that the dashboard had no working narrow layout at all: .app stayed
+   "260px minmax(0,1fr)", so at a narrow (or zoomed) viewport the main column collapsed to
+   ~260px while its content still needed ~1314px, crushing every card into a clipped strip.
+   Scoping to min-width:1201px keeps the wide-screen fix and lets the max-width:1200px rule
+   below actually take effect. */
+@media (min-width: 1201px) {
+  .app {
+    width: 100vw !important;
+    max-width: none !important;
+    grid-template-columns: 260px minmax(0, 1fr) !important;
+  }
 
-.main {
-  width: 100% !important;
-  max-width: none !important;
-  min-width: 0 !important;
-  padding-right: 28px !important;
-}
+  .main {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    padding-right: 28px !important;
+  }
 
-.metrics {
-  grid-template-columns: repeat(6, minmax(190px, 1fr)) !important;
-}
+  .metrics {
+    grid-template-columns: repeat(6, minmax(190px, 1fr)) !important;
+  }
 
-.health {
-  grid-template-columns: repeat(5, minmax(190px, 1fr)) !important;
-}
+  .health {
+    grid-template-columns: repeat(5, minmax(190px, 1fr)) !important;
+  }
 
-.content {
-  grid-template-columns: minmax(520px, 0.9fr) minmax(900px, 1.6fr) !important;
-}
+  .content {
+    grid-template-columns: minmax(520px, 0.9fr) minmax(900px, 1.6fr) !important;
+  }
 
-.battlefield {
-  grid-template-columns: minmax(260px, 0.75fr) minmax(420px, 1.25fr) !important;
-}
+  .battlefield {
+    grid-template-columns: minmax(260px, 0.75fr) minmax(420px, 1.25fr) !important;
+  }
 
-.card {
-  min-width: 0 !important;
-}
+  .card {
+    min-width: 0 !important;
+  }
 
-.value {
-  overflow: visible !important;
-  text-overflow: clip !important;
-  white-space: nowrap !important;
-  font-size: clamp(28px, 1.65vw, 38px) !important;
-}
+  .value {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+    font-size: clamp(28px, 1.65vw, 38px) !important;
+  }
 
-table {
-  min-width: 980px !important;
-}
+  table {
+    min-width: 980px !important;
+  }
 
-.content > .card:nth-child(2) {
-  overflow-x: auto !important;
+  .content > .card:nth-child(2) {
+    overflow-x: auto !important;
+  }
+
 }
 
 @media (max-width: 1700px) {
