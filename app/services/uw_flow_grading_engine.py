@@ -158,9 +158,17 @@ class UWFlowGradingEngine:
             closes = self._daily_close(symbol)
             days = sorted(set(flow) & set(closes))
             for i, d in enumerate(days):
-                # next available trading day at least HORIZON_DAYS ahead
-                fwd = next((fd for fd in days[i + 1:] if fd > d), None)
-                if not fwd or closes[d] <= 0:
+                # The day HORIZON_DAYS observations ahead. This previously took the next
+                # available day regardless of HORIZON_DAYS, so the constant documented a
+                # configurable horizon the code silently ignored — every verdict this
+                # engine has ever produced was a 1-day horizon, whatever it was set to.
+                # Index offset (not calendar arithmetic) because `days` is already the
+                # intersection of days that HAVE both flow and a close.
+                j = i + self.HORIZON_DAYS
+                if j >= len(days):
+                    continue
+                fwd = days[j]
+                if closes[d] <= 0:
                     continue
                 raw = (closes[fwd] / closes[d] - 1) * 100
                 decisive = abs(raw) >= self.DECISIVE_PCT

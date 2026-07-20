@@ -95,3 +95,44 @@ def test_no_flow_data_is_handled():
     eng.price._load = lambda s: []
     out = eng.grade()
     assert out["symbols_graded"] == 0
+
+
+def test_horizon_days_actually_controls_the_forward_window(tmp_path, monkeypatch):
+    """HORIZON_DAYS documented a configurable horizon that grade() ignored — it always took
+    the next available day, so every verdict this engine ever produced was a 1-day horizon
+    whatever the constant said. The horizon sweep that found (and then unfound) structure
+    at 3/5/10 days was only possible once this worked."""
+    from app.services.uw_flow_grading_engine import UWFlowGradingEngine
+
+    # Rising 1% per day: a positive-flow call is CORRECT at every horizon, and the forward
+    # return must grow with the horizon if the offset is honoured.
+    days = [f"2026-06-{d:02d}" for d in range(1, 21)]
+    flow = {d: {"directional_flow": 1.0} for d in days}
+    closes = {d: 100.0 * (1.01 ** i) for i, d in enumerate(days)}
+
+    seen = {}
+
+    def run(h):
+        class G(UWFlowGradingEngine):
+            HORIZON_DAYS = h
+
+            def _symbols(self_inner):
+                return ["TEST"]
+
+            def _daily_flow(self_inner, symbol):
+                return flow
+
+            def _daily_close(self_inner, symbol):
+                return closes
+
+        out = G().grade()
+        return out["features"]["directional_flow"]
+
+    for h in (1, 5):
+        seen[h] = run(h)
+
+    # A 5-day forward window yields fewer samples than a 1-day one over the same series.
+    assert seen[5]["n"] < seen[1]["n"], seen
+    # And on a monotonically rising series every call is correct at both horizons.
+    assert seen[1]["balanced_accuracy"] == 1.0
+    assert seen[5]["balanced_accuracy"] == 1.0
