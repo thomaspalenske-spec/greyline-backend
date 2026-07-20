@@ -1,16 +1,35 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+_UTC = timezone.utc
 
 from app.services.persistence.json_store import append_jsonl, read_jsonl
 
 
 def _parse(ts):
+    """Parse a timestamp to a NAIVE UTC datetime.
+
+    The old implementation stripped a trailing "+HH:MM" but not a "-HH:MM", so a
+    positive-offset or Z timestamp became naive while a negative-offset one stayed
+    tz-aware. Mixing the two blows up on comparison (`TypeError: can't compare offset-naive
+    and offset-aware`) inside sorts and price lookups — and the broker's TradeTime is now
+    being persisted, so negative offsets are reachable where they previously were not.
+    Worse than the crash: a US-Eastern offset silently misread would shift a point five
+    hours, which lands inside a six-hour tolerance window and joins the wrong price without
+    erroring at all.
+
+    Offsets are now CONVERTED to UTC rather than truncated, so the instant is preserved.
+    """
     if isinstance(ts, datetime):
-        return ts
+        return ts.replace(tzinfo=None) if ts.tzinfo is None else (
+            ts.astimezone(_UTC).replace(tzinfo=None))
     try:
-        return datetime.fromisoformat(str(ts).replace("Z", "+00:00").split("+")[0])
+        parsed = datetime.fromisoformat(str(ts).strip().replace("Z", "+00:00"))
     except Exception:
         return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(_UTC).replace(tzinfo=None)
+    return parsed
 
 
 class PriceHistoryStore:

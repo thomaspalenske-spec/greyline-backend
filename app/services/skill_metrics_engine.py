@@ -25,11 +25,21 @@ class SkillMetricsEngine:
     NEUTRAL grades (|move| < band) are excluded from the binary matrix.
     """
 
-    def evaluate(self, graded):
+    GRADES = ("FAVORABLE", "UNFAVORABLE", "NEUTRAL")
+
+    def evaluate(self, graded, effective_n=None):
         tp = fp = tn = fn = 0
+        unrecognized = 0
         for x in graded:
             bias = str(x.get("directional_bias", "")).upper()
             grade = x.get("grade")
+            if grade not in self.GRADES:
+                # A missing or unexpected grade used to fall through to `correct = False`
+                # and be tallied as a wrong prediction, so a plumbing failure that dropped
+                # the field was indistinguishable from measured anti-skill — and it
+                # inflated n, and therefore the significance of whatever verdict followed.
+                unrecognized += 1
+                continue
             if grade == "NEUTRAL":
                 continue
             correct = grade == "FAVORABLE"
@@ -55,8 +65,19 @@ class SkillMetricsEngine:
         denom = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
         mcc = ((tp * tn - fp * fn) / denom) if denom else 0.0
 
-        # significance of MCC: z = MCC * sqrt(n) (chi-square_1 = n*MCC^2), two-sided
-        z = mcc * math.sqrt(n) if n else 0.0
+        # Significance of MCC: z = MCC * sqrt(n), chi-square_1 = n*MCC^2, two-sided.
+        #
+        # n here MUST be the number of INDEPENDENT observations, not the number of rows.
+        # Callers grade the same symbol repeatedly through the day over overlapping forward
+        # windows, so consecutive rows share most of their outcome and rows from one cycle
+        # share a single market move across symbols. Passing raw row counts understated the
+        # p-value by roughly sqrt(rows per independent observation) — which is how a
+        # coin-flip signal earns DIRECTIONAL_SKILL_CONFIRMED.
+        #
+        # `effective_n` lets a caller supply the honest count (e.g. distinct symbol-days).
+        # It is capped at n because an effective sample can never exceed the actual rows.
+        n_eff = n if effective_n is None else max(0, min(int(effective_n), n))
+        z = mcc * math.sqrt(n_eff) if n_eff else 0.0
         p_value = 2 * (1 - _phi(abs(z)))
 
         base_up_acc = _safe(actual_up, n)      # always predict UP
@@ -67,9 +88,15 @@ class SkillMetricsEngine:
             if (accuracy is not None and best_baseline is not None) else None
         )
 
-        if n < MIN_SAMPLE:
+        # The guard applies to the EFFECTIVE sample: 500 rows that are 3 independent
+        # observations is not 500 samples, and clearing MIN_SAMPLE on row count was how a
+        # handful of market days could produce a confident verdict.
+        if n_eff < MIN_SAMPLE:
             verdict = "INSUFFICIENT_DATA"
-            interpretation = f"Only {n} decisive graded outcomes (< {MIN_SAMPLE}); cannot assess skill."
+            interpretation = (
+                f"Only {n_eff} independent decisive outcomes (< {MIN_SAMPLE}); cannot assess skill."
+                + (f" {n} rows were graded, but they are not independent." if n_eff < n else "")
+            )
         elif p_value < 0.05 and mcc > 0:
             verdict = "DIRECTIONAL_SKILL_CONFIRMED"
             interpretation = f"MCC {mcc:.3f} (p={p_value:.2e}) — real discriminative skill beyond drift."
@@ -89,6 +116,10 @@ class SkillMetricsEngine:
             "verdict": verdict,
             "interpretation": interpretation,
             "confusion_matrix": {"tp": tp, "fp": fp, "tn": tn, "fn": fn, "n_decisive": n},
+            # The number the p-value was actually computed on, and how many rows were
+            # discarded for having no usable grade. Both were previously invisible.
+            "n_effective": n_eff,
+            "unrecognized_grade_rows": unrecognized,
             "mcc": round(mcc, 4),
             "mcc_p_value": p_value,
             "accuracy": round(accuracy, 4) if accuracy is not None else None,

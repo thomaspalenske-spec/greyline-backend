@@ -97,14 +97,27 @@ class FlowSkillValidationEngine:
         horizon = timedelta(hours=self.horizon_hours)
 
         graded = []
-        degenerate = 0  # buying == selling (no directional info)
+        # These were one counter reported as "degenerate_or_equal_signal", so a corpus
+        # where most rows had unparseable timestamps or non-numeric scores looked like a
+        # merely one-sided signal — and the FLOW_SIGNAL_CONSTANT_OR_ONE_SIDED gate keys off
+        # `preds`, which is unaffected, so a confident verdict could be emitted over a
+        # corpus that was mostly broken. Split so each failure is visible.
+        equal_signal = 0        # buying == selling (genuinely no directional info)
+        malformed_score = 0     # non-numeric buying/selling
+        malformed_ts = 0        # unparseable timestamp
         no_price = 0
         preds = set()
         for s in snapshots:
             b, sell = s["buying"], s["selling"]
             ts = _parse(s["ts"])
-            if not isinstance(b, (int, float)) or not isinstance(sell, (int, float)) or b == sell or ts is None:
-                degenerate += 1
+            if not isinstance(b, (int, float)) or not isinstance(sell, (int, float)):
+                malformed_score += 1
+                continue
+            if ts is None:
+                malformed_ts += 1
+                continue
+            if b == sell:
+                equal_signal += 1
                 continue
             predicted = BULLISH if b > sell else BEARISH
             preds.add(predicted)
@@ -119,9 +132,16 @@ class FlowSkillValidationEngine:
             raw = (fwd / cur - 1) * 100
             directional = raw if predicted == BULLISH else -raw
             grade = "FAVORABLE" if directional >= self.band_pct else "UNFAVORABLE" if directional <= -self.band_pct else "NEUTRAL"
-            graded.append({"directional_bias": predicted, "grade": grade})
+            graded.append({"directional_bias": predicted, "grade": grade,
+                           "symbol": s["symbol"], "day": ts.date().isoformat()})
 
-        skill = SkillMetricsEngine().evaluate(graded)
+        # Independence: institutional_memory is appended once per scheduler cycle, so one
+        # symbol yields many snapshots per day whose 24h forward windows almost entirely
+        # overlap. Counting those as separate trials understated the p-value by roughly
+        # sqrt(snapshots per symbol-day). A distinct symbol-day is the honest unit.
+        effective_n = len({(g["symbol"], g["day"]) for g in graded
+                           if g["grade"] in ("FAVORABLE", "UNFAVORABLE")})
+        skill = SkillMetricsEngine().evaluate(graded, effective_n=effective_n)
 
         data_quality = []
         if not key_configured:
@@ -130,6 +150,13 @@ class FlowSkillValidationEngine:
             data_quality.append("FLOW_SIGNAL_CONSTANT_OR_ONE_SIDED (buying/selling not varying — likely defaulted)")
         if not graded:
             data_quality.append("NO_JOINED_FLOW+PRICE_SAMPLE_YET (accumulate data, then re-run)")
+        # A corpus that is mostly malformed must say so: the one-sided gate above cannot
+        # see it, because unparseable rows never reach `preds`.
+        dropped = malformed_score + malformed_ts
+        if dropped and dropped > len(graded):
+            data_quality.append(
+                f"MOSTLY_MALFORMED_INPUT ({dropped} rows unusable vs {len(graded)} graded — "
+                "verdict rests on a minority of the corpus)")
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
@@ -138,7 +165,14 @@ class FlowSkillValidationEngine:
             "horizon_hours": self.horizon_hours,
             "flow_snapshots_seen": len(snapshots),
             "usable_graded": len(graded),
-            "degenerate_or_equal_signal": degenerate,
+            "effective_n_symbol_days": effective_n,
+            "degenerate_or_equal_signal": equal_signal + malformed_score + malformed_ts,
+            "dropped_breakdown": {
+                "equal_signal": equal_signal,
+                "malformed_score": malformed_score,
+                "malformed_timestamp": malformed_ts,
+                "no_price_join": no_price,
+            },
             "dropped_no_price_join": no_price,
             "unusual_whales_key_configured": key_configured,
             "data_quality_warnings": data_quality,

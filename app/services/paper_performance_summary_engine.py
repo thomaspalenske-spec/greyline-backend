@@ -7,6 +7,27 @@ from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
 class PaperPerformanceSummaryEngine:
 
     @staticmethod
+    def _running_peak(starting_equity, latest_equity):
+        """Highest equity actually reached, from the recorded equity timeline.
+
+        Falls back to max(start, latest) only when no timeline exists — and that fallback
+        is a floor on the true peak, never an overstatement of drawdown.
+        """
+        curve = []
+        try:
+            from app.services.paper_equity_timeline_engine import PaperEquityTimelineEngine
+            timeline = PaperEquityTimelineEngine().build() or {}
+            points = timeline.get("timeline") or timeline.get("points") or []
+            for p in points:
+                value = p.get("equity") if isinstance(p, dict) else None
+                if isinstance(value, (int, float)) and value > 0:
+                    curve.append(float(value))
+        except Exception:
+            curve = []
+        candidates = curve + [starting_equity, latest_equity]
+        return round(max(candidates), 2)
+
+    @staticmethod
     def _mark_open_positions(open_trades):
         """(unrealized_pnl, unvalued_symbols) marking open trades to the last known price.
 
@@ -66,7 +87,12 @@ class PaperPerformanceSummaryEngine:
         equity_complete = not unvalued
         latest_equity = (round(starting_equity + realized_pnl + unrealized_pnl, 2)
                          if equity_complete else None)
-        highest_equity = max(starting_equity, latest_equity) if equity_complete else None
+        # A running PEAK over the equity path, not max(start, latest). The old expression
+        # compared two scalars and, since equity only ever rose (open losers were invisible),
+        # it was nearly always just `latest_equity` — reported next to max_drawdown_pct as
+        # though a peak-to-trough measurement had been taken. When no equity timeline
+        # exists the honest answer is None, not "the peak is wherever we are now".
+        highest_equity = self._running_peak(starting_equity, latest_equity) if equity_complete else None
         total_return_pct = (round(((latest_equity - starting_equity) / starting_equity) * 100, 2)
                             if equity_complete else None)
 
