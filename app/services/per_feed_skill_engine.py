@@ -190,11 +190,20 @@ class PerFeedSkillEngine:
             "feeds": feeds,
             "ranked_by_mcc": ranked,
             "best_feed": best,
+            # best_feed can now be None even when `ranked` is non-empty, because a feed
+            # must earn DIRECTIONAL_SKILL_CONFIRMED to be named rather than merely topping
+            # the list. Indexing feeds[best] on that path raised KeyError(None) and took
+            # the whole /feature-skill route down — caught by test_route_audit.
             "interpretation": (
                 "Not enough joined data yet — let the session accumulate."
                 if not ranked else
-                f"'{best}' has the highest directional MCC ({feeds[best]['mcc']}). "
-                "Feeds with MCC significantly > 0 are candidates to wire into the live decision."
+                (f"'{best}' has the highest directional MCC ({feeds[best]['mcc']}) AND "
+                 "earned a significant verdict — a candidate to wire into the live decision."
+                 if best else
+                 f"No feed demonstrated skill. Top of the ranking is '{ranked[0]}' "
+                 f"(MCC {feeds[ranked[0]]['mcc']}), but it did not earn a significant "
+                 "verdict, so it is the best of several coin flips rather than a signal. "
+                 "best_feed is deliberately null.")
             ),
             "status": "PER_FEED_SKILL_READY",
         }
