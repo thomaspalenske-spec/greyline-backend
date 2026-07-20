@@ -56,8 +56,22 @@ class FlowSkillValidationEngine:
             return
         idx.setdefault(str(symbol).upper(), []).append((dt, price))
 
-    def _price_at(self, idx, symbol, target_dt):
+    def _price_at(self, idx, symbol, target_dt, direction="nearest"):
+        """Price near `target_dt`. `direction` constrains which side is acceptable.
+
+        The match used to be two-sided for BOTH the entry and the outcome. With a 6h
+        tolerance that let the ENTRY price be sampled up to six hours AFTER the flow
+        snapshot — i.e. after the market had already begun the move being predicted. On any
+        momentum-derived signal that leaks the outcome into the entry and manufactures
+        skill. Entries must look backwards, outcomes forwards.
+        """
         pts = idx.get(str(symbol).upper())
+        if not pts:
+            return None
+        if direction == "before":
+            pts = [p for p in pts if p[0] <= target_dt]
+        elif direction == "after":
+            pts = [p for p in pts if p[0] >= target_dt]
         if not pts:
             return None
         best = min(pts, key=lambda p: abs((p[0] - target_dt).total_seconds()))
@@ -94,8 +108,11 @@ class FlowSkillValidationEngine:
                 continue
             predicted = BULLISH if b > sell else BEARISH
             preds.add(predicted)
-            cur = self._price_at(idx, s["symbol"], ts)
-            fwd = self._price_at(idx, s["symbol"], ts + horizon)
+            # Entry looks BACKWARDS from the signal, outcome looks FORWARDS from T+horizon.
+            # Two-sided matching on the entry was lookahead: it could price the trade after
+            # the move had started.
+            cur = self._price_at(idx, s["symbol"], ts, direction="before")
+            fwd = self._price_at(idx, s["symbol"], ts + horizon, direction="after")
             if not cur or not fwd:
                 no_price += 1
                 continue
