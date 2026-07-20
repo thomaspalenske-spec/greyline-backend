@@ -5,14 +5,7 @@ from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.price_history_store import PriceHistoryStore
-
-
-def _parse_ts(value):
-    try:
-        return datetime.fromisoformat(
-            str(value).replace("Z", "+00:00").split("+")[0])
-    except Exception:
-        return None
+from app.services.time_utils import parse_utc as _parse_ts
 
 
 class ForwardOutcomeCaptureEngine:

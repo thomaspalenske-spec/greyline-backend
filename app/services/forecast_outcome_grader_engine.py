@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app.services.price_history_store import PriceHistoryStore
+from app.services.time_utils import parse_utc
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.regime_learning_engine import (
     RegimeLearningEngine,
@@ -39,6 +41,7 @@ class ForecastOutcomeGraderEngine:
     def __init__(self):
         self.outcome_path = Path("app/data/forecast_outcomes.jsonl")
         self.graded_path = Path("app/data/forecast_outcome_grades.jsonl")
+        self.price_store = PriceHistoryStore()
 
     def _read_outcomes(self):
         if not self.outcome_path.exists():
@@ -83,7 +86,7 @@ class ForecastOutcomeGraderEngine:
         if not value:
             return None
         try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+            return parse_utc(value)
         except Exception:
             return None
 
@@ -357,9 +360,30 @@ class ForecastOutcomeGraderEngine:
                     "trade_time": None,
                 }
             else:
-                if symbol not in price_cache:
-                    price_cache[symbol] = self._last_price(symbol)
-                price_info = price_cache.get(symbol, {})
+                # FIXED HORIZON, not the live tape.
+                #
+                # min_age_minutes was only a lower bound on ELIGIBILITY — nothing sampled
+                # the price at forecast_time + horizon. A forecast made four days ago was
+                # graded against today's quote, so every A/B/F in this system measured
+                # "did the symbol drift my way since some arbitrary past moment" over a
+                # ragged, ever-growing window. Look up the price AT the horizon instead,
+                # and leave the forecast pending if that price does not exist yet.
+                forecast_time = self._parse_dt(
+                    record.get("forecast_timestamp") or record.get("timestamp"))
+                price_info = {"price": None, "quote_status": "NO_HORIZON_PRICE",
+                              "trade_time": None}
+                if forecast_time is not None:
+                    target = forecast_time + timedelta(minutes=min_age_minutes)
+                    hit = self.price_store.price_at(
+                        symbol, target.isoformat(),
+                        max_tolerance_seconds=int(min_age_minutes * 60 * 0.25),
+                        direction="after")
+                    if hit:
+                        price_info = {"price": hit["price"],
+                                      "quote_status": "HORIZON_PRICE",
+                                      "trade_time": hit["timestamp"],
+                                      "realized_horizon_minutes": round(
+                                          min_age_minutes + hit["age_seconds"] / 60, 2)}
 
             current_price = price_info.get("price")
             snapshot_price = record.get("snapshot_price")
@@ -376,10 +400,19 @@ class ForecastOutcomeGraderEngine:
 
             if snapshot_price > 0 and current > 0 and predicted_direction:
                 raw_return_pct = round(((current - snapshot_price) / snapshot_price) * 100, 4)
-                return_pct = raw_return_pct
                 directional_return_pct = raw_return_pct
                 if predicted_direction == "BEARISH":
                     directional_return_pct = round(-raw_return_pct, 4)
+
+                # `return_pct` is what ForecastQualityLearningEngine reads and calls a win
+                # when positive. It was set to the RAW return, so a BEARISH forecast that
+                # was RIGHT (price fell 2%) recorded -2% and was bucketed as a loss, while
+                # a bearish forecast that was WRONG recorded +2% and counted as a win. The
+                # entire bearish book was sign-inverted in average_return_pct, average_win_pct
+                # and quality_score — and the same record's forecast_correct field, computed
+                # from the directional value below, disagreed with it.
+                return_pct = directional_return_pct
+                raw_market_return_pct = raw_return_pct
 
                 forecast_correct = directional_return_pct > 0
                 forecast_grade = "A" if directional_return_pct >= 1 else "B" if directional_return_pct > 0 else "F"
@@ -508,10 +541,14 @@ class ForecastOutcomeGraderEngine:
                 is None
             )
 
-            if (
-                existing_completed
-                and incoming_pending
-            ):
+            # A completed grade is FINAL. The guard used to protect a completed grade only
+            # from being clobbered by a PENDING one, so a completed grade was replaced by a
+            # freshly computed completed grade on every scheduler cycle — a forecast graded
+            # at T+1h was silently re-graded at T+2h, T+3h and so on, and the stored verdict
+            # was whatever the last cycle happened to say. That is what let each forecast's
+            # measurement window grow without bound, and it made the fixed horizon
+            # unenforceable no matter how the price was sampled.
+            if existing_completed:
                 continue
 
             existing_grades[key] = row
