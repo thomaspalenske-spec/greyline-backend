@@ -32,11 +32,13 @@ OUT_DIR = Path("app/data/uw_flow")
 
 class UWSweepOpeningBackfillEngine:
 
-    def __init__(self, provider=None):
+    def __init__(self, provider=None, out_dir=None):
         if provider is None:
             from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
             provider = UnusualWhalesProvider()
         self.provider = provider
+        from pathlib import Path as _P
+        self.out_dir = _P(out_dir) if out_dir else OUT_DIR
 
     @staticmethod
     def _f(v):
@@ -122,11 +124,11 @@ class UWSweepOpeningBackfillEngine:
     def backfill(self, symbols, days=250, progress=None):
         from datetime import timedelta
         until = (datetime.utcnow() - timedelta(days=int(days * 1.5))).strftime("%Y-%m-%d")
-        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
         written = skipped = 0
 
         for symbol in symbols:
-            path = OUT_DIR / f"{str(symbol).upper()}.jsonl"
+            path = self.out_dir / f"{str(symbol).upper()}.jsonl"
             have = self._existing_days(path)
             try:
                 alerts = self.fetch_alerts(symbol, until)
