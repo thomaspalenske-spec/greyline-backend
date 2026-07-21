@@ -51,6 +51,17 @@ def dow_symbols():
     return _index_holdings("DIA", min_expected=25)
 
 
+def nasdaq100_symbols():
+    """The ~100 NASDAQ-100 constituents (QQQ holdings).
+
+    Unlike the Dow, this genuinely EXPANDS the universe: ~13 NASDAQ-100 names are NOT in
+    the S&P 500 because the S&P 500 requires US domicile and the NASDAQ-100 does not —
+    e.g. ASML (NL), ARM (UK), MELI (AR), PDD (CN), CCEP (UK). Sourcing from SPY holdings
+    alone silently excluded them. Pinning QQQ holdings brings the full NASDAQ-100 in.
+    """
+    return _index_holdings("QQQ", min_expected=90)
+
+
 # ETFs the strategy trades alongside single names — instruments, not an opinion about
 # which companies matter. This is how a $10k CASH-equity account gets futures, commodity,
 # rate and international exposure: through liquid, cash-settled, whole-share-sizable
@@ -172,11 +183,15 @@ def main():
 
     sp500 = set(sp500_symbols())
     dow = set(dow_symbols())
-    symbols = sorted(sp500 | dow | set(ETF_SYMBOLS))
+    ndx = set(nasdaq100_symbols())
+    symbols = sorted(sp500 | dow | ndx | set(ETF_SYMBOLS))
     dow_only = sorted(dow - sp500)
-    print(f"universe: {len(symbols)} symbols (S&P 500 + {len(dow)} Dow + {len(ETF_SYMBOLS)} ETFs)")
-    print(f"  Dow components not in the S&P 500 (pinned so they can't drop): "
-          f"{dow_only if dow_only else 'none today — all 30 are S&P members'}")
+    ndx_only = sorted(ndx - sp500)
+    print(f"universe: {len(symbols)} symbols "
+          f"(S&P 500 + {len(dow)} Dow + {len(ndx)} NASDAQ-100 + {len(ETF_SYMBOLS)} ETFs)")
+    print(f"  Dow-only (pinned so they can't drop): "
+          f"{dow_only if dow_only else 'none — all 30 are S&P members'}")
+    print(f"  NASDAQ-100-only (genuinely new, ex-US / non-S&P): {ndx_only or 'none'}")
 
     for symbol in symbols:
         # Resumable: an existing file with real history is left alone, so a rerun only
