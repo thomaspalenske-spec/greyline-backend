@@ -127,9 +127,23 @@ class PortfolioExposureEngine:
             "GOOG": "COMMUNICATIONS", "GOOGL": "COMMUNICATIONS",
             "NFLX": "COMMUNICATIONS",
 
-            "DIA": "BROAD_MARKET",
+            "DIA": "BROAD_MARKET", "VTI": "BROAD_MARKET",
             "GLD": "PRECIOUS_METALS", "SLV": "PRECIOUS_METALS",
+            "PPLT": "PRECIOUS_METALS",
             "TLT": "TREASURIES",
+            # Multi-asset ETFs added 2026-07-21. Bucketed by asset class so the
+            # concentration limit SEES them: without these, six bond ETFs or five
+            # commodity trackers would each pool into UNKNOWN and read as diversified while
+            # being one correlated bet — the exact concentration-blindness the sector map
+            # exists to prevent. Rates ETFs share a bucket because they move on one factor
+            # (the curve); commodities span sub-groups but are one asset-class exposure at
+            # $10k sizing.
+            "IEF": "TREASURIES", "SHY": "TREASURIES", "TIP": "TREASURIES",
+            "AGG": "BONDS_CREDIT", "LQD": "BONDS_CREDIT", "HYG": "BONDS_CREDIT",
+            "DBC": "COMMODITIES", "DBA": "COMMODITIES", "UNG": "COMMODITIES",
+            "CPER": "COMMODITIES",
+            "EFA": "INTL_EQUITY", "EEM": "INTL_EQUITY", "VWO": "INTL_EQUITY",
+            "FXI": "INTL_EQUITY", "EWJ": "INTL_EQUITY", "EWZ": "INTL_EQUITY",
         }
 
         if symbol in sector_map:

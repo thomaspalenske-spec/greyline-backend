@@ -51,12 +51,40 @@ def dow_symbols():
     return _index_holdings("DIA", min_expected=25)
 
 
-# The ETFs the strategy trades alongside single names. Not in SPY holdings, so kept
-# explicitly — these are instruments, not an opinion about which companies matter.
+# ETFs the strategy trades alongside single names — instruments, not an opinion about
+# which companies matter. This is how a $10k CASH-equity account gets futures, commodity,
+# rate and international exposure: through liquid, cash-settled, whole-share-sizable
+# trackers the existing pipeline handles cleanly. It is deliberately NOT leveraged/inverse
+# or volatility-decay products (UVXY, UNG-style contango traps as core holdings) — those
+# adversely select under a momentum signal. Every name here is an established, liquid ETF.
 ETF_SYMBOLS = [
-    "SPY", "QQQ", "IWM", "DIA",
+    # Broad equity beta
+    "SPY", "QQQ", "IWM", "DIA", "VTI",
+    # US sectors
     "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC",
-    "SMH", "IBB", "KRE", "TLT", "GLD", "SLV", "USO",
+    "SMH", "IBB", "KRE",
+    # --- COMMODITIES (the "commodity market", via liquid futures-backed trackers) ---
+    "DBC",   # broad commodity basket
+    "DBA",   # agriculture
+    "GLD", "SLV", "USO",
+    "UNG",   # natural gas
+    "CPER",  # copper
+    "PPLT",  # platinum
+    # --- RATES / BONDS (the Treasury + credit "market") ---
+    "TLT",   # 20y+ Treasuries
+    "IEF",   # 7-10y Treasuries
+    "SHY",   # 1-3y Treasuries
+    "AGG",   # aggregate bond
+    "LQD",   # investment-grade credit
+    "HYG",   # high-yield credit
+    "TIP",   # inflation-protected
+    # --- INTERNATIONAL EQUITY (the ex-US "markets") ---
+    "EFA",   # developed ex-US
+    "EEM",   # emerging markets
+    "VWO",   # emerging markets (Vanguard)
+    "FXI",   # China large-cap
+    "EWJ",   # Japan
+    "EWZ",   # Brazil
     # Liquid non-S&P names the strategy already held; keeping them avoids silently
     # dropping open positions when the universe definition changes.
     "COIN", "MSTR",
