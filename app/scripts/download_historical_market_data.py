@@ -10,30 +10,45 @@ import json
 DATA_DIR = Path("app/data/historical")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-def sp500_symbols():
-    """Current S&P 500 constituents from Unusual Whales (SPY holdings).
+def _index_holdings(etf, min_expected):
+    """Current constituents of an index, from its tracking ETF's holdings (Unusual Whales).
 
-    This replaces a hand-typed list as the definition of the tradable universe.
-    MomentumReversalStrategyEngine._symbols() globs the CSVs this writes, so whatever
-    lands here IS what the strategy may select — the list was the shackle, not the code.
-
-    Returns ~504 tickers: the index holds 500 companies but several have dual share
-    classes (GOOG/GOOGL, FOX/FOXA, NWS/NWSA).
+    Sourcing the universe from live holdings replaces a hand-typed list —
+    MomentumReversalStrategyEngine._symbols() globs the CSVs this writes, so whatever lands
+    here IS what the strategy may select. `min_expected` guards against a partial API
+    response silently shrinking the universe.
     """
     from dotenv import load_dotenv
     load_dotenv(".env")
     from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
 
-    resp = UnusualWhalesProvider()._get("/api/etfs/SPY/holdings", params={"limit": 600})
+    resp = UnusualWhalesProvider()._get(f"/api/etfs/{etf}/holdings", params={"limit": 600})
     rows = (resp.get("data") if isinstance(resp, dict) else resp) or []
     tickers = sorted({r.get("ticker") for r in rows
                       if r.get("ticker") and str(r.get("type", "stock")).lower() == "stock"})
-    if len(tickers) < 400:
+    if len(tickers) < min_expected:
         raise RuntimeError(
-            f"SPY holdings returned only {len(tickers)} tickers — refusing to shrink the "
-            "universe on a partial response. Check the UW plan/endpoint before rerunning."
+            f"{etf} holdings returned only {len(tickers)} tickers (expected >= {min_expected}) "
+            "— refusing to shrink the universe on a partial response. Check the UW endpoint."
         )
     return tickers
+
+
+def sp500_symbols():
+    """The ~504 S&P 500 constituents (500 companies, plus dual classes like GOOG/GOOGL)."""
+    return _index_holdings("SPY", min_expected=400)
+
+
+def dow_symbols():
+    """The 30 Dow Jones Industrial Average constituents (DIA holdings).
+
+    Every Dow name is CURRENTLY also an S&P 500 member, so this is a subset of
+    sp500_symbols() today. It is pinned explicitly anyway because the two indices are
+    maintained by DIFFERENT committees: were a Dow component ever dropped from the S&P
+    500, sourcing the universe from SPY holdings alone would silently drop it from what
+    GreyLine can trade. Unioning DIA guarantees the Dow is always tradable regardless.
+    """
+    return _index_holdings("DIA", min_expected=25)
 
 
 # The ETFs the strategy trades alongside single names. Not in SPY holdings, so kept
@@ -127,8 +142,13 @@ def main():
     bad = 0
     skipped = 0
 
-    symbols = sorted(set(sp500_symbols()) | set(ETF_SYMBOLS))
-    print(f"universe: {len(symbols)} symbols (S&P 500 constituents + {len(ETF_SYMBOLS)} ETFs)")
+    sp500 = set(sp500_symbols())
+    dow = set(dow_symbols())
+    symbols = sorted(sp500 | dow | set(ETF_SYMBOLS))
+    dow_only = sorted(dow - sp500)
+    print(f"universe: {len(symbols)} symbols (S&P 500 + {len(dow)} Dow + {len(ETF_SYMBOLS)} ETFs)")
+    print(f"  Dow components not in the S&P 500 (pinned so they can't drop): "
+          f"{dow_only if dow_only else 'none today — all 30 are S&P members'}")
 
     for symbol in symbols:
         # Resumable: an existing file with real history is left alone, so a rerun only
