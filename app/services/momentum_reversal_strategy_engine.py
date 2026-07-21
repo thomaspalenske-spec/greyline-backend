@@ -149,6 +149,61 @@ class MomentumReversalStrategyEngine:
         out.sort(key=lambda x: x[0])
         return out
 
+    QUOTE_BATCH = 100          # TradeStation bulk-quotes accepts ~100 symbols per call
+
+    def _bulk_quotes(self, symbols, base_url, token):
+        """Current (date, close) per symbol via TradeStation BULK quotes.
+
+        One HTTP call per QUOTE_BATCH symbols instead of one barchart call per symbol —
+        ~50 calls for the whole NASDAQ vs ~5,000. This is the live tip; the 252 bars of
+        history behind it don't change intraday and come from disk, so re-fetching them
+        every cycle was the waste. Uses Last, falling back to Close then PreviousClose.
+        """
+        import requests as _rq
+        out, headers = {}, {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        for i in range(0, len(symbols), self.QUOTE_BATCH):
+            chunk = symbols[i:i + self.QUOTE_BATCH]
+            try:
+                r = _rq.get(base_url.rstrip("/") + "/v3/marketdata/quotes/" + ",".join(chunk),
+                            headers=headers, timeout=30)
+                if r.status_code != 200:
+                    continue
+                for q in (r.json() or {}).get("Quotes", []) or []:
+                    sym = str(q.get("Symbol") or "").upper()
+                    raw = q.get("Last") or q.get("Close") or q.get("PreviousClose")
+                    try:
+                        px = float(raw)
+                    except (TypeError, ValueError):
+                        continue
+                    if sym and px > 0:
+                        out[sym] = (str(q.get("TradeTime") or "")[:10], px)
+            except Exception:
+                continue
+        return out
+
+    def _disk_history(self):
+        """Per-symbol [(date, close)] from the on-disk CSVs — the immutable history, no API.
+
+        These are kept current by the nightly bar refresh; the live quote adds today's tip.
+        """
+        hist = {}
+        for p in glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv"):
+            sym = os.path.basename(p).replace("_daily.csv", "").upper()
+            closes = []
+            try:
+                with open(p) as f:
+                    for r in csv.DictReader(f):
+                        try:
+                            closes.append((r["date"][:10], float(r["close"])))
+                        except (ValueError, KeyError, TypeError):
+                            pass
+            except Exception:
+                continue
+            if closes:
+                closes.sort(key=lambda x: x[0])
+                hist[sym] = closes
+        return hist
+
     def _universe_key(self):
         """Identity of the symbol set the cache was built from."""
         return hashlib.sha256("|".join(self._symbols()).encode()).hexdigest()[:16]
@@ -176,34 +231,38 @@ class MomentumReversalStrategyEngine:
         if not token:
             raise RuntimeError("no TradeStation access token")
 
-        # Fetched concurrently: the universe is the whole S&P 500, and serially that is ~8
-        # minutes of blocking inside rebalance() at the open — against an entry doctrine
-        # that validated MARKET entry precisely because delay adversely selects.
-        # TradeStation throttles server-side around 2 requests/sec no matter how many
-        # workers we use (measured: 1 worker 1.1/s, 6 workers 1.9/s, 12 workers 2.1/s with
-        # zero errors), so this roughly halves the wall time and no more. The real
-        # protection is a cache warmed before the open — see CACHE_TTL_SECONDS.
+        # EFFICIENT LIVE FETCH: immutable history from disk + the live tip in bulk.
+        #
+        # The old path fetched a full 320-bar barchart PER SYMBOL every refresh — ~5,000
+        # calls for the NASDAQ, and TradeStation caps concurrency near 2 req/s, so it was
+        # both slow and API-hungry. But 252 of those 253 bars never change; only today's
+        # bar is new. So history comes from the on-disk CSVs (kept current by the nightly
+        # refresh, no API) and only the live tip is fetched — batched at ~100 symbols per
+        # call. For the full NASDAQ that is ~50 calls instead of ~5,000, and it stays fully
+        # live because the price driving each cycle's signal is today's real quote.
+        history = self._disk_history()
+        symbols = [s for s in self._symbols() if s.upper() in history]
+        quotes = self._bulk_quotes(symbols, base_url, token)
+
         series, asof, failed = {}, None, []
-
-        def _one(sym):
-            try:
-                return sym, self._fetch_daily_closes(sym, base_url, token)
-            except Exception:
-                return sym, None
-
-        with ThreadPoolExecutor(max_workers=self.FETCH_WORKERS) as pool:
-            for sym, bars in pool.map(_one, self._symbols()):
-                if bars is None:
-                    failed.append(sym)
-                    continue
-                closes = [c for _, c in bars]
-                if len(closes) >= self.signal.MIN_BARS:
-                    series[sym] = closes
-                    last = bars[-1][0]
-                    if last and (asof is None or last > asof):
-                        asof = last
-                else:
-                    failed.append(sym)
+        for sym in symbols:
+            bars = history[sym.upper()]
+            closes = [c for _, c in bars]
+            last_date = bars[-1][0]
+            q = quotes.get(sym.upper())
+            # Append today's live close only if it is genuinely newer than the last stored
+            # bar, so a stale quote or a repeated day never double-counts or back-dates.
+            if q and q[0] and q[0] > last_date:
+                closes = closes + [q[1]]
+                day = q[0]
+            else:
+                day = last_date
+            if len(closes) >= self.signal.MIN_BARS:
+                series[sym] = closes
+                if asof is None or day > asof:
+                    asof = day
+            else:
+                failed.append(sym)
 
         if not series:
             raise RuntimeError("live fetch produced no usable series")
