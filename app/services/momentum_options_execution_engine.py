@@ -37,7 +37,13 @@ class MomentumOptionsExecutionEngine:
     MIN_DTE = 21
     MAX_DTE = 60
 
-    def __init__(self, capital_base=10000.0, max_position_pct=0.10, top_n=10):
+    # CONCENTRATED by default: a $10k options book cannot spread across 10 names and hold
+    # anything (only the cheapest option clears the budget). Fewer names x more dollars is
+    # the only shape that trades real contracts at a small account, and it aligns with the
+    # no-reserve directive — 100% of capital across a handful of highest-conviction picks.
+    CANDIDATE_POOL = 25       # scan this many top-conviction picks for affordable options
+
+    def __init__(self, capital_base=10000.0, max_position_pct=0.33, top_n=3):
         self.capital_base = float(capital_base)
         self.max_position_pct = float(max_position_pct)
         self.top_n = int(top_n)
@@ -106,7 +112,15 @@ class MomentumOptionsExecutionEngine:
         """
         budget = self.capital_base * self.max_position_pct
         tradeable, skipped = [], []
-        for t in targets[:self.top_n]:
+        # Scan the FULL ranked list and take affordable picks in conviction order, up to
+        # top_n positions — NOT the top_n by rank. The signal's highest-conviction names are
+        # its highest-priced, whose options price out; the affordable options sit lower in
+        # the ranking (RKLB, GLW). Concentrating into the top would trade nothing. This
+        # trades the best AFFORDABLE picks — an honest compromise a small account must make
+        # until it grows into the pricier names.
+        for t in targets[:self.CANDIDATE_POOL]:
+            if len(tradeable) >= self.top_n:
+                break
             symbol = t.get("symbol")
             option_type = "PUT" if str(t.get("side", "")).upper() in ("SELL", "SELL_SHORT", "SHORT") else "CALL"
             exp = self._target_expiration(symbol)
@@ -147,4 +161,46 @@ class MomentumOptionsExecutionEngine:
                      f"as options at ${self.capital_base:,.0f}; the rest priced out. This grows "
                      "as the account grows."),
             "status": "MOMENTUM_OPTIONS_PLAN_READY",
+        }
+
+    def execute(self, targets):
+        """Place the tradeable options picks via OptionsCycleEngine (paper).
+
+        THIS engine is the signal authority — the momentum pick IS the decision — so it
+        checks the paper-execution kill-switch itself (exactly as the equity rebalance
+        does) and then places with enforce_authority=False. OptionsCycleEngine's own
+        authority gate ties to a DIFFERENT signal (the master decision engine), which does
+        not apply to a momentum-driven options book; but its kill-switch guard does, so we
+        enforce that guard here rather than lose it. The options ledger's own gates
+        (market hours, entry quality, exposure, cash, reliability) still apply at placement.
+        """
+        from os import getenv
+        if (getenv("GREYLINE_PAPER_EXECUTION_ENABLED", "") or "").lower() != "true":
+            return {"timestamp": datetime.utcnow().isoformat(),
+                    "engine": "MomentumOptionsExecutionEngine", "placed": [], "blocked": [],
+                    "priced_out": [], "placed_count": 0,
+                    "status": "MOMENTUM_OPTIONS_EXECUTION_KILL_SWITCH_DISABLED"}
+
+        plan = self.plan(targets)
+        placed, blocked = [], []
+        for t in plan["tradeable"]:
+            result = self.cycle.run(
+                symbol=t["symbol"],
+                option_type=t["option_type"],
+                expiration=t["expiration"],
+                max_position_pct=self.max_position_pct,
+                enforce_authority=False,
+            )
+            rec = {"symbol": t["symbol"], "option_type": t["option_type"],
+                   "status": result.get("status"),
+                   "recorded": bool(result.get("paper_trade_recorded")),
+                   "reason": result.get("reason")}
+            (placed if rec["recorded"] else blocked).append(rec)
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "engine": "MomentumOptionsExecutionEngine",
+            "placed": placed, "blocked": blocked,
+            "priced_out": plan["skipped"],
+            "placed_count": len(placed),
+            "status": "MOMENTUM_OPTIONS_EXECUTION_COMPLETE",
         }
