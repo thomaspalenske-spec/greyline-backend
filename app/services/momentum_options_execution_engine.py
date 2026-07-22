@@ -163,6 +163,32 @@ class MomentumOptionsExecutionEngine:
             "status": "MOMENTUM_OPTIONS_PLAN_READY",
         }
 
+    def run_cycle(self):
+        """Full scheduler cycle: gate on market-open, get the signal's picks, execute.
+
+        Self-contained so the scheduler wiring is one call. Kill-switch and per-name
+        affordability are enforced inside execute(); this adds the market-open gate (never
+        open a new options position into a closed tape) and the data-staleness guard the
+        equity path uses, then hands the ranked picks to execution.
+        """
+        from app.services.market_hours_engine import MarketHoursEngine
+        from app.services.momentum_reversal_strategy_engine import MomentumReversalStrategyEngine
+
+        if MarketHoursEngine().status().get("is_regular_session") is not True:
+            return {"engine": "MomentumOptionsExecutionEngine", "placed_count": 0,
+                    "status": "OPTIONS_REBALANCE_SKIPPED_MARKET_CLOSED"}
+        strat = MomentumReversalStrategyEngine()
+        series, asof, source = strat.universe()
+        # Same data-quality bar as the equity rebalance — never enter on stale prices.
+        if source not in ("TRADESTATION_LIVE", "TRADESTATION_LIVE_CACHED"):
+            return {"engine": "MomentumOptionsExecutionEngine", "placed_count": 0,
+                    "as_of": asof, "data_source": source,
+                    "status": "OPTIONS_REBALANCE_SKIPPED_STALE_DATA"}
+        targets, _ = strat.select(series)
+        out = self.execute(targets)
+        out["as_of"] = asof
+        return out
+
     def execute(self, targets):
         """Place the tradeable options picks via OptionsCycleEngine (paper).
 

@@ -304,11 +304,26 @@ class BackgroundSchedulerService:
         # The rebuilt, validated strategy, traded forward. Self-gates: no-op unless the
         # market is open, it's due (~weekly), and execution is enabled. On the first due
         # cycle it opens the top-N; thereafter it realizes and re-selects each cycle it fires.
-        try:
-            momentum_reversal = MomentumReversalRebalanceEngine().rebalance()
-        except Exception as exc:
-            momentum_reversal = {"rebalanced": False, "error": repr(exc),
-                                 "status": "MOMENTUM_REVERSAL_REBALANCE_DEGRADED"}
+        # OPTIONS MODE (operator directive): trade the signal's picks as OPTIONS, not
+        # shares. When GREYLINE_OPTIONS_MODE=true the equity rebalance is skipped and the
+        # options execution engine runs instead — same directional signal, options vehicle,
+        # affordability-gated, Dynamic-TPS exit. The equity book already open keeps being
+        # managed by the exit manager below until it closes, so this is a clean handover.
+        from os import getenv as _getenv
+        options_mode = (_getenv("GREYLINE_OPTIONS_MODE", "") or "").lower() == "true"
+        if options_mode:
+            try:
+                from app.services.momentum_options_execution_engine import MomentumOptionsExecutionEngine
+                momentum_reversal = MomentumOptionsExecutionEngine().run_cycle()
+            except Exception as exc:
+                momentum_reversal = {"placed_count": 0, "error": repr(exc),
+                                     "status": "MOMENTUM_OPTIONS_REBALANCE_DEGRADED"}
+        else:
+            try:
+                momentum_reversal = MomentumReversalRebalanceEngine().rebalance()
+            except Exception as exc:
+                momentum_reversal = {"rebalanced": False, "error": repr(exc),
+                                     "status": "MOMENTUM_REVERSAL_REBALANCE_DEGRADED"}
 
         # Validated H2 exit doctrine, applied to open momentum positions every cycle while
         # the market is open (marks to live quotes; stale closed-market marks would misfire
