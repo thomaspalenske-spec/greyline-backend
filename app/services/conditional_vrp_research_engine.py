@@ -100,6 +100,14 @@ class ConditionalVRPResearchEngine:
             rank = self._trailing_rank(ivs, i, self.IVRANK_LOOKBACK)
             if rank is None:
                 continue
+            # NO dual-source "data-quality" gate here — it was tried and REJECTED (2026-07-24):
+            # requiring UW and TS realized vol to agree drops exactly the vol-SPIKE observations
+            # (where the two sources measure the blowout differently), and those are the vol-
+            # seller's catastrophic losses (dropped-obs mean edge ~ -2700bps, realized ~0.70).
+            # Censoring the tail turns a break-even strategy into a fake-profitable one — the worst
+            # possible bias for a RISK premium. The honest outcome uses UW's (more complete)
+            # realized vol for every completed window, tail included. TS stays a reporting-only
+            # cross-check, never a filter.
             earnings_in_window = any(d < e <= urv for e in earn)
             out.append({
                 "date": d, "month": d[:7], "iv": iv, "uw_rv": uw_rv,
