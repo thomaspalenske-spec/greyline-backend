@@ -110,3 +110,4 @@ app/data/unusual_whales_refresh_state.json
 app/data/forecast_outcomes.jsonl
 app/data/forecast_outcome_grades.jsonl
 app/data/.vrp_panel_last_record
+app/data/data_quality/price_bar_tradability.json
