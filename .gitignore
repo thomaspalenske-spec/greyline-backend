@@ -82,3 +82,31 @@ app/data/institutional/*.json
 # Research artifacts: multi-GB price pulls and universe snapshots, regenerable from UW+Yahoo.
 app/data/research/universe/
 app/data/research/prices/
+
+# --- runtime caches, staging scratch, and per-cycle operational churn -------------
+# Regenerable / high-churn data the scheduler rewrites constantly. NOT source, and it
+# bloats the repo. The genuine evidence base (research/, ledgers, options_reality/,
+# data_quality/ lineage, panels, registry) stays TRACKED — see DisasterRecoveryEngine TIER1.
+app/data/nasdaq_staging/
+app/data/price_history/
+app/data/quote_snapshots/
+app/data/portfolio_analytics/
+app/data/live_portfolio_snapshots/
+app/data/portfolio/
+app/data/portfolio_timeline/
+app/data/runtime/
+app/data/continuity/
+app/data/decision_shadow/
+app/data/master_decisions/
+app/data/learning/
+app/data/skill/
+app/data/institutional_memory/
+app/data/institutional_attribution/
+app/data/adaptive_governance/
+app/data/adaptive_weights.json
+app/data/institutional_memory_sweep_cursor.json
+app/data/unusual_whales_api_usage.json
+app/data/unusual_whales_refresh_state.json
+app/data/forecast_outcomes.jsonl
+app/data/forecast_outcome_grades.jsonl
+app/data/.vrp_panel_last_record
