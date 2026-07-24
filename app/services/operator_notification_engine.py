@@ -52,9 +52,23 @@ class OperatorNotificationEngine:
         with self.ledger_file.open("a") as f:
             f.write(json.dumps(row) + "\n")
 
+        # A CRITICAL event that only lands in this ledger is invisible the moment the operator
+        # is not looking at the dashboard — which is precisely when it matters most. Escalate it
+        # off the machine (best-effort; a failing alert channel must never break the recording).
+        external = None
+        if str(severity).upper() == "CRITICAL":
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                external = ExternalAlertEngine().dispatch(
+                    title=title, message=message, severity="CRITICAL",
+                    fingerprint=f"{event_type}:{title}")
+            except Exception as exc:
+                external = {"status": "EXTERNAL_ALERT_FAILED", "error": repr(exc)[:120]}
+
         return {
             "notification_recorded": True,
             "notification": row,
+            "external_alert": external,
             "status": "OPERATOR_NOTIFICATION_RECORDED",
         }
 

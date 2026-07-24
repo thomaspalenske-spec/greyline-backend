@@ -48,6 +48,70 @@ def _data_sandbox(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _block_real_broker_orders(monkeypatch):
+    """NO test may place a real broker order. Ever.
+
+    The CWD sandbox above isolates FILES, not the network. A test that drives an engine
+    end-to-end still reached TradeStation: `test_rebalance_opens_into_free_slots_only`
+    monkeypatches the universe to fake symbols AAA/BBB and calls rebalance(force=True),
+    whose booking step is unmocked. That was harmless while SIM booking was off — the
+    moment GREYLINE_SIM_BOOKING_ENABLED went true, every full test run bought 50 shares
+    each of AAA and BBB in the real Paper Trading Account (four fills before this landed).
+
+    So the block lives here, once, for the whole suite: a test that reaches an order
+    endpoint FAILS LOUDLY instead of silently trading. Tests that legitimately exercise
+    booking logic must mock the booking engine themselves.
+    """
+    def _forbidden(*_a, **_k):
+        raise AssertionError(
+            "TEST TRIED TO PLACE A REAL BROKER ORDER. Mock the booking engine "
+            "(GreyLineSimExecutionEngine / TradeStationSimBookingEngine) in this test.")
+
+    from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+    monkeypatch.setattr(TradeStationSimBookingEngine, "place_order", _forbidden)
+    monkeypatch.setattr(TradeStationSimBookingEngine, "cancel_order", _forbidden)
+    # The LIVE client is blocked at the NETWORK layer, not at submit_order(): its whole job
+    # is to raise LiveOrderSafetyError BEFORE any POST, and test_live_order_interlock exists
+    # to prove exactly that — patching the method would destroy the behaviour under test
+    # while still looking green.
+    #
+    # But `_live.requests` IS the shared requests module, so a blanket patch of .post is
+    # global: it broke token refresh, which POSTs to an auth endpoint and has nothing to do
+    # with orders. Block on the URL instead — order-execution endpoints raise, everything
+    # else calls through untouched.
+    try:
+        from app.services import greyline_live_broker_client_engine as _live
+
+        _real_post = _live.requests.post
+
+        def _guarded_post(url, *a, **k):
+            if "orderexecution" in str(url).lower():
+                _forbidden()
+            return _real_post(url, *a, **k)
+
+        monkeypatch.setattr(_live.requests, "post", _guarded_post)
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _neutralize_external_alerts(monkeypatch):
+    """No test may fire a real external alert or pop a macOS notification.
+
+    Recording a CRITICAL operator notification auto-escalates through ExternalAlertEngine —
+    which, left unmocked, would POST to a configured webhook/ntfy topic and spawn osascript
+    desktop notifications during every suite run. Channels default off in CI, but an operator
+    with GREYLINE_ALERT_* set in their shell would get paged by their own test run. Force the
+    engine dormant for tests; the alert logic is exercised explicitly in test_external_alert.py
+    with its own controlled env.
+    """
+    for k in ("GREYLINE_ALERT_WEBHOOK_URL", "GREYLINE_ALERT_NTFY_TOPIC",
+              "GREYLINE_ALERT_IMESSAGE_TO"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("GREYLINE_ALERT_MACOS_LOCAL", "false")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_app_data(request, _data_sandbox):
     module = request.node.module.__name__.rsplit(".", 1)[-1]
     if module in _EXEMPT_MODULES:

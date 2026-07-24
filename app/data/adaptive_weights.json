@@ -1,9 +1,8 @@
 {
   "breadth_score": {
-    "sample_size": 388,
-    "updated": "2026-07-20T14:36:20.519021",
-    "weight": 0.96,
-    "win_rate": 0.0
+    "actionable": false,
+    "sample_size": 192,
+    "weight": 1.0
   },
   "direction_confidence": {
     "sample_size": 0,
@@ -22,26 +21,25 @@
     "weight": 1.0
   },
   "regime_score": {
-    "sample_size": 388,
-    "updated": "2026-07-20T14:36:20.519028",
+    "sample_size": 192,
+    "updated": "2026-07-24T22:40:59.797935",
     "weight": 0.96,
     "win_rate": 0.0
   },
   "risk_state_score": {
-    "sample_size": 388,
-    "updated": "2026-07-20T14:36:20.519026",
-    "weight": 1.14,
-    "win_rate": 90.95
+    "actionable": false,
+    "sample_size": 192,
+    "weight": 1.0
   },
   "setup_score": {
-    "sample_size": 388,
-    "updated": "2026-07-20T14:36:20.519024",
+    "sample_size": 192,
+    "updated": "2026-07-24T22:40:59.797918",
     "weight": 0.96,
     "win_rate": 0.0
   },
   "volatility_score": {
     "actionable": false,
-    "sample_size": 388,
+    "sample_size": 192,
     "weight": 1.0
   }
 }

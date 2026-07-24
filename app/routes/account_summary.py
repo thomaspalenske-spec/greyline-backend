@@ -1,105 +1,74 @@
-import json
 from datetime import datetime
-from pathlib import Path
+from os import getenv
 
 from fastapi import APIRouter
 
-from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
-from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+from app.services.broker_account_view_engine import BrokerAccountViewEngine
 
 router = APIRouter()
 
-OPTIONS_LEDGER = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
-STARTING_CAPITAL = 10000.0
-STRATEGY_INTENT = "MOMENTUM_REVERSAL"
 
-
-def _last(quote, symbol):
+def _capital_base():
     try:
-        r = quote.get_quote(symbol)
-        return float(((r.get("response_json") or {}).get("Quotes") or [{}])[0].get("Last") or 0)
-    except Exception:
-        return 0.0
-
-
-def _read(path):
-    if not path.exists():
-        return []
-    out = []
-    for line in path.read_text().splitlines():
-        if line.strip():
-            try:
-                out.append(json.loads(line))
-            except ValueError:
-                pass
-    return out
+        return float(getenv("GREYLINE_ACCOUNT_CAPITAL_BASE", "10000") or 10000)
+    except (TypeError, ValueError):
+        return 10000.0
 
 
 @router.get("/account-summary")
 def account_summary():
-    """The real account across BOTH books, with P&L attributed to its source.
+    """Account summary sourced from the selected TradeStation account — not a local ledger.
 
-    The dashboard's account cards read the options-only engine, so once the system
-    moved to equity they showed $0 deployed and $0 unrealized while real stock was
-    held — and reported a "Total Return" that belongs entirely to the RETIRED
-    coin-flip options signal. Attribution matters: a loss the decommissioned system
-    booked is not the live strategy's track record.
+    Two distinct, honestly-separated figures:
+      * GreyLine MISSION BOOK — the capital GreyLine actually trades ($10k, the operator's
+        set size). This is the headline; return % is measured against it.
+      * The real TradeStation account it reads (paper SIM now, real money on flip). Its true
+        equity/cash/buying-power are shown as-is — the SIM account is TradeStation-funded at
+        $1,000,000; GreyLine deploys only the mission book from it. Nothing is faked to match.
+
+    Open positions and unrealized P&L come from the broker, so the numbers reflect what is
+    actually booked at TradeStation. When nothing is booked, this is a clean $10k / $0.
     """
-    quote = TradeStationQuoteLiveEngine()
-    equity_rows = PaperTradeLedgerEngine()._read_all()
-    option_rows = _read(OPTIONS_LEDGER)
+    base = _capital_base()
+    view = BrokerAccountViewEngine().snapshot()
+    rows = view.get("positions", [])
 
-    realized_options = sum(float(r.get("realized_pnl") or 0)
-                           for r in option_rows if r.get("status") == "CLOSED")
-    realized_strategy = sum(float(r.get("realized_pnl") or 0) for r in equity_rows
-                            if r.get("status") == "CLOSED" and r.get("trade_intent") == STRATEGY_INTENT)
-    realized_other_equity = sum(float(r.get("realized_pnl") or 0) for r in equity_rows
-                                if r.get("status") == "CLOSED" and r.get("trade_intent") != STRATEGY_INTENT)
+    cost_basis = round(sum(r["entry_price"] * r["quantity"] for r in rows), 2)
+    market_value = round(sum(r["current_price"] * r["quantity"] for r in rows), 2)
+    unrealized = round(sum(r["unrealized_pnl"] for r in rows), 2)
 
-    open_rows = [r for r in equity_rows if r.get("status") == "OPEN" and r.get("symbol")]
-    cost_basis = unrealized = market_value = 0.0
-    unrealized_strategy = 0.0
-    for r in open_rows:
-        entry = float(r.get("entry_price") or 0)
-        qty = float(r.get("quantity") or 0)
-        cur = _last(quote, r["symbol"]) or entry
-        direction = -1 if str(r.get("side") or "").upper() in ("SELL", "SELL_SHORT", "SHORT") else 1
-        pnl = (cur - entry) * qty * direction
-        cost_basis += entry * qty
-        market_value += cur * qty
-        unrealized += pnl
-        if r.get("trade_intent") == STRATEGY_INTENT:
-            unrealized_strategy += pnl
-
-    realized_total = realized_options + realized_strategy + realized_other_equity
-    cash = STARTING_CAPITAL + realized_total - cost_basis
-    total_equity = STARTING_CAPITAL + realized_total + unrealized
-    strategy_pnl = realized_strategy + unrealized_strategy
+    # Mission-book equity: the $10k base plus live unrealized on what's actually booked.
+    # (Realized P&L across broker fills will attach once closed-trade history is tracked from
+    # the broker; today the account is flat, so realized is 0 and this is exact.)
+    mission_equity = round(base + unrealized, 2)
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
-        "starting_capital": STARTING_CAPITAL,
-        "cash_on_hand": round(cash, 2),
-        "buying_power": round(cash, 2),
-        "deployed_capital": round(cost_basis, 2),
-        "deployed_pct_of_equity": round(100 * cost_basis / total_equity, 2) if total_equity else 0,
-        "open_market_value": round(market_value, 2),
-        "unrealized_pnl": round(unrealized, 2),
-        "realized_pnl": round(realized_total, 2),
-        "total_equity": round(total_equity, 2),
-        "total_return_pct": round(100 * (total_equity - STARTING_CAPITAL) / STARTING_CAPITAL, 2),
-        "open_position_count": len(open_rows),
-        "closed_trade_count": len([r for r in equity_rows + option_rows if r.get("status") == "CLOSED"]),
-        "total_trade_count": len([r for r in equity_rows + option_rows if r.get("symbol") or r.get("underlying")]),
-        # Attribution — whose P&L is this, really?
-        "attribution": {
-            "retired_options_signal": round(realized_options, 2),
-            "retired_equity_signal": round(realized_other_equity, 2),
-            "momentum_reversal_realized": round(realized_strategy, 2),
-            "momentum_reversal_unrealized": round(unrealized_strategy, 2),
-            "momentum_reversal_total": round(strategy_pnl, 2),
-            "note": ("Account return is dominated by the RETIRED coin-flip signal's losses. "
-                     "momentum_reversal_total is the live strategy's own track record."),
+        "account_mode": view.get("account_mode"),
+        "account_label": view.get("account_label"),
+        "reads_ok": view.get("reads_ok"),
+
+        # --- GreyLine mission book (the $10k GreyLine trades) ---
+        "starting_capital": round(base, 2),
+        "deployed_capital": cost_basis,
+        "deployed_pct_of_equity": round(100 * cost_basis / mission_equity, 2) if mission_equity else 0,
+        "open_market_value": market_value,
+        "unrealized_pnl": unrealized,
+        "realized_pnl": 0.0,
+        "total_equity": mission_equity,
+        "total_return_pct": round(100 * (mission_equity - base) / base, 2) if base else 0,
+        "open_position_count": len(rows),
+
+        # --- the real TradeStation account being read (broker truth, not faked to $10k) ---
+        "broker_account": {
+            "mode": view.get("account_mode"),
+            "label": view.get("account_label"),
+            "host_kind": view.get("host_kind"),
+            "equity": view.get("equity"),
+            "cash_balance": view.get("cash_balance"),
+            "buying_power": view.get("buying_power"),
+            "working_orders": view.get("orders_working"),
+            "note": ("GreyLine deploys only the $%s mission book from this account." % f"{base:,.0f}"),
         },
-        "status": "ACCOUNT_SUMMARY_READY",
+        "status": "ACCOUNT_SUMMARY_READY" if view.get("reads_ok") else "ACCOUNT_SUMMARY_BROKER_READ_DEGRADED",
     }

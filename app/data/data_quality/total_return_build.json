@@ -1,0 +1,303 @@
+{
+  "timestamp": "2026-07-23T22:37:17.220833",
+  "symbols_built": 555,
+  "symbols_failed": 2,
+  "total_dividends_applied": 39150,
+  "examples": [
+    {
+      "symbol": "DD",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 106,
+      "dividends_out_of_range": 1,
+      "special_distributions_excluded": 1,
+      "special_distributions": [
+        {
+          "date": "2025-11-03",
+          "amount": 142.5143,
+          "prior_close": 102.49,
+          "fraction_of_price": 1.391
+        }
+      ],
+      "splits": 3,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 2.91,
+      "total_return_cagr_pct": 16.06,
+      "dividend_contribution_pct_yr": 13.15
+    },
+    {
+      "symbol": "NI",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 110,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 1,
+      "special_distributions": [
+        {
+          "date": "2015-07-02",
+          "amount": 27.59,
+          "prior_close": 17.86,
+          "fraction_of_price": 1.545
+        }
+      ],
+      "splits": 0,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 5.55,
+      "total_return_cagr_pct": 14.5,
+      "dividend_contribution_pct_yr": 8.95
+    },
+    {
+      "symbol": "LYB",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 4081,
+      "dividends_applied": 62,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "2010-04-28",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 6.45,
+      "total_return_cagr_pct": 14.03,
+      "dividend_contribution_pct_yr": 7.58
+    },
+    {
+      "symbol": "APO",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 3848,
+      "dividends_applied": 62,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "2011-03-30",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 12.98,
+      "total_return_cagr_pct": 20.25,
+      "dividend_contribution_pct_yr": 7.27
+    },
+    {
+      "symbol": "DOC",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 121,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 1,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 0.87,
+      "total_return_cagr_pct": 7.54,
+      "dividend_contribution_pct_yr": 6.67
+    },
+    {
+      "symbol": "HYG",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 4849,
+      "dividends_applied": 231,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "2007-04-11",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": -1.39,
+      "total_return_cagr_pct": 4.96,
+      "dividend_contribution_pct_yr": 6.35
+    },
+    {
+      "symbol": "TDG",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 5118,
+      "dividends_applied": 12,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "2006-03-15",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 21.21,
+      "total_return_cagr_pct": 27.4,
+      "dividend_contribution_pct_yr": 6.19
+    },
+    {
+      "symbol": "O",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 330,
+      "dividends_out_of_range": 1,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 2,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 5.99,
+      "total_return_cagr_pct": 11.96,
+      "dividend_contribution_pct_yr": 5.97
+    },
+    {
+      "symbol": "OKE",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 111,
+      "dividends_out_of_range": 1,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 2,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 8.7,
+      "total_return_cagr_pct": 14.64,
+      "dividend_contribution_pct_yr": 5.94
+    },
+    {
+      "symbol": "MO",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 110,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 2,
+      "special_distributions": [
+        {
+          "date": "2007-04-02",
+          "amount": 22.5655,
+          "prior_close": 87.81,
+          "fraction_of_price": 0.257
+        },
+        {
+          "date": "2008-03-31",
+          "amount": 50.4807,
+          "prior_close": 73.83,
+          "fraction_of_price": 0.684
+        }
+      ],
+      "splits": 0,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 1.77,
+      "total_return_cagr_pct": 7.7,
+      "dividend_contribution_pct_yr": 5.93
+    },
+    {
+      "symbol": "BX",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 4798,
+      "dividends_applied": 75,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 1,
+      "date_range": [
+        "2007-06-22",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 6.93,
+      "total_return_cagr_pct": 12.66,
+      "dividend_contribution_pct_yr": 5.73
+    },
+    {
+      "symbol": "SPG",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 115,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 7.34,
+      "total_return_cagr_pct": 13.04,
+      "dividend_contribution_pct_yr": 5.7
+    },
+    {
+      "symbol": "VICI",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 2147,
+      "dividends_applied": 34,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "2018-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 3.46,
+      "total_return_cagr_pct": 9.16,
+      "dividend_contribution_pct_yr": 5.7
+    },
+    {
+      "symbol": "MAA",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 114,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 5.51,
+      "total_return_cagr_pct": 11.2,
+      "dividend_contribution_pct_yr": 5.69
+    },
+    {
+      "symbol": "VTR",
+      "status": "TOTAL_RETURN_BUILT",
+      "bars": 7179,
+      "dividends_applied": 109,
+      "dividends_out_of_range": 0,
+      "special_distributions_excluded": 0,
+      "special_distributions": [],
+      "splits": 0,
+      "date_range": [
+        "1998-01-02",
+        "2026-07-20"
+      ],
+      "price_only_cagr_pct": 7.04,
+      "total_return_cagr_pct": 12.69,
+      "dividend_contribution_pct_yr": 5.65
+    }
+  ],
+  "failed": [
+    {
+      "symbol": "HONA",
+      "status": "INSUFFICIENT_BARS",
+      "bars": 24
+    },
+    {
+      "symbol": "SPCX",
+      "status": "INSUFFICIENT_BARS",
+      "bars": 25
+    }
+  ],
+  "status": "TOTAL_RETURN_UNIVERSE_BUILT"
+}

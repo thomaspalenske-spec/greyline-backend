@@ -1,0 +1,297 @@
+{
+  "timestamp": "2026-07-24T15:48:05.793579",
+  "source": "TRADESTATION_BARCHARTS",
+  "universe_size": 1782,
+  "cursor_started_at": 25,
+  "checked": 40,
+  "compared_days_each": 120,
+  "tolerance_pct": 0.1,
+  "matched": 40,
+  "mismatched": 0,
+  "mismatches": [],
+  "unreachable": [],
+  "results": [
+    {
+      "symbol": "AAPG",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AAPL",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AARD",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AAT",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AAUC",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AB",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABAT",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABBV",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABCB",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABCL",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABEO",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABEV",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABG",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABI",
+      "days_compared": 50,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABLLW",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABLV",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABLVW",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABM",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABNB",
+      "days_compared": 120,
+      "max_deviation_pct": 0.004,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABOS",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABR",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABSI",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABT",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABTC",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABTS",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABUS",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABVC",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABVX",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABX",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ABXL",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACA",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACAA",
+      "days_compared": 51,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACAAU",
+      "days_compared": 75,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACAAW",
+      "days_compared": 32,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACAD",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACB",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACCL",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACCO",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACCS",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "ACDC",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    }
+  ],
+  "ok": true,
+  "status": "PRICE_BARS_CROSS_SOURCE_VERIFIED"
+}

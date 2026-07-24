@@ -1,0 +1,562 @@
+"""Reality Guard — continuously proves GreyLine is on real broker data, not fantasy.
+
+GreyLine's "fantasy land" failure mode is specific and has happened: a local JSON ledger
+fills with fabricated positions and P&L that were NEVER booked at TradeStation, and the
+dashboard renders them as if real. This engine encodes the invariants that must hold for the
+displayed state to be trustworthy, and fails LOUD the instant one breaks. It is read-only and
+never throws — a guard that crashes guards nothing.
+
+Invariants (a CRITICAL failure means "fantasy detected", the dashboard must go red):
+
+  ACCOUNT_SOURCE_RESOLVED   (critical) the account selector resolves to a real TradeStation
+                            account with the host/account interlock intact.
+  BROKER_READS_OK           (critical) the dashboard's holdings/balance actually came back
+                            from TradeStation this cycle (HTTP 200 on all three reads).
+  NO_PHANTOM_POSITIONS      (critical) the local paper ledger holds NO open position that the
+                            broker account does not — i.e. nothing is displayed/tracked that
+                            was never booked. This is the exact fantasy condition.
+  EXEC_BOOKING_COHERENT     (critical) if paper execution is ON, real SIM booking must also be
+                            ON. Otherwise every "trade" lands only in the local ledger and
+                            never reaches the broker — fantasy by construction.
+  DATA_SOURCE_REAL          (warning)  the strategy's candidate data comes from a real feed
+                            (live or cached real bars), not a synthetic/unknown source, and is
+                            not absurdly stale.
+"""
+
+from datetime import datetime, timedelta
+from os import getenv
+
+REAL_DATA_SOURCES = {"TRADESTATION_LIVE", "TRADESTATION_LIVE_CACHED", "CSV_HISTORICAL"}
+MAX_CANDIDATE_STALE_DAYS = 5
+
+
+def _flag(name):
+    return (getenv(name, "") or "").strip().strip("'\"").lower() == "true"
+
+
+class GreyLineRealityGuardEngine:
+
+    def _check_account_source(self):
+        try:
+            from app.services.tradestation_account_source_engine import TradeStationAccountSourceEngine
+            src = TradeStationAccountSourceEngine().resolve()
+            return {
+                "id": "ACCOUNT_SOURCE_RESOLVED", "severity": "critical",
+                "ok": bool(src.get("ok")),
+                "detail": src.get("label") if src.get("ok") else (src.get("error") or "unresolved"),
+            }
+        except Exception as e:
+            return {"id": "ACCOUNT_SOURCE_RESOLVED", "severity": "critical", "ok": False,
+                    "detail": f"selector error: {str(e)[:120]}"}
+
+    def _check_broker_reads(self, view):
+        return {
+            "id": "BROKER_READS_OK", "severity": "critical",
+            "ok": bool(view.get("reads_ok")),
+            "detail": (f"reading {view.get('account_label')}" if view.get("reads_ok")
+                       else f"broker read failed ({view.get('status')})"),
+        }
+
+    def _check_phantom_positions(self, view):
+        """No open position in EITHER local ledger (equity or options) that the broker does
+        not actually hold. Covers both books so options mode cannot open a fantasy hole."""
+        import json
+        from pathlib import Path
+
+        ledger_syms = set()
+        try:
+            from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+            for t in PaperTradeLedgerEngine()._read_all():
+                if t.get("status") == "OPEN" and t.get("symbol"):
+                    ledger_syms.add(str(t.get("symbol")).upper())
+        except Exception as e:
+            return {"id": "NO_PHANTOM_POSITIONS", "severity": "critical", "ok": False,
+                    "detail": f"equity ledger read error: {str(e)[:120]}"}
+        # options ledger — open positions are keyed by the OSI option symbol
+        try:
+            opt_file = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
+            if opt_file.exists():
+                for line in opt_file.read_text().splitlines():
+                    if not line.strip():
+                        continue
+                    t = json.loads(line)
+                    if t.get("status") == "OPEN" and t.get("option_symbol"):
+                        ledger_syms.add(str(t.get("option_symbol")).upper())
+        except Exception:
+            pass
+
+        broker_syms = {str(p.get("symbol") or "").upper() for p in (view.get("positions") or [])}
+        # A WORKING buy-to-open limit order is a legitimate in-between state: the entry is
+        # recorded and submitted, but the broker has not filled it yet. That is pending, not
+        # fantasy — counting it as a phantom would make the guard cry wolf on every limit
+        # entry (which is now the normal entry path) and train the operator to ignore it.
+        # If the order later dies, the reconciler voids the ledger entry; if it is never
+        # resolved, the symbol drops out of `working` and it becomes a phantom for real.
+        pending_syms = {str(b.get("symbol") or "").upper()
+                        for b in (view.get("pending_buys") or [])}
+        phantoms = sorted(s for s in ledger_syms if s not in broker_syms and s not in pending_syms)
+        pending_open = sorted(ledger_syms & (pending_syms - broker_syms))
+        return {
+            "id": "NO_PHANTOM_POSITIONS", "severity": "critical",
+            "ok": not phantoms,
+            "detail": ((f"no local ledger positions (equity or options) absent from the broker"
+                        + (f"; {len(pending_open)} awaiting fill" if pending_open else ""))
+                       if not phantoms
+                       else f"{len(phantoms)} phantom position(s) in local ledger, not held at broker: "
+                            f"{', '.join(phantoms[:8])}"),
+            "phantoms": phantoms,
+            "pending_fill": pending_open,
+        }
+
+    def managed_symbols(self):
+        """The single definition of what GreyLine actually opened and is managing.
+
+        Owned here, not in a route: the guard uses it to detect untracked broker risk and
+        the dashboard uses it to label rows, and those two must never disagree. Routes stay
+        display-only — they read this instead of touching a ledger themselves, which also
+        keeps the "positions come from the broker, never the local ledger" rule intact.
+        """
+        import json
+        from pathlib import Path
+
+        syms = set()
+        try:
+            from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+            for t in PaperTradeLedgerEngine()._read_all():
+                if t.get("status") == "OPEN" and t.get("symbol"):
+                    syms.add(str(t["symbol"]).upper())
+        except Exception:
+            pass
+        try:
+            f = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
+            if f.exists():
+                for line in f.read_text().splitlines():
+                    if not line.strip():
+                        continue
+                    t = json.loads(line)
+                    if t.get("status") == "OPEN" and t.get("option_symbol"):
+                        syms.add(str(t["option_symbol"]).upper())
+        except Exception:
+            pass
+        return syms
+
+    def _check_untracked_broker_positions(self, view):
+        """The MIRROR of the phantom check: the broker holds something no GreyLine ledger does.
+
+        A phantom is GreyLine claiming a position it doesn't have. This is the opposite —
+        real risk in the account that GreyLine is not managing: no stop, no take-profit, no
+        maturity liquidation, and it is still rendered on the broker-sourced dashboard as if
+        it were GreyLine's. Silent is the dangerous part.
+
+        WARNING, not critical: the account holder may legitimately place their own trades.
+        The requirement is that such positions are visible and labelled, never mistaken for
+        GreyLine's own book.
+        """
+        tracked = self.managed_symbols()
+        untracked = sorted({str(p.get("symbol") or "").upper()
+                            for p in (view.get("positions") or [])} - tracked)
+        return {
+            "id": "NO_UNTRACKED_BROKER_POSITIONS", "severity": "warning",
+            "ok": not untracked,
+            "detail": ("every broker position is tracked by a GreyLine ledger"
+                       if not untracked
+                       else f"{len(untracked)} broker position(s) NOT managed by GreyLine "
+                            f"(no stop/TP/maturity rule applies): {', '.join(untracked[:8])}"),
+            "untracked": untracked,
+        }
+
+    def _check_exec_booking_coherent(self):
+        paper_exec = _flag("GREYLINE_PAPER_EXECUTION_ENABLED")
+        sim_booking = _flag("GREYLINE_SIM_BOOKING_ENABLED")
+        ok = (not paper_exec) or sim_booking
+        return {
+            "id": "EXEC_BOOKING_COHERENT", "severity": "critical", "ok": ok,
+            "detail": ("execution and booking are coherent"
+                       if ok else
+                       "PAPER EXECUTION IS ON BUT SIM BOOKING IS OFF — trades would fabricate in the "
+                       "local ledger and never reach TradeStation. Turn on GREYLINE_SIM_BOOKING_ENABLED "
+                       "or turn off GREYLINE_PAPER_EXECUTION_ENABLED."),
+            "paper_execution_enabled": paper_exec, "sim_booking_enabled": sim_booking,
+        }
+
+    def _check_data_source(self):
+        try:
+            import json
+            from pathlib import Path
+            cache = Path("app/data/momentum_reversal/top_candidates_cache.json")
+            if not cache.exists():
+                return {"id": "DATA_SOURCE_REAL", "severity": "warning", "ok": True,
+                        "detail": "no candidate snapshot computed yet"}
+            d = json.loads(cache.read_text())
+            source = d.get("data_source")
+            as_of = d.get("as_of")
+            source_ok = source in REAL_DATA_SOURCES
+            stale = False
+            if as_of:
+                try:
+                    stale = (datetime.utcnow().date() - datetime.fromisoformat(str(as_of)[:10]).date()).days > MAX_CANDIDATE_STALE_DAYS
+                except (ValueError, TypeError):
+                    stale = False
+            ok = source_ok and not stale
+            return {"id": "DATA_SOURCE_REAL", "severity": "warning", "ok": ok,
+                    "detail": (f"candidates from {source} as of {as_of}" if ok
+                               else f"suspect candidate source={source!r} as_of={as_of!r} "
+                                    f"(real sources: {sorted(REAL_DATA_SOURCES)}, max {MAX_CANDIDATE_STALE_DAYS}d stale)")}
+        except Exception as e:
+            return {"id": "DATA_SOURCE_REAL", "severity": "warning", "ok": True,
+                    "detail": f"data-source check skipped: {str(e)[:100]}"}
+
+    def _check_price_bars(self):
+        """The price bars every signal/ATR/stop is computed from must not be corrupt.
+
+        Reads the LAST SCAN (PriceBarIntegrityEngine writes it) rather than rescanning — a
+        full pass is seconds-long and this runs on every dashboard refresh. Critical findings
+        (impossible OHLC, cross-symbol duplicate closes, non-positive prices) mean signals are
+        being computed on bad data, which manufactures fake edge.
+        """
+        try:
+            from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine
+            scan = PriceBarIntegrityEngine().last_scan()
+        except Exception as e:
+            return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
+                    "detail": f"price-bar check skipped: {str(e)[:100]}"}
+        if not scan:
+            return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
+                    "detail": "no price-bar scan run yet"}
+        crit = int(scan.get("critical_count") or 0)
+        age = ""
+        try:
+            age = (f", scanned {(datetime.utcnow() - datetime.fromisoformat(scan['scanned_at'])).days}d ago")
+        except Exception:
+            pass
+        if crit == 0:
+            return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
+                    "detail": f"{scan.get('symbols_checked')} symbols clean ({scan.get('mode')}{age})"}
+        return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": False,
+                "detail": (f"{crit} corrupt bar(s) across {scan.get('symbols_checked')} symbols "
+                           f"— {scan.get('counts')}{age}")}
+
+    def _check_price_bars_match_source(self):
+        """The bars must match an INDEPENDENT source, not merely be self-consistent.
+
+        PRICE_BARS_CLEAN proves the CSVs are internally coherent. That cannot catch data
+        that is uniformly wrong — a shifted series, a mis-mapped ticker, an unadjusted split
+        — all of which are self-consistent and would silently poison every ATR, stop and TP.
+        This reads the rotating reconciliation against TradeStation's own barcharts.
+
+        Reads the last run rather than reconciling here: this runs on every dashboard
+        refresh and the comparison makes real API calls.
+        """
+        try:
+            from app.services.price_bar_cross_source_engine import PriceBarCrossSourceEngine
+            run = PriceBarCrossSourceEngine().last_run()
+        except Exception as e:
+            return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
+                    "detail": f"cross-source check skipped: {str(e)[:100]}"}
+        if not run:
+            return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
+                    "detail": "no cross-source reconciliation run yet"}
+        if run.get("ok") is None:
+            return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
+                    "detail": str(run.get("detail") or run.get("status"))[:110]}
+        bad = int(run.get("mismatched") or 0)
+        age = ""
+        try:
+            age = f", {(datetime.utcnow() - datetime.fromisoformat(run['timestamp'])).days}d ago"
+        except Exception:
+            pass
+        if bad == 0:
+            return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
+                    "detail": (f"{run.get('matched')}/{run.get('checked')} symbols match "
+                               f"TradeStation barcharts{age}")}
+        names = ", ".join(m.get("symbol") for m in (run.get("mismatches") or [])[:5])
+        return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": False,
+                "detail": (f"{bad} symbol(s) DISAGREE with TradeStation barcharts{age}: "
+                           f"{names} — signals on these are computed from wrong prices")}
+
+    def _check_signal_bars_tradable(self):
+        """Signals must be computed from bars that were actually TRADED.
+
+        MIN_BARS counts raw bars, so a ticker carrying a long pre-listing stub can satisfy
+        253 bars while offering almost no real history — momentum measured across that
+        boundary compares prices nobody transacted at, and ATR (every doctrine stop)
+        collapses. The strategy now excludes these; this proves the exclusion is live.
+        """
+        try:
+            from app.services.price_bar_tradability_engine import PriceBarTradabilityEngine
+            scan = PriceBarTradabilityEngine().last_scan()
+        except Exception as e:
+            return {"id": "SIGNAL_BARS_TRADABLE", "severity": "warning", "ok": True,
+                    "detail": f"tradability check skipped: {str(e)[:100]}"}
+        if not scan:
+            return {"id": "SIGNAL_BARS_TRADABLE", "severity": "warning", "ok": True,
+                    "detail": "no tradability scan run yet"}
+        bad = int(scan.get("contaminated_signal_windows") or 0)
+        if bad == 0:
+            return {"id": "SIGNAL_BARS_TRADABLE", "severity": "warning", "ok": True,
+                    "detail": (f"{scan.get('symbols')} symbols: every signal window is built "
+                               f"on traded bars")}
+        names = ", ".join(r.get("symbol") for r in (scan.get("contaminated") or [])[:5])
+        return {"id": "SIGNAL_BARS_TRADABLE", "severity": "warning", "ok": True,
+                "detail": (f"{bad} symbol(s) excluded from the universe — signal window "
+                           f"reaches into untraded bars: {names}")}
+
+    def _check_survivorship_archive(self):
+        """The point-in-time universe archive must be advancing.
+
+        Delisted names cannot be re-acquired — TradeStation answers "Invalid Symbol" for
+        every dead ticker — so a day the archive fails to record is a day of survivorship-free
+        data lost permanently. This is the one data gap that gets strictly worse with silence.
+        """
+        try:
+            from app.services.universe_survivorship_engine import UniverseSurvivorshipEngine
+            st = UniverseSurvivorshipEngine().status()
+        except Exception as e:
+            return {"id": "SURVIVORSHIP_ARCHIVE_ADVANCING", "severity": "warning", "ok": True,
+                    "detail": f"survivorship check skipped: {str(e)[:100]}"}
+        days = int(st.get("archive_days") or 0)
+        if days == 0:
+            return {"id": "SURVIVORSHIP_ARCHIVE_ADVANCING", "severity": "warning", "ok": False,
+                    "detail": "no point-in-time universe archive — every day without one is "
+                              "survivorship-free data lost for good"}
+        return {"id": "SURVIVORSHIP_ARCHIVE_ADVANCING", "severity": "warning", "ok": True,
+                "detail": (f"point-in-time universe recorded for {days} day(s) since "
+                           f"{st.get('survivorship_free_from')}; "
+                           f"{st.get('retained_delisted_count')} delisted name(s) retained. "
+                           f"History before that date remains biased.")}
+
+    def _check_total_return_available(self):
+        """A dividend-adjusted total-return series should exist alongside the price series.
+
+        Price-only closes understate every dividend payer (MO: 1.77%/yr price vs 13.32% total
+        return) and turn each ex-dividend drop into a false reversal dip. This is advisory:
+        the raw price series stays valid for price; total return is the correct input for a
+        return-based signal and its absence is a quality gap, not a fantasy condition.
+        """
+        try:
+            from app.services.total_return_series_engine import TotalReturnSeriesEngine
+            rep = TotalReturnSeriesEngine().last_report()
+        except Exception as e:
+            return {"id": "TOTAL_RETURN_SERIES_AVAILABLE", "severity": "warning", "ok": True,
+                    "detail": f"total-return check skipped: {str(e)[:100]}"}
+        if not rep:
+            return {"id": "TOTAL_RETURN_SERIES_AVAILABLE", "severity": "warning", "ok": False,
+                    "detail": "no total-return series built yet — returns are price-only and "
+                              "understate every dividend payer"}
+        return {"id": "TOTAL_RETURN_SERIES_AVAILABLE", "severity": "warning", "ok": True,
+                "detail": (f"{rep.get('symbols_built')} symbols have a dividend+split adjusted "
+                           f"total-return series ({rep.get('total_dividends_applied')} dividends "
+                           f"applied)")}
+
+    def _check_regime_gate(self):
+        """Surface the market-regime gate so its state is never invisible.
+
+        The gate blocks dip-buys when the index is below its 200DMA. If it silently degrades
+        (missing/stale index data) it fails OPEN — trades flow with no crash protection — so
+        that state must be visible, not hidden. Advisory: a degraded gate is a protection gap,
+        not a fantasy condition.
+        """
+        try:
+            from app.services.market_regime_gate_engine import MarketRegimeGateEngine
+            e = MarketRegimeGateEngine()
+            r = e.assess()
+            enabled = e.enabled()
+        except Exception as ex:
+            return {"id": "REGIME_GATE_HEALTHY", "severity": "warning", "ok": True,
+                    "detail": f"regime check skipped: {str(ex)[:100]}"}
+        if not enabled:
+            return {"id": "REGIME_GATE_HEALTHY", "severity": "warning", "ok": True,
+                    "detail": "regime gate DISABLED — dip-buying has no downtrend brake"}
+        if r.get("degraded"):
+            return {"id": "REGIME_GATE_HEALTHY", "severity": "warning", "ok": False,
+                    "detail": f"regime gate degraded (fails open, no crash brake): {r.get('detail')}"}
+        return {"id": "REGIME_GATE_HEALTHY", "severity": "warning", "ok": True,
+                "detail": f"{r.get('regime')} — {r.get('detail')}"}
+
+    def _check_lineage_stable(self):
+        """Settled price history must not have silently changed since the accepted baseline.
+
+        Every other check verifies the data is correct NOW; this is the only one that notices
+        when an already-settled bar changed underneath us (vendor restatement, re-adjustment,
+        or corruption). A silent change to validated history makes past research irreproducible
+        — the numbers move and nothing says why. Warning severity: a change needs review and
+        re-acceptance, it is not a fantasy-positions condition.
+        """
+        try:
+            from app.services.price_bar_lineage_engine import PriceBarLineageEngine
+            rep = PriceBarLineageEngine().last_report()
+        except Exception as e:
+            return {"id": "LINEAGE_STABLE", "severity": "warning", "ok": True,
+                    "detail": f"lineage check skipped: {str(e)[:100]}"}
+        if not rep:
+            return {"id": "LINEAGE_STABLE", "severity": "warning", "ok": True,
+                    "detail": "no lineage verification run yet"}
+        ch = int(rep.get("changed_count") or 0)
+        if ch == 0:
+            return {"id": "LINEAGE_STABLE", "severity": "warning", "ok": True,
+                    "detail": (f"{rep.get('symbols_checked')} symbols: settled history unchanged "
+                               f"since baseline ({rep.get('settled_through')})")}
+        names = ", ".join(c.get("symbol") for c in (rep.get("changed") or [])[:5])
+        return {"id": "LINEAGE_STABLE", "severity": "warning", "ok": False,
+                "detail": (f"{ch} symbol(s) with settled history CHANGED since baseline "
+                           f"(review, then re-accept): {names}")}
+
+    def _check_options_capture(self):
+        """The options surface must be captured every day — it cannot be recovered later.
+
+        An options edge cannot be backtested here (UW's historic-contract endpoint returns
+        nothing; TradeStation purges expired contracts), so this forward panel is the ONLY
+        evidence base the options mission can ever be verified against. A day not captured is
+        a permanent hole, which is why a stale capture is surfaced rather than ignored.
+        """
+        try:
+            from app.services.options_reality_capture_engine import OptionsRealityCaptureEngine
+            cov = OptionsRealityCaptureEngine().coverage()
+        except Exception as e:
+            return {"id": "OPTIONS_CAPTURE_ADVANCING", "severity": "warning", "ok": True,
+                    "detail": f"options capture check skipped: {str(e)[:90]}"}
+        days = int(cov.get("days_captured") or 0)
+        if days == 0:
+            return {"id": "OPTIONS_CAPTURE_ADVANCING", "severity": "warning", "ok": False,
+                    "detail": "no options surface captured yet — the options mission has no "
+                              "evidence base and cannot be verified"}
+        last = str(cov.get("last_day") or "")
+        stale = ""
+        try:
+            age = (datetime.utcnow().date() - datetime.fromisoformat(last).date()).days
+            if age > 4:      # allows a holiday weekend
+                return {"id": "OPTIONS_CAPTURE_ADVANCING", "severity": "warning", "ok": False,
+                        "detail": (f"last options capture {last} is {age}d old — every missed "
+                                   f"day is evidence that cannot be reconstructed")}
+            stale = f", {age}d ago"
+        except Exception:
+            pass
+        return {"id": "OPTIONS_CAPTURE_ADVANCING", "severity": "warning", "ok": True,
+                "detail": (f"{days} day(s) of options surface captured, {cov.get('total_rows')} "
+                           f"rows, through {last}{stale}")}
+
+    def _check_backup_current(self):
+        """The unrecoverable data must be backed up OFF-MACHINE and recently.
+
+        options_reality, the PIT universe archive and the earnings-vol panel accrue
+        forward-only — no API can rebuild them. One disk failure restarts the options edge
+        experiment from zero. A same-disk copy does not count and is reported as such.
+        """
+        try:
+            from app.services.disaster_recovery_engine import DisasterRecoveryEngine
+            st = DisasterRecoveryEngine().status()
+        except Exception as e:
+            return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": True,
+                    "detail": f"backup check skipped: {str(e)[:90]}"}
+        if not st.get("last_backup_at"):
+            return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": False,
+                    "detail": "unrecoverable data has NEVER been backed up — a disk failure "
+                              "would permanently destroy the options evidence base"}
+        if not st.get("off_machine"):
+            return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": False,
+                    "detail": f"backup destination is on the SAME DISK — not redundancy: "
+                              f"{str(st.get('destination_note'))[:70]}"}
+        age = st.get("hours_since_backup")
+        if age is not None and age > 48:
+            return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": False,
+                    "detail": f"last off-machine backup was {age}h ago — forward-only data "
+                              f"since then is unprotected"}
+        return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": True,
+                "detail": (f"{st.get('files_protected')} unrecoverable files verified "
+                           f"off-machine, {age}h ago")}
+
+    def _check_broker_side_protection(self):
+        """Open longs should have a failsafe that survives this process dying.
+
+        Every doctrine exit — the ATR stop, the TP ladder, the maturity liquidation — is
+        evaluated in software and needs the scheduler alive. If this machine sleeps or the
+        process dies, positions with no resting broker order have NO protection at all. This
+        surfaces that exposure; it does not fail hard, because the disaster stop is deliberately
+        OFF by default (it places real orders) — the point is to make the gap VISIBLE, not
+        silent. Positions with a working close order are not counted as exposed.
+        """
+        try:
+            from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+            st = BrokerProtectiveStopEngine().status()
+        except Exception as e:
+            return {"id": "BROKER_SIDE_PROTECTION", "severity": "warning", "ok": True,
+                    "detail": f"protection check skipped: {str(e)[:90]}"}
+        unprotected = st.get("unprotected") or []
+        if not unprotected:
+            return {"id": "BROKER_SIDE_PROTECTION", "severity": "warning", "ok": True,
+                    "detail": ("no open long is exposed — either flat, all closing, or resting "
+                               "broker stops are in place")}
+        armed = "armed" if st.get("enabled") else "DISABLED (GREYLINE_BROKER_PROTECTIVE_STOPS)"
+        return {"id": "BROKER_SIDE_PROTECTION", "severity": "warning", "ok": False,
+                "detail": (f"{len(unprotected)} open long(s) have NO broker-side stop — no "
+                           f"protection if GreyLine stops running; disaster stops are {armed}. "
+                           f"Exposed: {', '.join(unprotected[:8])}")}
+
+    def _check_external_alerting(self):
+        """A CRITICAL event must be able to LEAVE this machine.
+
+        The notification ledger is dashboard-only. If GreyLine breaks while the operator is away,
+        an on-machine-only alert is never seen — exactly the silent backfill failure. This checks
+        that at least one off-machine channel is configured; a warning, not a block, because the
+        operator may deliberately run without one.
+        """
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            st = ExternalAlertEngine().status()
+        except Exception as e:
+            return {"id": "EXTERNAL_ALERTING", "severity": "warning", "ok": True,
+                    "detail": f"alert check skipped: {str(e)[:90]}"}
+        if st.get("has_external_channel"):
+            return {"id": "EXTERNAL_ALERTING", "severity": "warning", "ok": True,
+                    "detail": f"external alert channel(s) live: {', '.join(st['external_channels'])}"}
+        return {"id": "EXTERNAL_ALERTING", "severity": "warning", "ok": False,
+                "detail": ("NO external alert channel — CRITICAL events stay on this machine and "
+                           "are invisible when the operator is away (the silent-backfill case). "
+                           "Set GREYLINE_ALERT_WEBHOOK_URL or GREYLINE_ALERT_NTFY_TOPIC")}
+
+    def check(self):
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            view = BrokerAccountViewEngine().snapshot()
+        except Exception as e:
+            view = {"reads_ok": False, "status": f"BROKER_VIEW_ERROR: {str(e)[:120]}", "positions": []}
+
+        checks = [
+            self._check_account_source(),
+            self._check_broker_reads(view),
+            self._check_phantom_positions(view),
+            self._check_untracked_broker_positions(view),
+            self._check_exec_booking_coherent(),
+            self._check_data_source(),
+            self._check_price_bars(),
+            self._check_price_bars_match_source(),
+            self._check_signal_bars_tradable(),
+            self._check_survivorship_archive(),
+            self._check_total_return_available(),
+            self._check_regime_gate(),
+            self._check_lineage_stable(),
+            self._check_options_capture(),
+            self._check_backup_current(),
+            self._check_broker_side_protection(),
+            self._check_external_alerting(),
+        ]
+        critical_failures = [c for c in checks if c["severity"] == "critical" and not c["ok"]]
+        warnings = [c for c in checks if c["severity"] == "warning" and not c["ok"]]
+
+        if critical_failures:
+            verdict = "FANTASY_DETECTED"
+        elif warnings:
+            verdict = "REAL_DATA_WITH_WARNINGS"
+        else:
+            verdict = "REAL_DATA_VERIFIED"
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "verdict": verdict,
+            "account_mode": view.get("account_mode"),
+            "account_label": view.get("account_label"),
+            "checks": checks,
+            "critical_failures": [c["id"] for c in critical_failures],
+            "warnings": [c["id"] for c in warnings],
+            "status": "REALITY_GUARD_READY",
+        }

@@ -1,0 +1,973 @@
+{
+  "scanned_at": "2026-07-24T18:20:28.019453",
+  "mode": "RECENT_30_ROWS",
+  "symbols_checked": 2120,
+  "rows_checked": 63472,
+  "counts": {
+    "STALE_FILE": 25,
+    "LARGE_MOVE": 113,
+    "FROZEN_SERIES": 13,
+    "DUPLICATE_CROSS_SYMBOL": 8
+  },
+  "critical_count": 8,
+  "warning_count": 151,
+  "ok": false,
+  "issues": [
+    {
+      "symbol": "AACBU",
+      "date": "2026-06-17",
+      "type": "STALE_FILE",
+      "detail": "last bar is 37 days old"
+    },
+    {
+      "symbol": "AACIW",
+      "date": "2026-06-05",
+      "type": "LARGE_MOVE",
+      "detail": "+49.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AACIW",
+      "date": "2026-07-13",
+      "type": "LARGE_MOVE",
+      "detail": "+41.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AACI",
+      "date": "2026-07-13",
+      "type": "STALE_FILE",
+      "detail": "last bar is 11 days old"
+    },
+    {
+      "symbol": "AACPW",
+      "date": "2026-05-29",
+      "type": "LARGE_MOVE",
+      "detail": "+99.8% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "AACP",
+      "date": "2026-07-22",
+      "type": "FROZEN_SERIES",
+      "detail": "close 9.98 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "AARD",
+      "date": "2026-07-10",
+      "type": "LARGE_MOVE",
+      "detail": "+52.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ABLLW",
+      "date": "2025-08-13",
+      "type": "STALE_FILE",
+      "detail": "last bar is 345 days old"
+    },
+    {
+      "symbol": "ACAA",
+      "date": "2026-07-23",
+      "type": "FROZEN_SERIES",
+      "detail": "close 10.0 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "ADACU",
+      "date": "2026-06-30",
+      "type": "STALE_FILE",
+      "detail": "last bar is 24 days old"
+    },
+    {
+      "symbol": "ADVB",
+      "date": "2026-07-20",
+      "type": "LARGE_MOVE",
+      "detail": "+76.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ADVB",
+      "date": "2026-07-22",
+      "type": "LARGE_MOVE",
+      "detail": "+73.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AEAQW",
+      "date": "2026-06-11",
+      "type": "FROZEN_SERIES",
+      "detail": "close 0.38 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "AENTW",
+      "date": "2026-07-09",
+      "type": "LARGE_MOVE",
+      "detail": "+51.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AFJKR",
+      "date": "2026-07-09",
+      "type": "LARGE_MOVE",
+      "detail": "-57.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AFJKU",
+      "date": "2026-02-26",
+      "type": "LARGE_MOVE",
+      "detail": "-52.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AFJKU",
+      "date": "2026-04-09",
+      "type": "LARGE_MOVE",
+      "detail": "+173.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AFJKU",
+      "date": "2026-04-13",
+      "type": "LARGE_MOVE",
+      "detail": "-40.6% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AFJKU",
+      "date": "2026-04-14",
+      "type": "LARGE_MOVE",
+      "detail": "+60.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AFJK",
+      "date": "2026-07-09",
+      "type": "LARGE_MOVE",
+      "detail": "-51.7% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "AGEN",
+      "date": "2026-07-13",
+      "type": "LARGE_MOVE",
+      "detail": "+82.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AHMA",
+      "date": "2026-06-15",
+      "type": "LARGE_MOVE",
+      "detail": "+43.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AIMDW",
+      "date": "2026-05-26",
+      "type": "LARGE_MOVE",
+      "detail": "+108.3% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AIMDW",
+      "date": "2026-07-16",
+      "type": "LARGE_MOVE",
+      "detail": "-43.8% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AIMDW",
+      "date": "2026-07-17",
+      "type": "LARGE_MOVE",
+      "detail": "+42.8% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AIXI",
+      "date": "2026-06-22",
+      "type": "LARGE_MOVE",
+      "detail": "-51.1% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "AKTX",
+      "date": "2026-07-07",
+      "type": "LARGE_MOVE",
+      "detail": "+42.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ALAR",
+      "date": "2026-07-06",
+      "type": "LARGE_MOVE",
+      "detail": "-51.5% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "ALFUU",
+      "date": "2026-07-16",
+      "type": "STALE_FILE",
+      "detail": "last bar is 8 days old"
+    },
+    {
+      "symbol": "ALFUW",
+      "date": "2026-06-12",
+      "type": "LARGE_MOVE",
+      "detail": "+100.0% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "ALF",
+      "date": "2026-07-16",
+      "type": "STALE_FILE",
+      "detail": "last bar is 8 days old"
+    },
+    {
+      "symbol": "ALOT",
+      "date": "2026-06-17",
+      "type": "LARGE_MOVE",
+      "detail": "+69.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ALOV",
+      "date": "2026-07-15",
+      "type": "STALE_FILE",
+      "detail": "last bar is 9 days old"
+    },
+    {
+      "symbol": "ALVOW",
+      "date": "2026-05-27",
+      "type": "LARGE_MOVE",
+      "detail": "+49.8% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ALVOW",
+      "date": "2026-05-28",
+      "type": "LARGE_MOVE",
+      "detail": "+48.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ALVOW",
+      "date": "2026-06-08",
+      "type": "LARGE_MOVE",
+      "detail": "+62.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AMODW",
+      "date": "2026-05-22",
+      "type": "LARGE_MOVE",
+      "detail": "-46.6% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AMODW",
+      "date": "2026-05-28",
+      "type": "LARGE_MOVE",
+      "detail": "+41.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AMZE",
+      "date": "2026-07-13",
+      "type": "STALE_FILE",
+      "detail": "last bar is 11 days old"
+    },
+    {
+      "symbol": "APGE",
+      "date": "2026-06-22",
+      "type": "LARGE_MOVE",
+      "detail": "+46.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "APLMW",
+      "date": "2026-06-11",
+      "type": "LARGE_MOVE",
+      "detail": "+49.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "APLMW",
+      "date": "2026-06-30",
+      "type": "LARGE_MOVE",
+      "detail": "+142.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "APLMW",
+      "date": "2026-07-08",
+      "type": "LARGE_MOVE",
+      "detail": "+54.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "APLMW",
+      "date": "2026-07-15",
+      "type": "LARGE_MOVE",
+      "detail": "+43.6% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "APMCU",
+      "date": "2026-07-16",
+      "type": "FROZEN_SERIES",
+      "detail": "close 10.02 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "APWC",
+      "date": "2026-06-18",
+      "type": "LARGE_MOVE",
+      "detail": "+43.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "APXTU",
+      "date": "2026-05-28",
+      "type": "FROZEN_SERIES",
+      "detail": "close 10.14 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "APXTW",
+      "date": "2026-07-22",
+      "type": "LARGE_MOVE",
+      "detail": "+48.6% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ARBEW",
+      "date": "2026-06-10",
+      "type": "LARGE_MOVE",
+      "detail": "+50.8% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASBPW",
+      "date": "2026-06-11",
+      "type": "LARGE_MOVE",
+      "detail": "+58.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASBPW",
+      "date": "2026-06-23",
+      "type": "LARGE_MOVE",
+      "detail": "+53.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASBPW",
+      "date": "2026-06-25",
+      "type": "LARGE_MOVE",
+      "detail": "+47.6% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASPCR",
+      "date": "2026-06-01",
+      "type": "LARGE_MOVE",
+      "detail": "+85.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTLW",
+      "date": "2026-06-11",
+      "type": "LARGE_MOVE",
+      "detail": "+50.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTLW",
+      "date": "2026-07-09",
+      "type": "LARGE_MOVE",
+      "detail": "+40.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTLW",
+      "date": "2026-07-13",
+      "type": "LARGE_MOVE",
+      "detail": "-45.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTLW",
+      "date": "2026-07-14",
+      "type": "LARGE_MOVE",
+      "detail": "+57.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTLW",
+      "date": "2026-07-16",
+      "type": "LARGE_MOVE",
+      "detail": "-44.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTLW",
+      "date": "2026-07-17",
+      "type": "LARGE_MOVE",
+      "detail": "+51.8% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTLW",
+      "date": "2026-07-20",
+      "type": "LARGE_MOVE",
+      "detail": "-42.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTN",
+      "date": "2026-06-29",
+      "type": "LARGE_MOVE",
+      "detail": "-42.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASTY",
+      "date": "2026-06-29",
+      "type": "LARGE_MOVE",
+      "detail": "+42.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ASUP",
+      "date": "2026-06-29",
+      "type": "LARGE_MOVE",
+      "detail": "+42.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ATOS",
+      "date": "2026-06-11",
+      "type": "LARGE_MOVE",
+      "detail": "-41.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ATPC",
+      "date": "2026-06-18",
+      "type": "LARGE_MOVE",
+      "detail": "+42.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "ATPC",
+      "date": "2026-07-16",
+      "type": "LARGE_MOVE",
+      "detail": "+66.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AVAT",
+      "date": "2026-06-11",
+      "type": "LARGE_MOVE",
+      "detail": "-40.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AXINU",
+      "date": "2026-07-15",
+      "type": "STALE_FILE",
+      "detail": "last bar is 9 days old"
+    },
+    {
+      "symbol": "AZI",
+      "date": "2026-06-25",
+      "type": "LARGE_MOVE",
+      "detail": "+73.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AZI",
+      "date": "2026-06-29",
+      "type": "LARGE_MOVE",
+      "detail": "+56.5% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BACCR",
+      "date": "2026-06-30",
+      "type": "LARGE_MOVE",
+      "detail": "+85.8% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BANFP",
+      "date": "2026-07-10",
+      "type": "STALE_FILE",
+      "detail": "last bar is 14 days old"
+    },
+    {
+      "symbol": "BBLGW",
+      "date": "2026-07-21",
+      "type": "LARGE_MOVE",
+      "detail": "-44.8% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BEAGR",
+      "date": "2026-06-10",
+      "type": "FROZEN_SERIES",
+      "detail": "close 0.3 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "BEATW",
+      "date": "2026-07-15",
+      "type": "LARGE_MOVE",
+      "detail": "+48.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BFLY",
+      "date": "2026-06-18",
+      "type": "LARGE_MOVE",
+      "detail": "+55.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BFRIW",
+      "date": "2026-07-21",
+      "type": "LARGE_MOVE",
+      "detail": "+77.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BGLWW",
+      "date": "2026-07-07",
+      "type": "LARGE_MOVE",
+      "detail": "+47.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BGLWW",
+      "date": "2026-07-22",
+      "type": "LARGE_MOVE",
+      "detail": "-46.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BGLWW",
+      "date": "2026-07-24",
+      "type": "LARGE_MOVE",
+      "detail": "+59.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BHAVR",
+      "date": "2026-07-16",
+      "type": "STALE_FILE",
+      "detail": "last bar is 8 days old"
+    },
+    {
+      "symbol": "BIXIU",
+      "date": "2026-07-06",
+      "type": "STALE_FILE",
+      "detail": "last bar is 18 days old"
+    },
+    {
+      "symbol": "BIYA",
+      "date": "2026-06-30",
+      "type": "LARGE_MOVE",
+      "detail": "+98.2% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "BJDX",
+      "date": "2026-06-29",
+      "type": "LARGE_MOVE",
+      "detail": "-50.9% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "BLIV",
+      "date": "2026-07-13",
+      "type": "STALE_FILE",
+      "detail": "last bar is 11 days old"
+    },
+    {
+      "symbol": "BLRKU",
+      "date": "2026-05-11",
+      "type": "FROZEN_SERIES",
+      "detail": "close 10.02 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "BLUWU",
+      "date": "2026-07-16",
+      "type": "STALE_FILE",
+      "detail": "last bar is 8 days old"
+    },
+    {
+      "symbol": "BLUWW",
+      "date": "2026-07-15",
+      "type": "STALE_FILE",
+      "detail": "last bar is 9 days old"
+    },
+    {
+      "symbol": "BLZE",
+      "date": "2026-06-23",
+      "type": "LARGE_MOVE",
+      "detail": "+43.6% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BNCWW",
+      "date": "2026-05-21",
+      "type": "LARGE_MOVE",
+      "detail": "+53.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BNCWZ",
+      "date": "2026-06-10",
+      "type": "LARGE_MOVE",
+      "detail": "-55.3% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BNCWZ",
+      "date": "2026-06-16",
+      "type": "LARGE_MOVE",
+      "detail": "+51.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BNCWZ",
+      "date": "2026-06-24",
+      "type": "LARGE_MOVE",
+      "detail": "-45.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BNCWZ",
+      "date": "2026-06-25",
+      "type": "LARGE_MOVE",
+      "detail": "+231.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BNCWZ",
+      "date": "2026-07-02",
+      "type": "LARGE_MOVE",
+      "detail": "+70.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BNCWZ",
+      "date": "2026-07-06",
+      "type": "LARGE_MOVE",
+      "detail": "+43.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BOLD",
+      "date": "2026-06-23",
+      "type": "LARGE_MOVE",
+      "detail": "+85.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BPACU",
+      "date": "2026-07-10",
+      "type": "STALE_FILE",
+      "detail": "last bar is 14 days old"
+    },
+    {
+      "symbol": "BPAC",
+      "date": "2026-07-01",
+      "type": "FROZEN_SERIES",
+      "detail": "close 10.12 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "BRLSW",
+      "date": "2026-04-29",
+      "type": "LARGE_MOVE",
+      "detail": "+165.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BRLSW",
+      "date": "2026-06-25",
+      "type": "LARGE_MOVE",
+      "detail": "+53.5% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BRLSW",
+      "date": "2026-07-02",
+      "type": "LARGE_MOVE",
+      "detail": "+60.3% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BRLSW",
+      "date": "2026-07-17",
+      "type": "LARGE_MOVE",
+      "detail": "+95.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BSAAU",
+      "date": "2026-07-15",
+      "type": "STALE_FILE",
+      "detail": "last bar is 9 days old"
+    },
+    {
+      "symbol": "BTBDW",
+      "date": "2026-05-08",
+      "type": "LARGE_MOVE",
+      "detail": "-68.3% vs prior close \u2014 near an exact split ratio, verify corporate action"
+    },
+    {
+      "symbol": "BTBDW",
+      "date": "2026-07-08",
+      "type": "LARGE_MOVE",
+      "detail": "+47.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BURU",
+      "date": "2026-07-21",
+      "type": "LARGE_MOVE",
+      "detail": "-43.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "BWIV",
+      "date": "2026-06-29",
+      "type": "FROZEN_SERIES",
+      "detail": "close 9.89 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "BWSN",
+      "date": "2025-12-04",
+      "type": "STALE_FILE",
+      "detail": "last bar is 232 days old"
+    },
+    {
+      "symbol": "BZFDW",
+      "date": "2026-07-08",
+      "type": "LARGE_MOVE",
+      "detail": "+66.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CAII",
+      "date": "2026-07-14",
+      "type": "FROZEN_SERIES",
+      "detail": "close 9.92 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "CANF",
+      "date": "2026-07-01",
+      "type": "LARGE_MOVE",
+      "detail": "+55.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CAPNU",
+      "date": "2026-06-17",
+      "type": "STALE_FILE",
+      "detail": "last bar is 37 days old"
+    },
+    {
+      "symbol": "CAPN",
+      "date": "2026-07-14",
+      "type": "STALE_FILE",
+      "detail": "last bar is 10 days old"
+    },
+    {
+      "symbol": "CAST",
+      "date": "2026-06-12",
+      "type": "LARGE_MOVE",
+      "detail": "+142.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CAST",
+      "date": "2026-06-15",
+      "type": "LARGE_MOVE",
+      "detail": "+141.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CAST",
+      "date": "2026-06-18",
+      "type": "LARGE_MOVE",
+      "detail": "+56.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CCAQU",
+      "date": "2026-07-16",
+      "type": "STALE_FILE",
+      "detail": "last bar is 8 days old"
+    },
+    {
+      "symbol": "CCGWW",
+      "date": "2026-07-16",
+      "type": "LARGE_MOVE",
+      "detail": "+80.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CCIXW",
+      "date": "2026-06-24",
+      "type": "LARGE_MOVE",
+      "detail": "+77.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CCIXW",
+      "date": "2026-06-29",
+      "type": "LARGE_MOVE",
+      "detail": "+54.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CCIXW",
+      "date": "2026-07-15",
+      "type": "LARGE_MOVE",
+      "detail": "-98.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CCIX",
+      "date": "2026-06-18",
+      "type": "FROZEN_SERIES",
+      "detail": "close 10.81 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "CCOM",
+      "date": "2026-07-06",
+      "type": "STALE_FILE",
+      "detail": "last bar is 18 days old"
+    },
+    {
+      "symbol": "CCO",
+      "date": "2026-07-09",
+      "type": "FROZEN_SERIES",
+      "detail": "close 2.41 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "CCTG",
+      "date": "2026-06-16",
+      "type": "LARGE_MOVE",
+      "detail": "+89.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CCXIW",
+      "date": "2026-06-24",
+      "type": "LARGE_MOVE",
+      "detail": "+246.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDIOW",
+      "date": "2026-06-04",
+      "type": "LARGE_MOVE",
+      "detail": "+41.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDIOW",
+      "date": "2026-06-05",
+      "type": "LARGE_MOVE",
+      "detail": "-47.5% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDTTW",
+      "date": "2026-05-29",
+      "type": "LARGE_MOVE",
+      "detail": "+41.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDTTW",
+      "date": "2026-06-01",
+      "type": "LARGE_MOVE",
+      "detail": "-44.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDTTW",
+      "date": "2026-06-03",
+      "type": "LARGE_MOVE",
+      "detail": "+74.4% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDTTW",
+      "date": "2026-06-11",
+      "type": "LARGE_MOVE",
+      "detail": "+64.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDTTW",
+      "date": "2026-06-16",
+      "type": "LARGE_MOVE",
+      "detail": "+55.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDTTW",
+      "date": "2026-06-30",
+      "type": "LARGE_MOVE",
+      "detail": "+43.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDTTW",
+      "date": "2026-07-08",
+      "type": "LARGE_MOVE",
+      "detail": "+45.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDT",
+      "date": "2026-06-18",
+      "type": "LARGE_MOVE",
+      "detail": "+47.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CDT",
+      "date": "2026-06-22",
+      "type": "LARGE_MOVE",
+      "detail": "+47.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CELZ",
+      "date": "2026-06-26",
+      "type": "LARGE_MOVE",
+      "detail": "-40.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CELZ",
+      "date": "2026-06-30",
+      "type": "LARGE_MOVE",
+      "detail": "+79.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CHARU",
+      "date": "2026-06-09",
+      "type": "STALE_FILE",
+      "detail": "last bar is 45 days old"
+    },
+    {
+      "symbol": "CHEC",
+      "date": "2026-06-03",
+      "type": "FROZEN_SERIES",
+      "detail": "close 10.11 unchanged for 5+ sessions"
+    },
+    {
+      "symbol": "CHPGU",
+      "date": "2026-06-05",
+      "type": "STALE_FILE",
+      "detail": "last bar is 49 days old"
+    },
+    {
+      "symbol": "CHPG",
+      "date": "2026-07-15",
+      "type": "STALE_FILE",
+      "detail": "last bar is 9 days old"
+    },
+    {
+      "symbol": "CIIT",
+      "date": "2026-06-16",
+      "type": "LARGE_MOVE",
+      "detail": "-70.1% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CIIT",
+      "date": "2026-06-17",
+      "type": "LARGE_MOVE",
+      "detail": "+40.5% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CIIT",
+      "date": "2026-06-23",
+      "type": "LARGE_MOVE",
+      "detail": "+81.2% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CINGW",
+      "date": "2026-06-10",
+      "type": "LARGE_MOVE",
+      "detail": "+51.6% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CISS",
+      "date": "2026-07-23",
+      "type": "LARGE_MOVE",
+      "detail": "-41.0% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "CJMB",
+      "date": "2026-07-17",
+      "type": "LARGE_MOVE",
+      "detail": "+41.9% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "UTZ",
+      "date": "2026-07-21",
+      "type": "LARGE_MOVE",
+      "detail": "+88.7% vs prior close \u2014 verify (likely a real event)"
+    },
+    {
+      "symbol": "AAT, AGNCL, BIPJ, BWNB",
+      "date": "2026-07-07",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "4 symbols share the identical close 25.0"
+    },
+    {
+      "symbol": "ALDB, ATCL, BRIB, BWNB, CAPR, CGOV",
+      "date": "2026-06-11",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "6 symbols share the identical close 25.04"
+    },
+    {
+      "symbol": "ADAMO, ANV, CIMP, KIM",
+      "date": "2026-06-16",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "4 symbols share the identical close 25.1"
+    },
+    {
+      "symbol": "BMRC, CHSCO, KMPR, NWSA",
+      "date": "2026-06-16",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "4 symbols share the identical close 25.93"
+    },
+    {
+      "symbol": "AAUC, AGNCO, APOS, BLFS, BMN",
+      "date": "2026-06-17",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "5 symbols share the identical close 25.58"
+    },
+    {
+      "symbol": "ADAMH, AQNB, BEPJ, HRL",
+      "date": "2026-06-24",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "4 symbols share the identical close 25.55"
+    },
+    {
+      "symbol": "AGNCM, AOMD, BIPJ, BPOPM",
+      "date": "2026-06-30",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "4 symbols share the identical close 25.0"
+    },
+    {
+      "symbol": "ABXL, AHD, BFLX, CIMN, DXYZ",
+      "date": "2026-07-06",
+      "type": "DUPLICATE_CROSS_SYMBOL",
+      "detail": "5 symbols share the identical close 25.5"
+    }
+  ],
+  "issues_truncated": 0,
+  "status": "PRICE_BARS_CORRUPTION_DETECTED"
+}

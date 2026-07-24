@@ -215,3 +215,15 @@ def test_scale_sizing_is_cumulative_not_per_slice():
     assert bank(8) == [(2, "TP1"), (2, "TP2"), (2, "TP3")]
     # 1 share cannot be quartered by anyone; the runner keeps it until CLOSE
     assert bank(1) == []
+
+
+def test_suite_cannot_place_a_real_broker_order():
+    """Guard on the guard: the autouse conftest block must actually stop an order.
+
+    Real incident — a test with unmocked booking bought 50 shares each of its fake
+    symbols AAA/BBB in the live Paper Trading Account on every suite run.
+    """
+    import pytest
+    from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+    with pytest.raises(AssertionError, match="REAL BROKER ORDER"):
+        TradeStationSimBookingEngine().place_order("AAA", 50, action="BUY")

@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-24T10:43:20.999656",
+  "baseline_created_at": "2026-07-24T10:42:56.054052",
+  "settled_through": "2026-07-19",
+  "symbols_checked": 854,
+  "unchanged": 854,
+  "changed_count": 0,
+  "changed": [],
+  "removed_count": 0,
+  "removed": [],
+  "new_symbols": [],
+  "new_symbol_count": 0,
+  "ok": true,
+  "status": "LINEAGE_STABLE"
+}

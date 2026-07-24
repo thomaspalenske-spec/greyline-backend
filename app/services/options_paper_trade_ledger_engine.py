@@ -166,6 +166,36 @@ class OptionsPaperTradeLedgerEngine:
                 deployed += float(trade.get("estimated_cost") or 0)
         return round(deployed, 2)
 
+    def _equity_book_deployed(self):
+        """Cost basis of open positions in the EQUITY (shares) ledger.
+
+        The options and equity books draw on ONE account, not two. When the shares book
+        already holds $7,500 of a $10k base, the options cash gate MUST see it, or it sizes
+        against the full $10k and deploys the same dollars twice — silent 2x leverage. This
+        is the operator's "balance options by the paper cash balance" made literal. Cost
+        basis (qty x entry), never mark: unrealized gains are not spendable cash.
+        """
+        try:
+            from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+            total = 0.0
+            for t in PaperTradeLedgerEngine()._read_all():
+                if t.get("status") == "OPEN":
+                    total += float(t.get("quantity") or 0) * float(t.get("entry_price") or 0)
+            return round(total, 2)
+        except Exception:
+            return 0.0
+
+    def account_free_cash(self, account_base=10000.0):
+        """Idle cash across BOTH books — the honest sizing base for a new options position.
+
+        account_base + realized P&L - (open options cost + open equity cost), floored at 0.
+        This is the single number every options sizing decision should draw on so the two
+        books never over-commit the shared account.
+        """
+        deployed = self._open_deployed_capital() + self._equity_book_deployed()
+        free = account_base + self._closed_realized_pnl() - deployed
+        return round(max(0.0, free), 2)
+
 
     def _closed_realized_pnl(self):
         if not self.ledger_file.exists():
@@ -190,6 +220,8 @@ class OptionsPaperTradeLedgerEngine:
         max_position_pct=0.05,
         candidate_score=None,
         regime_calibration=None,
+        sizing_base=None,
+        max_contracts=None,
     ):
         legs = candidate.get("Legs") or [{}]
         leg = legs[0]
@@ -257,13 +289,25 @@ class OptionsPaperTradeLedgerEngine:
                 "status": "OPTIONS_PAPER_TRADE_STALE_UNDERLYING_QUOTE_BLOCKED",
             }
 
+        # SIZING base: how big a position to build. Defaults to the full $10k for standalone
+        # callers; the momentum options engine passes the account's free cash so the contract
+        # count is sized against dollars the equity book hasn't already spent. Distinct from
+        # the cash-GATE base below (total account), which stays $10k and subtracts deployed.
         sizing = OptionsPositionSizingEngine().evaluate(
-            account_equity=10000,
+            account_equity=float(sizing_base) if sizing_base else 10000,
             option_ask=float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0),
             max_position_pct=max_position_pct,
         )
 
         entry_price = float(candidate.get("Ask") or candidate.get("Mid") or candidate.get("Last") or 0)
+        # Per-name contract cap: buy at most `max_contracts` of this name's best contract so
+        # cash on hand spreads across several names instead of loading one. Recompute the
+        # estimated cost from the capped count so the cash/exposure gates stay consistent.
+        if max_contracts is not None:
+            capped = min(int(sizing.get("recommended_contracts") or 0), int(max_contracts))
+            sizing = dict(sizing)
+            sizing["recommended_contracts"] = capped
+            sizing["estimated_position_cost"] = round(capped * entry_price * 100, 2)
         entry_quality_gate = OptionsEntryQualityGateEngine().evaluate(
             candidate_score=candidate_score,
             initial_contract_days=contract_metrics.get("initial_contract_days"),
@@ -287,7 +331,12 @@ class OptionsPaperTradeLedgerEngine:
             }
 
         estimated_position_cost = float(sizing.get("estimated_position_cost") or 0)
-        deployed_capital = self._open_deployed_capital()
+        # BOTH books draw on the one account: options already-open PLUS the equity shares
+        # book. Counting only options here was the leak — it let a new option deploy against
+        # cash the shares already held. Include equity so the cash/exposure gates are honest.
+        options_deployed = self._open_deployed_capital()
+        equity_deployed = self._equity_book_deployed()
+        deployed_capital = round(options_deployed + equity_deployed, 2)
         account_equity = 10000.0
         max_total_deployed_pct = 0.95
         max_total_deployed = round(account_equity * max_total_deployed_pct, 2)
@@ -460,6 +509,40 @@ class OptionsPaperTradeLedgerEngine:
             "status": "OPTIONS_PAPER_TRADE_RECORDED",
         }
 
+
+    def void_unfilled(self, option_symbol, reason="BROKER_ORDER_NOT_FILLED"):
+        """Retire an OPEN entry whose broker order never became a position.
+
+        A limit entry is recorded OPEN at submit time, but the broker can still reject,
+        cancel or expire it (our first live limit orders were rejected outright for an
+        invalid price increment). Leaving the entry OPEN is precisely the fantasy the
+        Reality Guard exists to catch: GreyLine believing it holds something it does not.
+
+        VOID_UNFILLED — not CLOSED — because no position ever existed, so this must never
+        be counted as a round-trip in P/L. Deployed capital is computed from OPEN entries
+        only, so voiding releases the reserved cash automatically.
+        """
+        if not self.ledger_file.exists():
+            return {"voided": 0, "status": "NO_LEDGER"}
+
+        target = str(option_symbol or "").upper()
+        out, voided = [], []
+        for line in self.ledger_file.read_text().splitlines():
+            if not line.strip():
+                continue
+            trade = json.loads(line)
+            if (trade.get("status") == "OPEN"
+                    and str(trade.get("option_symbol") or "").upper() == target):
+                trade["status"] = "VOID_UNFILLED"
+                trade["void_reason"] = reason
+                trade["voided_at"] = datetime.utcnow().isoformat()
+                voided.append(trade.get("option_symbol"))
+            out.append(json.dumps(trade))
+
+        if voided:
+            self.ledger_file.write_text("\n".join(out) + "\n")
+        return {"voided": len(voided), "option_symbols": voided, "reason": reason,
+                "status": "LEDGER_ENTRY_VOIDED" if voided else "NO_OPEN_ENTRY_TO_VOID"}
 
     def open_position_exists(self, option_symbol):
         if not self.ledger_file.exists():

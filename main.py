@@ -30,6 +30,47 @@ from app.routes import decision_outcomes
 from app.routes import decision_self_audit
 
 app = FastAPI(title="GreyLine Backend Server")
+
+
+# --- Password gate for remote/public access -------------------------------------------
+# When GREYLINE_DASHBOARD_PASSWORD is set, EVERY request needs HTTP Basic auth with that
+# password (any username). When unset, this is a no-op (localhost-only usage is unchanged).
+# This is the required guard before exposing the dashboard through a tunnel — it carries the
+# real account and live action buttons; a public URL with no auth is not acceptable.
+import base64 as _b64
+from os import getenv as _getenv
+from starlette.middleware.base import BaseHTTPMiddleware as _BaseHTTPMiddleware
+from starlette.responses import Response as _Response
+
+
+class _DashboardAuthMiddleware(_BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        pw = _getenv("GREYLINE_DASHBOARD_PASSWORD", "") or ""
+        if pw:
+            header = request.headers.get("Authorization", "")
+            ok = False
+            if header.startswith("Basic "):
+                try:
+                    _, _, provided = _b64.b64decode(header[6:]).decode("utf-8", "replace").partition(":")
+                    ok = provided == pw
+                except Exception:
+                    ok = False
+            if not ok:
+                return _Response(status_code=401, content="Authentication required",
+                                 headers={"WWW-Authenticate": 'Basic realm="GreyLine"'})
+        response = await call_next(request)
+        # NEVER let a browser cache an HTML dashboard. Stale pages repeatedly showed old
+        # positions/status (e.g. YELLOW + "2 alerts" when the live state was GREEN + 0),
+        # which is indistinguishable from the system being wrong. Applies to every page.
+        if "text/html" in str(response.headers.get("content-type", "")).lower():
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+
+app.add_middleware(_DashboardAuthMiddleware)
+
 app.include_router(operator_notifications.router)
 app.include_router(historical_data_import_router)
 app.include_router(institutional_flow_router)
@@ -201,6 +242,75 @@ app.include_router(open_positions.router)
 
 from app.routes import account_summary
 app.include_router(account_summary.router)
+
+from app.routes import top_candidates
+app.include_router(top_candidates.router)
+
+from app.routes import reality_guard
+app.include_router(reality_guard.router)
+
+from app.routes import options_entry_learning
+app.include_router(options_entry_learning.router)
+
+from app.routes import price_bar_integrity
+app.include_router(price_bar_integrity.router)
+
+from app.routes import price_bar_cross_source
+app.include_router(price_bar_cross_source.router)
+
+from app.routes import price_bar_tradability
+app.include_router(price_bar_tradability.router)
+
+from app.routes import mechanical_flow_research
+app.include_router(mechanical_flow_research.router)
+
+from app.routes import universe_survivorship
+app.include_router(universe_survivorship.router)
+
+from app.routes import survivorship_bias
+app.include_router(survivorship_bias.router)
+
+from app.routes import momentum_reversal_backtest
+app.include_router(momentum_reversal_backtest.router)
+
+from app.routes import options_reality
+app.include_router(options_reality.router)
+
+from app.routes import edge_discovery
+app.include_router(edge_discovery.router)
+
+from app.routes import broker_protection
+app.include_router(broker_protection.router)
+
+from app.routes import external_alerts
+app.include_router(external_alerts.router)
+
+from app.routes import options_exit_policy
+app.include_router(options_exit_policy.router)
+
+from app.routes import options_exit_quality
+app.include_router(options_exit_quality.router)
+
+from app.routes import execution_cost
+app.include_router(execution_cost.router)
+
+from app.routes import vrp_study
+app.include_router(vrp_study.router)
+
+from app.routes import conditional_vrp
+app.include_router(conditional_vrp.router)
+
+from app.routes import conditional_vrp_panel
+app.include_router(conditional_vrp_panel.router)
+
+from app.routes import total_return
+app.include_router(total_return.router)
+
+from app.routes import market_regime
+app.include_router(market_regime.router)
+
+from app.routes import price_bar_lineage
+app.include_router(price_bar_lineage.router)
 
 from app.routes import opportunity_balance
 app.include_router(opportunity_balance.router)

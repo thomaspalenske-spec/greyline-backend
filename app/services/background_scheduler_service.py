@@ -346,6 +346,163 @@ class BackgroundSchedulerService:
                             "status": "UW_RETENTION_DEGRADED"}
         paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
         options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
+        # Phase 2: reconcile pending limit-buy fills and refine the entry aggressiveness.
+        try:
+            from app.services.options_entry_reconciler_engine import OptionsEntryReconcilerEngine
+            _reconciler = OptionsEntryReconcilerEngine()
+            options_entry_reconcile = _reconciler.reconcile()
+            # Then heal any OPEN entry the broker neither holds nor has a working order for.
+            # A rejected limit order (our first live ones were rejected for an invalid price
+            # increment) otherwise leaves the ledger claiming a position that never existed —
+            # the exact fantasy state the Reality Guard is there to catch.
+            options_entry_reconcile["phantom_sweep"] = _reconciler.sweep_phantoms()
+        except Exception as exc:
+            options_entry_reconcile = {"status": "OPTIONS_ENTRY_RECONCILE_DEGRADED", "error": repr(exc)}
+
+        # Exit side: resolve priced exit fills and measure realized price vs mid and vs the old
+        # naked-market counterfactual — the evidence that the exit-pricing change actually pays.
+        try:
+            from app.services.options_exit_reconciler_engine import OptionsExitReconcilerEngine
+            options_exit_reconcile = OptionsExitReconcilerEngine().reconcile()
+        except Exception as exc:
+            options_exit_reconcile = {"status": "OPTIONS_EXIT_RECONCILE_DEGRADED", "error": repr(exc)}
+
+        # Conditional-VRP forward panel: record today's rich-IV/non-earnings entries and resolve
+        # any whose 30-day window has closed. This is the OUT-OF-SAMPLE test that earns the p-value
+        # the backtest could not. Self-gated to once/day (UW budget); resolve runs every cycle since
+        # it is cheap and only acts on completed windows.
+        try:
+            from pathlib import Path as _P
+            from app.services.conditional_vrp_forward_panel_engine import ConditionalVRPForwardPanelEngine
+            _vp = ConditionalVRPForwardPanelEngine()
+            _marker = _P("app/data/research/.vrp_panel_last_record")
+            _today = datetime.utcnow().date().isoformat()
+            _due = True
+            try:
+                _due = _marker.read_text().strip() != _today
+            except Exception:
+                _due = True
+            vrp_panel = {"record": (_vp.record_signals() if _due else {"status": "VRP_RECORD_NOT_DUE"})}
+            if _due:
+                try:
+                    _marker.parent.mkdir(parents=True, exist_ok=True); _marker.write_text(_today)
+                except Exception:
+                    pass
+            vrp_panel["resolve"] = _vp.resolve()
+        except Exception as exc:
+            vrp_panel = {"status": "VRP_PANEL_DEGRADED", "error": repr(exc)}
+
+        # Full-history price-bar integrity scan. Self-gates to ~once/day, so this is a no-op
+        # most cycles; it keeps the Reality Guard's PRICE_BARS_CLEAN invariant backed by all
+        # 3.4M rows rather than a 30-row window. Corrupt bars silently poison ATR/stops/TPs.
+        try:
+            from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine
+            price_bar_scan = PriceBarIntegrityEngine().scan_if_due()
+        except Exception as exc:
+            price_bar_scan = {"status": "PRICE_BAR_SCAN_DEGRADED", "error": repr(exc)}
+
+        # Lineage: has any SETTLED historical bar silently changed since the accepted baseline?
+        # This is the reproducibility guard — it catches vendor restatements / re-adjustments /
+        # corruption that every other (point-in-time) check is blind to. Bootstraps its
+        # baseline on first run, then self-gates to ~once a day.
+        try:
+            from app.services.price_bar_lineage_engine import PriceBarLineageEngine
+            lineage = PriceBarLineageEngine().verify_if_due()
+        except Exception as exc:
+            lineage = {"status": "LINEAGE_VERIFY_DEGRADED", "error": repr(exc)}
+
+        # Options reality capture. The options mission cannot be backtested (no historical
+        # contract data exists from UW or TradeStation), so this forward panel is the only
+        # evidence an options edge can ever be verified against. A missed day is permanent.
+        try:
+            from app.services.options_reality_capture_engine import OptionsRealityCaptureEngine
+            options_capture = OptionsRealityCaptureEngine().capture_if_due()
+        except Exception as exc:
+            options_capture = {"status": "OPTIONS_CAPTURE_DEGRADED", "error": repr(exc)}
+
+        # Earnings implied-vs-realized: the first candidate that passes the ECONOMIC MAGNITUDE
+        # screen (28.7% of earnings moves exceed the 6% OTM-viable threshold). The implied side
+        # is unrecoverable after the fact, so it must be recorded before each announcement.
+        try:
+            from app.services.earnings_vol_edge_engine import EarningsVolEdgeEngine
+            _ev = EarningsVolEdgeEngine()
+            earnings_vol = _ev.record_implied()
+            earnings_vol["resolved"] = _ev.resolve_realized().get("resolved")
+        except Exception as exc:
+            earnings_vol = {"status": "EARNINGS_VOL_DEGRADED", "error": repr(exc)}
+
+        # Off-machine backup of the UNRECOVERABLE data (options surface, PIT archive, panels,
+        # ledgers). ~5MB, forward-only, no API can rebuild it — one disk failure would restart
+        # the options edge experiment from zero.
+        try:
+            from app.services.disaster_recovery_engine import DisasterRecoveryEngine
+            _dr = DisasterRecoveryEngine()
+            _last = _dr.last_backup()
+            _due = True
+            if _last:
+                try:
+                    _due = (datetime.utcnow() - datetime.fromisoformat(_last["timestamp"])).total_seconds() > 20 * 3600
+                except Exception:
+                    _due = True
+            backup = _dr.backup() if _due else {"status": "BACKUP_NOT_DUE"}
+        except Exception as exc:
+            backup = {"status": "BACKUP_DEGRADED", "error": repr(exc)}
+        # The proof case: a backup that fails must SCREAM, not sit in a ledger reading "complete".
+        # A CRITICAL notification now auto-escalates off the machine (if a channel is configured).
+        if str(backup.get("status")) in ("BACKUP_DEGRADED", "BACKUP_INCOMPLETE"):
+            try:
+                from app.services.operator_notification_engine import OperatorNotificationEngine
+                OperatorNotificationEngine().record(
+                    event_type="BACKUP_FAILED",
+                    title="Off-machine backup FAILED",
+                    message=(f"Unrecoverable-data backup returned {backup.get('status')}. "
+                             f"Forward-only data (options surface, PIT archive, earnings panel) "
+                             f"is unprotected until this is fixed. {str(backup.get('error') or '')[:150]}"),
+                    severity="CRITICAL", source="DISASTER_RECOVERY", payload=backup)
+            except Exception:
+                pass
+
+        # Broker-side disaster stops: the only protection that survives THIS process dying.
+        # Every doctrine exit (ATR stop, TP ladder, maturity liquidation) needs the scheduler
+        # alive; a resting GTC stop at the broker does not. Default OFF, and each cycle it only
+        # covers positions that lack a working sell (never stacks on a close — double-sell guard).
+        try:
+            from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+            _bp = BrokerProtectiveStopEngine()
+            broker_stops = _bp.ensure_stops() if _bp.enabled() else _bp.status()
+        except Exception as exc:
+            broker_stops = {"status": "BROKER_STOPS_DEGRADED", "error": repr(exc)}
+
+        # Second-source proof: the integrity scan only checks the CSVs against THEMSELVES.
+        # Uniformly-wrong data (a shift, a mis-mapped ticker, an unadjusted split) is
+        # self-consistent and invisible to it — and these CSVs are what every signal, ATR,
+        # stop and TP is computed from. Rotating sample, self-gated to ~once a day.
+        try:
+            from app.services.price_bar_cross_source_engine import PriceBarCrossSourceEngine
+            cross_source = PriceBarCrossSourceEngine().reconcile_if_due()
+        except Exception as exc:
+            cross_source = {"status": "CROSS_SOURCE_DEGRADED", "error": repr(exc)}
+
+        # Which bars were actually TRADED. Pre-listing stubs are self-consistent, match the
+        # vendor, and are still unusable — they manufacture fake momentum in backtests and
+        # would let a name into the universe on a handful of real bars.
+        try:
+            from app.services.price_bar_tradability_engine import PriceBarTradabilityEngine
+            tradability = PriceBarTradabilityEngine().scan()
+        except Exception as exc:
+            tradability = {"status": "TRADABILITY_SCAN_DEGRADED", "error": repr(exc)}
+
+        # Survivorship: record today's universe point-in-time and RETAIN any symbol whose
+        # feed goes quiet. Delisted-company prices can't be bought back later — TradeStation
+        # purges them — so the only way to own a survivorship-free dataset is to stop
+        # discarding names as they die, starting now.
+        try:
+            from app.services.universe_survivorship_engine import UniverseSurvivorshipEngine
+            _surv = UniverseSurvivorshipEngine()
+            survivorship = _surv.snapshot()
+            survivorship["departures"] = _surv.detect_departures()
+        except Exception as exc:
+            survivorship = {"status": "SURVIVORSHIP_ARCHIVE_DEGRADED", "error": repr(exc)}
         from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
         health = SystemHealthDashboardEngine().status()
 
@@ -375,6 +532,25 @@ class BackgroundSchedulerService:
                 "fixed_horizon_skill": fixed_horizon,
                 "momentum_reversal_rebalance": momentum_reversal,
                 "momentum_exit_manager": momentum_exit,
+                "price_bar_cross_source_status": cross_source.get("status"),
+                "lineage_status": lineage.get("status"),
+                "options_capture_status": options_capture.get("status"),
+                "earnings_vol_status": earnings_vol.get("status"),
+                "backup_status": backup.get("status"),
+                "broker_stops_status": broker_stops.get("status"),
+                "broker_stops_placed": broker_stops.get("placed"),
+                "broker_stops_unprotected": broker_stops.get("unprotected"),
+                "options_exit_reconcile_status": options_exit_reconcile.get("status"),
+                "options_exit_reconcile_filled": options_exit_reconcile.get("filled"),
+                "vrp_panel_recorded": (vrp_panel.get("record") or {}).get("recorded"),
+                "vrp_panel_resolved": (vrp_panel.get("resolve") or {}).get("resolved"),
+                "earnings_vol_recorded": earnings_vol.get("recorded"),
+                "options_capture_rows": options_capture.get("rows"),
+                "lineage_changed": lineage.get("changed_count"),
+                "tradability_status": tradability.get("status"),
+                "survivorship_archive_status": survivorship.get("status"),
+                "tradability_excluded": tradability.get("contaminated_signal_windows"),
+                "price_bar_cross_source_mismatched": cross_source.get("mismatched"),
                 "uw_snapshot_retention": uw_retention,
                 "institutional_snapshot_sweep_status": (
                     institutional_snapshot_sweep.get(

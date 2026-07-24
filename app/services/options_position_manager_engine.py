@@ -1,17 +1,41 @@
+"""Manage open option positions with the VALIDATED exit doctrine, driven by the UNDERLYING.
+
+Replaces the old crude rule (arbitrary +50% / -35% of PREMIUM, single full close). Two
+reasons that rule was wrong: (1) a premium-% stop fires on THETA — time decay alone can hit
+-35% with no adverse move; (2) a single +50% full close caps the convex upside that is the
+whole point of buying options.
+
+This runs the war-gamed TradeDoctrineEngine (2.5-ATR stop; targets at 1.5/3/4.5 ATR; last
+tranche runs on a 3-ATR trailing stop) on the UNDERLYING's price, via OptionsDynamicTPSEngine
+which allocates the contracts across those exits and, below 4 contracts, keeps the doctrine's
+risk profile through the ratcheting stop (the runner always survives). Every exit is a real
+SELLTOCLOSE at the broker (full or partial), capped at the live position so it can never
+oversell. And no option is ever allowed to reach maturity — it is liquidated 1 BUSINESS DAY
+before expiry.
+
+The signal that OPENS the position is a separate question (and an unproven one — flow edge is
+null); this doctrine is signal-agnostic and manages whatever was opened.
+"""
+
 import json
 from datetime import datetime, timedelta, time, timezone
 from pathlib import Path
 
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.market_hours_engine import MarketHoursEngine
-from app.services.operator_event_bus_engine import OperatorEventBusEngine
+from app.services.options_dynamic_tps_engine import OptionsDynamicTPSEngine
+from app.services.momentum_exit_manager_engine import atr_for
 
 
 class OptionsPositionManagerEngine:
 
+    MAX_QUOTE_AGE_SECONDS = 900
+
     def __init__(self):
         self.ledger_file = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
+        self.tps = OptionsDynamicTPSEngine()
 
+    # ---- expiry / maturity --------------------------------------------------
     def _parse_expiration(self, expiration_value):
         if not expiration_value:
             return None
@@ -21,234 +45,175 @@ class OptionsPositionManagerEngine:
         except Exception:
             return None
 
-    def _parse_trade_time(self, value):
-        if not value:
-            return None
-        try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        except Exception:
-            return None
+    @staticmethod
+    def _prev_business_day(d):
+        """The business day immediately before date `d` (skips Sat/Sun)."""
+        d = d - timedelta(days=1)
+        while d.weekday() >= 5:   # Mon=0 .. Sat=5, Sun=6
+            d -= timedelta(days=1)
+        return d
 
-    def _last_market_opportunity(self, expiration_dt):
+    def _maturity_liquidation_required(self, expiration_dt, now):
+        """True once we're at/after 1 BUSINESS DAY before expiry — never hold to maturity."""
         if expiration_dt is None:
-            return None
-        return datetime.combine(expiration_dt.date(), time(16, 0))
+            return {"required": False, "reason": "EXPIRATION_UNAVAILABLE", "deadline": None}
+        deadline = self._prev_business_day(expiration_dt.date())
+        required = now.date() >= deadline
+        return {"required": required,
+                "reason": "WITHIN_ONE_BUSINESS_DAY_OF_EXPIRY" if required else "MATURITY_WINDOW_NOT_REACHED",
+                "deadline": deadline.isoformat(), "expiry": expiration_dt.date().isoformat()}
 
-    def _maturity_liquidation_required(self, expiration_value):
-        expiration_dt = self._parse_expiration(expiration_value)
-        last_market_opportunity = self._last_market_opportunity(expiration_dt)
+    # ---- live underlying quote ----------------------------------------------
+    def _underlying_quote(self, symbol):
+        r = TradeStationQuoteLiveEngine().get_quote(symbol)
+        q = ((r.get("response_json") or {}).get("Quotes") or [{}])[0]
+        try:
+            px = float(q.get("Last") or q.get("Mid") or q.get("Bid") or 0)
+        except (TypeError, ValueError):
+            px = 0.0
+        delayed = bool((q.get("MarketFlags") or {}).get("IsDelayed"))
+        tt = q.get("TradeTime")
+        age = None
+        if tt:
+            try:
+                age = (datetime.now(timezone.utc)
+                       - datetime.fromisoformat(str(tt).replace("Z", "+00:00"))).total_seconds()
+            except Exception:
+                age = None
+        return px, age, delayed
 
-        if last_market_opportunity is None:
-            return {
-                "required": False,
-                "reason": "EXPIRATION_UNAVAILABLE",
-                "last_market_opportunity": None,
-                "forced_liquidation_deadline": None,
-            }
+    def _sim(self):
+        from app.services.greyline_sim_execution_engine import GreyLineSimExecutionEngine
+        return GreyLineSimExecutionEngine()
 
-        forced_liquidation_deadline = last_market_opportunity - timedelta(hours=24)
-        now = datetime.utcnow()
-
-        return {
-            "required": now >= forced_liquidation_deadline,
-            "reason": (
-                "WITHIN_24_HOURS_OF_LAST_MARKET_OPPORTUNITY"
-                if now >= forced_liquidation_deadline
-                else "MATURITY_WINDOW_NOT_REACHED"
-            ),
-            "last_market_opportunity": last_market_opportunity.isoformat(),
-            "forced_liquidation_deadline": forced_liquidation_deadline.isoformat(),
-        }
+    def _book_close(self, option_symbol, contracts, reason):
+        """Real SELLTOCLOSE of `contracts` (partial or full). Returns (ok, booked, result)."""
+        try:
+            r = self._sim().book_option_close(option_symbol, contracts, reason=reason)
+        except Exception as e:
+            return False, 0, {"status": "SIM_CLOSE_ERROR", "error": str(e)[:120]}
+        ok = (r.get("status") == "SIM_OPTION_CLOSE_BOOKED" and r.get("ok")) or \
+             r.get("status") == "NO_SIM_OPTION_POSITION"
+        return ok, int(r.get("contracts") or 0), r
 
     def manage_open_positions(self):
         if not self.ledger_file.exists():
-            return {
-                "timestamp": datetime.utcnow().isoformat(),
-                "positions_checked": 0,
-                "positions_closed": 0,
-                "stale_quote_blocked_count": 0,
-                "status": "NO_OPTIONS_PAPER_LEDGER",
-            }
+            return {"timestamp": datetime.utcnow().isoformat(), "positions_checked": 0,
+                    "positions_closed": 0, "status": "NO_OPTIONS_PAPER_LEDGER"}
 
-        trades = [
-            json.loads(line)
-            for line in self.ledger_file.read_text().splitlines()
-            if line.strip()
-        ]
+        trades = [json.loads(l) for l in self.ledger_file.read_text().splitlines() if l.strip()]
+        now = datetime.utcnow()
+        market = MarketHoursEngine().status()
+        market_open = bool(market.get("is_regular_session"))
 
-        updated = []
-        checked = 0
-        closed = []
-        stale_blocked = []
-        market_hours = MarketHoursEngine().status()
-        market_open = bool(market_hours.get('is_regular_session'))
+        updated, checked, closed, scaled, blocked = [], 0, 0, 0, 0
 
         for trade in trades:
             if trade.get("status") != "OPEN":
                 updated.append(trade)
                 continue
-
             checked += 1
             option_symbol = trade.get("option_symbol")
-            entry_price = float(trade.get("entry_price") or 0)
-            contracts = int(trade.get("contracts") or 0)
+            underlying = trade.get("underlying")
+            u_entry = float(trade.get("underlying_entry_price") or 0)
+            contracts_now = int(trade.get("contracts") or 0)
+            direction = "LONG" if str(trade.get("option_type", "")).lower().startswith("c") else "SHORT"
+            atr = atr_for(underlying)
 
-            quote = TradeStationQuoteLiveEngine().get_quote(option_symbol)
-            quote_row = ((quote.get("response_json") or {}).get("Quotes") or [{}])[0]
-
-            try:
-                current_price = float(
-                    quote_row.get("Last")
-                    or quote_row.get("Mid")
-                    or quote_row.get("Bid")
-                    or 0
-                )
-            except Exception:
-                current_price = 0.0
-
-            trade_time_raw = quote_row.get("TradeTime")
-            trade_time = self._parse_trade_time(trade_time_raw)
-            quote_age_seconds = None if trade_time is None else round((datetime.now(timezone.utc) - trade_time).total_seconds(), 2)
-            market_flags = quote_row.get("MarketFlags") or {}
-            is_delayed = bool(market_flags.get("IsDelayed"))
-
-            maturity_rule = self._maturity_liquidation_required(trade.get("expiration"))
-            trade["maturity_rule"] = maturity_rule
-
-            if current_price <= 0 or entry_price <= 0:
-                trade["manager_status"] = "OPTION_PRICE_UNAVAILABLE"
-                trade["last_manager_block_reason"] = "OPTION_PRICE_UNAVAILABLE"
-                trade["last_managed_at"] = datetime.utcnow().isoformat()
+            # Doctrine needs a real underlying entry + ATR; without them we cannot manage on
+            # the underlying's move. Flag rather than silently fall back to a premium rule.
+            if not atr or u_entry <= 0 or contracts_now <= 0:
+                trade["manager_status"] = "OPTION_DOCTRINE_UNAVAILABLE_NO_ATR_OR_ENTRY"
                 updated.append(trade)
                 continue
 
-            if market_open and (is_delayed or quote_age_seconds is None or quote_age_seconds > 900):
-                trade["manager_status"] = "OPTION_STALE_QUOTE_BLOCKED"
-                trade["last_manager_block_reason"] = "FRESH_NON_DELAYED_OPTION_QUOTE_REQUIRED"
-                trade["last_quote_trade_time"] = trade_time_raw
-                trade["last_quote_age_seconds"] = quote_age_seconds
-                trade["last_quote_is_delayed"] = is_delayed
-                trade["last_manager_checked_at"] = datetime.utcnow().isoformat()
-                stale_blocked.append({
-                    "option_symbol": option_symbol,
-                    "trade_time": trade_time_raw,
-                    "quote_age_seconds": quote_age_seconds,
-                    "is_delayed": is_delayed,
-                })
-                updated.append(trade)
-                continue
+            # Attach the underlying-driven doctrine once.
+            if not trade.get("exit_doctrine_underlying"):
+                trade["exit_doctrine_underlying"] = self.tps.plan(u_entry, direction, atr, contracts_now)
+                trade["doctrine_state_u"] = {"targets_filled": 0, "extreme": u_entry,
+                                             "remaining_contracts": contracts_now}
+            plan = trade["exit_doctrine_underlying"]
+            state = trade["doctrine_state_u"]
 
-            pnl = round((current_price - entry_price) * contracts * 100, 2)
-            pnl_pct = round(((current_price / entry_price) - 1) * 100, 2)
+            expiration_dt = self._parse_expiration(trade.get("expiration") or trade.get("contract_expiration_date"))
+            maturity = self._maturity_liquidation_required(expiration_dt, now)
+            trade["maturity_rule"] = maturity
 
             if not market_open:
-                trade["current_price"] = current_price
-                trade["unrealized_pnl"] = pnl
-                trade["unrealized_pnl_pct"] = pnl_pct
-                trade["manager_status"] = "OPTION_MARKET_CLOSED_LAST_QUOTE_MARK"
-                trade["market_state"] = market_hours.get("state")
-                trade["last_quote_trade_time"] = trade_time_raw
-                trade["last_quote_age_seconds"] = quote_age_seconds
-                trade["last_quote_is_delayed"] = is_delayed
-                trade["last_manager_checked_at"] = datetime.utcnow().isoformat()
+                trade["manager_status"] = "OPTION_MARKET_CLOSED"
                 updated.append(trade)
                 continue
 
-            trade["current_price"] = current_price
-            trade["unrealized_pnl"] = pnl
-            trade["unrealized_pnl_pct"] = pnl_pct
-            trade["last_quote_trade_time"] = trade_time_raw
-            trade["last_quote_age_seconds"] = quote_age_seconds
-            trade["last_quote_is_delayed"] = is_delayed
-            trade["last_managed_at"] = datetime.utcnow().isoformat()
-            trade["manager_status"] = "OPTION_POSITION_UPDATED_FRESH_QUOTE"
+            upx, age, delayed = self._underlying_quote(underlying)
+            if upx <= 0 or delayed or age is None or age > self.MAX_QUOTE_AGE_SECONDS:
+                trade["manager_status"] = "OPTION_UNDERLYING_STALE_QUOTE_BLOCKED"
+                trade["last_underlying_quote_age_seconds"] = age
+                blocked += 1
+                updated.append(trade)
+                continue
 
-            if maturity_rule.get("required") is True:
-                trade["status"] = "CLOSED"
-                trade["exit_price"] = current_price
-                trade["exit_timestamp"] = datetime.utcnow().isoformat()
-                trade["realized_pnl"] = pnl
-                trade["realized_pnl_pct"] = pnl_pct
-                trade["exit_reason"] = "OPTIONS_MATURITY_PROTECTION_24HR"
-                OperatorEventBusEngine().publish(
-                    source="OptionsPositionManagerEngine",
-                    category="POSITION_EXIT",
-                    severity="WARNING",
-                    title="Option Maturity Protection Exit",
-                    message=f"{option_symbol} closed due to maturity protection.",
-                    symbol=trade.get("underlying") or trade.get("symbol"),
-                    trade_id=trade.get("trade_id") or option_symbol,
-                    ack_required=True,
-                    payload=trade,
-                )
-                closed.append(trade)
-            elif pnl_pct >= 50:
-                trade["status"] = "CLOSED"
-                trade["exit_price"] = current_price
-                trade["exit_timestamp"] = datetime.utcnow().isoformat()
-                trade["realized_pnl"] = pnl
-                trade["realized_pnl_pct"] = pnl_pct
-                trade["exit_reason"] = "OPTIONS_TAKE_PROFIT_50_PCT"
-                OperatorEventBusEngine().publish(
-                    source="OptionsPositionManagerEngine",
-                    category="TAKE_PROFIT",
-                    severity="INFO",
-                    title="Option Take Profit Hit",
-                    message=f"{option_symbol} hit +50% take profit.",
-                    symbol=trade.get("underlying") or trade.get("symbol"),
-                    trade_id=trade.get("trade_id") or option_symbol,
-                    ack_required=False,
-                    payload=trade,
-                )
-                closed.append(trade)
-            elif pnl_pct <= -35:
-                stop_loss_threshold_pct = -35
-                stop_loss_breach_pct = round(abs(pnl_pct - stop_loss_threshold_pct), 2)
+            trade["underlying_current_price"] = round(upx, 4)
+            remaining = int(state.get("remaining_contracts") or 0)
 
-                trade["status"] = "CLOSED"
-                trade["exit_price"] = current_price
-                trade["exit_timestamp"] = datetime.utcnow().isoformat()
-                trade["realized_pnl"] = pnl
-                trade["realized_pnl_pct"] = pnl_pct
-                trade["exit_reason"] = "OPTIONS_STOP_LOSS_35_PCT"
-                trade["stop_loss_threshold_pct"] = stop_loss_threshold_pct
-                trade["stop_loss_breach_pct"] = stop_loss_breach_pct
-                trade["stop_loss_execution_quality"] = (
-                    "LATE_STOP_LOSS_EXECUTION"
-                    if stop_loss_breach_pct >= 10
-                    else "NORMAL_STOP_LOSS_EXECUTION"
-                )
-                OperatorEventBusEngine().publish(
-                    source="OptionsPositionManagerEngine",
-                    category="STOP_LOSS",
-                    severity="CRITICAL",
-                    title="Option Stop Loss Triggered",
-                    message=f"{option_symbol} hit stop loss at {pnl_pct}%.",
-                    symbol=trade.get("underlying") or trade.get("symbol"),
-                    trade_id=trade.get("trade_id") or option_symbol,
-                    ack_required=True,
-                    payload=trade,
-                )
-                closed.append(trade)
+            # 1) Maturity liquidation ALWAYS wins — never hold into expiry.
+            if maturity.get("required"):
+                ok, booked, res = self._book_close(option_symbol, remaining, "OPTIONS_MATURITY_1_BUSINESS_DAY")
+                trade.setdefault("exit_events", []).append(
+                    {"at": now.isoformat(), "reason": "MATURITY_1BD", "contracts": booked, "sim": res.get("status")})
+                if ok:
+                    trade["status"] = "CLOSED"; trade["exit_reason"] = "OPTIONS_MATURITY_1_BUSINESS_DAY"
+                    trade["exit_timestamp"] = now.isoformat(); closed += 1
+                else:
+                    trade["manager_status"] = "OPTION_MATURITY_CLOSE_FAILED"
+                updated.append(trade)
+                continue
 
+            # 2) Doctrine decision on the UNDERLYING's move.
+            sign = 1 if direction == "LONG" else -1
+            state["extreme"] = max(state["extreme"], upx) if sign > 0 else min(state["extreme"], upx)
+            decision = self.tps.decide(plan, upx, int(state.get("targets_filled") or 0), state["extreme"])
+            state["targets_filled"] = decision["targets_reached"]
+            trade["current_stop_underlying"] = decision["stop"]
+            trade["doctrine_stop_basis"] = decision["stop_basis"]
+            trade["manager_status"] = f"OPTION_DOCTRINE_{decision['action']}"
+
+            if decision["action"] == "CLOSE":     # stop hit → flatten the remainder
+                ok, booked, res = self._book_close(option_symbol, remaining, "OPTIONS_DOCTRINE_STOP")
+                trade.setdefault("exit_events", []).append(
+                    {"at": now.isoformat(), "reason": "STOP", "contracts": booked, "sim": res.get("status")})
+                if ok:
+                    trade["status"] = "CLOSED"; trade["exit_reason"] = "OPTIONS_DOCTRINE_STOP"
+                    trade["exit_timestamp"] = now.isoformat(); closed += 1
+                else:
+                    trade["manager_status"] = "OPTION_STOP_CLOSE_FAILED"
+
+            elif decision["action"] == "SCALE":   # a target was reached with contracts to bank
+                want = min(int(decision["sell_contracts"]), remaining)
+                ok, booked, res = self._book_close(option_symbol, want, f"OPTIONS_TP{decision['targets_reached']}")
+                trade.setdefault("exit_events", []).append(
+                    {"at": now.isoformat(), "reason": f"TP{decision['targets_reached']}",
+                     "contracts": booked, "sim": res.get("status")})
+                if ok and booked > 0:
+                    remaining -= booked
+                    state["remaining_contracts"] = remaining
+                    trade["contracts"] = remaining     # keep ledger == broker
+                    scaled += 1
+                    if remaining <= 0:
+                        trade["status"] = "CLOSED"; trade["exit_reason"] = "OPTIONS_LADDER_FULLY_BANKED"
+                        trade["exit_timestamp"] = now.isoformat(); closed += 1
+
+            trade["last_managed_at"] = now.isoformat()
             updated.append(trade)
 
-        self.ledger_file.write_text(
-            "\n".join(json.dumps(t) for t in updated) + ("\n" if updated else "")
-        )
+        self.ledger_file.write_text("\n".join(json.dumps(t) for t in updated) + ("\n" if updated else ""))
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
-            "system": "GreyLine",
+            "timestamp": now.isoformat(), "system": "GreyLine",
             "source": "OPTIONS_POSITION_MANAGER",
-            "positions_checked": checked,
-            "positions_closed": len(closed),
-            "stale_quote_blocked_count": len(stale_blocked),
-            "stale_quote_blocked": stale_blocked,
-            "market_state": market_hours.get("state"),
-            "market_open": market_open,
-            "closed_positions": closed,
-            "execution_enabled": False,
-            "order_placement_allowed": False,
+            "doctrine": "underlying-ATR 2.5 stop; TP1/2/3 at 1.5/3/4.5 ATR (bank, dynamic <4); "
+                        "TP4 runner trails 3 ATR; liquidate 1 business day before expiry",
+            "positions_checked": checked, "positions_closed": closed,
+            "positions_scaled": scaled, "stale_quote_blocked_count": blocked,
+            "market_open": market_open, "market_state": market.get("state"),
             "status": "OPTIONS_POSITION_MANAGER_COMPLETE",
         }

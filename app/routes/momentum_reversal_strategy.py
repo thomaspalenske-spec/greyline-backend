@@ -30,9 +30,28 @@ def momentum_reversal_strategy(top_n: int = None):
 
 @router.get("/momentum-reversal-rebalance")
 def momentum_reversal_rebalance(force: bool = False, top_n: int = None):
-    """Rebalance status; ?force=true realizes prior holdings and opens the current top-N now."""
-    eng = MomentumReversalRebalanceEngine(top_n=top_n)
-    return eng.rebalance(force=True) if force else eng.status()
+    """Rebalance STATUS — read-only.
+
+    ?force=true used to run the rebalance right here, which places REAL broker orders. A GET
+    must be safe: this endpoint is reachable by a browser prefetch, a bookmark, a crawler or
+    an <img src> on any page, and the server listens on 0.0.0.0 — so a link could open
+    positions with nobody clicking anything. Forcing now lives on POST below. The parameter
+    is still accepted so an old caller gets a loud redirect instead of silently no-opping.
+    """
+    if force:
+        return {
+            "rebalanced": False,
+            "status": "FORCE_REQUIRES_POST",
+            "detail": "Forcing a rebalance places real broker orders and is no longer "
+                      "reachable by GET. Use POST /momentum-reversal-rebalance/force.",
+        }
+    return MomentumReversalRebalanceEngine(top_n=top_n).status()
+
+
+@router.post("/momentum-reversal-rebalance/force")
+def momentum_reversal_rebalance_force(top_n: int = None):
+    """Realize prior holdings and open the current top-N NOW — PLACES REAL BROKER ORDERS."""
+    return MomentumReversalRebalanceEngine(top_n=top_n).rebalance(force=True)
 
 
 @router.get("/momentum-reversal-positions")

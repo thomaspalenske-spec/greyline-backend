@@ -103,9 +103,25 @@ class MomentumReversalStrategyEngine:
         return confirmed[:self.top_n], confirmed
 
     # --- data feed -------------------------------------------------------------
+    def _excluded_symbols(self):
+        """Names whose signal window is built on bars nobody actually traded.
+
+        MIN_BARS only counts RAW bars, so a ticker carrying a long pre-listing stub (SW has
+        16 years of ~$180/day prints) can satisfy 253 bars while offering almost no real
+        history. Momentum computed across that boundary is measured against prices that
+        never transacted. Fails open: no scan -> nothing excluded.
+        """
+        try:
+            from app.services.price_bar_tradability_engine import PriceBarTradabilityEngine
+            return PriceBarTradabilityEngine().contaminated_symbols()
+        except Exception:
+            return set()
+
     def _symbols(self):
-        return sorted(os.path.basename(p).replace("_daily.csv", "")
-                      for p in glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv"))
+        excluded = self._excluded_symbols()
+        return sorted(s for s in (os.path.basename(p).replace("_daily.csv", "")
+                                  for p in glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv"))
+                      if s not in excluded)
 
     def _csv_universe(self):
         series, asof = {}, None
