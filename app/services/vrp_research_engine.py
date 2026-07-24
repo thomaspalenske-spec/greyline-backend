@@ -45,15 +45,42 @@ class VRPResearchEngine:
     CACHE = Path("app/data/research/vrp_vol_history")
     OUT = Path("app/data/research/vrp_study.json")
 
-    # A liquid, optionable, sector-spread sample — where VRP is best measured and most tradeable.
-    # Configurable via run(names=...). Kept modest to respect the UW budget on the first pass.
+    # A liquid, optionable, sector-spread universe — where VRP is best measured and most tradeable.
+    # Illiquid names have no reliable IV series, so the engine filters to those with real vol data
+    # (>= MIN_ROWS); passing a broad liquid list and letting that filter run is safe. Configurable
+    # via run(names=...). Each new name costs one (cached) UW call.
     DEFAULT_NAMES = [
-        "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "AMD", "NFLX",
-        "JPM", "BAC", "GS", "MS", "WFC", "V", "MA", "XOM", "CVX", "COP",
-        "WMT", "COST", "HD", "MCD", "NKE", "KO", "PEP", "PG", "JNJ", "PFE",
-        "MRK", "ABBV", "UNH", "LLY", "DIS", "CMCSA", "T", "VZ", "INTC", "QCOM",
-        "CRM", "ORCL", "ADBE", "CSCO", "TXN", "BA", "CAT", "GE", "HON", "UPS",
+        # mega/large-cap tech + semis
+        "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "GOOG", "META", "TSLA", "AVGO", "AMD",
+        "NFLX", "ORCL", "CRM", "ADBE", "CSCO", "TXN", "QCOM", "INTC", "AMAT", "MU",
+        "LRCX", "KLAC", "ADI", "SNPS", "CDNS", "MRVL", "ON", "NXPI", "MCHP", "ARM",
+        "NOW", "INTU", "PANW", "CRWD", "SNOW", "DDOG", "NET", "ZS", "FTNT", "WDAY",
+        "TEAM", "ANET", "SMCI", "DELL", "HPQ", "IBM", "UBER", "SHOP", "PYPL", "ABNB",
+        # financials
+        "JPM", "BAC", "GS", "MS", "WFC", "C", "USB", "PNC", "SCHW", "AXP",
+        "BLK", "SPGI", "CB", "PGR", "MMC", "ICE", "CME", "COF", "V", "MA",
+        "BX", "KKR", "TFC",
+        # energy
+        "XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "DVN",
+        # consumer
+        "WMT", "COST", "HD", "LOW", "MCD", "NKE", "SBUX", "TGT", "TJX", "BKNG",
+        "CMG", "MAR", "GM", "F", "LULU", "DG", "YUM", "KO", "PEP", "PG",
+        "EL", "CL", "MDLZ",
+        # health
+        "JNJ", "PFE", "MRK", "ABBV", "UNH", "LLY", "TMO", "ABT", "DHR", "BMY",
+        "AMGN", "GILD", "CVS", "CI", "ISRG", "VRTX", "REGN", "MDT", "ZTS", "BSX",
+        "MRNA", "BIIB", "HCA",
+        # industrials / materials
+        "BA", "CAT", "GE", "HON", "UPS", "LMT", "RTX", "NOC", "GD", "DE",
+        "MMM", "EMR", "ETN", "ITW", "PH", "CSX", "NSC", "FDX", "DAL", "UAL",
+        "LIN", "APD", "FCX", "NEM", "NUE", "DOW",
+        # comm / media / other
+        "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR", "WBD", "EA", "TTWO", "RBLX",
+        "PINS", "SNAP", "SPOT", "COIN", "HOOD", "SQ", "PLTR", "MSTR",
+        # ETFs (deep, liquid option markets across the surface)
         "SPY", "QQQ", "IWM", "DIA", "XLE", "XLF", "XLK", "SMH", "GLD", "TLT",
+        "XLC", "XLI", "XLU", "XLB", "XLV", "XLY", "XLP", "XLRE", "XBI", "XOP",
+        "KRE", "ARKK", "EEM", "EFA", "FXI", "SLV", "HYG", "IBIT",
     ]
 
     MIN_ROWS = 60
