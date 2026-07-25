@@ -369,8 +369,12 @@ class BackgroundSchedulerService:
                     _due = True
                 from app.services.market_hours_engine import MarketHoursEngine
                 if _due and MarketHoursEngine().status().get("is_regular_session"):
-                    _liq = ["SPY", "QQQ", "IWM", "DIA", "XLE", "XLF", "XLK", "SMH", "GLD", "TLT",
-                            "AAPL", "MSFT", "NVDA", "AMZN", "META", "AMD"]
+                    # Sell premium where the variance premium demonstrably LIVES: the broad-index
+                    # ETFs (dispersion study 2026-07-26 — SPY/XLF/DIA/IWM VRP 13-18% of IV), NOT
+                    # single-name mega-caps or concentrated ETFs (XLK/SMH VRP ~0-4% = pure cost).
+                    # This is the index variance / correlation risk premium — the one candidate that
+                    # cleared significance (p=0.025). Broad indices only.
+                    _liq = ["SPY", "DIA", "IWM", "XLF", "XLE", "QQQ"]
                     vrp_short_premium["open"] = _sp.open_positions(names=_liq, dry_run=False, limit=2)
                     try:
                         _mk.parent.mkdir(parents=True, exist_ok=True); _mk.write_text(_today)
