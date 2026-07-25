@@ -114,6 +114,35 @@ class ConditionalVRPForwardPanelEngine:
         return {"status": "VRP_SIGNALS_RECORDED", "recorded": len(new),
                 "as_of": today, "names_scanned": len(names)}
 
+    def rich_iv_candidates(self, names=None):
+        """Today's tickers that pass the conditional-VRP signal: rich IV (causal trailing rank
+        >= threshold) and NO earnings inside the ~30d window. Shared by the short-premium strategy
+        so the traded signal is identical to the one being forward-tracked."""
+        names = names or self.vrp.DEFAULT_NAMES
+        out = []
+        for t in names:
+            rows = self._fresh_series(t)
+            if len(rows) < 60:
+                continue
+            rows.sort(key=lambda x: str(x.get("date"))[:10])
+            ivs = [self.vrp._f(x.get("implied_volatility")) for x in rows]
+            i = len(rows) - 1
+            latest = rows[i]
+            d = str(latest.get("date"))[:10]
+            urv = str(latest.get("unshifted_rv_date"))[:10]
+            iv = ivs[i]
+            if iv is None or iv <= 0:
+                continue
+            rank = self.cvrp._trailing_rank([v for v in ivs if v is not None], i, self.IVRANK_LOOKBACK)
+            if rank is None or rank < self.THRESHOLD:
+                continue
+            if any(d < e <= urv for e in self.cvrp._earnings_dates(t)):
+                continue
+            out.append({"ticker": t, "iv": round(iv, 4), "iv_rank": round(rank, 3),
+                        "entry_date": d, "forward_end": urv})
+        out.sort(key=lambda x: x["iv_rank"], reverse=True)
+        return out
+
     # ------------------------------------------------------------ resolve side
 
     def resolve(self, save=True):

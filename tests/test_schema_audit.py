@@ -14,6 +14,8 @@ IGNORED_ROUTES = {
         "/live-portfolio-snapshot",
         "/tradestation-orders-live",
         "/tradestation-positions-live",
+        "/vrp-short-premium/plan",   # scans 201 names live (UW + option chains) — verified 200 over HTTP
+        "/broker-protection",        # live broker positions/orders read, like the other TS-live routes
         "/tradestation-balance-live",
         "/tradestation-positions-retry",
         "/tradestation-balance-retry",

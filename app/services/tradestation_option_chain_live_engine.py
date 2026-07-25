@@ -137,7 +137,8 @@ class TradeStationOptionChainLiveEngine:
             ),
         }
 
-    def get_chain_snapshot(self, symbol, expiration, option_type="All", max_contracts=50):
+    def get_chain_snapshot(self, symbol, expiration, option_type="All", max_contracts=50,
+                           strike_proximity=None):
         TradeStationTokenMaintenanceEngine().evaluate()
 
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
@@ -149,8 +150,22 @@ class TradeStationOptionChainLiveEngine:
             + f"/v3/marketdata/stream/options/chains/{symbol}"
             + f"?expiration={expiration}&optionType={option_type}"
         )
+        # strikeProximity = strikes each side of ATM. Without it the stream centres on the
+        # most-active near-ATM strikes and never reaches the OTM strikes an iron-condor's wings
+        # need. With it we get the whole band and can select by delta out to the tail.
+        if strike_proximity:
+            url += f"&strikeProximity={int(strike_proximity)}"
 
-        contracts = []
+        # Two collection modes:
+        #  * default (strike_proximity None): stop after max_contracts messages with Legs — the
+        #    original FAST behaviour existing callers rely on (near-ATM is all they need).
+        #  * banded (strike_proximity set): the stream re-sends active near-ATM strikes as quotes
+        #    update, so to reach OTM we must dedupe by contract symbol and keep collecting DISTINCT
+        #    strikes until we have enough or the stream stalls. Slower, used only by callers that
+        #    explicitly ask for the wide band (e.g. iron-condor construction).
+        banded = bool(strike_proximity)
+        by_symbol, contracts = {}, []
+        msgs, stall = 0, 0
 
         with requests.get(
             url,
@@ -168,10 +183,25 @@ class TradeStationOptionChainLiveEngine:
                     row = json.loads(line.decode("utf-8"))
                 except Exception:
                     continue
-                if row.get("Legs"):
+                if not row.get("Legs"):
+                    stall += 1
+                    if banded and stall > 400:
+                        break
+                    continue
+                if not banded:
                     contracts.append(row)
-                if len(contracts) >= max_contracts:
+                    if len(contracts) >= max_contracts:
+                        break
+                    continue
+                key = ((row.get("Legs") or [{}])[0] or {}).get("Symbol")
+                if key:
+                    stall = 0 if key not in by_symbol else stall + 1
+                    by_symbol[key] = row
+                msgs += 1
+                if len(by_symbol) >= max_contracts or stall > 400 or msgs > 5000:
                     break
+        if banded:
+            contracts = list(by_symbol.values())
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
