@@ -34,6 +34,16 @@ from os import getenv
 from pathlib import Path
 
 
+# The DISTINCT-underlying high-VRP index harvest set (measured 2026-07-26, VRP >= ~10% of IV).
+# Redundant S&P clones (VOO/IVV/VTI) collapsed to SPY — selling all of them is 4x the same crash
+# bet, not diversification. Kept: distinct underlyings across size/style/sector/region, so the
+# IDIOSYNCRATIC vol diversifies (better non-crash Sharpe) while the portfolio cap bounds the one
+# risk that does NOT diversify — a correlated market crash.
+INDEX_ETFS = ["SPY", "RSP", "MDY", "IWM", "DIA", "QQQ",
+              "XLF", "XLE", "XLY", "XLC", "XLU", "XLB", "XLRE",
+              "VWO", "FXI"]
+
+
 class ConditionalVRPShortPremiumEngine:
 
     LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")

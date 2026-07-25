@@ -306,6 +306,9 @@ app.include_router(conditional_vrp_panel.router)
 from app.routes import vrp_short_premium
 app.include_router(vrp_short_premium.router)
 
+from app.routes import index_variance_premium
+app.include_router(index_variance_premium.router)
+
 from app.routes import total_return
 app.include_router(total_return.router)
 

@@ -369,13 +369,12 @@ class BackgroundSchedulerService:
                     _due = True
                 from app.services.market_hours_engine import MarketHoursEngine
                 if _due and MarketHoursEngine().status().get("is_regular_session"):
-                    # Sell premium where the variance premium demonstrably LIVES: the broad-index
-                    # ETFs (dispersion study 2026-07-26 — SPY/XLF/DIA/IWM VRP 13-18% of IV), NOT
-                    # single-name mega-caps or concentrated ETFs (XLK/SMH VRP ~0-4% = pure cost).
-                    # This is the index variance / correlation risk premium — the one candidate that
-                    # cleared significance (p=0.025). Broad indices only.
-                    _liq = ["SPY", "DIA", "IWM", "XLF", "XLE", "QQQ"]
-                    vrp_short_premium["open"] = _sp.open_positions(names=_liq, dry_run=False, limit=2)
+                    # Sell premium where the variance premium demonstrably LIVES: the measured,
+                    # distinct-underlying high-VRP index harvest set (dispersion study 2026-07-26;
+                    # firmed by block bootstrap, CI [+1.48,+3.66] vol pts). Single names + defensive
+                    # sectors + redundant S&P clones excluded — they carry cost without premium.
+                    from app.services.conditional_vrp_short_premium_engine import INDEX_ETFS
+                    vrp_short_premium["open"] = _sp.open_positions(names=INDEX_ETFS, dry_run=False, limit=2)
                     try:
                         _mk.parent.mkdir(parents=True, exist_ok=True); _mk.write_text(_today)
                     except Exception:
@@ -428,6 +427,30 @@ class BackgroundSchedulerService:
             vrp_panel["resolve"] = _vp.resolve()
         except Exception as exc:
             vrp_panel = {"status": "VRP_PANEL_DEGRADED", "error": repr(exc)}
+
+        # Index variance premium forward panel — the OUT-OF-SAMPLE arbiter for THE candidate (the
+        # one edge that cleared significance). Records the index harvest set daily, resolves ~30d
+        # out. Self-gated to once/day for the record (UW budget); resolve is cheap, runs each cycle.
+        try:
+            from pathlib import Path as _P2
+            from app.services.index_variance_premium_panel_engine import IndexVariancePremiumPanelEngine
+            _ivp = IndexVariancePremiumPanelEngine()
+            _m2 = _P2("app/data/research/.index_vrp_last_record")
+            _t2 = datetime.utcnow().date().isoformat()
+            _due2 = True
+            try:
+                _due2 = _m2.read_text().strip() != _t2
+            except Exception:
+                _due2 = True
+            index_vrp_panel = {"record": (_ivp.record() if _due2 else {"status": "NOT_DUE"}),
+                               "resolve": _ivp.resolve()}
+            if _due2:
+                try:
+                    _m2.parent.mkdir(parents=True, exist_ok=True); _m2.write_text(_t2)
+                except Exception:
+                    pass
+        except Exception as exc:
+            index_vrp_panel = {"status": "INDEX_VRP_PANEL_DEGRADED", "error": repr(exc)}
 
         # Full-history price-bar integrity scan. Self-gates to ~once/day, so this is a no-op
         # most cycles; it keeps the Reality Guard's PRICE_BARS_CLEAN invariant backed by all
@@ -583,6 +606,8 @@ class BackgroundSchedulerService:
                 "vrp_short_premium_status": vrp_short_premium.get("status") or "VRP_SHORT_PREMIUM_ACTIVE",
                 "vrp_short_premium_opened": ((vrp_short_premium.get("open") or {}) if isinstance(vrp_short_premium.get("open"), dict) else {}).get("opened"),
                 "vrp_panel_resolved": (vrp_panel.get("resolve") or {}).get("resolved"),
+                "index_vrp_recorded": (index_vrp_panel.get("record") or {}).get("recorded"),
+                "index_vrp_resolved": (index_vrp_panel.get("resolve") or {}).get("resolved"),
                 "earnings_vol_recorded": earnings_vol.get("recorded"),
                 "options_capture_rows": options_capture.get("rows"),
                 "lineage_changed": lineage.get("changed_count"),
