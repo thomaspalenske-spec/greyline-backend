@@ -106,7 +106,9 @@ def _neutralize_external_alerts(monkeypatch):
     with its own controlled env.
     """
     for k in ("GREYLINE_ALERT_WEBHOOK_URL", "GREYLINE_ALERT_NTFY_TOPIC",
-              "GREYLINE_ALERT_IMESSAGE_TO"):
+              "GREYLINE_ALERT_IMESSAGE_TO",
+              # operator arming flags for real-order-placing features must never leak into tests
+              "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_BROKER_PROTECTIVE_STOPS"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GREYLINE_ALERT_MACOS_LOCAL", "false")
 

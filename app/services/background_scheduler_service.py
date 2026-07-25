@@ -346,6 +346,39 @@ class BackgroundSchedulerService:
                             "status": "UW_RETENTION_DEGRADED"}
         paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
         options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
+
+        # Conditional-VRP short-premium (defined-risk iron condors). GATED OFF by default. When
+        # armed: MANAGE open condors every cycle (take-profit / expiry / hard-stop), and OPEN new
+        # ones at most once/day, only in a regular session, on a bounded liquid name set (where any
+        # VRP concentrates) with a small limit. Every position is defined-risk; the portfolio cap
+        # bounds the correlated tail.
+        try:
+            from pathlib import Path as _P
+            from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
+            _sp = ConditionalVRPShortPremiumEngine()
+            if not _sp.enabled():
+                vrp_short_premium = {"status": "VRP_SHORT_PREMIUM_DISABLED"}
+            else:
+                vrp_short_premium = {"manage": _sp.manage_positions(dry_run=False)}
+                _mk = _P("app/data/options_paper_trading/.vrp_short_last_open")
+                _today = datetime.utcnow().date().isoformat()
+                _due = True
+                try:
+                    _due = _mk.read_text().strip() != _today
+                except Exception:
+                    _due = True
+                from app.services.market_hours_engine import MarketHoursEngine
+                if _due and MarketHoursEngine().status().get("is_regular_session"):
+                    _liq = ["SPY", "QQQ", "IWM", "DIA", "XLE", "XLF", "XLK", "SMH", "GLD", "TLT",
+                            "AAPL", "MSFT", "NVDA", "AMZN", "META", "AMD"]
+                    vrp_short_premium["open"] = _sp.open_positions(names=_liq, dry_run=False, limit=2)
+                    try:
+                        _mk.parent.mkdir(parents=True, exist_ok=True); _mk.write_text(_today)
+                    except Exception:
+                        pass
+        except Exception as exc:
+            vrp_short_premium = {"status": "VRP_SHORT_PREMIUM_DEGRADED", "error": repr(exc)}
+
         # Phase 2: reconcile pending limit-buy fills and refine the entry aggressiveness.
         try:
             from app.services.options_entry_reconciler_engine import OptionsEntryReconcilerEngine
@@ -543,6 +576,8 @@ class BackgroundSchedulerService:
                 "options_exit_reconcile_status": options_exit_reconcile.get("status"),
                 "options_exit_reconcile_filled": options_exit_reconcile.get("filled"),
                 "vrp_panel_recorded": (vrp_panel.get("record") or {}).get("recorded"),
+                "vrp_short_premium_status": vrp_short_premium.get("status") or "VRP_SHORT_PREMIUM_ACTIVE",
+                "vrp_short_premium_opened": ((vrp_short_premium.get("open") or {}) if isinstance(vrp_short_premium.get("open"), dict) else {}).get("opened"),
                 "vrp_panel_resolved": (vrp_panel.get("resolve") or {}).get("resolved"),
                 "earnings_vol_recorded": earnings_vol.get("recorded"),
                 "options_capture_rows": options_capture.get("rows"),
