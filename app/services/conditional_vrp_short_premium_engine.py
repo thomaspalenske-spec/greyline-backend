@@ -77,6 +77,7 @@ class ConditionalVRPShortPremiumEngine:
     # may not exceed this. Even a simultaneous max-loss across the book stays survivable.
     PORTFOLIO_RISK_CAP_USD = 1200.0       # 12% of the book, worst-case correlated loss
     MAX_CONCURRENT = 5
+    SKEW_POOL = 8                 # build this many candidates, then harvest the richest-skew ones
     MIN_CREDIT = 0.10             # skip structures that barely pay
     PROFIT_TAKE_FRAC = 0.50       # close at 50% of max credit captured
     MANAGE_DTE = 7               # liquidate this many days before expiry (gamma risk)
@@ -123,6 +124,7 @@ class ConditionalVRPShortPremiumEngine:
             "symbol": sym, "strike": self._strike(sym),
             "bid": self._f(contract.get("Bid")), "ask": self._f(contract.get("Ask")),
             "delta": abs(self._f(contract.get("Delta"))),
+            "iv": self._f(contract.get("ImpliedVolatility")),
             "oi": int(self._f(contract.get("DailyOpenInterest"))),
         }
 
@@ -208,6 +210,11 @@ class ConditionalVRPShortPremiumEngine:
             "short_put_delta": round(short_put["delta"], 3),
             "short_call_delta": round(short_call["delta"], 3),
             "put_tilt": round(short_put["delta"] - short_call["delta"], 3),  # >0 = put nearer ATM
+            # skew of the sold legs (put IV - call IV). Steeper = richer premium (skew-timing study
+            # 2026-07-26: steep skew -> ~54% more put-VRP). Used to PRIORITISE which names to harvest,
+            # NOT to size up — the study's tail-safety at steep skew is a crash-free-sample mirage.
+            "skew": round(short_put["iv"] - short_call["iv"], 4)
+            if (short_put.get("iv") and short_call.get("iv")) else None,
         }
 
     # ------------------------------------------------------------ planning
@@ -243,9 +250,16 @@ class ConditionalVRPShortPremiumEngine:
         slots = max(0, self.MAX_CONCURRENT - len(open_syms))
         open_risk = self._open_risk()
         budget_left = self.PORTFOLIO_RISK_CAP_USD - open_risk
-        built, skipped = [], []
+        want = limit if limit is not None else slots
+
+        # SKEW-CONDITIONED SELECTION: build condors for a bounded candidate POOL, then take the
+        # RICHEST-SKEW ones (skew-timing study: steep skew ~= 54% more premium). This harvests the
+        # most-overpriced opportunities at the SAME defined-risk size — more premium per unit of the
+        # same bounded tail. Deliberately NOT sizing up on skew: the study's tail-safety at steep
+        # skew is a crash-free-sample mirage, so skew picks WHAT to sell, never how much risk to bear.
+        candidates, skipped = [], []
         for c in cands:
-            if len(built) >= (limit if limit is not None else slots):
+            if len(candidates) >= self.SKEW_POOL:
                 break
             if c["ticker"] in open_syms:
                 continue
@@ -255,10 +269,6 @@ class ConditionalVRPShortPremiumEngine:
                 skipped.append({"ticker": c["ticker"], "skip": f"chain error: {str(e)[:60]}"})
                 continue
             con = self.build_condor(c["ticker"], contracts)
-            # If the put-tilt can't be capped within the per-position cap (a tilted put sits nearer
-            # ATM, harder to cap tightly), fall back to the SYMMETRIC condor rather than skip the
-            # name — capture the symmetric premium instead of nothing. Tilt is a preference, not a
-            # requirement; defined-risk is the requirement.
             if con.get("skip") and "cap" in con["skip"]:
                 sym = self.build_condor(c["ticker"], contracts,
                                         put_delta=self.SHORT_DELTA, call_delta=self.SHORT_DELTA)
@@ -268,14 +278,20 @@ class ConditionalVRPShortPremiumEngine:
             if con.get("skip"):
                 skipped.append({"ticker": c["ticker"], "skip": con["skip"]})
                 continue
-            # PORTFOLIO tail cap: condors are correlated (a vol spike hits them together), so total
-            # defined risk across the book is bounded, not just each position.
+            con.update({"expiration": exp, "iv_rank": c["iv_rank"], "iv": c["iv"]})
+            candidates.append(con)
+
+        # richest skew first (None skew sorts last), then fill within slots + portfolio budget
+        candidates.sort(key=lambda x: (x.get("skew") if x.get("skew") is not None else -9), reverse=True)
+        built = []
+        for con in candidates:
+            if len(built) >= want:
+                break
             if con["max_loss_total"] > budget_left:
-                skipped.append({"ticker": c["ticker"],
+                skipped.append({"ticker": con["symbol"],
                                 "skip": f"would exceed portfolio risk cap (${round(budget_left, 0)} left)"})
                 continue
             budget_left -= con["max_loss_total"]
-            con.update({"expiration": exp, "iv_rank": c["iv_rank"], "iv": c["iv"]})
             built.append(con)
         return {
             "timestamp": datetime.utcnow().isoformat(),

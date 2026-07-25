@@ -139,3 +139,25 @@ def test_plan_falls_back_to_symmetric_when_tilt_exceeds_the_cap(monkeypatch):
     r = e.plan(limit=1)
     assert len(r["planned"]) == 1
     assert r["planned"][0].get("tilt_fallback", "").startswith("symmetric")
+
+
+def test_plan_harvests_richest_skew_first(monkeypatch):
+    """Skew-conditioned SELECTION: given several buildable condors, plan picks the richest-skew
+    ones (most overpriced premium) at the same defined-risk size — not sizing up, just choosing."""
+    e = ConditionalVRPShortPremiumEngine()
+    pool = [{"ticker": t, "iv_rank": 0.9, "iv": 0.3} for t in ("LOWSK", "HIGHSK", "MIDSK")]
+    monkeypatch.setattr("app.services.conditional_vrp_forward_panel_engine."
+                        "ConditionalVRPForwardPanelEngine.rich_iv_candidates",
+                        lambda self, names=None: pool)
+    monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", []))
+    monkeypatch.setattr(e, "_open_symbols", lambda: set())
+    monkeypatch.setattr(e, "_open_risk", lambda: 0.0)
+    skewmap = {"LOWSK": 0.02, "HIGHSK": 0.15, "MIDSK": 0.08}
+    monkeypatch.setattr(e, "build_condor", lambda t, c, put_delta=None, call_delta=None: {
+        "symbol": t, "quantity": 1, "max_loss_total": 100.0, "credit_total": 20.0,
+        "skew": skewmap[t]})
+
+    r = e.plan(limit=2)
+    picked = [b["symbol"] for b in r["planned"]]
+    assert picked == ["HIGHSK", "MIDSK"], f"expected richest-skew first, got {picked}"
+    assert "LOWSK" not in picked   # the flat-skew name is left for the cheaper-premium day
