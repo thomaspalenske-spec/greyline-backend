@@ -373,8 +373,8 @@ class BackgroundSchedulerService:
                     # distinct-underlying high-VRP index harvest set (dispersion study 2026-07-26;
                     # firmed by block bootstrap, CI [+1.48,+3.66] vol pts). Single names + defensive
                     # sectors + redundant S&P clones excluded — they carry cost without premium.
-                    from app.services.conditional_vrp_short_premium_engine import INDEX_ETFS
-                    vrp_short_premium["open"] = _sp.open_positions(names=INDEX_ETFS, dry_run=False, limit=2)
+                    from app.services.conditional_vrp_short_premium_engine import VARIANCE_HARVEST
+                    vrp_short_premium["open"] = _sp.open_positions(names=VARIANCE_HARVEST, dry_run=False, limit=2)
                     try:
                         _mk.parent.mkdir(parents=True, exist_ok=True); _mk.write_text(_today)
                     except Exception:

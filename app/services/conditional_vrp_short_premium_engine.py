@@ -43,6 +43,19 @@ INDEX_ETFS = ["SPY", "RSP", "MDY", "IWM", "DIA", "QQQ",
               "XLF", "XLE", "XLY", "XLC", "XLU", "XLB", "XLRE",
               "VWO", "FXI"]
 
+# CROSS-ASSET variance premium (measured 2026-07-26): non-equity vol that is ALSO overpriced but
+# whose tail is a DIFFERENT crash — a bond selloff / credit event / oil spike / dollar move, not a
+# stock crash. Correlations of monthly VRP with SPY's: rates 0.23-0.27, credit -0.07/0.26, oil 0.00,
+# dollar -0.22 (a partial equity-crash hedge). This is what breaks the single-crash concentration
+# of index vol selling — independent tails instead of one. Gold/silver EXCLUDED (negative VRP: their
+# vol is underpriced). The cost gate skips any that are too illiquid to trade defined-risk.
+CROSS_ASSET_ETFS = ["TLT", "IEF", "HYG", "LQD", "USO", "UUP"]
+
+# The full diversified variance-premium harvest: equity-index crash premium PLUS independent-tail
+# cross-asset premiums. The portfolio cap still bounds the worst case, but that worst case is now
+# spread across uncorrelated risk drivers rather than concentrated in one equity crash.
+VARIANCE_HARVEST = INDEX_ETFS + CROSS_ASSET_ETFS
+
 
 class ConditionalVRPShortPremiumEngine:
 

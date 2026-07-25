@@ -23,7 +23,7 @@ import statistics
 from datetime import datetime
 from pathlib import Path
 
-from app.services.conditional_vrp_short_premium_engine import INDEX_ETFS
+from app.services.conditional_vrp_short_premium_engine import VARIANCE_HARVEST as INDEX_ETFS
 from app.services.conditional_vrp_research_engine import ConditionalVRPResearchEngine
 
 

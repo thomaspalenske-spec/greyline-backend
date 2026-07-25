@@ -4,7 +4,7 @@ powered, block-bootstrap CI (autocorrelation-robust)."""
 
 import json
 from app.services.index_variance_premium_panel_engine import IndexVariancePremiumPanelEngine
-from app.services.conditional_vrp_short_premium_engine import INDEX_ETFS
+from app.services.conditional_vrp_short_premium_engine import INDEX_ETFS, CROSS_ASSET_ETFS, VARIANCE_HARVEST
 
 
 def _panel(tmp_path):
@@ -20,6 +20,11 @@ def test_harvest_set_is_distinct_high_vrp_indices():
         assert redundant not in INDEX_ETFS, "redundant S&P clone should be collapsed to SPY"
     for zero in ("EEM", "XLV", "AAPL"):
         assert zero not in INDEX_ETFS
+    # cross-asset diversifiers (independent tails) are harvested; gold (negative VRP) is NOT
+    for div in ("TLT", "HYG", "USO", "UUP"):
+        assert div in CROSS_ASSET_ETFS and div in VARIANCE_HARVEST
+    for neg in ("GLD", "SLV", "GDX"):
+        assert neg not in VARIANCE_HARVEST
 
 
 def test_records_each_index_etf_once(tmp_path, monkeypatch):
@@ -34,7 +39,7 @@ def test_records_each_index_etf_once(tmp_path, monkeypatch):
                "unshifted_rv_date": "2099-01-01"} for dd in days]
     monkeypatch.setattr(e, "_fresh_series", lambda t: series)
     r = e.record()
-    assert r["recorded"] == len(INDEX_ETFS)
+    assert r["recorded"] == len(VARIANCE_HARVEST)   # equity + cross-asset
     # idempotent: recording again adds nothing for the same date
     assert e.record()["recorded"] == 0
 
