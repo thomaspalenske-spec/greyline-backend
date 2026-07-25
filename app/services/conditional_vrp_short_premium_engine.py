@@ -61,7 +61,16 @@ class ConditionalVRPShortPremiumEngine:
 
     LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
 
-    SHORT_DELTA = 0.20             # sell ~20-delta strangle (≈1 SD, standard premium-selling)
+    # ASYMMETRIC PUT-TILT (measured 2026-07-26): the index variance premium is concentrated in an
+    # OVERPRICED put skew — OTM put IV runs ~7-12 vol pts above OTM call IV while realized downside
+    # asymmetry is only ~1.4. So sell the PUT nearer the money (richer skew = more premium) and the
+    # CALL further out (call skew is cheap; less premium given up, and it trims upside risk). The
+    # tilt is DELIBERATELY MODEST (25d put / 15d call, vs a symmetric 20/20): a heavier tilt would
+    # concentrate crash exposure and undo the cross-asset diversification. Set both equal to go
+    # symmetric. Env-overridable for tuning the premium-vs-crash-concentration dial.
+    SHORT_DELTA = 0.20             # reference / symmetric fallback
+    SHORT_PUT_DELTA = 0.25         # put nearer ATM — capture the overpriced put skew
+    SHORT_CALL_DELTA = 0.15        # call further OTM — cheap skew, less premium there, less upside risk
     MAX_LOSS_PER_POSITION_USD = 300.0     # 3% of the $10k book, capped BEFORE the trade
     # Positions are CORRELATED — a vol spike hits every condor at once — so the tail is bounded at
     # the PORTFOLIO level, not just per position. Total defined risk across all open + new condors
@@ -78,6 +87,20 @@ class ConditionalVRPShortPremiumEngine:
     @staticmethod
     def enabled():
         return (getenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "") or "").strip().lower() == "true"
+
+    @classmethod
+    def _put_delta(cls):
+        try:
+            return float(getenv("GREYLINE_VRP_SHORT_PUT_DELTA", "") or cls.SHORT_PUT_DELTA)
+        except (TypeError, ValueError):
+            return cls.SHORT_PUT_DELTA
+
+    @classmethod
+    def _call_delta(cls):
+        try:
+            return float(getenv("GREYLINE_VRP_SHORT_CALL_DELTA", "") or cls.SHORT_CALL_DELTA)
+        except (TypeError, ValueError):
+            return cls.SHORT_CALL_DELTA
 
     @staticmethod
     def _f(v):
@@ -103,11 +126,14 @@ class ConditionalVRPShortPremiumEngine:
             "oi": int(self._f(contract.get("DailyOpenInterest"))),
         }
 
-    def build_condor(self, symbol, contracts):
+    def build_condor(self, symbol, contracts, put_delta=None, call_delta=None):
         """Construct a defined-risk iron condor from a chain snapshot, or a skip reason.
 
-        `contracts` is the raw chain list (each with Side/Bid/Ask/Delta/Legs). Returns a dict
-        describing the 4 legs, net credit, max loss and sized quantity — or {'skip': reason}."""
+        `contracts` is the raw chain list (each with Side/Bid/Ask/Delta/Legs). Defaults to the
+        asymmetric put-tilt (put nearer ATM); a caller can force specific short deltas. Returns a
+        dict describing the 4 legs, net credit, max loss and sized quantity — or {'skip': reason}."""
+        put_delta = self._put_delta() if put_delta is None else put_delta
+        call_delta = self._call_delta() if call_delta is None else call_delta
         calls = [self._leg(c) for c in contracts
                  if c.get("Side") == "Call" and c.get("Delta") and c.get("Bid")]
         puts = [self._leg(c) for c in contracts
@@ -120,8 +146,8 @@ class ConditionalVRPShortPremiumEngine:
         def nearest(legs, target):
             return min(legs, key=lambda l: abs(l["delta"] - target))
 
-        short_call = nearest(calls, self.SHORT_DELTA)
-        short_put = nearest(puts, self.SHORT_DELTA)
+        short_call = nearest(calls, call_delta)
+        short_put = nearest(puts, put_delta)
 
         # ADAPTIVE WINGS: buy the WIDEST wing (most tail protection / best credit) whose resulting
         # single-condor max loss still fits the per-position cap. A wide chain gives more choices;
@@ -179,6 +205,9 @@ class ConditionalVRPShortPremiumEngine:
             "max_loss_total": round(max_loss_per * qty, 2),
             "call_width": call_width, "put_width": put_width,
             "return_on_risk": round(credit * 100 / max_loss_per, 3),
+            "short_put_delta": round(short_put["delta"], 3),
+            "short_call_delta": round(short_call["delta"], 3),
+            "put_tilt": round(short_put["delta"] - short_call["delta"], 3),  # >0 = put nearer ATM
         }
 
     # ------------------------------------------------------------ planning
@@ -226,6 +255,16 @@ class ConditionalVRPShortPremiumEngine:
                 skipped.append({"ticker": c["ticker"], "skip": f"chain error: {str(e)[:60]}"})
                 continue
             con = self.build_condor(c["ticker"], contracts)
+            # If the put-tilt can't be capped within the per-position cap (a tilted put sits nearer
+            # ATM, harder to cap tightly), fall back to the SYMMETRIC condor rather than skip the
+            # name — capture the symmetric premium instead of nothing. Tilt is a preference, not a
+            # requirement; defined-risk is the requirement.
+            if con.get("skip") and "cap" in con["skip"]:
+                sym = self.build_condor(c["ticker"], contracts,
+                                        put_delta=self.SHORT_DELTA, call_delta=self.SHORT_DELTA)
+                if not sym.get("skip"):
+                    sym["tilt_fallback"] = "symmetric (put-tilt exceeded the cap)"
+                    con = sym
             if con.get("skip"):
                 skipped.append({"ticker": c["ticker"], "skip": con["skip"]})
                 continue

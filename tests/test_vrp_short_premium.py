@@ -94,3 +94,48 @@ def test_wings_bought_before_shorts_are_sold(monkeypatch):
     # the two BUYTOOPEN wing legs must precede the two SELLTOOPEN short legs
     assert order_seq[:2] == ["BUYTOOPEN", "BUYTOOPEN"]
     assert order_seq[2:] == ["SELLTOOPEN", "SELLTOOPEN"]
+
+
+def test_put_tilt_sells_the_put_nearer_the_money_than_the_call():
+    """The overpriced put skew is the richest premium, so the short PUT sits nearer ATM (higher
+    delta) than the short CALL — while every leg stays defined-risk with wings."""
+    e = ConditionalVRPShortPremiumEngine()
+    con = e.build_condor("XYZ", _full_chain())
+    assert "skip" not in con, con
+    # put delta > call delta => put nearer the money (the tilt), and it's a real tilt not symmetric
+    assert con["short_put_delta"] > con["short_call_delta"]
+    assert con["put_tilt"] > 0
+    # still defined-risk: wings present, max loss capped
+    assert con["legs"]["wing_put"]["strike"] < con["legs"]["short_put"]["strike"]
+    assert con["max_loss_total"] <= e.MAX_LOSS_PER_POSITION_USD + 1e-6
+
+
+def test_deltas_are_env_tunable_for_the_premium_vs_crash_dial(monkeypatch):
+    e = ConditionalVRPShortPremiumEngine()
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_PUT_DELTA", "0.40")
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_CALL_DELTA", "0.10")
+    assert e._put_delta() == 0.40 and e._call_delta() == 0.10
+
+
+def test_plan_falls_back_to_symmetric_when_tilt_exceeds_the_cap(monkeypatch):
+    """If the put-tilt can't be capped within the per-position cap, plan() must fall back to the
+    symmetric condor (capture the premium) rather than skip the name entirely."""
+    e = ConditionalVRPShortPremiumEngine()
+    monkeypatch.setattr("app.services.conditional_vrp_forward_panel_engine."
+                        "ConditionalVRPForwardPanelEngine.rich_iv_candidates",
+                        lambda self, names=None: [{"ticker": "XYZ", "iv_rank": 0.9, "iv": 0.3}])
+    monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", _full_chain()))
+    monkeypatch.setattr(e, "_open_symbols", lambda: set())
+    monkeypatch.setattr(e, "_open_risk", lambda: 0.0)
+
+    real_build = e.build_condor
+    def build(sym, contracts, put_delta=None, call_delta=None):
+        # force the tilt (default deltas) to look cap-exceeding; symmetric succeeds
+        if put_delta is None or put_delta != e.SHORT_DELTA:
+            return {"skip": "no wing keeps one condor's max loss within the per-position cap"}
+        return real_build(sym, contracts, put_delta=put_delta, call_delta=call_delta)
+    monkeypatch.setattr(e, "build_condor", build)
+
+    r = e.plan(limit=1)
+    assert len(r["planned"]) == 1
+    assert r["planned"][0].get("tilt_fallback", "").startswith("symmetric")
