@@ -15,7 +15,8 @@ IGNORED_ROUTES = {
         "/tradestation-orders-live",
         "/tradestation-positions-live",
         "/premium-harvest-os",
-        "/portfolio-greeks",     # live chain greeks per open leg   # aggregates live UW/broker reads
+        "/portfolio-greeks",     # live chain greeks per open leg
+        "/crash-stress-test/live",  # reads live book greeks   # aggregates live UW/broker reads
         "/catalyst-overlay",     # live UW economic/FDA calendar
         "/vrp-short-premium/plan",   # scans 201 names live (UW + option chains) — verified 200 over HTTP
         "/broker-protection",        # live broker positions/orders read, like the other TS-live routes

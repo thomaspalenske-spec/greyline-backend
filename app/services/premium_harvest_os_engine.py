@@ -107,5 +107,13 @@ class PremiumHarvestOSEngine:
         except Exception as e:
             out["book_greeks"] = {"error": str(e)[:80]}
 
+        # 8. CRASH STRESS — the return-vs-ruin truth: the live book's loss under real vol crashes,
+        # bounded by the defined-risk cap. Proves the tail is survivable, not wished away.
+        try:
+            from app.services.crash_stress_test_engine import CrashStressTestEngine
+            out["crash_stress"] = CrashStressTestEngine().stress_current_book()
+        except Exception as e:
+            out["crash_stress"] = {"error": str(e)[:80]}
+
         out["status"] = "PREMIUM_HARVEST_OS_STATUS"
         return out
