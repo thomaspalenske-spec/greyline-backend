@@ -309,6 +309,9 @@ app.include_router(vrp_short_premium.router)
 from app.routes import index_variance_premium
 app.include_router(index_variance_premium.router)
 
+from app.routes import premium_harvest_os
+app.include_router(premium_harvest_os.router)
+
 from app.routes import total_return
 app.include_router(total_return.router)
 

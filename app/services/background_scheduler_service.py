@@ -369,12 +369,16 @@ class BackgroundSchedulerService:
                     _due = True
                 from app.services.market_hours_engine import MarketHoursEngine
                 if _due and MarketHoursEngine().status().get("is_regular_session"):
-                    # Sell premium where the variance premium demonstrably LIVES: the measured,
-                    # distinct-underlying high-VRP index harvest set (dispersion study 2026-07-26;
-                    # firmed by block bootstrap, CI [+1.48,+3.66] vol pts). Single names + defensive
-                    # sectors + redundant S&P clones excluded — they carry cost without premium.
                     from app.services.conditional_vrp_short_premium_engine import VARIANCE_HARVEST
-                    vrp_short_premium["open"] = _sp.open_positions(names=VARIANCE_HARVEST, dry_run=False, limit=2)
+                    # CATALYST-AWARE TAIL DEFENSE: don't sell fresh index premium straight into a
+                    # scheduled vol event (Fed/CPI/PCE/jobs) — a known gap risk for no extra edge.
+                    from app.services.catalyst_risk_overlay_engine import CatalystRiskOverlayEngine
+                    _cat = CatalystRiskOverlayEngine().defer_new_premium(tickers=VARIANCE_HARVEST)
+                    if _cat.get("defer"):
+                        vrp_short_premium["open"] = {"status": "DEFERRED_CATALYST", **_cat}
+                    else:
+                        vrp_short_premium["open"] = _sp.open_positions(
+                            names=VARIANCE_HARVEST, dry_run=False, limit=2)
                     try:
                         _mk.parent.mkdir(parents=True, exist_ok=True); _mk.write_text(_today)
                     except Exception:
