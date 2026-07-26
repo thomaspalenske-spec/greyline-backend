@@ -161,3 +161,27 @@ def test_plan_harvests_richest_skew_first(monkeypatch):
     picked = [b["symbol"] for b in r["planned"]]
     assert picked == ["HIGHSK", "MIDSK"], f"expected richest-skew first, got {picked}"
     assert "LOWSK" not in picked   # the flat-skew name is left for the cheaper-premium day
+
+
+def test_plan_stops_at_the_vega_budget(monkeypatch):
+    """A vol desk sizes by net vega, not just max loss. Once the book's short-vega budget is used,
+    further condors are skipped even if dollar-risk headroom remains."""
+    e = ConditionalVRPShortPremiumEngine()
+    monkeypatch.setenv("GREYLINE_VEGA_BUDGET_USD", "100")   # tight vega budget (env, read by _vega_budget)
+    monkeypatch.setattr(e, "PORTFOLIO_RISK_CAP_USD", 100000.0)  # dollar cap not binding
+    monkeypatch.setattr(e, "_current_book_vega", lambda: 0.0)
+    pool = [{"ticker": t, "iv_rank": 0.9, "iv": 0.3} for t in ("A", "B", "C")]
+    monkeypatch.setattr("app.services.conditional_vrp_forward_panel_engine."
+                        "ConditionalVRPForwardPanelEngine.rich_iv_candidates",
+                        lambda self, names=None: pool)
+    monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", []))
+    monkeypatch.setattr(e, "_open_symbols", lambda: set())
+    monkeypatch.setattr(e, "_open_risk", lambda: 0.0)
+    # each condor is -$60 net vega; budget 100 -> only ONE fits (2nd would hit 120 > 100)
+    monkeypatch.setattr(e, "build_condor", lambda t, c, put_delta=None, call_delta=None: {
+        "symbol": t, "quantity": 1, "max_loss_total": 50.0, "credit_total": 10.0,
+        "skew": 0.10, "net_vega": -60.0})
+    r = e.plan(limit=5)
+    assert len(r["planned"]) == 1                          # vega budget binds before the dollar cap
+    assert r["vega_deployed_usd"] == 60.0
+    assert any("vega budget" in s.get("skip", "") for s in r["skipped"])

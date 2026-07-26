@@ -68,7 +68,10 @@ class PremiumHarvestOSEngine:
                 "deployed_defined_risk_usd": round(deployed, 2),
                 "headroom_usd": round(sp.PORTFOLIO_RISK_CAP_USD - deployed, 2),
                 "open_positions": len(sp._open_symbols()),
-                "note": "worst case is the whole cap lost in a correlated crash — bounded by design",
+                "vega_budget_usd": sp._vega_budget(),
+                "note": "TWO risk dimensions like a vol desk: max loss (dollar cap, the tail) AND "
+                        "net short-vega (the vol exposure). Worst case is the whole dollar cap lost "
+                        "in a correlated crash — bounded by design.",
             }
         except Exception as e:
             out["risk_budget"] = {"error": str(e)[:80]}

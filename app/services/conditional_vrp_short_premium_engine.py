@@ -76,6 +76,10 @@ class ConditionalVRPShortPremiumEngine:
     # the PORTFOLIO level, not just per position. Total defined risk across all open + new condors
     # may not exceed this. Even a simultaneous max-loss across the book stays survivable.
     PORTFOLIO_RISK_CAP_USD = 1200.0       # 12% of the book, worst-case correlated loss
+    # VEGA BUDGET: a vol desk sizes by its net vol EXPOSURE, not just its max loss. This caps the
+    # book's total net SHORT vega (|$ P&L per +1 vol point|). At -300, a 4-vol-pt spike ~= the
+    # portfolio dollar cap, so the two risk metrics agree. Env-tunable (GREYLINE_VEGA_BUDGET_USD).
+    MAX_SHORT_VEGA_USD = 300.0
     MAX_CONCURRENT = 5
     SKEW_POOL = 8                 # build this many candidates, then harvest the richest-skew ones
     MIN_CREDIT = 0.10             # skip structures that barely pay
@@ -88,6 +92,21 @@ class ConditionalVRPShortPremiumEngine:
     @staticmethod
     def enabled():
         return (getenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "") or "").strip().lower() == "true"
+
+    @classmethod
+    def _vega_budget(cls):
+        try:
+            return abs(float(getenv("GREYLINE_VEGA_BUDGET_USD", "") or cls.MAX_SHORT_VEGA_USD))
+        except (TypeError, ValueError):
+            return cls.MAX_SHORT_VEGA_USD
+
+    def _current_book_vega(self):
+        """Net vega already on the book (open positions), so new harvest sizes on top of it."""
+        try:
+            from app.services.portfolio_greeks_engine import PortfolioGreeksEngine
+            return self._f(PortfolioGreeksEngine().book_greeks().get("net_vega"))
+        except Exception:
+            return 0.0
 
     @classmethod
     def _put_delta(cls):
@@ -125,6 +144,7 @@ class ConditionalVRPShortPremiumEngine:
             "bid": self._f(contract.get("Bid")), "ask": self._f(contract.get("Ask")),
             "delta": abs(self._f(contract.get("Delta"))),
             "iv": self._f(contract.get("ImpliedVolatility")),
+            "vega": self._f(contract.get("Vega")),
             "oi": int(self._f(contract.get("DailyOpenInterest"))),
         }
 
@@ -215,6 +235,10 @@ class ConditionalVRPShortPremiumEngine:
             # NOT to size up — the study's tail-safety at steep skew is a crash-free-sample mirage.
             "skew": round(short_put["iv"] - short_call["iv"], 4)
             if (short_put.get("iv") and short_call.get("iv")) else None,
+            # net vega of the condor ($ P&L per +1 vol pt): wings (long) minus shorts (short). Net
+            # NEGATIVE = short vol. This is the vol-exposure the vega budget is sized against.
+            "net_vega": round(((wing_put["vega"] + wing_call["vega"])
+                               - (short_put["vega"] + short_call["vega"])) * 100 * qty, 1),
         }
 
     # ------------------------------------------------------------ planning
@@ -281,8 +305,11 @@ class ConditionalVRPShortPremiumEngine:
             con.update({"expiration": exp, "iv_rank": c["iv_rank"], "iv": c["iv"]})
             candidates.append(con)
 
-        # richest skew first (None skew sorts last), then fill within slots + portfolio budget
+        # richest skew first (None skew sorts last), then fill within slots, the DOLLAR cap AND the
+        # VEGA BUDGET — two risk dimensions a vol desk manages: max loss (tail) and vol exposure.
         candidates.sort(key=lambda x: (x.get("skew") if x.get("skew") is not None else -9), reverse=True)
+        vega_budget = self._vega_budget()
+        vega_used = abs(self._current_book_vega())     # net short vega already on the book
         built = []
         for con in candidates:
             if len(built) >= want:
@@ -291,7 +318,13 @@ class ConditionalVRPShortPremiumEngine:
                 skipped.append({"ticker": con["symbol"],
                                 "skip": f"would exceed portfolio risk cap (${round(budget_left, 0)} left)"})
                 continue
+            con_vega = abs(self._f(con.get("net_vega")))
+            if con_vega and vega_used + con_vega > vega_budget:
+                skipped.append({"ticker": con["symbol"],
+                                "skip": f"would exceed vega budget (${round(vega_budget - vega_used, 0)} left)"})
+                continue
             budget_left -= con["max_loss_total"]
+            vega_used += con_vega
             built.append(con)
         return {
             "timestamp": datetime.utcnow().isoformat(),
@@ -300,6 +333,9 @@ class ConditionalVRPShortPremiumEngine:
             "free_slots": slots, "planned": built, "skipped": skipped[:20],
             "cap_per_position_usd": self.MAX_LOSS_PER_POSITION_USD,
             "total_defined_risk_usd": round(sum(b["max_loss_total"] for b in built), 2),
+            "vega_budget_usd": round(vega_budget, 1),
+            "vega_deployed_usd": round(vega_used, 1),
+            "total_new_vega_usd": round(sum(abs(self._f(b.get("net_vega"))) for b in built), 1),
             "status": "VRP_SHORT_PREMIUM_PLAN",
         }
 
