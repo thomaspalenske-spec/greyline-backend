@@ -95,5 +95,14 @@ class PremiumHarvestOSEngine:
         except Exception as e:
             out["out_of_sample_scoreboard"] = {"error": str(e)[:80]}
 
+        # 7. BOOK GREEKS — the vol-desk view: is the harvest a PURE vol bet or a directional one?
+        try:
+            from app.services.portfolio_greeks_engine import PortfolioGreeksEngine
+            g = PortfolioGreeksEngine().book_greeks()
+            out["book_greeks"] = {k: g.get(k) for k in
+                ("net_delta_shares", "net_vega", "net_theta", "delta_neutral", "delta_hedge", "open_legs")}
+        except Exception as e:
+            out["book_greeks"] = {"error": str(e)[:80]}
+
         out["status"] = "PREMIUM_HARVEST_OS_STATUS"
         return out

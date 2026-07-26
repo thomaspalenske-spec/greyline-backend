@@ -386,6 +386,23 @@ class BackgroundSchedulerService:
         except Exception as exc:
             vrp_short_premium = {"status": "VRP_SHORT_PREMIUM_DEGRADED", "error": repr(exc)}
 
+        # BOOK GREEKS: keep the harvest a PURE vol bet, not an accidental directional one. Computes
+        # the aggregate delta and, if delta-hedging is armed, trades the underlying to neutralise it.
+        # Cheap when flat (returns immediately with no open legs); only fetches chains when positions
+        # exist. Reports the recommended hedge either way.
+        try:
+            from app.services.portfolio_greeks_engine import PortfolioGreeksEngine
+            _pg = PortfolioGreeksEngine()
+            bg = _pg.book_greeks()
+            book_greeks = {"net_delta_shares": bg.get("net_delta_shares"), "net_vega": bg.get("net_vega"),
+                           "delta_neutral": bg.get("delta_neutral"), "open_legs": bg.get("open_legs")}
+            if bg.get("delta_hedge") and _pg._hedge_enabled():
+                book_greeks["hedge"] = _pg.hedge_delta(dry_run=False)
+            elif bg.get("delta_hedge"):
+                book_greeks["hedge_recommended"] = bg["delta_hedge"]
+        except Exception as exc:
+            book_greeks = {"status": "BOOK_GREEKS_DEGRADED", "error": repr(exc)}
+
         # Phase 2: reconcile pending limit-buy fills and refine the entry aggressiveness.
         try:
             from app.services.options_entry_reconciler_engine import OptionsEntryReconcilerEngine
@@ -611,6 +628,8 @@ class BackgroundSchedulerService:
                 "vrp_short_premium_opened": ((vrp_short_premium.get("open") or {}) if isinstance(vrp_short_premium.get("open"), dict) else {}).get("opened"),
                 "vrp_panel_resolved": (vrp_panel.get("resolve") or {}).get("resolved"),
                 "index_vrp_recorded": (index_vrp_panel.get("record") or {}).get("recorded"),
+                "book_net_delta": book_greeks.get("net_delta_shares"),
+                "book_delta_neutral": book_greeks.get("delta_neutral"),
                 "index_vrp_resolved": (index_vrp_panel.get("resolve") or {}).get("resolved"),
                 "earnings_vol_recorded": earnings_vol.get("recorded"),
                 "options_capture_rows": options_capture.get("rows"),
