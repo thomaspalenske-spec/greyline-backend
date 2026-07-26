@@ -185,3 +185,32 @@ def test_plan_stops_at_the_vega_budget(monkeypatch):
     assert len(r["planned"]) == 1                          # vega budget binds before the dollar cap
     assert r["vega_deployed_usd"] == 60.0
     assert any("vega budget" in s.get("skip", "") for s in r["skipped"])
+
+
+def test_gamma_defense_closes_a_tested_short_strike_early(tmp_path, monkeypatch):
+    """A short leg tested toward ITM (delta past the threshold) must close PROACTIVELY — before it
+    becomes a max-loss hard stop — while a safe centered condor keeps running."""
+    import json as _json
+    e = ConditionalVRPShortPremiumEngine()
+    e.LEDGER = tmp_path / "vrp.jsonl"
+    e.LEDGER.write_text(_json.dumps({
+        "symbol": "SPY", "quantity": 1, "status": "OPEN", "expiration": "2026-09-30",
+        "credit_per_condor": 1.0, "credit_total": 100.0, "max_loss_total": 400.0,
+        "legs": [{"symbol": "SPY 260930P600", "action": "SELLTOOPEN"},
+                 {"symbol": "SPY 260930P590", "action": "BUYTOOPEN"},
+                 {"symbol": "SPY 260930C660", "action": "SELLTOOPEN"},
+                 {"symbol": "SPY 260930C670", "action": "BUYTOOPEN"}]}) + "\n")
+    # a TESTED position is LOSING, not at profit: the short put (now near ITM) is expensive to buy
+    # back, so cost-to-close ~= credit (small loss) — not a 50% profit, not a hard stop.
+    import app.services.tradestation_quote_live_engine as tsq
+    _px = {"SPY 260930P600": (1.10, 1.20), "SPY 260930P590": (0.05, 0.10),
+           "SPY 260930C660": (0.05, 0.10), "SPY 260930C670": (0.02, 0.05)}
+    monkeypatch.setattr(tsq.TradeStationQuoteLiveEngine, "get_quote",
+                        lambda self, s: {"response_json": {"Bid": _px.get(s, (0.5, 0.6))[0],
+                                                           "Ask": _px.get(s, (0.5, 0.6))[1]}})
+    # the short PUT has drifted to 0.50 delta (underlying dropped toward it) = TESTED
+    monkeypatch.setattr(e, "_short_leg_greeks_map", lambda rows: {"SPY 260930P600": 0.50,
+                                                                  "SPY 260930C660": 0.15})
+    r = e.manage_positions(dry_run=True)
+    d = r["decisions"][0]
+    assert d["action"] == "CLOSE" and d["reason"].startswith("DEFEND_TESTED_STRIKE")

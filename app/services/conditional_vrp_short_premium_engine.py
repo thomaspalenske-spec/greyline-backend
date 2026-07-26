@@ -84,8 +84,13 @@ class ConditionalVRPShortPremiumEngine:
     SKEW_POOL = 8                 # build this many candidates, then harvest the richest-skew ones
     MIN_CREDIT = 0.10             # skip structures that barely pay
     PROFIT_TAKE_FRAC = 0.50       # close at 50% of max credit captured
-    MANAGE_DTE = 7               # liquidate this many days before expiry (gamma risk)
+    MANAGE_DTE = 7               # liquidate this many days before expiry (gamma backstop)
     HARD_STOP_LOSS_MULT = 0.80    # stop if unrealized loss reaches 80% of defined max loss
+    # GAMMA DEFENSE: a short leg whose delta has grown to this means the underlying is TESTING that
+    # strike — short gamma is now acute and the strike is at risk of breach. Close proactively,
+    # before it becomes a max-loss hard stop. This is the "manage the tested side" discipline that
+    # lets SAFE (centered) condors keep harvesting theta while cutting THREATENED ones early.
+    TESTED_SHORT_DELTA = 0.45
 
     _SYM = re.compile(r"^(\S+)\s+(\d{6})([CP])(\d+(?:\.\d+)?)$")
 
@@ -397,6 +402,25 @@ class ConditionalVRPShortPremiumEngine:
 
     # ------------------------------------------------------------ exit doctrine
 
+    def _short_leg_greeks_map(self, open_rows):
+        """{option_symbol: |delta|} for every leg across open condors — live from the chain, one
+        fetch per (underlying, expiry). Used by the gamma defense to see tested short strikes."""
+        try:
+            from app.services.portfolio_greeks_engine import PortfolioGreeksEngine
+            pg = PortfolioGreeksEngine()
+        except Exception:
+            return {}
+        groups, out = set(), {}
+        for r in open_rows:
+            for leg in r.get("legs", []):
+                und, exp = pg._parse(leg.get("symbol"))
+                if und and exp:
+                    groups.add((und, exp))
+        for und, exp in groups:
+            for sym, g in (pg._chain_greeks(und, exp) or {}).items():
+                out[sym] = abs(g.get("delta") or 0.0)
+        return out
+
     def _dte(self, expiration):
         try:
             e = datetime.strptime(str(expiration)[:10], "%Y-%m-%d").date()
@@ -414,6 +438,10 @@ class ConditionalVRPShortPremiumEngine:
             return {"status": "NO_VRP_LEDGER", "managed": 0}
         from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
         q = TradeStationQuoteLiveEngine()
+
+        # Pre-fetch current greeks once per (underlying, expiry) so the gamma defense can read each
+        # short leg's LIVE delta without a chain call per position.
+        greeks = self._short_leg_greeks_map([r for r in rows if r.get("status") == "OPEN"])
 
         decisions = []
         for r in rows:
@@ -440,9 +468,15 @@ class ConditionalVRPShortPremiumEngine:
             dte = self._dte(r.get("expiration"))
             max_loss_total = r["max_loss_total"]
 
+            # GAMMA DEFENSE: has a short leg been tested toward ITM? (live delta of the shorts)
+            tested_delta = max((greeks.get(str(leg["symbol"]).upper(), 0.0)
+                                for leg in r["legs"] if leg["action"] == "SELLTOOPEN"), default=0.0)
+
             reason = None
             if pnl_per >= self.PROFIT_TAKE_FRAC * credit * 100:
                 reason = "PROFIT_TAKE_50PCT"
+            elif tested_delta >= self.TESTED_SHORT_DELTA:
+                reason = f"DEFEND_TESTED_STRIKE_{round(tested_delta, 2)}d"
             elif dte <= self.MANAGE_DTE:
                 reason = f"MANAGE_DTE_{dte}D"
             elif pnl_total <= -self.HARD_STOP_LOSS_MULT * max_loss_total:
