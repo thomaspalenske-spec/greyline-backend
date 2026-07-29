@@ -104,6 +104,24 @@ def _momentum_enabled():
     return (getenv("GREYLINE_MOMENTUM_ENABLED", "true") or "true").strip().lower() == "true"
 
 
+def _attach_exec_status(result):
+    """Attach LIVE executability (status + reason) to each candidate — the SAME classification the
+    Execute/Watch panel uses (ExecuteWatchEngine is the single source), so the two can never disagree.
+    Status is live (held / free cash / per-name budget), so it's stamped at SERVE time and never
+    baked into the 15-min cache."""
+    try:
+        from app.services.execute_watch_engine import ExecuteWatchEngine
+        stat = {str(w.get("symbol") or "").upper(): w
+                for w in (ExecuteWatchEngine().view().get("watch") or [])}
+        for c in (result.get("candidates") or []):
+            w = stat.get(str(c.get("symbol") or "").upper())
+            c["exec_status"] = (w or {}).get("status")
+            c["exec_reason"] = (w or {}).get("reason")
+    except Exception:
+        pass
+    return result
+
+
 @router.get("/top-candidates")
 def top_candidates(force: bool = False, top_n: int = 5):
     """Top-N momentum-reversal candidates, TTL-cached. ?force=true recomputes now."""
@@ -121,7 +139,7 @@ def top_candidates(force: bool = False, top_n: int = 5):
                 clean, discarded = TrashPickFilterEngine.partition(cached.get("candidates") or [])
                 cached["candidates"] = clean
                 cached["trash_discarded"] = int(cached.get("trash_discarded") or 0) + len(discarded)
-                return cached
+                return _attach_exec_status(cached)
         except Exception:
             pass
 
@@ -133,4 +151,4 @@ def top_candidates(force: bool = False, top_n: int = 5):
         pass
     result["cache"] = "MISS_COMPUTED"
     result["momentum_enabled"] = _momentum_enabled()
-    return result
+    return _attach_exec_status(result)

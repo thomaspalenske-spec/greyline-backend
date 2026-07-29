@@ -39,3 +39,11 @@ def execute_watch():
     """Buy opportunities: WATCH ranked by conviction; EXECUTE = meets criteria but blocked (no capital/glitch)."""
     from app.services.execute_watch_engine import ExecuteWatchEngine
     return ExecuteWatchEngine().view()
+
+
+@router.get("/opportunity-board")
+def opportunity_board():
+    """Unified board — equity + option candidates side by side, grouped by edge, sorted by each edge's
+    native score (NOT cross-ranked). Never streams chains, so it's safe after hours."""
+    from app.services.unified_opportunity_board_engine import UnifiedOpportunityBoardEngine
+    return UnifiedOpportunityBoardEngine().board()

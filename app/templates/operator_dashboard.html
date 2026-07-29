@@ -680,8 +680,8 @@ th {
         <div id="candidates_momentum_banner" style="display:none;"></div>
         <div class="sub" style="margin-bottom:10px;">The momentum-reversal signal's long picks, traded as WHOLE-SHARE EQUITY (2026-07-24: OTM options retired — the backtest proved they can't carry the edge). A pick is a 12-month uptrend that just pulled back short-term. Long-only, regime-gated. <span id="candidates_open_note">These open at the next market session.</span></div>
         <table>
-          <thead><tr><th>#</th><th>Symbol</th><th>Side</th><th>12-1 Momentum</th><th>5-Day Reversal</th><th>Conviction</th><th>Price</th><th>Est. Cost</th></tr></thead>
-          <tbody id="candidates_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+          <thead><tr><th>#</th><th>Symbol</th><th>Instrument</th><th>Side</th><th>12-1 Momentum</th><th>5-Day Reversal</th><th>Conviction</th><th>Price</th><th>Est. Cost</th><th>Status</th><th>Reason</th></tr></thead>
+          <tbody id="candidates_body"><tr><td colspan="11"><span class="sub">Loading…</span></td></tr></tbody>
         </table>
       </div>
 
@@ -693,6 +693,17 @@ th {
             <tr><th>Rank</th><th>Symbol</th><th>Conviction</th><th>12-1 Mom</th><th>5d Rev</th><th>Price</th><th>Status</th><th>Reason</th></tr>
           </thead>
           <tbody id="execute_watch_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="opportunity_board_card">
+        <div class="section-title">Opportunity Board — Equity + Options <span id="ob_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Every live candidate across the harvesting sleeves, grouped by edge and sorted by each edge's <em>native</em> score. Deliberately NOT cross-ranked — a directional-equity conviction and a defined-risk condor's IV rank are different units; one blended "expected profit" number on unproven edges would be false precision. A true cross-instrument ranking waits on <a href="/edge-persistence" style="color:inherit;">measured live edge</a>.</div>
+        <table>
+          <thead>
+            <tr><th>Symbol</th><th>Instrument</th><th>Score</th><th>Status</th><th>Reason</th><th>Detail</th></tr>
+          </thead>
+          <tbody id="opportunity_board_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
         </table>
       </div>
 
@@ -976,12 +987,15 @@ async function refreshTopCandidates() {
       <tr>
         <td>${i + 1}</td>
         <td><strong>${c.symbol}</strong></td>
+        <td><span class="badge open">EQUITY</span><br><span class="sub">whole shares</span></td>
         <td><span class="green">LONG</span></td>
         <td>${pctCell(c.momentum_12_1_pct)}</td>
         <td>${pctCell(c.reversal_5d_move_pct)}<br><span class="sub">buys the dip</span></td>
         <td><strong>${(c.conviction != null ? Number(c.conviction).toFixed(3) : "—")}</strong></td>
         <td>${px > 0 ? fmtMoney(px) : "—"}</td>
-        <td>${shares > 0 ? `${fmtMoney(cost)}<br><span class="sub">${shares} sh</span>` : "—"}</td>
+        <td>${shares > 0 ? `${fmtMoney(cost)}<br><span class="sub">${shares} shares</span>` : "—"}</td>
+        <td>${c.exec_status ? `<span class="badge ${c.exec_status === "EXECUTE" ? "unmanaged" : c.exec_status === "BOUGHT" ? "open" : "neutral"}">${c.exec_status}</span>` : "—"}</td>
+        <td><span class="sub">${c.exec_reason || "—"}</span></td>
       </tr>`;
     }).join("");
     const stale = !String(d.data_source || "").startsWith("TRADESTATION_LIVE");
@@ -990,7 +1004,7 @@ async function refreshTopCandidates() {
       : "No confirmed long signals right now (12-1 momentum and 5-day reversal must agree).";
     body.innerHTML = rows || `<tr><td colspan="8"><span class="sub">${emptyMsg}</span></td></tr>`;
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="8"><span class="red">⚠ Candidates unavailable — could not read the strategy (${String(e).slice(0,50)}).</span></td></tr>`;
+    body.innerHTML = `<tr><td colspan="11"><span class="red">⚠ Candidates unavailable — could not read the strategy (${String(e).slice(0,50)}).</span></td></tr>`;
   }
 }
 
@@ -1020,6 +1034,43 @@ async function refreshExecuteWatch() {
   }
 }
 
+async function refreshOpportunityBoard() {
+  const body = document.getElementById("opportunity_board_body");
+  const summary = document.getElementById("ob_summary");
+  try {
+    const d = await getJSON("/opportunity-board");
+    const groups = d.groups || [];
+    if (summary) summary.textContent = `${d.total_candidates || 0} live candidates across ${groups.length} edges · sorted within edge, not cross-ranked`;
+    let html = "";
+    for (const g of groups) {
+      const cands = g.candidates || [];
+      html += `<tr><td colspan="6" style="padding-top:14px;">
+        <strong>${g.strategy || ""}</strong> <span class="sub">· ${g.instrument || ""}</span><br>
+        <span class="sub">${g.edge || ""}</span><br>
+        <span class="sub" style="opacity:.85;">${g.action || ""}${g.error ? " — <span class='red'>"+g.error+"</span>" : ""}</span>
+      </td></tr>`;
+      if (!cands.length) {
+        html += `<tr><td colspan="6"><span class="sub">${g.note || "no candidates right now"}</span></td></tr>`;
+        continue;
+      }
+      html += cands.map(c => {
+        const badge = c.status === "EXECUTE" ? "unmanaged" : c.status === "BOUGHT" ? "open" : c.status === "ARMED" ? "open" : "neutral";
+        return `<tr>
+        <td><strong>${c.symbol}</strong></td>
+        <td><span class="sub">${c.instrument || ""}</span></td>
+        <td>${c.score != null ? c.score : "—"} <span class="sub">${c.score_label || ""}</span></td>
+        <td>${c.status && c.status !== "—" ? `<span class="badge ${badge}">${c.status}</span>` : "—"}</td>
+        <td><span class="sub">${c.reason || "—"}</span></td>
+        <td><span class="sub">${c.detail || ""}</span></td>
+      </tr>`;
+      }).join("");
+    }
+    body.innerHTML = html || `<tr><td colspan="6"><span class="sub">No candidates right now.</span></td></tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="6"><span class="red">Opportunity board unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshAll() {
   setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
   await refreshCockpitBanner();
@@ -1027,6 +1078,7 @@ async function refreshAll() {
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
   refreshTopCandidates();   // fire-and-forget: cached endpoint, must never stall the main loop
   refreshExecuteWatch();    // fire-and-forget: reads the cached candidates, never stalls the loop
+  refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
 
   const [ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/options-account-dashboard"),
