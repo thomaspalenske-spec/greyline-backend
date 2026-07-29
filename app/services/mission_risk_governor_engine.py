@@ -25,7 +25,55 @@ class MissionRiskGovernorEngine:
     SOD = DIR / "sod_equity.json"
     HALT_MARKER = DIR / "opens_halted.json"
     ALERT_STATE = DIR / "governor_alert_state.json"
+    IDLE_MARKER = DIR / "armed_idle_since.json"
     THROTTLE_MIN = 30.0
+
+    # "armed but not trading" watch: the failure that sat SILENT on the 2026-07-29 open (strategies
+    # were meant to be on, GreyLine ran flat for 90min, and no alert fired because the arming lived in
+    # an external task, not the service). Now watched INSIDE the always-on scheduler.
+    IDLE_PCT = 5.0             # deployed below this while armed during RTH ...
+    IDLE_ALERT_MIN = 20.0      # ... for this long -> CRITICAL alert to the phone
+    STRATEGY_FLAGS = ["GREYLINE_VOL_CARRY_ENABLED", "GREYLINE_TREND_ENABLED", "GREYLINE_TBILL_SWEEP_ENABLED",
+                      "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_EARNINGS_VOL_ENABLED",
+                      "GREYLINE_MOMENTUM_ENABLED"]
+
+    @classmethod
+    def _armed(cls):
+        return [f for f in cls.STRATEGY_FLAGS if (getenv(f, "") or "").strip().lower() == "true"]
+
+    def _is_rth(self):
+        try:
+            from app.services.market_hours_engine import MarketHoursEngine
+            return MarketHoursEngine().status().get("is_regular_session") is True
+        except Exception:
+            return False
+
+    def reset_sod(self, equity=None):
+        """Reset start-of-day equity — call after a rebaseline so daily P&L isn't a reset artifact."""
+        if equity is None:
+            equity, _ = self._equity_and_deployed()
+        self.DIR.mkdir(parents=True, exist_ok=True)
+        self.SOD.write_text(json.dumps({"date": datetime.utcnow().date().isoformat(), "equity": equity}))
+        return equity
+
+    def _idle_since(self):
+        today = datetime.utcnow().date().isoformat()
+        try:
+            rec = json.loads(self.IDLE_MARKER.read_text())
+            if rec.get("date") == today and rec.get("since"):
+                return datetime.fromisoformat(rec["since"])
+        except Exception:
+            pass
+        now = datetime.utcnow()
+        self.DIR.mkdir(parents=True, exist_ok=True)
+        self.IDLE_MARKER.write_text(json.dumps({"date": today, "since": now.isoformat()}))
+        return now
+
+    def _clear_idle(self):
+        try:
+            self.IDLE_MARKER.unlink()
+        except Exception:
+            pass
 
     @staticmethod
     def _f(v):
@@ -170,4 +218,19 @@ class MissionRiskGovernorEngine:
                            f"Deployed {s['deployed']} = {s['deployed_pct']}% of the {base:.0f} book "
                            f"(>100%). Capital coordination breached — review allocations.", "CRITICAL"):
                 alerts.append("OVER_DEPLOYED")
-        return {**s, "alerts_fired": alerts}
+
+        # ARMED BUT NOT TRADING — the silent open-day failure, now self-watched in the always-on
+        # service. Strategies enabled + market open + deployed ~nothing for too long = likely idle.
+        armed = self._armed()
+        idle = bool(armed and self._is_rth() and s["deployed_pct"] < self.IDLE_PCT)
+        if idle:
+            mins = (datetime.utcnow() - self._idle_since()).total_seconds() / 60.0
+            if mins >= self.IDLE_ALERT_MIN and self._alert(
+                    "BOOK_ARMED_BUT_IDLE", "GreyLine armed but NOT trading",
+                    f"{len(armed)} strateg(ies) enabled and the market is open, but deployed is only "
+                    f"{s['deployed_pct']}% for ~{round(mins)}min. GreyLine is likely UP but idle — "
+                    f"check the scheduler cycle and strategy flags NOW.", "CRITICAL"):
+                alerts.append("ARMED_IDLE")
+        else:
+            self._clear_idle()
+        return {**s, "armed_count": len(armed), "armed_idle": idle, "alerts_fired": alerts}

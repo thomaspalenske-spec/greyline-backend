@@ -55,6 +55,32 @@ def test_over_deployment_fires_critical(monkeypatch, tmp_path):
     assert any(c["severity"] == "CRITICAL" for c in FakeNotifier.calls)
 
 
+def test_armed_but_idle_fires_critical(monkeypatch, tmp_path):
+    """The silent open-day failure: strategies enabled, market open, deployed ~0 for too long."""
+    from datetime import datetime, timedelta
+    _patch(monkeypatch, tmp_path, equity=10000, sod=10000, deployed=0)         # 0% deployed
+    monkeypatch.setattr(G, "_armed", classmethod(lambda cls: ["GREYLINE_TREND_ENABLED"]))
+    monkeypatch.setattr(G, "_is_rth", lambda self: True)
+    monkeypatch.setattr(G, "_idle_since", lambda self: datetime.utcnow() - timedelta(minutes=25))
+    r = G().check_and_alert()
+    assert "ARMED_IDLE" in r["alerts_fired"]
+    assert any(c["severity"] == "CRITICAL" for c in FakeNotifier.calls)
+
+
+def test_armed_and_deployed_is_not_idle(monkeypatch, tmp_path):
+    _patch(monkeypatch, tmp_path, equity=10000, sod=10000, deployed=4000)      # 40% deployed
+    monkeypatch.setattr(G, "_armed", classmethod(lambda cls: ["GREYLINE_TREND_ENABLED"]))
+    monkeypatch.setattr(G, "_is_rth", lambda self: True)
+    assert "ARMED_IDLE" not in G().check_and_alert()["alerts_fired"]
+
+
+def test_idle_but_not_armed_is_silent(monkeypatch, tmp_path):
+    _patch(monkeypatch, tmp_path, equity=10000, sod=10000, deployed=0)         # flat but nothing armed
+    monkeypatch.setattr(G, "_armed", classmethod(lambda cls: []))
+    monkeypatch.setattr(G, "_is_rth", lambda self: True)
+    assert "ARMED_IDLE" not in G().check_and_alert()["alerts_fired"]
+
+
 def test_alert_is_throttled(monkeypatch, tmp_path):
     _patch(monkeypatch, tmp_path, equity=9550, sod=10000, deployed=5000)
     assert G().check_and_alert()["alerts_fired"] == ["WARN"]

@@ -557,6 +557,15 @@ class BackgroundSchedulerService:
         except Exception as exc:
             risk_governor = {"error": repr(exc), "status": "MISSION_RISK_GOVERNOR_DEGRADED"}
 
+        # EDGE PERSISTENCE (Medallion discipline, additive read-only): record today's per-sleeve marks
+        # so each strategy builds a LIVE track record — the foundation for retiring decayed sleeves on
+        # evidence. Overwrites today's row each cycle, so it ends the day on the latest marks.
+        try:
+            from app.services.edge_persistence_engine import EdgePersistenceEngine
+            edge_persistence = EdgePersistenceEngine().snapshot()
+        except Exception as exc:
+            edge_persistence = {"error": repr(exc), "status": "EDGE_PERSISTENCE_DEGRADED"}
+
         # BOOK GREEKS: keep the harvest a PURE vol bet, not an accidental directional one. Computes
         # the aggregate delta and, if delta-hedging is armed, trades the underlying to neutralise it.
         # Cheap when flat (returns immediately with no open legs); only fetches chains when positions

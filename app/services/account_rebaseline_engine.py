@@ -90,6 +90,12 @@ class AccountRebaselineEngine:
                   "archived_realized_before": prior, "archived_to": archived_to,
                   "reset_daily_baseline_to": daily, "vrp_ledger_rows_closed": vrp_closed}
         self.MARKER.write_text(json.dumps(marker))
+        # reset the governor's start-of-day equity so daily P&L isn't a rebaseline artifact
+        try:
+            from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
+            MissionRiskGovernorEngine().reset_sod()
+        except Exception:
+            pass
         return {"status": "REBASELINED", **marker, "cumulative_realized_now": mr.cumulative_realized()}
 
     def rebaseline_if_pending(self, reason="operator clean-slate reset"):
