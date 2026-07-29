@@ -132,8 +132,10 @@ class TrendFollowingEngine:
             if d > 0 and abs(leg["delta_usd"]) < self.REBALANCE_MIN_USD:
                 continue
             action = "BUY" if d > 0 else "SELL"
-            limit = round(leg["ask"] if d > 0 else leg["bid"], 2)
-            if limit <= 0:
+            # patient limit: post toward the mid to CAPTURE part of the spread instead of crossing it
+            from app.services.execution_pricing_engine import ExecutionPricingEngine
+            limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
+            if not limit or limit <= 0:
                 continue
             if dry_run:
                 acts.append({"symbol": leg["symbol"], "would": action, "qty": abs(d), "limit": limit})

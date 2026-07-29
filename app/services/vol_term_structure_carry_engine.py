@@ -206,14 +206,18 @@ class VolTermStructureCarryEngine:
         if p["status"] not in ("VOL_CARRY_PLAN",):
             return {**p, "acted": False}
         delta = p["delta_shares"]
-        # exits (delta<0 toward 0) always act; entries respect the churn threshold
-        if delta == 0 or (delta > 0 and abs(p["delta_usd"]) < self.REBALANCE_MIN_USD):
+        # A FULL exit (target 0 — backwardation / stop) always acts. A routine vol-target trim in
+        # EITHER direction respects the churn band, so we don't pay the spread on tiny daily wiggles.
+        full_exit = p["target_shares"] == 0
+        if delta == 0 or (not full_exit and abs(p["delta_usd"]) < self.REBALANCE_MIN_USD):
             return {**p, "status": "VOL_CARRY_IN_BALANCE", "acted": False}
         if dry_run:
             return {**p, "status": "VOL_CARRY_DRYRUN", "acted": False,
                     "would": ("BUY" if delta > 0 else "SELL", abs(delta), self.SYMBOL)}
         action = "BUY" if delta > 0 else "SELL"
-        limit = round(p["ask"] if delta > 0 else p["bid"], 2)
+        # patient limit: post toward the mid to CAPTURE part of the spread instead of crossing it all
+        from app.services.execution_pricing_engine import ExecutionPricingEngine
+        limit = ExecutionPricingEngine.patient_limit(p["bid"], p["ask"], delta > 0)
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         r = TradeStationSimBookingEngine().place_order(self.SYMBOL, abs(delta), action=action,
                                                        order_type="Limit", limit_price=limit, tif="DAY")
