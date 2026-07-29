@@ -51,7 +51,7 @@ class BrokerAccountViewEngine:
         # Pending limit BUY-to-open orders — what we've placed and are WAITING to fill at a
         # target price. Empty while entries are market orders; populates once entries are
         # limit orders. These are not positions yet, so the dashboard shows them as pending.
-        pending_buys, pending_closes = [], []
+        pending_buys, pending_closes, pending_stops = [], [], []
         for o in working:
             leg = (o.get("Legs") or [{}])[0]
             buy_or_sell = str(leg.get("BuyOrSell") or "").lower()
@@ -70,9 +70,16 @@ class BrokerAccountViewEngine:
             if buy_or_sell.startswith("buy") and open_or_close == "open":
                 pending_buys.append(row)
             elif buy_or_sell.startswith("sell") and open_or_close == "close":
-                # A working SELLTOCLOSE means this position is being LIQUIDATED — surface it
-                # so the dashboard shows "closing", not orphaned risk sitting untouched.
-                pending_closes.append(row)
+                if str(o.get("OrderType") or "") in ("StopMarket", "StopLimit"):
+                    # A resting protective STOP (disaster stop, far below price) — NOT an active
+                    # liquidation. It fires only if the position crashes. Surface it as the
+                    # position's stop, NOT as "closing" (which falsely reads like the book is being
+                    # dumped when it is actually held and protected).
+                    row["stop_price"] = _f(o.get("StopPrice"))
+                    pending_stops.append(row)
+                else:
+                    # A working Limit/Market SELLTOCLOSE = this position is being LIQUIDATED now.
+                    pending_closes.append(row)
 
         reads_ok = (bal.get("http_status") == 200 and pos.get("http_status") == 200
                     and ords.get("http_status") == 200)
@@ -131,5 +138,6 @@ class BrokerAccountViewEngine:
             "orders_working": len(working),
             "pending_buys": pending_buys,
             "pending_closes": pending_closes,
+            "pending_stops": pending_stops,
             "status": "BROKER_ACCOUNT_VIEW_READY" if reads_ok else "BROKER_ACCOUNT_READ_DEGRADED",
         }

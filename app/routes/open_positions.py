@@ -121,6 +121,10 @@ def open_positions():
     # placed the closes, which fill at the next open). These must read as CLOSING, not as
     # orphaned UNMANAGED risk that nobody is acting on.
     closing = {str(c.get("symbol") or "").upper(): c for c in (view.get("pending_closes") or [])}
+    # Broker-side protective STOPS (resting StopMarket, far below price) — NOT closes. Shown in the
+    # Stop column so a held+protected position doesn't falsely read as "closing".
+    stops = {str(s.get("symbol") or "").upper(): s.get("stop_price")
+             for s in (view.get("pending_stops") or [])}
     for r in rows:
         sym = str(r.get("symbol") or "").upper()
         # Total initial cost in real dollars (option premium x100 x contracts) — computed for
@@ -173,6 +177,9 @@ def open_positions():
                 r["status"] = "MANAGED"
                 r["stage"] = "VRP condor leg · managed as a unit (defined-risk · 50% profit / gamma / DTE)"
                 r["condor_levels"] = condor_levels.get(sym)
+        elif stops.get(sym) is not None:
+            # held equity/ETF with a broker-side protective disaster stop — show the stop, stay OPEN
+            r["stop_loss"] = stops.get(sym)
 
     # Pending limit BUYs we're waiting to fill — shown as PENDING rows (not positions yet).
     for pb in view.get("pending_buys", []):

@@ -155,6 +155,25 @@ class GreyLineRealityGuardEngine:
                                 syms.add(s)
         except Exception:
             pass
+        # New equity/ETF sleeves (carry/trend/T-bill) book straight to the broker, not a paper
+        # ledger — so register their instruments as managed while their sleeve is armed. Without
+        # this they mislabel as UNMANAGED on the dashboard and read as untracked risk to the guard.
+        try:
+            from os import getenv
+
+            def _on(flag):
+                return (getenv(flag, "") or "").strip().lower() == "true"
+            if _on("GREYLINE_VOL_CARRY_ENABLED"):
+                from app.services.vol_term_structure_carry_engine import VolTermStructureCarryEngine
+                syms.add(VolTermStructureCarryEngine.SYMBOL)
+            if _on("GREYLINE_TREND_ENABLED"):
+                from app.services.trend_following_engine import TrendFollowingEngine
+                syms.update(TrendFollowingEngine.BASKET)
+            if _on("GREYLINE_TBILL_SWEEP_ENABLED"):
+                from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+                syms.add(TbillCashSweepEngine.symbol())
+        except Exception:
+            pass
         return syms
 
     def _check_untracked_broker_positions(self, view):
