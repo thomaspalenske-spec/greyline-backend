@@ -675,9 +675,10 @@ th {
     </section>
 
     <section class="content">
-      <div class="card">
+      <div class="card" id="candidates_card">
         <div class="section-title">Top Candidates — Equity Longs <span id="candidates_asof" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">The momentum-reversal signal's long picks, traded as WHOLE-SHARE EQUITY (2026-07-24: OTM options retired — the backtest proved they can't carry the edge). A pick is a 12-month uptrend that just pulled back short-term. Long-only, regime-gated. These open at the next market session.</div>
+        <div id="candidates_momentum_banner" style="display:none;"></div>
+        <div class="sub" style="margin-bottom:10px;">The momentum-reversal signal's long picks, traded as WHOLE-SHARE EQUITY (2026-07-24: OTM options retired — the backtest proved they can't carry the edge). A pick is a 12-month uptrend that just pulled back short-term. Long-only, regime-gated. <span id="candidates_open_note">These open at the next market session.</span></div>
         <table>
           <thead><tr><th>#</th><th>Symbol</th><th>Side</th><th>12-1 Momentum</th><th>5-Day Reversal</th><th>Conviction</th><th>Price</th><th>Est. Cost</th></tr></thead>
           <tbody id="candidates_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
@@ -924,6 +925,25 @@ async function refreshTopCandidates() {
   if (!body) return;
   try {
     const d = await getJSON("/top-candidates");
+    // MOMENTUM KILL SWITCH: these picks only OPEN when momentum is enabled. When it's off (clean
+    // VRP test) the whole panel is a DISABLED strategy's hypothetical picks (equal-$1000 sizing on
+    // junk names) — noise that reads as fabricated. Hide the entire card so the dashboard shows
+    // only what's actually happening.
+    const momOn = d.momentum_enabled !== false;
+    const card = document.getElementById("candidates_card");
+    if (card) card.style.display = momOn ? "" : "none";
+    if (!momOn) return;
+    const banner = document.getElementById("candidates_momentum_banner");
+    const openNote = document.getElementById("candidates_open_note");
+    if (banner) {
+      banner.style.display = momOn ? "none" : "block";
+      banner.style.marginBottom = "10px";
+      banner.innerHTML = momOn ? "" :
+        `<span class="red" style="font-weight:700;">⚠ MOMENTUM DISABLED</span> <span class="sub">— kill switch is OFF for the clean VRP test. Shown for reference only; these will NOT open.</span>`;
+    }
+    if (openNote) openNote.textContent = momOn
+      ? "These open at the next market session."
+      : "These will NOT open — the momentum strategy is disabled.";
     // EQUITY vehicle now: show the signal's LONG picks (bullish), not option contracts.
     const cands = (d.candidates || []).filter(c =>
       String(c.directional_bias || "").toUpperCase() === "BULLISH" ||
@@ -1079,7 +1099,9 @@ async function refreshAll() {
     setText("cash", fmtMoney(acct ? acct.cash_on_hand : cash));
     setText("buying_power", fmtMoney(acct ? acct.buying_power : cash));
     setText("deployed", fmtMoney(acct ? acct.deployed_capital : deployed));
-    setText("deployed_pct", `${fmtPct((deployed / Math.max(equity, 1)) * 100)} of Equity`);
+    const deployedVal = acct ? acct.deployed_capital : deployed;
+    const equityVal = acct ? acct.total_equity : equity;
+    setText("deployed_pct", `${fmtPct((deployedVal / Math.max(equityVal, 1)) * 100)} of Equity`);
     setText("unrealized", fmtMoney(acct ? acct.unrealized_pnl : unrealized));
     setText("total_return", fmtPct(acct ? acct.total_return_pct : totalReturn));
     setText("open_trades", acct ? acct.open_position_count : open.length);
@@ -1088,9 +1110,11 @@ async function refreshAll() {
     setText("closed_trade_count", acct ? acct.closed_trade_count : (l.closed_option_trade_count ?? 0));
     setText("realized_pnl", fmtMoney(acct ? acct.realized_pnl : (l.realized_pnl || 0)));
 
-    setClassBySign("unrealized", unrealized);
-    setClassBySign("total_return", totalReturn);
-    setClassBySign("realized_pnl", l.realized_pnl || 0);
+    // Color the SAME value the card shows (from /account-summary), not the stale options-only
+    // ledger variable — otherwise a real loss can render green.
+    setClassBySign("unrealized", acct ? acct.unrealized_pnl : unrealized);
+    setClassBySign("total_return", acct ? acct.total_return_pct : totalReturn);
+    setClassBySign("realized_pnl", acct ? acct.realized_pnl : (l.realized_pnl || 0));
 
     // Render the WHOLE book from /open-positions (equity + options). This panel used
     // to read only the options ledger, so it reported "No open positions" while real
@@ -1114,11 +1138,18 @@ async function refreshAll() {
       const uAnchor = (isU && p.underlying_price)
         ? `<br><span class="sub">${uName} $${Number(p.underlying_price).toFixed(2)}${p.underlying_entry_price ? " · in $"+Number(p.underlying_entry_price).toFixed(2) : ""}</span>`
         : "";
-      const stopCell = (p.stop_loss != null)
+      // A VRP condor is managed as a UNIT (not per-leg), so its stop/TP are P&L dollars, not
+      // underlying prices — render those instead of the momentum ATR cells.
+      const cl = p.condor_levels;
+      const stopCell = cl
+        ? `<span class="red">${fmtMoney(cl.hard_stop_usd)}</span><br><span class="sub">hard stop · 80% of ${fmtMoney(cl.max_loss_usd)} max</span>`
+        : (p.stop_loss != null)
         ? `${fmtMoney(p.stop_loss)}${isU ? ` <span class="sub">${uName}</span>` : ""}${ref ? `<br><span class="sub red">${((p.stop_loss/ref-1)*100).toFixed(1)}%</span>` : ""}`
         : `<span class="sub">—</span>`;
       // TP1/2/3 (banked ones ✓ green) + TP4 the runner (trails, uncapped). Underlying-anchored.
-      const tpCell = (p.targets && p.targets.length)
+      const tpCell = cl
+        ? `<span class="green">+${fmtMoney(cl.profit_take_usd)}</span><br><span class="sub">50% of ${fmtMoney(cl.credit_usd)} credit · exit ${cl.dte}→${cl.manage_dte}d</span>`
+        : (p.targets && p.targets.length)
         ? p.targets.map((t,i) => {
             const banked = (p.tps_filled||0) > i;
             return `<span class="${banked ? "green" : "sub"}" title="TP${i+1}${banked ? " (reached)" : ""}">${banked ? "✓ " : ""}TP${i+1} ${fmtMoney(t)}</span>`;
@@ -1127,8 +1158,18 @@ async function refreshAll() {
       const dash = `<span class="sub">—</span>`;
       const entryVal = isU && p.underlying_entry_price != null ? p.underlying_entry_price : p.entry_price;
       const curVal = isU && p.underlying_price != null ? p.underlying_price : p.current_price;
-      const entryCell = entryVal != null ? `${fmtMoney(entryVal)}${isU ? `<br><span class="sub">${uName} stock</span>` : ""}` : dash;
-      const curCell = curVal != null ? fmtMoney(curVal) : dash;
+      // OPTIONS: show the FULL-CONTRACT total ($ premium x100 x qty) as the headline, with the
+      // per-share premium and the UNDERLYING spot beneath — so the math (equity price -> premium ->
+      // total contract) is all traceable in the row. Equities keep the plain share price.
+      const isOpt = p.asset_type === "OPTION";
+      const undTag = (p.underlying_price != null)
+        ? ` · ${p.underlying || uName} $${Number(p.underlying_price).toFixed(2)}` : "";
+      const entryCell = isOpt
+        ? (p.initial_cost != null ? `${fmtMoney(p.initial_cost)}<br><span class="sub">${fmtMoney(p.entry_price)}/sh${undTag}</span>` : dash)
+        : (entryVal != null ? `${fmtMoney(entryVal)}${isU ? `<br><span class="sub">${uName} stock</span>` : ""}` : dash);
+      const curCell = isOpt
+        ? (p.current_value != null ? `${fmtMoney(p.current_value)}<br><span class="sub">${fmtMoney(p.current_price)}/sh</span>` : dash)
+        : (curVal != null ? fmtMoney(curVal) : dash);
       const limitCell = p.limit_buy != null ? `<span class="yellow">${fmtMoney(p.limit_buy)}</span>` : dash;
       const costCell = p.initial_cost != null ? fmtMoney(p.initial_cost) : dash;
       // Every lifecycle state gets a distinct, legible badge — not raw text mixed into the

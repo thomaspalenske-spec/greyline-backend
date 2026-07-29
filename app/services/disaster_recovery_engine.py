@@ -32,7 +32,10 @@ works equally well). The engine reports plainly whether its destination is genui
 
 import hashlib
 import json
+import os
+import re
 import shutil
+import threading
 from datetime import datetime
 from os import getenv
 from pathlib import Path
@@ -98,7 +101,23 @@ class DisasterRecoveryEngine:
                        "against disk failure. Set GREYLINE_BACKUP_DIR to iCloud or an external "
                        "volume for real redundancy.")
 
+    _DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    _lock = threading.Lock()      # class-level: only one backup runs at a time across cycles
+
+    def _clean_staging(self, snaps_dir):
+        """Remove abandoned .staging-* dirs from runs that were killed mid-copy."""
+        try:
+            for p in snaps_dir.glob(".staging-*"):
+                shutil.rmtree(p, ignore_errors=True)
+        except Exception:
+            pass
+
     def backup(self, tier2=False, save=True):
+        """ATOMIC + verified. Build the whole tree in a staging dir, verify every file by hash there,
+        and ONLY THEN promote it into place with a rename and advance the marker. An interrupted run
+        (restart / sleep / crash) leaves at most an abandoned .staging-* dir — the previous complete
+        snapshot, `latest`, and last_backup.json are never touched, so a partial can never be mistaken
+        for progress and the marker never points at an incomplete backup."""
         dest = self.dest()
         off, off_note = self._is_off_machine(dest)
         rels = list(self.TIER1) + (list(self.TIER2) if tier2 else [])
@@ -107,45 +126,58 @@ class DisasterRecoveryEngine:
             return {"status": "NOTHING_TO_BACK_UP", "backed_up": 0}
 
         day = datetime.utcnow().date().isoformat()
-        latest = dest / "latest"
-        snap = dest / "snapshots" / day
-        manifest, copied, total_bytes, errors = {}, 0, 0, []
+        snaps_dir = dest / "snapshots"
+        snaps_dir.mkdir(parents=True, exist_ok=True)
+        self._clean_staging(snaps_dir)
+        staging = snaps_dir / f".staging-{datetime.utcnow().strftime('%Y%m%dT%H%M%S')}-{os.getpid()}"
 
+        # stage every file and verify the COPY's hash against the source, in staging
+        manifest, copied, total_bytes, errors, mismatched = {}, 0, 0, [], []
         for src, rel in files:
             try:
-                for base in (latest, snap):
-                    target = base / rel
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, target)
-                manifest[str(rel)] = {"sha256_16": self._hash_file(src),
-                                      "bytes": src.stat().st_size}
+                target = staging / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, target)
+                src_h = self._hash_file(src)
+                if self._hash_file(target) != src_h or src_h is None:
+                    mismatched.append(str(rel))
+                    continue
+                manifest[str(rel)] = {"sha256_16": src_h, "bytes": src.stat().st_size}
                 total_bytes += src.stat().st_size
                 copied += 1
             except Exception as e:
                 errors.append({"file": str(rel), "error": str(e)[:80]})
 
-        # VERIFY: a backup nobody verified is a backup nobody has.
-        verified, mismatched = 0, []
-        for rel, meta in manifest.items():
-            t = latest / rel
-            if self._hash_file(t) == meta["sha256_16"]:
-                verified += 1
-            else:
-                mismatched.append(rel)
-
+        complete = bool(copied == len(files) and not mismatched and not errors)
         result = {
             "timestamp": datetime.utcnow().isoformat(),
-            "destination": str(dest),
-            "off_machine": off, "destination_note": off_note,
-            "tier2_included": bool(tier2),
-            "files_backed_up": copied, "bytes": total_bytes,
-            "verified_by_hash": verified, "mismatched": mismatched[:10],
-            "errors": errors[:10],
-            "snapshot": str(snap),
-            "ok": bool(copied and not mismatched and not errors),
-            "status": ("BACKUP_VERIFIED" if (copied and not mismatched and not errors)
-                       else "BACKUP_INCOMPLETE"),
+            "destination": str(dest), "off_machine": off, "destination_note": off_note,
+            "tier2_included": bool(tier2), "files_backed_up": copied, "bytes": total_bytes,
+            "verified_by_hash": copied, "mismatched": mismatched[:10], "errors": errors[:10],
+            "snapshot": str(snaps_dir / day),
+            "ok": complete,
+            "status": "BACKUP_VERIFIED" if complete else "BACKUP_INCOMPLETE",
         }
+        if not complete:
+            shutil.rmtree(staging, ignore_errors=True)     # NEVER promote a partial
+            return result                                  # marker untouched; last good stands
+
+        # ATOMIC promote: replace any partial today-dir, then rename staging in. If killed between the
+        # rmtree and the rename, today's dir is simply absent and the marker still points at the last
+        # complete snapshot — recovery stays safe (never a partial masquerading as complete).
+        dst = snaps_dir / day
+        try:
+            if dst.exists():
+                shutil.rmtree(dst)
+            os.rename(staging, dst)
+        except Exception as e:
+            shutil.rmtree(staging, ignore_errors=True)
+            result["errors"].append({"promote": str(e)[:80]})
+            result["ok"] = False
+            result["status"] = "BACKUP_INCOMPLETE"
+            return result
+        result["snapshot"] = str(dst)
+
         if save:
             try:
                 (dest / "backup_manifest.json").write_text(
@@ -154,12 +186,56 @@ class DisasterRecoveryEngine:
                 (self.ROOT / "data_quality" / "last_backup.json").write_text(json.dumps(result, indent=2))
             except Exception:
                 pass
+
+        # `latest` is a convenience mirror only — rebuilt AFTER the marker is safe, so an interrupted
+        # rebuild can't hurt recovery (the marker already points at the complete dated snapshot).
+        try:
+            latest = dest / "latest"
+            if latest.exists():
+                shutil.rmtree(latest)
+            shutil.copytree(dst, latest)
+        except Exception:
+            pass
         self._prune(dest)
         return result
 
+    def _run_and_alert(self, tier2=False):
+        """Worker body: run the atomic backup and SCREAM if it ends incomplete (moved off the
+        scheduler so the alert fires from the async path, not the inline cycle)."""
+        try:
+            r = self.backup(tier2=tier2)
+        except Exception as e:
+            r = {"status": "BACKUP_DEGRADED", "error": repr(e)[:150]}
+        if str(r.get("status")) in ("BACKUP_DEGRADED", "BACKUP_INCOMPLETE"):
+            try:
+                from app.services.operator_notification_engine import OperatorNotificationEngine
+                OperatorNotificationEngine().record(
+                    event_type="BACKUP_FAILED", title="Off-machine backup FAILED",
+                    message=(f"Unrecoverable-data backup returned {r.get('status')}. Forward-only "
+                             f"data is unprotected until this is fixed. {str(r.get('error') or '')[:150]}"),
+                    severity="CRITICAL", source="DISASTER_RECOVERY", payload=r)
+            except Exception:
+                pass
+        return r
+
+    def backup_async(self, tier2=False):
+        """Kick the backup OFF the scheduler's critical path. Non-blocking; one run at a time."""
+        if not self._lock.acquire(blocking=False):
+            return {"status": "BACKUP_ALREADY_RUNNING"}
+
+        def _worker():
+            try:
+                self._run_and_alert(tier2=tier2)
+            finally:
+                self._lock.release()
+
+        threading.Thread(target=_worker, name="greyline-backup", daemon=True).start()
+        return {"status": "BACKUP_STARTED"}
+
     def _prune(self, dest):
         try:
-            snaps = sorted((dest / "snapshots").iterdir())
+            snaps = sorted(p for p in (dest / "snapshots").iterdir()
+                           if p.is_dir() and self._DAY_RE.match(p.name))
             for old in snaps[:-self.MAX_SNAPSHOTS]:
                 shutil.rmtree(old, ignore_errors=True)
         except Exception:
@@ -198,3 +274,54 @@ class DisasterRecoveryEngine:
                                "edge experiment from zero."),
             "status": "DISASTER_RECOVERY_STATUS",
         }
+
+    STALE_MAX_AGE_H = 26.0        # a healthy 20h cadence + slack; older = a real gap
+    STALE_THROTTLE_H = 6.0        # don't re-scream more than this often while stale
+    STALE_MARKER = ROOT / "data_quality" / "backup_stale_alert.json"
+
+    def alert_if_stale(self, now=None):
+        """Scream when the last VERIFIED backup is too old — even if NO backup() call errored.
+
+        Closes the silent hole: a backup killed mid-run (restart / sleep / crash) leaves a partial
+        snapshot and never advances the marker, so the returned-status alert never fires. This checks
+        the MARKER age directly. Throttled so a persistent gap warns periodically, not every cycle."""
+        last = self.last_backup()
+        now = now or datetime.utcnow()
+        age_h = None
+        if last:
+            try:
+                age_h = (now - datetime.fromisoformat(last["timestamp"])).total_seconds() / 3600.0
+            except Exception:
+                age_h = None
+        stale = (last is None) or (age_h is not None and age_h > self.STALE_MAX_AGE_H)
+        if not stale:
+            return {"status": "BACKUP_FRESH", "hours_since_backup": round(age_h, 1) if age_h else None}
+
+        # throttle: only re-alert every STALE_THROTTLE_H
+        try:
+            prev = json.loads(self.STALE_MARKER.read_text()).get("alerted_at")
+            if prev and (now - datetime.fromisoformat(prev)).total_seconds() < self.STALE_THROTTLE_H * 3600:
+                return {"status": "BACKUP_STALE_THROTTLED",
+                        "hours_since_backup": round(age_h, 1) if age_h else None}
+        except Exception:
+            pass
+        try:
+            from app.services.operator_notification_engine import OperatorNotificationEngine
+            OperatorNotificationEngine().record(
+                event_type="BACKUP_STALE",
+                title="Off-machine backup is STALE",
+                message=(f"Last verified backup was {round(age_h, 1) if age_h else 'never'}h ago "
+                         f"(threshold {self.STALE_MAX_AGE_H}h). Forward-only unrecoverable data "
+                         f"(options surface, PIT archive, earnings panel) is at risk until a backup "
+                         f"completes — likely interrupted mid-run by a restart/sleep."),
+                severity="CRITICAL", source="DISASTER_RECOVERY",
+                payload={"hours_since_backup": age_h, "last_backup_at": (last or {}).get("timestamp")})
+        except Exception:
+            pass
+        try:
+            self.STALE_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            self.STALE_MARKER.write_text(json.dumps({"alerted_at": now.isoformat(),
+                                                     "hours_since_backup": age_h}))
+        except Exception:
+            pass
+        return {"status": "BACKUP_STALE_ALERTED", "hours_since_backup": round(age_h, 1) if age_h else None}

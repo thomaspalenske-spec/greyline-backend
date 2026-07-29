@@ -1,0 +1,173 @@
+"""Book-level risk governor — the guardrail GreyLine lacked: a DAILY loss limit and a deployment cap.
+
+GreyLine had per-position broker stops and the reality guard, but nothing watching the BOOK as a
+whole. With six strategies going live at once on a fresh $10k, the two things that can quietly ruin a
+day are (1) the book bleeding past a daily loss limit while everything looks individually fine, and
+(2) total deployment creeping over 100% of the mission book. This engine watches both every cycle and
+SCREAMS (CRITICAL -> iMessage) the moment either is breached — so a bad day is caught in seconds, on
+the phone, not discovered after the close.
+
+Deliberately MONITOR + ALERT, not auto-halt: halting safely means blocking NEW opens while still
+allowing EXITS, which needs per-engine changes I will not rush the night before an open. On a HALT
+breach it writes a halt marker (for a future gate / manual use) and alerts CRITICAL; the operator
+response is to flip the kill flags (seconds). Everything here is read-only on the trading path.
+"""
+
+import json
+from datetime import datetime
+from os import getenv
+from pathlib import Path
+
+
+class MissionRiskGovernorEngine:
+
+    DIR = Path("app/data/risk")
+    SOD = DIR / "sod_equity.json"
+    HALT_MARKER = DIR / "opens_halted.json"
+    ALERT_STATE = DIR / "governor_alert_state.json"
+    THROTTLE_MIN = 30.0
+
+    @staticmethod
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @classmethod
+    def _base(cls):
+        try:
+            return float(getenv("GREYLINE_ACCOUNT_CAPITAL_BASE", "10000") or 10000)
+        except (TypeError, ValueError):
+            return 10000.0
+
+    @classmethod
+    def _warn_pct(cls):
+        try:
+            return abs(float(getenv("GREYLINE_DAILY_LOSS_WARN_PCT", "") or 4.0))
+        except (TypeError, ValueError):
+            return 4.0
+
+    @classmethod
+    def _halt_pct(cls):
+        try:
+            return abs(float(getenv("GREYLINE_DAILY_LOSS_HALT_PCT", "") or 7.0))
+        except (TypeError, ValueError):
+            return 7.0
+
+    # ---- mission figures (read-only) -----------------------------------------------------------
+
+    def _equity_and_deployed(self):
+        base = self._base()
+        try:
+            from app.services.mission_realized_pnl_engine import MissionRealizedPnlEngine
+            realized = MissionRealizedPnlEngine().cumulative_realized()
+        except Exception:
+            realized = 0.0
+        deployed, unrealized = 0.0, 0.0
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            rows = BrokerAccountViewEngine().snapshot().get("positions", []) or []
+            unrealized = sum(self._f(r.get("unrealized_pnl")) for r in rows)
+            deployed = sum(self._f(r.get("entry_price")) * self._f(r.get("quantity")) for r in rows)
+        except Exception:
+            pass
+        return round(base + realized + unrealized, 2), round(deployed, 2)
+
+    def _sod_equity(self, current):
+        """Start-of-day mission equity; recorded on the first read of each UTC day."""
+        today = datetime.utcnow().date().isoformat()
+        try:
+            rec = json.loads(self.SOD.read_text())
+            if rec.get("date") == today:
+                return self._f(rec.get("equity"))
+        except Exception:
+            pass
+        self.DIR.mkdir(parents=True, exist_ok=True)
+        self.SOD.write_text(json.dumps({"date": today, "equity": current}))
+        return current
+
+    def opens_halted(self):
+        today = datetime.utcnow().date().isoformat()
+        try:
+            return json.loads(self.HALT_MARKER.read_text()).get("date") == today
+        except Exception:
+            return False
+
+    def snapshot(self):
+        base = self._base()
+        equity, deployed = self._equity_and_deployed()
+        sod = self._sod_equity(equity)
+        daily = round(equity - sod, 2)
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "mission_equity": equity, "start_of_day_equity": sod,
+            "daily_pnl": daily, "daily_pnl_pct": round(100 * daily / base, 2) if base else 0.0,
+            "deployed": deployed, "deployed_pct": round(100 * deployed / base, 2) if base else 0.0,
+            "warn_at_pct": -self._warn_pct(), "halt_at_pct": -self._halt_pct(),
+            "halted": self.opens_halted(), "status": "MISSION_RISK_GOVERNOR",
+        }
+
+    # ---- alerting (throttled) ------------------------------------------------------------------
+
+    def _throttled(self, key):
+        try:
+            prev = json.loads(self.ALERT_STATE.read_text()).get(key)
+            if prev:
+                age = (datetime.utcnow() - datetime.fromisoformat(prev)).total_seconds() / 60.0
+                return age < self.THROTTLE_MIN
+        except Exception:
+            pass
+        return False
+
+    def _mark(self, key):
+        try:
+            self.DIR.mkdir(parents=True, exist_ok=True)
+            state = {}
+            try:
+                state = json.loads(self.ALERT_STATE.read_text())
+            except Exception:
+                state = {}
+            state[key] = datetime.utcnow().isoformat()
+            self.ALERT_STATE.write_text(json.dumps(state))
+        except Exception:
+            pass
+
+    def _alert(self, key, title, message, severity):
+        if self._throttled(key):
+            return False
+        try:
+            from app.services.operator_notification_engine import OperatorNotificationEngine
+            OperatorNotificationEngine().record(event_type=key, title=title, message=message,
+                                                severity=severity, source="MISSION_RISK_GOVERNOR")
+        except Exception:
+            pass
+        self._mark(key)
+        return True
+
+    def check_and_alert(self):
+        s = self.snapshot()
+        base = self._base()
+        alerts = []
+        # daily loss ladder
+        if s["daily_pnl"] <= -self._halt_pct() / 100.0 * base:
+            self.DIR.mkdir(parents=True, exist_ok=True)
+            self.HALT_MARKER.write_text(json.dumps({"date": datetime.utcnow().date().isoformat(),
+                                                    "daily_pnl": s["daily_pnl"]}))
+            if self._alert("BOOK_DAILY_LOSS_HALT", "Mission book past HALT loss limit",
+                           f"Book down {s['daily_pnl']} today ({s['daily_pnl_pct']}%), past the "
+                           f"{-self._halt_pct()}% halt limit. Recommend flipping the strategy kill "
+                           f"flags to false NOW to stop new opens.", "CRITICAL"):
+                alerts.append("HALT")
+        elif s["daily_pnl"] <= -self._warn_pct() / 100.0 * base:
+            if self._alert("BOOK_DAILY_LOSS_WARN", "Mission book daily loss warning",
+                           f"Book down {s['daily_pnl']} today ({s['daily_pnl_pct']}%), past the "
+                           f"{-self._warn_pct()}% warning line. Watching.", "WARNING"):
+                alerts.append("WARN")
+        # over-deployment
+        if s["deployed_pct"] > 100.0:
+            if self._alert("BOOK_OVER_DEPLOYED", "Mission book OVER-deployed",
+                           f"Deployed {s['deployed']} = {s['deployed_pct']}% of the {base:.0f} book "
+                           f"(>100%). Capital coordination breached — review allocations.", "CRITICAL"):
+                alerts.append("OVER_DEPLOYED")
+        return {**s, "alerts_fired": alerts}

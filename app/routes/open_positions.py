@@ -25,6 +25,41 @@ def _greyline_managed_symbols():
         return set()
 
 
+def _vrp_condor_levels():
+    """Per-leg-symbol -> the condor's unit stop/profit-take, for display. Read from the engine (not
+    a ledger here) so the 'positions come from the broker, never the local ledger' rule holds."""
+    try:
+        from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
+        return ConditionalVRPShortPremiumEngine().condor_display_levels()
+    except Exception:
+        return {}
+
+
+def _underlying_prices(option_symbols):
+    """{underlying: last_price} for the distinct underlyings of these option symbols. Best-effort
+    live quotes, fetched ONCE per distinct underlying (IWM, LQD, ...) — display only, so a slow or
+    failed quote just leaves the price blank rather than breaking the row."""
+    unders = {str(s).split()[0].upper() for s in option_symbols if s and " " in str(s)}
+    out = {}
+    if not unders:
+        return out
+    try:
+        from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+        q = TradeStationQuoteLiveEngine()
+        for u in unders:
+            try:
+                rj = (q.get_quote(u).get("response_json") or {})
+                row = (rj.get("Quotes") or [rj])[0] if isinstance(rj, dict) else {}
+                px = row.get("Last") or row.get("Close")
+                if px:
+                    out[u] = float(px)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return out
+
+
 def _doctrine_levels():
     """The exit doctrine's REAL trigger levels per open option, keyed by option symbol.
 
@@ -78,6 +113,10 @@ def open_positions():
     rows = view.get("positions", [])
     doctrine = _doctrine_levels()
     managed = _greyline_managed_symbols()
+    condor_levels = _vrp_condor_levels()
+    # Underlying spot for every option leg, so a row shows equity price -> premium -> total contract
+    # (the operator wants to trace the math end-to-end). Deduped: one quote per distinct underlying.
+    und_px = _underlying_prices([r.get("symbol") for r in rows if r.get("asset_type") == "OPTION"])
     # Symbols with a working SELLTOCLOSE — being liquidated right now (e.g. an account reset
     # placed the closes, which fill at the next open). These must read as CLOSING, not as
     # orphaned UNMANAGED risk that nobody is acting on.
@@ -88,7 +127,17 @@ def open_positions():
         # EVERY row up front, before any status branch, so a closing/unmanaged row still shows
         # its cost. (A stray `continue` here once blanked the Cost column on closing rows.)
         mult = 100 if r.get("asset_type") == "OPTION" else 1
-        r["initial_cost"] = round(float(r.get("entry_price") or 0) * mult * abs(float(r.get("quantity") or 0)), 2)
+        qty_abs = abs(float(r.get("quantity") or 0))
+        r["initial_cost"] = round(float(r.get("entry_price") or 0) * mult * qty_abs, 2)
+        # Full-contract CURRENT value + the underlying spot, so the operator can check the math:
+        # underlying price -> premium/sh -> x100xqty = total contract.
+        if r.get("asset_type") == "OPTION":
+            r["current_value"] = round(float(r.get("current_price") or 0) * mult * qty_abs, 2)
+            u = sym.split()[0] if " " in sym else None
+            if u:
+                r["underlying"] = u
+                if r.get("underlying_price") is None:
+                    r["underlying_price"] = und_px.get(u)
         r["limit_buy"] = None                # filled at market — nothing pending
         r["pending"] = False
         # The account can hold positions GreyLine did NOT open (a stray fill, a manual trade).
@@ -116,6 +165,14 @@ def open_positions():
                 r["underlying_entry_price"] = d["underlying_entry_price"]
                 r["runner_contracts"] = d["runner_contracts"]
                 r["levels_basis"] = "UNDERLYING"
+            elif r.get("managed_by_greyline"):
+                # a managed option with no per-leg ATR doctrine is a VRP condor leg — managed as a
+                # UNIT by the variance-premium engine (defined-risk wings, 50% profit-take, gamma
+                # defense, DTE), NOT by a per-leg stop. Surface the condor's UNIT stop/TP so the
+                # Stop/Take-Profit columns show what actually protects it instead of a blank dash.
+                r["status"] = "MANAGED"
+                r["stage"] = "VRP condor leg · managed as a unit (defined-risk · 50% profit / gamma / DTE)"
+                r["condor_levels"] = condor_levels.get(sym)
 
     # Pending limit BUYs we're waiting to fill — shown as PENDING rows (not positions yet).
     for pb in view.get("pending_buys", []):
@@ -131,6 +188,28 @@ def open_positions():
             "initial_cost": round(float(limit or 0) * mult * abs(float(pb.get("quantity") or 0)), 2),
             "status": "PENDING", "stage": f"waiting · limit ${limit}" if limit else "waiting",
         })
+
+    # CONDOR AS A UNIT: group VRP legs by their condor (underlying + expiry), attach the NET P&L, and
+    # show the stop/TP ONCE — on the primary leg — instead of repeating the same condor-level number
+    # on every leg (which read as "N separate positions all targeting $19").
+    from collections import defaultdict
+    condor_groups = defaultdict(list)
+    for r in rows:
+        if r.get("condor_levels"):
+            parts = str(r.get("symbol") or "").split()
+            key = (parts[0], parts[1][:6]) if len(parts) >= 2 else (str(r.get("symbol")),)
+            condor_groups[key].append(r)
+    for legs in condor_groups.values():
+        net = round(sum(float(l.get("unrealized_pnl") or 0) for l in legs), 2)
+        und = (legs[0].get("condor_levels") or {}).get("condor") or legs[0].get("underlying") or "condor"
+        for i, l in enumerate(legs):
+            l["condor_net_pnl"] = net
+            l["condor_primary"] = (i == 0)
+            l["condor_leg"] = f"{i + 1}/{len(legs)}"
+            # EVERY leg keeps the condor's stop/TP — they are the CONDOR's ONE shared stop and ONE
+            # take-profit (the whole unit exits together), shown on each row so no leg reads as
+            # having no risk management. The stage names the condor + leg + the unit's net P/L.
+            l["stage"] = f"{und} condor · leg {i + 1}/{len(legs)} · net P/L ${net}"
 
     total_pnl = round(sum(r.get("unrealized_pnl") or 0 for r in rows), 2)
     total_notional = round(sum(abs((r.get("current_price") or 0) * (r.get("quantity") or 0)) for r in rows), 2)

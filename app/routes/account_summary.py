@@ -37,10 +37,13 @@ def account_summary():
     market_value = round(sum(r["current_price"] * r["quantity"] for r in rows), 2)
     unrealized = round(sum(r["unrealized_pnl"] for r in rows), 2)
 
-    # Mission-book equity: the $10k base plus live unrealized on what's actually booked.
-    # (Realized P&L across broker fills will attach once closed-trade history is tracked from
-    # the broker; today the account is flat, so realized is 0 and this is exact.)
-    mission_equity = round(base + unrealized, 2)
+    # Mission-book equity = $10k base + CUMULATIVE realized (closed trades) + live unrealized. The
+    # realized term is essential: without it a closed loss vanishes (the broker's daily realized
+    # resets, so the legacy flatten's ~$4,100 loss snapped the equity back to $10k). Sourced from the
+    # persistent mission realized ledger, not the broker's daily figure.
+    from app.services.mission_realized_pnl_engine import MissionRealizedPnlEngine
+    realized = MissionRealizedPnlEngine().cumulative_realized()
+    mission_equity = round(base + realized + unrealized, 2)
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -54,7 +57,7 @@ def account_summary():
         "deployed_pct_of_equity": round(100 * cost_basis / mission_equity, 2) if mission_equity else 0,
         "open_market_value": market_value,
         "unrealized_pnl": unrealized,
-        "realized_pnl": 0.0,
+        "realized_pnl": realized,
         "total_equity": mission_equity,
         "total_return_pct": round(100 * (mission_equity - base) / base, 2) if base else 0,
         "open_position_count": len(rows),

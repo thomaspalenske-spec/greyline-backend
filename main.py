@@ -305,6 +305,20 @@ app.include_router(conditional_vrp_panel.router)
 
 from app.routes import vrp_short_premium
 app.include_router(vrp_short_premium.router)
+from app.routes import adaptive_dte
+app.include_router(adaptive_dte.router)
+from app.routes import harvest_proof
+app.include_router(harvest_proof.router)
+from app.routes import earnings_vol_proof
+app.include_router(earnings_vol_proof.router)
+from app.routes import earnings_vol
+app.include_router(earnings_vol.router)
+from app.routes import vol_carry
+app.include_router(vol_carry.router)
+from app.routes import trend_following
+app.include_router(trend_following.router)
+from app.routes import risk_and_readiness
+app.include_router(risk_and_readiness.router)
 
 from app.routes import index_variance_premium
 app.include_router(index_variance_premium.router)

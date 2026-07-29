@@ -10,6 +10,13 @@ from app.services.tradestation_token_maintenance_engine import TradeStationToken
 
 class TradeStationOptionChainLiveEngine:
 
+    # In-cycle snapshot cache. A banded chain stream costs ~39s; the same (underlying, expiry) is
+    # fetched up to 4x per scheduler cycle (gamma-defense greeks + book greeks). Chains don't move
+    # meaningfully in a few minutes, and the next cycle (>= ~5 min later) re-fetches, so a short TTL
+    # dedupes the redundant fetches with no stale-data risk. Keyed by every param that changes output.
+    _snap_cache = {}
+    _SNAP_TTL_SEC = 180
+
     def __init__(self):
         reload_env()
 
@@ -139,6 +146,11 @@ class TradeStationOptionChainLiveEngine:
 
     def get_chain_snapshot(self, symbol, expiration, option_type="All", max_contracts=50,
                            strike_proximity=None):
+        import time as _time
+        _ck = (str(symbol).upper().strip(), str(expiration), option_type, max_contracts, strike_proximity)
+        _hit = self._snap_cache.get(_ck)
+        if _hit and (_time.time() - _hit[0]) < self._SNAP_TTL_SEC:
+            return _hit[1]                                  # in-cycle reuse — skip the ~39s stream
         TradeStationTokenMaintenanceEngine().evaluate()
 
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
@@ -203,7 +215,7 @@ class TradeStationOptionChainLiveEngine:
         if banded:
             contracts = list(by_symbol.values())
 
-        return {
+        _result = {
             "timestamp": datetime.utcnow().isoformat(),
             "broker": "TradeStation",
             "symbol": symbol,
@@ -215,3 +227,11 @@ class TradeStationOptionChainLiveEngine:
             "order_placement_allowed": False,
             "status": "OPTION_CHAIN_SNAPSHOT_READY" if contracts else "OPTION_CHAIN_SNAPSHOT_EMPTY",
         }
+        # cache only a non-empty snapshot (don't pin an empty/failed pull for 3 min)
+        if contracts:
+            self._snap_cache[_ck] = (_time.time(), _result)
+            if len(self._snap_cache) > 64:                  # bounded; evict stale
+                _cut = _time.time() - self._SNAP_TTL_SEC
+                for _k in [k for k, v in list(self._snap_cache.items()) if v[0] < _cut]:
+                    self._snap_cache.pop(_k, None)
+        return _result

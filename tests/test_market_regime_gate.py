@@ -17,10 +17,11 @@ def gate(tmp_path, monkeypatch):
     return MarketRegimeGateEngine()
 
 
-def _spy(tmp_path, closes, last_date="2026-07-20"):
-    """Write a SPY series ending on a recent date with the given closes."""
-    from datetime import date, timedelta
-    end = date.fromisoformat(last_date)
+def _spy(tmp_path, closes, last_date=None):
+    """Write a SPY series ending on a recent date (default: TODAY, so freshness checks pass
+    regardless of the calendar) with the given closes."""
+    from datetime import date, datetime, timedelta
+    end = date.fromisoformat(last_date) if last_date else datetime.utcnow().date()
     rows = []
     for i, c in enumerate(closes):
         d = end - timedelta(days=(len(closes) - 1 - i))

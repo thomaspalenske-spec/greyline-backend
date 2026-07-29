@@ -11,7 +11,8 @@ CONDOR, never a naked short strangle, for one reason that overrides everything e
     sized so that capped loss is a small, fixed fraction of the book. The tail is bounded by
     construction, not by hope.
 
-STRUCTURE per name (4 legs, all same ~30-45 DTE expiry):
+STRUCTURE per name (4 legs, all same expiry; tenor chosen by AdaptiveDTESelectionEngine — the
+EV-best expiration in a 28-56 DTE band from the live market, not a fixed literal):
     SELLTOOPEN  ~SHORT_DELTA call   +  BUYTOOPEN  ~WING_DELTA call   (call spread)
     SELLTOOPEN  ~SHORT_DELTA put    +  BUYTOOPEN  ~WING_DELTA put    (put spread)
   net credit = shorts' bids - wings' asks ; max loss = widest wing width x100 - credit x100.
@@ -84,7 +85,9 @@ class ConditionalVRPShortPremiumEngine:
     SKEW_POOL = 8                 # build this many candidates, then harvest the richest-skew ones
     MIN_CREDIT = 0.10             # skip structures that barely pay
     PROFIT_TAKE_FRAC = 0.50       # close at 50% of max credit captured
-    MANAGE_DTE = 7               # liquidate this many days before expiry (gamma backstop)
+    MANAGE_DTE = 21              # exit this many days before expiry — before terminal gamma (the
+    #                             "manage at 21 DTE" rule). Sits BELOW the 28-DTE entry-band floor
+    #                             (AdaptiveDTESelectionEngine) so entry and exit can never collide.
     HARD_STOP_LOSS_MULT = 0.80    # stop if unrealized loss reaches 80% of defined max loss
     # GAMMA DEFENSE: a short leg whose delta has grown to this means the underlying is TESTING that
     # strike — short gamma is now acute and the strike is at risk of breach. Close proactively,
@@ -250,8 +253,11 @@ class ConditionalVRPShortPremiumEngine:
 
     def _chain(self, symbol):
         from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
-        from app.services.options_cycle_engine import OptionsCycleEngine
-        exp = OptionsCycleEngine()._select_expiration(symbol)
+        from app.services.adaptive_dte_selection_engine import AdaptiveDTESelectionEngine
+        # TENOR from the live market, not a fixed literal: the EV-best expiration in a sane band
+        # (or a band-clamped static target when adaptive is off/degraded). Never returns a sub-band
+        # tenor, so the old 7-DTE / MANAGE_DTE collision cannot recur.
+        exp = AdaptiveDTESelectionEngine().select(symbol)
         # strike_proximity reaches the OTM strikes the wings need (without it the stream centres on
         # near-ATM and the condor can never be capped).
         snap = TradeStationOptionChainLiveEngine().get_chain_snapshot(
@@ -270,6 +276,131 @@ class ConditionalVRPShortPremiumEngine:
 
     def _open_risk(self):
         return sum(self._f(r.get("max_loss_total")) for r in self._open_rows())
+
+    def condor_display_levels(self):
+        """{leg_symbol: unit management levels} for the dashboard. A condor's stop/profit-take are
+        on the WHOLE unit's P&L (not per leg), so the same levels are surfaced against each of its
+        legs — that's what actually protects the position."""
+        out = {}
+        for r in self._open_rows():
+            credit = self._f(r.get("credit_total"))
+            max_loss = self._f(r.get("max_loss_total"))
+            if max_loss <= 0:
+                continue
+            info = {
+                "condor": r.get("symbol"),
+                "profit_take_usd": round(credit * self.PROFIT_TAKE_FRAC, 2),   # +50% of credit
+                "hard_stop_usd": round(-self.HARD_STOP_LOSS_MULT * max_loss, 2),  # -80% of max loss
+                "max_loss_usd": round(max_loss, 2),
+                "credit_usd": round(credit, 2),
+                "manage_dte": self.MANAGE_DTE,
+                "dte": self._dte(r.get("expiration")),
+            }
+            for lg in r.get("legs", []) or []:
+                s = str(lg.get("symbol") or "").upper()
+                if s:
+                    out[s] = info
+        return out
+
+    _LEG_RE = re.compile(r"^[A-Z.]+\s+\d{6}([CP])(\d+(?:\.\d+)?)$")
+
+    def _broker_fills(self):
+        """{option_symbol: {'avg': fill_price, 'long': bool}} from the LIVE broker — the source of
+        truth for what actually filled and at what price."""
+        out = {}
+        try:
+            from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+            for x in ((TradeStationPositionsLiveEngine().get_positions().get("response_json") or {})
+                      .get("Positions") or []):
+                if x.get("AssetType") == "STOCKOPTION":
+                    out[str(x.get("Symbol") or "").upper()] = {
+                        "avg": self._f(x.get("AveragePrice")),
+                        "long": str(x.get("LongShort") or "").lower() == "long"}
+        except Exception:
+            pass
+        return out
+
+    def reconcile_fills(self, dry_run=False):
+        """Rewrite each OPEN condor's credit/max-loss from the ACTUAL broker fills, counting only the
+        legs that actually filled. Fixes: (1) recorded credit was the PLANNED limit price, not the
+        fill; (2) unfilled legs were counted as if real. Flags a naked short (a filled short with no
+        filled protective wing) — undefined risk that must never be silently carried."""
+        try:
+            rows = [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
+        except Exception:
+            return {"status": "NO_VRP_LEDGER", "reconciled": 0}
+        fills = self._broker_fills()
+        changed, nakeds = [], []
+        for r in rows:
+            if r.get("status") != "OPEN":
+                continue
+            qty = int(r.get("quantity") or 0)
+            parsed = []
+            for lg in r.get("legs", []) or []:
+                sym = str(lg.get("symbol") or "").upper()
+                m = self._LEG_RE.match(sym)
+                if not m:
+                    continue
+                f = fills.get(sym)
+                parsed.append({"type": m.group(1), "strike": float(m.group(2)),
+                               "short": "SELL" in str(lg.get("action", "")).upper(),
+                               "fill": (f["avg"] if f else None), "lg": lg})
+            filled = [p for p in parsed if p["fill"] is not None]
+            if not filled:
+                continue
+            # net credit PER SHARE from the filled legs (short = received +, long = paid -)
+            net = sum((p["fill"] if p["short"] else -p["fill"]) for p in filled)
+
+            def width(typ):
+                shorts = [p for p in filled if p["type"] == typ and p["short"]]
+                wings = [p for p in filled if p["type"] == typ and not p["short"]]
+                if shorts and not wings:
+                    return None                                   # filled short, no filled wing = NAKED
+                if shorts and wings:
+                    return abs(wings[0]["strike"] - shorts[0]["strike"])
+                return 0.0
+            cw, pw = width("C"), width("P")
+            naked = cw is None or pw is None
+            for p in parsed:                                       # record real fills for transparency
+                if p["fill"] is not None:
+                    p["lg"]["fill_price"] = p["fill"]
+            credit_total = round(net * 100 * qty, 2)
+            old_c, old_ml = self._f(r.get("credit_total")), self._f(r.get("max_loss_total"))
+            if naked:
+                r["naked_exposure"] = True
+                nakeds.append({"symbol": r.get("symbol"), "note": "filled short with no filled wing"})
+                continue                                           # do NOT overwrite risk with a wrong cap
+            r.pop("naked_exposure", None)
+            max_w = max([w for w in (cw, pw)] or [0.0])
+            max_loss_total = round(max_w * 100 * qty - credit_total, 2)
+            if (abs(credit_total - old_c) >= 0.01 or abs(max_loss_total - old_ml) >= 0.01
+                    or not r.get("fill_reconciled")):
+                changed.append({"symbol": r.get("symbol"),
+                                "credit_total": {"was": old_c, "now": credit_total},
+                                "max_loss_total": {"was": old_ml, "now": max_loss_total},
+                                "filled_legs": len(filled), "total_legs": len(parsed)})
+                r["credit_total"] = credit_total
+                r["credit_per_condor"] = round(net, 4)
+                r["max_loss_total"] = max_loss_total
+                r["filled_leg_count"] = len(filled)
+                r["fill_reconciled"] = True
+        if not dry_run and (changed or nakeds):
+            with open(self.LEDGER, "w") as f:
+                for r in rows:
+                    f.write(json.dumps(r) + "\n")
+        if nakeds:
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                eng = ExternalAlertEngine()
+                if eng.has_external_channel():
+                    eng.dispatch(title="GreyLine NAKED option exposure",
+                                 message=f"reconciler found a filled short with no filled wing: {nakeds}",
+                                 severity="CRITICAL", fingerprint=f"VRP_NAKED:{nakeds}")
+            except Exception:
+                pass
+        return {"timestamp": datetime.utcnow().isoformat(), "reconciled": len(changed),
+                "changes": changed, "naked": nakeds,
+                "status": "VRP_FILLS_RECONCILED" if not dry_run else "VRP_FILLS_RECONCILE_DRYRUN"}
 
     def plan(self, names=None, limit=None):
         """Build defined-risk condors for today's rich-IV candidates. Places nothing."""
@@ -386,11 +517,23 @@ class ConditionalVRPShortPremiumEngine:
                     break
             if leg_err:
                 continue
+            # PROVENANCE for later PROOF: an edge can only be validated if the conditions it was
+            # sold under are recorded at entry. entry_iv_rank is the richness that IS the edge
+            # (registry: VRP ~9.6x conditional on rich IV); dte_selection_mode + entry_dte let the
+            # adaptive-vs-static tenor hypothesis be measured out-of-sample; skew ties to skew-timing.
+            from app.services.adaptive_dte_selection_engine import AdaptiveDTESelectionEngine
             rec = {
                 "symbol": con["symbol"], "quantity": qty, "expiration": con["expiration"],
                 "legs": placed_legs, "credit_per_condor": con["credit_per_condor"],
                 "credit_total": con["credit_total"], "max_loss_total": con["max_loss_total"],
                 "opened_at": datetime.utcnow().isoformat(), "status": "OPEN",
+                # --- provenance (added 2026-07-26 so the harvest is provable from real trades) ---
+                "entry_dte": self._dte(con["expiration"]),
+                "dte_selection_mode": "adaptive" if AdaptiveDTESelectionEngine.enabled() else "static",
+                "entry_iv_rank": con.get("iv_rank"),
+                "entry_iv": con.get("iv"),
+                "entry_skew": con.get("skew"),
+                "return_on_risk": con.get("return_on_risk"),
             }
             self.LEDGER.parent.mkdir(parents=True, exist_ok=True)
             with open(self.LEDGER, "a") as f:
@@ -450,6 +593,7 @@ class ConditionalVRPShortPremiumEngine:
             # current cost to CLOSE the condor = pay to buy back shorts, receive to sell wings
             cost_to_close = 0.0
             priced = True
+            leg_quotes = {}
             for leg in r["legs"]:
                 qd = (q.get_quote(leg["symbol"]).get("response_json") or {})
                 row = (qd.get("Quotes") or [qd])[0] if isinstance(qd, dict) else {}
@@ -457,6 +601,7 @@ class ConditionalVRPShortPremiumEngine:
                 if bid <= 0 or ask <= 0:
                     priced = False
                     break
+                leg_quotes[leg["symbol"]] = (bid, ask)     # retained to PRICE the exit, not market it
                 mid = (bid + ask) / 2
                 cost_to_close += mid if leg["action"] == "SELLTOOPEN" else -mid  # buy back shorts, sell wings
             if not priced:
@@ -473,7 +618,19 @@ class ConditionalVRPShortPremiumEngine:
                                 for leg in r["legs"] if leg["action"] == "SELLTOOPEN"), default=0.0)
 
             reason = None
-            if pnl_per >= self.PROFIT_TAKE_FRAC * credit * 100:
+            if r.get("strategy") == "earnings_vol":
+                # EARNINGS-VOL exit: the IV crush is realized within ~1 session of the report — close
+                # then. The post-earnings weekly is intentionally short-dated, so MANAGE_DTE and the
+                # gamma-defense exit do NOT apply (they'd close it the moment it opened).
+                _today = datetime.utcnow().date().isoformat()
+                _rd = str(r.get("report_date") or "")[:10]
+                if pnl_per >= self.PROFIT_TAKE_FRAC * credit * 100:
+                    reason = "EARNINGS_PROFIT_TAKE"
+                elif _rd and _today > _rd:
+                    reason = "EARNINGS_CRUSH_CAPTURED"
+                elif pnl_total <= -self.HARD_STOP_LOSS_MULT * max_loss_total:
+                    reason = "HARD_STOP_NEAR_MAX_LOSS"
+            elif pnl_per >= self.PROFIT_TAKE_FRAC * credit * 100:
                 reason = "PROFIT_TAKE_50PCT"
             elif tested_delta >= self.TESTED_SHORT_DELTA:
                 reason = f"DEFEND_TESTED_STRIKE_{round(tested_delta, 2)}d"
@@ -490,8 +647,18 @@ class ConditionalVRPShortPremiumEngine:
                 b = self._booking()
                 for leg in r["legs"]:
                     close_action = "BUYTOCLOSE" if leg["action"] == "SELLTOOPEN" else "SELLTOCLOSE"
-                    b.place_order(leg["symbol"], r["quantity"], action=close_action,
-                                  order_type="Market", tif="DAY")
+                    bid, ask = leg_quotes.get(leg["symbol"], (0.0, 0.0))
+                    if bid > 0 and ask > 0:
+                        # MARKETABLE LIMIT (not a naked market order): buy back shorts at the ask,
+                        # sell wings at the bid — fills at top of book, but the limit is a hard cap so
+                        # a thin OTM wing can't fill us THROUGH it. Fills immediately, so marking the
+                        # unit CLOSED here stays truthful (no phantom).
+                        px = ask if close_action == "BUYTOCLOSE" else bid
+                        b.place_order(leg["symbol"], r["quantity"], action=close_action,
+                                      order_type="Limit", limit_price=self._tick_round(px), tif="DAY")
+                    else:
+                        b.place_order(leg["symbol"], r["quantity"], action=close_action,
+                                      order_type="Market", tif="DAY")   # no usable quote: flagged fallback
                 r["status"] = "CLOSED"; r["closed_at"] = datetime.utcnow().isoformat()
                 r["close_reason"] = reason; r["realized_pnl"] = round(pnl_total, 2)
             decisions.append({"symbol": r["symbol"], "action": "CLOSE", "reason": reason,

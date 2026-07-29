@@ -84,6 +84,14 @@ def _compute(top_n):
     }
 
 
+def _momentum_enabled():
+    """Live read of the momentum kill switch — these candidates only OPEN when momentum is on.
+    Stamped fresh on every response (never cached) so the panel can never claim picks will open
+    while the strategy is disabled for a clean VRP test."""
+    from os import getenv
+    return (getenv("GREYLINE_MOMENTUM_ENABLED", "true") or "true").strip().lower() == "true"
+
+
 @router.get("/top-candidates")
 def top_candidates(force: bool = False, top_n: int = 5):
     """Top-N momentum-reversal candidates, TTL-cached. ?force=true recomputes now."""
@@ -93,6 +101,7 @@ def top_candidates(force: bool = False, top_n: int = 5):
             fresh = (time.time() - float(cached.get("computed_epoch") or 0)) < TTL_SECONDS
             if fresh and cached.get("candidates") is not None:
                 cached["cache"] = "HIT"
+                cached["momentum_enabled"] = _momentum_enabled()
                 return cached
         except Exception:
             pass
@@ -104,4 +113,5 @@ def top_candidates(force: bool = False, top_n: int = 5):
     except Exception:
         pass
     result["cache"] = "MISS_COMPUTED"
+    result["momentum_enabled"] = _momentum_enabled()
     return result

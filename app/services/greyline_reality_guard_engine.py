@@ -138,6 +138,23 @@ class GreyLineRealityGuardEngine:
                         syms.add(str(t["option_symbol"]).upper())
         except Exception:
             pass
+        # VRP defined-risk condors: each is one ledger unit with 4 legs. All legs are GreyLine-
+        # managed (as a unit, by the VRP engine's exit doctrine) — without this they mislabel as
+        # UNMANAGED on the dashboard and read as untracked broker risk to the guard.
+        try:
+            f = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
+            if f.exists():
+                for line in f.read_text().splitlines():
+                    if not line.strip():
+                        continue
+                    t = json.loads(line)
+                    if t.get("status") == "OPEN":
+                        for lg in t.get("legs", []) or []:
+                            s = str(lg.get("symbol") or "").upper()
+                            if s:
+                                syms.add(s)
+        except Exception:
+            pass
         return syms
 
     def _check_untracked_broker_positions(self, view):

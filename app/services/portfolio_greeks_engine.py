@@ -82,8 +82,13 @@ class PortfolioGreeksEngine:
         """{option_symbol: {delta,gamma,vega,theta}} for one underlying/expiry."""
         try:
             from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
+            # Tight band: we only need greeks near our held strikes (short legs ~10-12 strikes OTM,
+            # wings a few more). A 200/60 pull never reaches its count and runs to the ~39s stall
+            # wall; 60/30 collects the near-ATM band and breaks on COUNT in a few seconds. A leg
+            # beyond the band just reads greek 0 — safe (gamma-defense checks the near-ATM shorts;
+            # a missed far wing only makes net-vega read slightly MORE short, the conservative way).
             cs = TradeStationOptionChainLiveEngine().get_chain_snapshot(
-                underlying, expiry, option_type="All", max_contracts=200, strike_proximity=60)
+                underlying, expiry, option_type="All", max_contracts=60, strike_proximity=30)
             out = {}
             for c in cs.get("contracts", []) or []:
                 sym = ((c.get("Legs") or [{}])[0] or {}).get("Symbol") or c.get("Symbol")

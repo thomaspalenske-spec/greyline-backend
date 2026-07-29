@@ -66,6 +66,29 @@ class BrokerProtectiveStopEngine:
         return pos, working, protected, closing
 
     @staticmethod
+    def _vrp_leg_symbols():
+        """Symbols that are legs of an OPEN VRP defined-risk condor. These must NEVER get a broker
+        stop: the wings ARE the risk cap, so stopping a wing leaves the short leg NAKED (undefined
+        risk) — the exact opposite of protection. The condor is already defined-risk by structure."""
+        import json
+        from pathlib import Path
+        out = set()
+        try:
+            for ln in Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl").read_text().splitlines():
+                if not ln.strip():
+                    continue
+                r = json.loads(ln)
+                if str(r.get("status")).upper() != "OPEN":
+                    continue
+                for lg in r.get("legs", []) or []:
+                    s = str(lg.get("symbol") or "").upper()
+                    if s:
+                        out.add(s)
+        except Exception:
+            pass
+        return out
+
+    @staticmethod
     def _tick_round(price, is_option):
         """Options quote on a $0.05 grid (TradeStation rejects off-grid); equities on $0.01."""
         if is_option:
@@ -81,6 +104,7 @@ class BrokerProtectiveStopEngine:
                               "GreyLine is not running"}
         b = self._booking()
         pos, working, protected, closing = self._live_state(b)
+        vrp_legs = self._vrp_leg_symbols()   # never stop a defined-risk condor's own legs
 
         placed, skipped, errors = [], [], []
         for p in pos:
@@ -90,6 +114,11 @@ class BrokerProtectiveStopEngine:
             is_short = str(p.get("LongShort") or "").lower() == "short"
             if qty <= 0 or entry <= 0 or is_short:
                 skipped.append({"symbol": sym, "reason": "not a long position"})
+                continue
+            if sym.upper() in vrp_legs:
+                # a condor WING: stopping it out would strand the short leg naked. The condor's
+                # defined-risk structure IS its protection; a broker stop here is actively harmful.
+                skipped.append({"symbol": sym, "reason": "VRP condor leg — defined-risk, must not be stopped"})
                 continue
             if sym.upper() in protected:
                 skipped.append({"symbol": sym, "reason": "already protected"})

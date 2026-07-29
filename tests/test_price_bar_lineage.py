@@ -3,6 +3,7 @@ on the legitimate daily append. The whole value is reproducibility: a changed pa
 never be invisible."""
 
 import csv
+from datetime import datetime
 
 import pytest
 
@@ -72,7 +73,8 @@ def test_appending_a_new_recent_bar_does_not_false_alarm(eng, tmp_path):
     rows = _settled_history()
     _write(tmp_path, "AAA", rows)
     eng.snapshot()
-    rows.append("2026-07-23,200,201,199,200,1000000\n")   # today, past settled_through
+    today = datetime.utcnow().date().isoformat()          # dynamic — always past the 5-day settled cutoff
+    rows.append(f"{today},200,201,199,200,1000000\n")      # a fresh unsettled bar (legit daily append)
     _write(tmp_path, "AAA", rows)
     assert eng.verify()["status"] == "LINEAGE_STABLE"
 

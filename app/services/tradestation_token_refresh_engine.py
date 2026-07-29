@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 from os import getenv
 
@@ -9,10 +10,33 @@ from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngin
 
 class TradeStationTokenRefreshEngine:
 
+    # HARD THROTTLE (2026-07-28): TradeStation warned about excessive refresh-token exchanges and can
+    # disable the key. This is the SINGLE choke point every refresh path funnels through (maintenance
+    # engine, the balance/positions retry services, sim booking), so the cap lives here: at most one
+    # token-endpoint call per MIN_REFRESH_INTERVAL_SEC per process. A token refreshed within that
+    # window is still valid (>>15 min of its 20 min left), so a skipped refresh is always safe. The
+    # lock collapses concurrent callers to a single exchange instead of a burst.
+    _lock = threading.Lock()
+    _last_attempt_at = None
+    MIN_REFRESH_INTERVAL_SEC = 180
+
     def __init__(self):
         reload_env()
 
-    def refresh(self):
+    def refresh(self, force=False):
+        now = datetime.utcnow()
+        with self._lock:
+            if (not force) and self._last_attempt_at is not None and \
+                    (now - self._last_attempt_at).total_seconds() < self.MIN_REFRESH_INTERVAL_SEC:
+                return {
+                    "timestamp": now.isoformat(), "token_refreshed": False,
+                    "status": "TOKEN_REFRESH_THROTTLED",
+                    "detail": f"a refresh was attempted within {self.MIN_REFRESH_INTERVAL_SEC}s; "
+                              "the access token is still valid — reusing it",
+                    "execution_enabled": False, "order_placement_allowed": False,
+                }
+            type(self)._last_attempt_at = now      # claim the slot before releasing the lock
+
         api_key = getenv("TRADESTATION_API_KEY", "")
         api_secret = getenv("TRADESTATION_API_SECRET", "")
         refresh_token = getenv("TRADESTATION_REFRESH_TOKEN", "")

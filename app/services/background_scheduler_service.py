@@ -46,6 +46,42 @@ class BackgroundSchedulerService:
     _last_duration_ms = None
     _recent_cycles = []
     _RECENT_CAP = 20
+    _ALERT_AFTER_FAILURES = 3        # consecutive cycle failures before alerting off-box (~15 min)
+
+    @classmethod
+    def _alert_cycle_failures(cls, consecutive, error):
+        """Best-effort off-box alert that the scheduler cycle is failing. Only fires when an EXTERNAL
+        channel is configured — a macOS-local popup is useless when the box itself is the problem."""
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if not eng.has_external_channel():
+                return
+            eng.dispatch(
+                title="GreyLine scheduler FAILING",
+                message=(f"{consecutive} consecutive cycle failures — nothing is trading/managing. "
+                         f"Last error: {str(error)[:140]}"),
+                severity="CRITICAL",
+                fingerprint=f"SCHED_CYCLE_FAIL:{str(error)[:40]}",
+            )
+        except Exception:
+            pass
+
+    @classmethod
+    def _alert_cycle_recovered(cls, prev_failures):
+        """Tell the operator the cycle is healthy again after a failing streak."""
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if not eng.has_external_channel():
+                return
+            eng.dispatch(
+                title="GreyLine scheduler recovered",
+                message=f"cycle succeeded after {prev_failures} consecutive failures",
+                severity="INFO", fingerprint="SCHED_CYCLE_RECOVERED", force=True,
+            )
+        except Exception:
+            pass
 
     @classmethod
     def _record_result(cls, status, started, error=None):
@@ -57,13 +93,22 @@ class BackgroundSchedulerService:
 
         cls._last_duration_ms = duration_ms
         if status == "COMPLETE":
+            prev_failures = cls._consecutive_failures
             cls._success_count += 1
             cls._consecutive_failures = 0
+            if prev_failures >= cls._ALERT_AFTER_FAILURES:
+                cls._alert_cycle_recovered(prev_failures)      # tell the operator it's back
         else:
             cls._failure_count += 1
             cls._consecutive_failures += 1
             cls._last_error = error
             cls._last_error_at = datetime.utcnow().isoformat()
+            # MAKE SILENT FAILURES LOUD: the cycle self-gates when the market is closed, so a total
+            # failure is invisible from outside (it hid for 25h / 303 cycles on 2026-07-26). Alert
+            # OFF the box after a few consecutive failures; the dispatch's fingerprint cooldown keeps
+            # it from spamming every cycle, and a new error type re-alerts.
+            if cls._consecutive_failures >= cls._ALERT_AFTER_FAILURES:
+                cls._alert_cycle_failures(cls._consecutive_failures, error)
 
         entry = {"status": status, "at": datetime.utcnow().isoformat(), "duration_ms": duration_ms, "error": error}
         cls._recent_cycles = (cls._recent_cycles + [entry])[-cls._RECENT_CAP:]
@@ -310,21 +355,9 @@ class BackgroundSchedulerService:
         # affordability-gated, Dynamic-TPS exit. The equity book already open keeps being
         # managed by the exit manager below until it closes, so this is a clean handover.
         from os import getenv as _getenv
-        options_mode = (_getenv("GREYLINE_OPTIONS_MODE", "") or "").lower() == "true"
-        if options_mode:
-            try:
-                from app.services.momentum_options_execution_engine import MomentumOptionsExecutionEngine
-                momentum_reversal = MomentumOptionsExecutionEngine().run_cycle()
-            except Exception as exc:
-                momentum_reversal = {"placed_count": 0, "error": repr(exc),
-                                     "status": "MOMENTUM_OPTIONS_REBALANCE_DEGRADED"}
-        else:
-            try:
-                momentum_reversal = MomentumReversalRebalanceEngine().rebalance()
-            except Exception as exc:
-                momentum_reversal = {"rebalanced": False, "error": repr(exc),
-                                     "status": "MOMENTUM_REVERSAL_REBALANCE_DEGRADED"}
-
+        # MOMENTUM opening runs LATER (priority 5 — LOWEST, after the four edges) so the higher-
+        # probability strategies claim capital first. Its EXIT manager still runs here every cycle,
+        # so any open momentum positions are managed regardless of when new ones are opened.
         # Validated H2 exit doctrine, applied to open momentum positions every cycle while
         # the market is open (marks to live quotes; stale closed-market marks would misfire
         # stops). This owns exits now — the rebalance only tops up empty slots.
@@ -335,6 +368,48 @@ class BackgroundSchedulerService:
                 momentum_exit = {"managed": 0, "status": "MOMENTUM_EXIT_MARKET_CLOSED"}
         except Exception as exc:
             momentum_exit = {"error": repr(exc), "status": "MOMENTUM_EXIT_MANAGER_DEGRADED"}
+
+        # LEGACY ORDERLY LIQUIDATION: flatten the pre-clean-test book (legacy calls + equities) at
+        # BEST price then GUARANTEED exit — re-priced against LIVE quotes each cycle, not frozen on
+        # stale weekend limits. Self-terminating (no-op once those targets are gone) and gated by
+        # GREYLINE_LEGACY_LIQUIDATION_ENABLED. Never touches a VRP-OS position.
+        try:
+            from app.services.legacy_orderly_liquidation_engine import LegacyOrderlyLiquidationEngine
+            legacy_liquidation = LegacyOrderlyLiquidationEngine().run_cycle(
+                is_regular_session=(market_hours.get("is_regular_session") is True))
+        except Exception as exc:
+            legacy_liquidation = {"error": repr(exc), "status": "LEGACY_LIQUIDATION_DEGRADED"}
+
+        # Clean-slate reset (operator-armed via GREYLINE_FLATTEN_ALL_ENABLED). Flatten the ENTIRE
+        # book to zero — shorts closed before longs, sized from the LIVE broker position — and, once
+        # the book is confirmed flat, re-baseline the mission ledger to a clean $10k/0-realized line.
+        # Options can't fill after hours, so this does its work at the next regular session open.
+        try:
+            from app.services.flatten_all_positions_engine import FlattenAllPositionsEngine
+            _fa = FlattenAllPositionsEngine()
+            if _fa.enabled():
+                flatten_all = _fa.run_cycle(
+                    is_regular_session=(market_hours.get("is_regular_session") is True))
+                if flatten_all.get("status") == "FLATTEN_ALL_FLAT":
+                    from app.services.account_rebaseline_engine import AccountRebaselineEngine
+                    flatten_all["rebaseline"] = AccountRebaselineEngine().rebaseline_if_pending(
+                        reason="operator clean-slate reset to $10k / 0 positions")
+            else:
+                flatten_all = {"status": "FLATTEN_ALL_DISABLED"}
+        except Exception as exc:
+            flatten_all = {"error": repr(exc), "status": "FLATTEN_ALL_DEGRADED"}
+
+        # Volatility term-structure CARRY sleeve (GATED OFF by GREYLINE_VOL_CARRY_ENABLED). The one
+        # backtestable variance-premium edge: SHORT vol (long SVXY, defined-risk) ONLY in contango,
+        # FLAT in backwardation, vol-targeted small. Rebalances the sleeve toward its target each
+        # regular-session cycle; sizes from the LIVE broker position. Short-vol, so it never self-arms.
+        try:
+            from app.services.vol_term_structure_carry_engine import VolTermStructureCarryEngine
+            _vc = VolTermStructureCarryEngine()
+            vol_carry = (_vc.run_cycle(is_regular_session=(market_hours.get("is_regular_session") is True))
+                         if _vc.enabled() else {"status": "VOL_CARRY_DISABLED"})
+        except Exception as exc:
+            vol_carry = {"error": repr(exc), "status": "VOL_CARRY_DEGRADED"}
 
         # Age out raw UW snapshots past the retention window (compacting flow first).
         # Self-gates to ~once/day, so this is a no-op most cycles. Best-effort.
@@ -359,7 +434,11 @@ class BackgroundSchedulerService:
             if not _sp.enabled():
                 vrp_short_premium = {"status": "VRP_SHORT_PREMIUM_DISABLED"}
             else:
-                vrp_short_premium = {"manage": _sp.manage_positions(dry_run=False)}
+                # RECONCILE recorded credit/max-loss to ACTUAL fills FIRST, so manage_positions
+                # (take-profit / stop / P&L) acts on reality, not the planned limit prices or
+                # not-yet-filled legs. Also flags a naked short (filled short, no filled wing).
+                vrp_short_premium = {"reconcile": _sp.reconcile_fills(dry_run=False),
+                                     "manage": _sp.manage_positions(dry_run=False)}
                 _mk = _P("app/data/options_paper_trading/.vrp_short_last_open")
                 _today = datetime.utcnow().date().isoformat()
                 _due = True
@@ -367,8 +446,10 @@ class BackgroundSchedulerService:
                     _due = _mk.read_text().strip() != _today
                 except Exception:
                     _due = True
-                from app.services.market_hours_engine import MarketHoursEngine
-                if _due and MarketHoursEngine().status().get("is_regular_session"):
+                # MarketHoursEngine is imported at module scope (top of file). A redundant local
+                # import here made it a function-local name, so the earlier market_hours line
+                # (MarketHoursEngine().status()) hit UnboundLocalError and FAILED EVERY CYCLE.
+                if _due and market_hours.get("is_regular_session"):
                     from app.services.conditional_vrp_short_premium_engine import VARIANCE_HARVEST
                     # CATALYST-AWARE TAIL DEFENSE: don't sell fresh index premium straight into a
                     # scheduled vol event (Fed/CPI/PCE/jobs) — a known gap risk for no extra edge.
@@ -386,6 +467,96 @@ class BackgroundSchedulerService:
         except Exception as exc:
             vrp_short_premium = {"status": "VRP_SHORT_PREMIUM_DEGRADED", "error": repr(exc)}
 
+        # Trend-following equity sleeve (PRIORITY 3, GATED OFF by GREYLINE_TREND_ENABLED). Long/flat
+        # 200-DMA on a diversified ETF basket — the long-convexity diversifier. Sizes from LIVE broker.
+        try:
+            from app.services.trend_following_engine import TrendFollowingEngine
+            _tf = TrendFollowingEngine()
+            trend_following = (_tf.run_cycle(is_regular_session=(market_hours.get("is_regular_session") is True))
+                               if _tf.enabled() else {"status": "TREND_DISABLED"})
+        except Exception as exc:
+            trend_following = {"error": repr(exc), "status": "TREND_DEGRADED"}
+
+        # EARNINGS-VOL harvest (forward test, gated): sell a tiny defined-risk condor into a rich-IV
+        # name's earnings, once/day, RTH only. Positions land in the VRP ledger with strategy tag, so
+        # the reconcile+manage above and the protective-stop/dashboard machinery already cover them.
+        try:
+            from app.services.earnings_vol_harvest_engine import EarningsVolHarvestEngine
+            _ev2 = EarningsVolHarvestEngine()
+            if not _ev2.enabled():
+                earnings_vol_harvest = {"status": "EARNINGS_VOL_DISABLED"}
+            else:
+                _evmk = Path("app/data/options_paper_trading/.earnings_vol_last_open")
+                _evtoday = datetime.utcnow().date().isoformat()
+                try:
+                    _evdue = _evmk.read_text().strip() != _evtoday
+                except Exception:
+                    _evdue = True
+                if _evdue and market_hours.get("is_regular_session"):
+                    # defer around imminent MACRO events (FOMC/CPI/PCE) too, so the earnings-crush
+                    # evidence isn't contaminated by a macro move layered on the single-name report.
+                    from app.services.catalyst_risk_overlay_engine import CatalystRiskOverlayEngine
+                    _evc = [c["ticker"] for c in _ev2._candidates()]
+                    _evcat = CatalystRiskOverlayEngine().defer_new_premium(tickers=_evc) if _evc else {"defer": False}
+                    if _evcat.get("defer"):
+                        earnings_vol_harvest = {"open": {"status": "DEFERRED_CATALYST", **_evcat}}
+                    else:
+                        earnings_vol_harvest = {"open": _ev2.open_positions(dry_run=False)}
+                    try:
+                        _evmk.parent.mkdir(parents=True, exist_ok=True); _evmk.write_text(_evtoday)
+                    except Exception:
+                        pass
+                else:
+                    earnings_vol_harvest = {"status": "EARNINGS_VOL_NOT_DUE_OR_CLOSED"}
+        except Exception as exc:
+            earnings_vol_harvest = {"status": "EARNINGS_VOL_HARVEST_DEGRADED", "error": repr(exc)}
+
+        # MOMENTUM opening (PRIORITY 5 — LOWEST). Directional momentum OPENS positions; deployed here,
+        # AFTER the four edges, so the higher-probability strategies claim capital first. It is the
+        # strategy that lost 41% with no proven edge — operator-enabled; kill with GREYLINE_MOMENTUM_ENABLED=false.
+        momentum_on = (_getenv("GREYLINE_MOMENTUM_ENABLED", "true") or "true").lower() == "true"
+        options_mode = (_getenv("GREYLINE_OPTIONS_MODE", "") or "").lower() == "true"
+        if not momentum_on:
+            momentum_reversal = {"placed_count": 0, "rebalanced": False,
+                                 "status": "MOMENTUM_DISABLED_CLEAN_VRP_TEST"}
+        elif options_mode:
+            try:
+                from app.services.momentum_options_execution_engine import MomentumOptionsExecutionEngine
+                momentum_reversal = MomentumOptionsExecutionEngine().run_cycle()
+            except Exception as exc:
+                momentum_reversal = {"placed_count": 0, "error": repr(exc),
+                                     "status": "MOMENTUM_OPTIONS_REBALANCE_DEGRADED"}
+        else:
+            try:
+                momentum_reversal = MomentumReversalRebalanceEngine().rebalance()
+            except Exception as exc:
+                momentum_reversal = {"rebalanced": False, "error": repr(exc),
+                                     "status": "MOMENTUM_REVERSAL_REBALANCE_DEGRADED"}
+
+        # T-BILL CASH SWEEP (runs LAST): park the idle mission remainder in SGOV so it earns instead of
+        # sitting dead. Because it runs after every strategy has claimed its capital, it sweeps only what
+        # is genuinely idle. GATED by GREYLINE_TBILL_SWEEP_ENABLED; RTH only (SGOV is an equity).
+        try:
+            from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+            _ts = TbillCashSweepEngine()
+            if not _ts.enabled():
+                tbill_sweep = {"status": "TBILL_SWEEP_DISABLED"}
+            elif market_hours.get("is_regular_session") is True:
+                tbill_sweep = _ts.sweep(dry_run=False)
+            else:
+                tbill_sweep = {"status": "TBILL_SWEEP_MARKET_CLOSED"}
+        except Exception as exc:
+            tbill_sweep = {"error": repr(exc), "status": "TBILL_SWEEP_DEGRADED"}
+
+        # MISSION RISK GOVERNOR (monitor-only, additive): after all deployment, watch the BOOK as a
+        # whole — daily loss ladder (warn/halt-alert) and total-deployment cap — and SCREAM via iMessage
+        # on a breach. Read-only on the trading path; it never halts or trades, only alerts.
+        try:
+            from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
+            risk_governor = MissionRiskGovernorEngine().check_and_alert()
+        except Exception as exc:
+            risk_governor = {"error": repr(exc), "status": "MISSION_RISK_GOVERNOR_DEGRADED"}
+
         # BOOK GREEKS: keep the harvest a PURE vol bet, not an accidental directional one. Computes
         # the aggregate delta and, if delta-hedging is armed, trades the underlying to neutralise it.
         # Cheap when flat (returns immediately with no open legs); only fetches chains when positions
@@ -402,6 +573,17 @@ class BackgroundSchedulerService:
                 book_greeks["hedge_recommended"] = bg["delta_hedge"]
         except Exception as exc:
             book_greeks = {"status": "BOOK_GREEKS_DEGRADED", "error": repr(exc)}
+
+        # MISSION REALIZED P&L: keep a cumulative, honest record of closed-trade P&L so a realized
+        # loss can't vanish from the equity (the broker's daily realized resets at midnight). Backfill
+        # the pre-tracking legacy flatten once, then book the broker's daily-realized delta each cycle.
+        try:
+            from app.services.mission_realized_pnl_engine import MissionRealizedPnlEngine
+            _mr = MissionRealizedPnlEngine()
+            _mr.ensure_legacy_backfill()
+            mission_realized = _mr.record_from_broker()
+        except Exception as exc:
+            mission_realized = {"status": "MISSION_REALIZED_DEGRADED", "error": repr(exc)}
 
         # Phase 2: reconcile pending limit-buy fills and refine the entry aggressiveness.
         try:
@@ -525,23 +707,19 @@ class BackgroundSchedulerService:
                     _due = (datetime.utcnow() - datetime.fromisoformat(_last["timestamp"])).total_seconds() > 20 * 3600
                 except Exception:
                     _due = True
-            backup = _dr.backup() if _due else {"status": "BACKUP_NOT_DUE"}
+            # ATOMIC + ASYNC: runs off the cycle's critical path (a slow iCloud copy no longer
+            # blocks the scheduler), builds in staging and promotes with a rename, and SCREAMS from
+            # its own worker if it ends incomplete. An interrupted run can't corrupt the last good
+            # backup or advance the marker onto a partial.
+            backup = _dr.backup_async() if _due else {"status": "BACKUP_NOT_DUE"}
         except Exception as exc:
             backup = {"status": "BACKUP_DEGRADED", "error": repr(exc)}
-        # The proof case: a backup that fails must SCREAM, not sit in a ledger reading "complete".
-        # A CRITICAL notification now auto-escalates off the machine (if a channel is configured).
-        if str(backup.get("status")) in ("BACKUP_DEGRADED", "BACKUP_INCOMPLETE"):
-            try:
-                from app.services.operator_notification_engine import OperatorNotificationEngine
-                OperatorNotificationEngine().record(
-                    event_type="BACKUP_FAILED",
-                    title="Off-machine backup FAILED",
-                    message=(f"Unrecoverable-data backup returned {backup.get('status')}. "
-                             f"Forward-only data (options surface, PIT archive, earnings panel) "
-                             f"is unprotected until this is fixed. {str(backup.get('error') or '')[:150]}"),
-                    severity="CRITICAL", source="DISASTER_RECOVERY", payload=backup)
-            except Exception:
-                pass
+        # Independent of any backup() call: scream if the MARKER is stale (a backup killed mid-run by
+        # a restart/sleep never updates it, so no completion alert ever fires). Throttled.
+        try:
+            _dr.alert_if_stale()
+        except Exception:
+            pass
 
         # Broker-side disaster stops: the only protection that survives THIS process dying.
         # Every doctrine exit (ATR stop, TP ladder, maturity liquidation) needs the scheduler
@@ -613,6 +791,15 @@ class BackgroundSchedulerService:
                 "fixed_horizon_skill": fixed_horizon,
                 "momentum_reversal_rebalance": momentum_reversal,
                 "momentum_exit_manager": momentum_exit,
+                "vol_carry_status": vol_carry.get("status"),
+                "trend_following_status": trend_following.get("status"),
+                "trend_assets_in_uptrend": trend_following.get("assets_in_uptrend"),
+                "tbill_sweep_status": tbill_sweep.get("status"),
+                "flatten_all_status": flatten_all.get("status"),
+                "risk_governor_daily_pnl": risk_governor.get("daily_pnl"),
+                "risk_governor_deployed_pct": risk_governor.get("deployed_pct"),
+                "risk_governor_alerts": risk_governor.get("alerts_fired"),
+                "earnings_vol_harvest_status": earnings_vol_harvest.get("status"),
                 "price_bar_cross_source_status": cross_source.get("status"),
                 "lineage_status": lineage.get("status"),
                 "options_capture_status": options_capture.get("status"),

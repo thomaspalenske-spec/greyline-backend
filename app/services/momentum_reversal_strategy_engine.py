@@ -38,7 +38,10 @@ class MomentumReversalStrategyEngine:
     and data-integrity pipeline measure the true edge.
     """
 
-    CAPITAL_BASE = 10000.0
+    # Momentum's capital allocation. Default = the full book, but GREYLINE_MOMENTUM_CAPITAL_USD caps
+    # it to a small sleeve: momentum is the strategy that lost 41% with no proven edge, so bounding
+    # its deployment bounds its damage (per_name = CAPITAL_BASE / top_n, so a $1500 base = $150/name).
+    CAPITAL_BASE = float(getenv("GREYLINE_MOMENTUM_CAPITAL_USD", "") or 10000.0)
     # Breadth. A thin edge only survives diversification (the portfolio backtest showed it
     # emerges in a basket, not a single name), and more names per rebalance is also the
     # only lever on time-to-verdict: 30 closed trades is ~6 weeks at 5/week, ~3 at 10.
