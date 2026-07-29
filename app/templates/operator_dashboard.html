@@ -1154,6 +1154,8 @@ async function refreshAll() {
             const banked = (p.tps_filled||0) > i;
             return `<span class="${banked ? "green" : "sub"}" title="TP${i+1}${banked ? " (reached)" : ""}">${banked ? "✓ " : ""}TP${i+1} ${fmtMoney(t)}</span>`;
           }).join("<br>") + `<br><span class="sub" title="Runner: last tranche trails 3 ATR, uncapped">TP4 · runner${p.runner_contracts ? " ("+p.runner_contracts+"c)" : ""}</span>`
+        : (p.tp_note)
+        ? `<span class="sub">${p.tp_note}</span>`
         : `<span class="sub">—</span>`;
       const dash = `<span class="sub">—</span>`;
       const entryVal = isU && p.underlying_entry_price != null ? p.underlying_entry_price : p.entry_price;

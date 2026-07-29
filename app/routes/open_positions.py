@@ -25,6 +25,39 @@ def _greyline_managed_symbols():
         return set()
 
 
+_TREND_BASKET = {"QQQM", "IWM", "TLT", "GLDM", "EFA", "DBC"}
+
+
+def _dynamic_exit(sym, current_price):
+    """The sleeve's REAL, dynamic exit — not the 35% disaster backstop. Trend exits on a 200-DMA
+    break (confirmed reversal); carry on backwardation; T-bill is a cash floor."""
+    base = str(sym or "").split()[0].upper()
+    try:
+        if base in _TREND_BASKET:
+            from app.services.trend_following_engine import TrendFollowingEngine
+            sig = TrendFollowingEngine()._signal(base, float(current_price or 0))
+            if sig and sig.get("sma"):
+                sma = round(sig["sma"], 2)
+                above = round((sig["last"] / sig["sma"] - 1) * 100, 1)
+                return {"stop_loss": sma,
+                        "stage": f"trend exit: sell on a close below the 200-DMA ${sma} ({above}% above now)",
+                        "tp_note": "rides the trend · full exit on 200-DMA break (no partial TP)"}
+        if base == "SVXY":
+            from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+            from app.services.vol_term_structure_carry_engine import VolTermStructureCarryEngine
+            s = VolTermStructureCarryEngine().signal(TradeStationQuoteLiveEngine())
+            if s.get("ok"):
+                cond = "contango · hold" if s.get("contango") else "BACKWARDATION · exiting"
+                return {"stop_loss": None,
+                        "stage": f"carry exit: sell on backwardation (VIX>VIX3M) · now {s['vix']}/{s['vix3m']} = {cond}",
+                        "tp_note": "harvests the roll until the curve inverts (no fixed TP)"}
+        if base == "SGOV":
+            return {"stop_loss": None, "stage": "cash floor · no exit stop", "tp_note": "cash equivalent"}
+    except Exception:
+        pass
+    return None
+
+
 def _vrp_condor_levels():
     """Per-leg-symbol -> the condor's unit stop/profit-take, for display. Read from the engine (not
     a ledger here) so the 'positions come from the broker, never the local ledger' rule holds."""
@@ -177,9 +210,17 @@ def open_positions():
                 r["status"] = "MANAGED"
                 r["stage"] = "VRP condor leg · managed as a unit (defined-risk · 50% profit / gamma / DTE)"
                 r["condor_levels"] = condor_levels.get(sym)
-        elif stops.get(sym) is not None:
-            # held equity/ETF with a broker-side protective disaster stop — show the stop, stay OPEN
-            r["stop_loss"] = stops.get(sym)
+        else:
+            # held equity — show the STRATEGY's real DYNAMIC exit (200-DMA break / backwardation),
+            # NOT the 35% disaster backstop. The broker's 35% stop still rests as a crash backstop.
+            dyn = _dynamic_exit(sym, r.get("current_price"))
+            if dyn:
+                r["stop_loss"] = dyn["stop_loss"]
+                r["stage"] = dyn["stage"]
+                r["tp_note"] = dyn["tp_note"]
+                r["disaster_backstop"] = stops.get(sym)     # the 35% broker stop, kept as a footnote
+            elif stops.get(sym) is not None:
+                r["stop_loss"] = stops.get(sym)
 
     # Pending limit BUYs we're waiting to fill — shown as PENDING rows (not positions yet).
     for pb in view.get("pending_buys", []):
