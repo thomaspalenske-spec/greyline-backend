@@ -130,7 +130,13 @@ class MomentumReversalRebalanceEngine:
             return self._result("REBALANCE_SKIPPED_STALE_DATA", rebalanced=False,
                                 as_of=asof, data_source=source, reason=stale)
 
-        targets, _ = self.strategy.select(series)
+        # Use the FULL ranked list, NOT select()'s top-N slice. The filters below (long-only,
+        # regime, vol, trash) whittle this down and the free_slots cap in the fill loop takes the
+        # top survivors — so clean names ranked below the junk backfill into the book. Filtering
+        # the pre-truncated top-N instead was the bug that deployed NOTHING on a 748-clean-signal
+        # day: the momentum signal ranks pump-and-dumps/split-artifacts highest, so the top-N was
+        # all trash while every tradeable name sat just below the cut.
+        _top_n_slice, targets = self.strategy.select(series)   # targets := full ranked list
 
         # LONG-ONLY. The 2026-07-24 cost-aware backtest showed the market-neutral long-short is
         # not significant while the long-only excess-over-market is — because the SHORT side is

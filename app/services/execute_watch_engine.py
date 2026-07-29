@@ -104,18 +104,26 @@ class ExecuteWatchEngine:
         watch = []
         for i, c in enumerate(cands):                         # cache is already ranked by conviction
             sym = str(c.get("symbol") or "").upper()
-            cost = self._f(c.get("last_close")) or per_name
+            share_px = self._f(c.get("last_close")) or per_name
+            # momentum sizes each name at its PER-NAME budget (cap / slots), buying whole shares.
+            # A name is only openable if >=1 whole share fits that budget AND the momentum cash is
+            # actually free. Checking cross-book free_cash here was wrong — it made $250 semis look
+            # affordable to a $100/name sleeve.
+            whole_shares = int(per_name // share_px) if share_px > 0 else 0
             if sym in held:
                 status, reason = "BOUGHT", "held"
             elif sym in rejects:
                 status, reason = "EXECUTE", "blocked: order rejected (glitch)"
             elif mom_cap <= 0:
                 status, reason = "WATCH", "momentum unfunded ($0 capital)"
-            elif free_cash < cost:
-                status, reason = "EXECUTE", f"blocked: no free capital (need ~${round(cost)}, have ${round(free_cash)})"
+            elif whole_shares < 1:
+                status, reason = "EXECUTE", (f"blocked: ${round(share_px)} share > ${round(per_name)}/name "
+                                             f"momentum budget (cap ${round(mom_cap)} / {self.MOMENTUM_TOP_N} slots)")
+            elif free_cash < share_px:
+                status, reason = "EXECUTE", f"blocked: no free cash (need ~${round(share_px)}, have ${round(free_cash)})"
             elif i < free_slots:
-                status, reason = "EXECUTE", ("meets signal + capital, not deployed — momentum may be "
-                                             "filtering it (price/liquidity) or the rebalance is stalled")
+                status, reason = "EXECUTE", (f"meets signal + affords {whole_shares} share(s) @ ${round(per_name)}/name, "
+                                             "not deployed — rebalance runs at the next session")
             else:
                 status, reason = "WATCH", f"ranked below the buy cutoff (slot {i+1} > {free_slots} free)"
             watch.append({"rank": c.get("rank", i + 1), "symbol": sym,

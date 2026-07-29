@@ -28,16 +28,18 @@ TTL_SECONDS = 900  # 15 min
 def _compute(top_n):
     strat = MomentumReversalStrategyEngine(top_n=top_n)
     series, asof, source = strat.universe()
-    targets, confirmed = strat.select(series)   # confirmed = the full ranked list
+    targets, confirmed = strat.select(series)   # confirmed = the FULL ranked list (targets = top-N slice)
 
-    # FAILSAFE: discard trash picks (penny stocks / artifact momentum / crashes) BEFORE taking the
-    # top-N, so the panel backfills with CLEAN picks and never surfaces junk. Same filter the
-    # execution path uses, so display and execution agree.
+    # FAILSAFE: discard trash picks (penny stocks / artifact momentum / crashes) from the FULL ranked
+    # list, THEN take the top-N — so clean picks ranked below the junk backfill into view. Filtering
+    # the already-truncated `targets` slice was the bug that showed "0 candidates" on a 748-clean day:
+    # the momentum signal ranks pump-and-dumps/split-artifacts highest, so the top-N is often all
+    # trash while the tradeable names sit just below it. Same filter the execution path uses.
     from app.services.trash_pick_filter_engine import TrashPickFilterEngine
-    targets, trash_discarded = TrashPickFilterEngine.partition(targets)
+    clean_confirmed, trash_discarded = TrashPickFilterEngine.partition(confirmed)
 
     candidates = []
-    for i, t in enumerate(targets[:top_n], start=1):
+    for i, t in enumerate(clean_confirmed[:top_n], start=1):
         candidates.append({
             "rank": i,
             "symbol": t.get("symbol"),
@@ -71,7 +73,7 @@ def _compute(top_n):
         else:
             from app.services.momentum_options_execution_engine import MomentumOptionsExecutionEngine
             oeng = MomentumOptionsExecutionEngine()
-            board = oeng.contract_board(confirmed, oeng._free_cash(), pool=10, top_affordable=5)
+            board = oeng.contract_board(clean_confirmed, oeng._free_cash(), pool=10, top_affordable=5)
     except Exception as e:
         board = {"top_scoring_contract": None, "affordable_contracts": [], "error": str(e)[:150]}
 
@@ -82,6 +84,7 @@ def _compute(top_n):
         "data_source": source,
         "universe_size": len(series),
         "confirmed_signals": len(confirmed),
+        "clean_signals": len(clean_confirmed),
         "candidates": candidates,
         "trash_discarded": len(trash_discarded),
         "trash_discarded_names": [{"symbol": t.get("symbol"), "last_close": t.get("last_close"),
