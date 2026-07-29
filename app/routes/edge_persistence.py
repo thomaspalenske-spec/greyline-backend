@@ -25,3 +25,10 @@ def edge_persistence():
 def execution_cost():
     """Per-sleeve round-trip spread cost (live) — pair with /edge-persistence: cost > edge = retire."""
     return ExecutionCostEngine().profile()
+
+
+@router.get("/execution-realized")
+def execution_realized():
+    """REALIZED slippage vs the decision-time mid, per strategy — what we actually paid + fill rate."""
+    from app.services.execution_log_engine import ExecutionLogEngine
+    return ExecutionLogEngine().realized()

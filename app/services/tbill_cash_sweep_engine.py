@@ -134,6 +134,12 @@ class TbillCashSweepEngine:
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         r = TradeStationSimBookingEngine().place_order(p["symbol"], abs(delta), action=action,
                                                        order_type="Limit", limit_price=limit, tif="DAY")
+        try:
+            from app.services.execution_log_engine import ExecutionLogEngine
+            ExecutionLogEngine().record("tbill", p["symbol"], action, delta, limit,
+                                        p["bid"], p["ask"], r.get("order_id"))
+        except Exception:
+            pass
         return {**p, "status": "TBILL_SWEEP_ORDERED", "acted": True,
                 "action": action, "qty": abs(delta), "limit": limit,
                 "ok": r.get("ok"), "order_id": r.get("order_id"),

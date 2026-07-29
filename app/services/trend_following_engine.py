@@ -150,6 +150,12 @@ class TrendFollowingEngine:
                     pass
             r = book.place_order(leg["symbol"], abs(d), action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
+            try:
+                from app.services.execution_log_engine import ExecutionLogEngine
+                ExecutionLogEngine().record("trend", leg["symbol"], action, d, limit,
+                                            leg["bid"], leg["ask"], r.get("order_id"))
+            except Exception:
+                pass
             acts.append({"symbol": leg["symbol"], "action": action, "qty": abs(d), "limit": limit,
                          "ok": r.get("ok"), "order_id": r.get("order_id")})
         return {"status": "TREND_REBALANCED" if not dry_run else "TREND_DRYRUN",
