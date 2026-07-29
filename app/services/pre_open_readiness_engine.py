@@ -39,19 +39,34 @@ class PreOpenReadinessEngine:
         def add(name, status, detail):
             checks.append({"check": name, "status": status, "detail": detail})
 
-        # 1. clean-slate reset armed for the open
-        add("reset_armed", "PASS" if self._flag("GREYLINE_FLATTEN_ALL_ENABLED") else "WARN",
-            "flatten-all is armed to flatten the book + rebaseline to $10k at the open"
-            if self._flag("GREYLINE_FLATTEN_ALL_ENABLED") else "flatten-all is OFF — reset will not run")
+        # This audit runs in TWO modes. RESET MODE (flatten-all ON) is the one-time clean-slate day:
+        # the book must flatten + rebaseline BEFORE any sleeve opens, so strategies-off is correct and
+        # strategies-on is the risk. NORMAL-OPEN MODE (flatten-all OFF) is every ordinary trading day:
+        # sleeves SHOULD be armed and flatten-all SHOULD be off — that's the healthy state, not a
+        # warning. Checks 1-2 branch on the mode so a normal open reads a clean READY instead of
+        # inheriting stale reset-day warnings (which would mask a real warning next to them).
+        reset_mode = self._flag("GREYLINE_FLATTEN_ALL_ENABLED")
 
-        # 2. strategy flags (pre-open these are OFF; the 8:50 task arms them AFTER the reset is clean)
+        # 1. reset posture — both states are valid; PASS with the posture that's actually intended.
+        add("reset_armed", "PASS",
+            "RESET MODE: flatten-all armed to flatten the book + rebaseline to $10k at the open"
+            if reset_mode else "normal trading open — no reset scheduled (flatten-all OFF, as expected)")
+
+        # 2. strategy flags — the correct state is mode-dependent.
         flags = {k: self._flag(k) for k in [
             "GREYLINE_VOL_CARRY_ENABLED", "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_TREND_ENABLED",
             "GREYLINE_EARNINGS_VOL_ENABLED", "GREYLINE_MOMENTUM_ENABLED", "GREYLINE_TBILL_SWEEP_ENABLED"]}
         any_on = any(flags.values())
-        add("strategy_flags_pre_open", "PASS" if not any_on else "WARN",
-            f"pre-open all OFF (armed by the 8:50 task after a clean reset): {flags}"
-            if not any_on else f"some strategies already ON before the reset — may fight flatten-all: {flags}")
+        if reset_mode:
+            # pre-reset the sleeves must be OFF so they don't open into a book that's about to flatten
+            add("strategy_flags_pre_open", "PASS" if not any_on else "WARN",
+                f"pre-reset all OFF (armed after a clean reset): {flags}" if not any_on
+                else f"strategies ON while a reset is armed — may fight flatten-all: {flags}")
+        else:
+            # normal open: sleeves SHOULD be armed. The dangerous case is nothing armed -> nothing opens.
+            add("strategy_flags_pre_open", "PASS" if any_on else "WARN",
+                f"sleeves armed for the open: {flags}" if any_on
+                else f"NO sleeves armed — nothing will open at the bell: {flags}")
 
         # 3. capital params sum sanity (<= book)
         def _n(k, d):
