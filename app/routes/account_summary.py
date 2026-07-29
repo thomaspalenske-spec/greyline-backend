@@ -45,6 +45,12 @@ def account_summary():
     realized = MissionRealizedPnlEngine().cumulative_realized()
     mission_equity = round(base + realized + unrealized, 2)
 
+    # Mission CASH = equity minus the market value of open positions (i.e. base + realized - cost).
+    # The dashboard read `cash_on_hand`/`buying_power` off this response, but they were never here,
+    # so both boxes showed $0.00 while ~60% of the book was actually in cash. The mission is cash-
+    # funded with no margin, so buying power = cash on hand.
+    cash_on_hand = round(mission_equity - market_value, 2)
+
     return {
         "timestamp": datetime.utcnow().isoformat(),
         "account_mode": view.get("account_mode"),
@@ -56,6 +62,8 @@ def account_summary():
         "deployed_capital": cost_basis,
         "deployed_pct_of_equity": round(100 * cost_basis / mission_equity, 2) if mission_equity else 0,
         "open_market_value": market_value,
+        "cash_on_hand": cash_on_hand,
+        "buying_power": cash_on_hand,
         "unrealized_pnl": unrealized,
         "realized_pnl": realized,
         "total_equity": mission_equity,
