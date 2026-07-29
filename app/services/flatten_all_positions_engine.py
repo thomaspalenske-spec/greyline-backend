@@ -144,6 +144,14 @@ class FlattenAllPositionsEngine:
                     actions.append({"symbol": symbol, "qty": qty,
                                     "skipped": "cancel not confirmed — retry next cycle"})
                     continue
+                # selling a LONG is rejected while a broker protective stop reserves the shares
+                # ("long N with N on sell orders"). Clear it first so the emergency flatten can fire.
+                if action in ("SELL", "SELLTOCLOSE"):
+                    try:
+                        from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+                        BrokerProtectiveStopEngine().clear_stop(symbol)
+                    except Exception:
+                        pass
                 r = book.place_order(symbol, abs(qty), action=action, order_type=otype,
                                      limit_price=limit, tif="DAY")
                 actions.append({"symbol": symbol, "qty": qty, "action": action, "limit": limit,

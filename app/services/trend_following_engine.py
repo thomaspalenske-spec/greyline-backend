@@ -140,6 +140,14 @@ class TrendFollowingEngine:
             if dry_run:
                 acts.append({"symbol": leg["symbol"], "would": action, "qty": abs(d), "limit": limit})
                 continue
+            # a SELL is rejected while a protective STOP reserves the shares — clear it first; the
+            # stop engine re-places one on the remaining shares next cycle.
+            if action == "SELL":
+                try:
+                    from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+                    BrokerProtectiveStopEngine().clear_stop(leg["symbol"])
+                except Exception:
+                    pass
             r = book.place_order(leg["symbol"], abs(d), action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
             acts.append({"symbol": leg["symbol"], "action": action, "qty": abs(d), "limit": limit,

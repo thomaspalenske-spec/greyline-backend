@@ -124,6 +124,13 @@ class TbillCashSweepEngine:
         # marketable limit (SGOV is penny-tight): buy at ask, sell at bid
         action = "BUY" if delta > 0 else "SELL"
         limit = round(p["ask"] if delta > 0 else p["bid"], 2)
+        # a SELL is rejected while a protective stop reserves the shares — clear it first.
+        if action == "SELL":
+            try:
+                from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+                BrokerProtectiveStopEngine().clear_stop(p["symbol"])
+            except Exception:
+                pass
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         r = TradeStationSimBookingEngine().place_order(p["symbol"], abs(delta), action=action,
                                                        order_type="Limit", limit_price=limit, tif="DAY")

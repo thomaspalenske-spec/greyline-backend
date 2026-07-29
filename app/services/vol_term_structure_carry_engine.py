@@ -215,6 +215,14 @@ class VolTermStructureCarryEngine:
             return {**p, "status": "VOL_CARRY_DRYRUN", "acted": False,
                     "would": ("BUY" if delta > 0 else "SELL", abs(delta), self.SYMBOL)}
         action = "BUY" if delta > 0 else "SELL"
+        # A SELL is rejected if a broker protective STOP still reserves the shares ("long N with N on
+        # sell orders"). Clear it first; the stop engine re-places one on the remaining shares next cycle.
+        if action == "SELL":
+            try:
+                from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+                BrokerProtectiveStopEngine().clear_stop(self.SYMBOL)
+            except Exception:
+                pass
         # patient limit: post toward the mid to CAPTURE part of the spread instead of crossing it all
         from app.services.execution_pricing_engine import ExecutionPricingEngine
         limit = ExecutionPricingEngine.patient_limit(p["bid"], p["ask"], delta > 0)
