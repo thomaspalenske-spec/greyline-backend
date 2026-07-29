@@ -685,6 +685,17 @@ th {
         </table>
       </div>
 
+      <div class="card" id="execute_watch_card">
+        <div class="section-title">Execute / Watch — Buy Opportunities <span id="ew_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">WATCH = buy candidates ranked by conviction (closest to firing on top). EXECUTE = meets the buy criteria but can't fire — blocked by no free capital, a rejected order, or not deploying.</div>
+        <table>
+          <thead>
+            <tr><th>Rank</th><th>Symbol</th><th>Conviction</th><th>12-1 Mom</th><th>5d Rev</th><th>Price</th><th>Status</th><th>Reason</th></tr>
+          </thead>
+          <tbody id="execute_watch_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+        </table>
+      </div>
+
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
         <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
         <table>
@@ -983,12 +994,39 @@ async function refreshTopCandidates() {
   }
 }
 
+async function refreshExecuteWatch() {
+  const body = document.getElementById("execute_watch_body");
+  const summary = document.getElementById("ew_summary");
+  try {
+    const d = await getJSON("/execute-watch");
+    const watch = d.watch || [];
+    if (summary) summary.textContent = `${d.execute_blocked_count || 0} EXECUTE-blocked · ${watch.length} watched · $${Math.round(d.free_cash || 0).toLocaleString()} free`;
+    if (!watch.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">No buy candidates (cache: ${d.candidates_as_of || "—"}).</span></td></tr>`; return; }
+    body.innerHTML = watch.map(w => {
+      const badge = w.status === "EXECUTE" ? "unmanaged" : w.status === "BOUGHT" ? "open" : "neutral";
+      return `<tr>
+        <td>#${w.rank}</td>
+        <td><strong>${w.symbol}</strong></td>
+        <td>${w.conviction != null ? Number(w.conviction).toFixed(2) : "—"}</td>
+        <td>${w.momentum_12_1_pct != null ? w.momentum_12_1_pct + "%" : "—"}</td>
+        <td>${w.reversal_5d_move_pct != null ? w.reversal_5d_move_pct + "%" : "—"}</td>
+        <td>${w.last_close != null ? "$" + w.last_close : "—"}</td>
+        <td><span class="badge ${badge}">${w.status}</span></td>
+        <td><span class="sub">${w.reason || ""}</span></td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8"><span class="red">Execute/Watch unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshAll() {
   setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
   await refreshCockpitBanner();
   await refreshCommanderSummary();
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
   refreshTopCandidates();   // fire-and-forget: cached endpoint, must never stall the main loop
+  refreshExecuteWatch();    // fire-and-forget: reads the cached candidates, never stalls the loop
 
   const [ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/options-account-dashboard"),

@@ -32,3 +32,10 @@ def execution_realized():
     """REALIZED slippage vs the decision-time mid, per strategy — what we actually paid + fill rate."""
     from app.services.execution_log_engine import ExecutionLogEngine
     return ExecutionLogEngine().realized()
+
+
+@router.get("/execute-watch")
+def execute_watch():
+    """Buy opportunities: WATCH ranked by conviction; EXECUTE = meets criteria but blocked (no capital/glitch)."""
+    from app.services.execute_watch_engine import ExecuteWatchEngine
+    return ExecuteWatchEngine().view()

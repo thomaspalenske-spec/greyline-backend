@@ -165,6 +165,12 @@ class MomentumReversalRebalanceEngine:
                     kept.append(t)
             targets = kept
 
+        # FAILSAFE: discard TRASH picks (penny stocks / artifact "momentum" / crashes-not-pullbacks)
+        # so GreyLine never EXECUTES on them — it just drops them. Same single filter the dashboard
+        # uses to hide them, so display and execution can never disagree on what counts as trash.
+        from app.services.trash_pick_filter_engine import TrashPickFilterEngine
+        targets, trash_discarded = TrashPickFilterEngine.partition(targets)
+
         # Exits are owned by MomentumExitManagerEngine (validated H2 doctrine), NOT the
         # rebalance. So the rebalance no longer closes the book — it only TOPS UP: fills
         # empty slots (top_n minus what's still open) with the strongest fresh signals not
@@ -243,6 +249,9 @@ class MomentumReversalRebalanceEngine:
                             skipped_unaffordable_whole_share=skipped_unaffordable,
                             regime=regime, regime_blocked=len(regime_dropped), long_only=True,
                             vol_blocked=len(vol_dropped), vol_blocked_names=vol_dropped[:10],
+                            trash_discarded=len(trash_discarded),
+                            trash_discarded_names=[{"symbol": t.get("symbol"),
+                                                    "reason": t.get("discard_reason")} for t in trash_discarded[:10]],
                             sim_booking=sim_booking)
 
     def status(self):

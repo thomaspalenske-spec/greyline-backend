@@ -30,6 +30,12 @@ def _compute(top_n):
     series, asof, source = strat.universe()
     targets, confirmed = strat.select(series)   # confirmed = the full ranked list
 
+    # FAILSAFE: discard trash picks (penny stocks / artifact momentum / crashes) BEFORE taking the
+    # top-N, so the panel backfills with CLEAN picks and never surfaces junk. Same filter the
+    # execution path uses, so display and execution agree.
+    from app.services.trash_pick_filter_engine import TrashPickFilterEngine
+    targets, trash_discarded = TrashPickFilterEngine.partition(targets)
+
     candidates = []
     for i, t in enumerate(targets[:top_n], start=1):
         candidates.append({
@@ -77,6 +83,9 @@ def _compute(top_n):
         "universe_size": len(series),
         "confirmed_signals": len(confirmed),
         "candidates": candidates,
+        "trash_discarded": len(trash_discarded),
+        "trash_discarded_names": [{"symbol": t.get("symbol"), "last_close": t.get("last_close"),
+                                   "reason": t.get("discard_reason")} for t in trash_discarded[:10]],
         "contract_board": board,
         "engine": "MomentumReversalStrategyEngine",
         "signal": "12-1 momentum AND 5-day reversal must agree; conviction = percentile-rank blend",
@@ -102,6 +111,13 @@ def top_candidates(force: bool = False, top_n: int = 5):
             if fresh and cached.get("candidates") is not None:
                 cached["cache"] = "HIT"
                 cached["momentum_enabled"] = _momentum_enabled()
+                # apply the failsafe on SERVE too, so a cache computed before the filter existed (or
+                # any stale cache) can never surface trash to the panel. ADD to the compute-time
+                # count (don't clobber it) so a clean cache still reports what compute-time threw out.
+                from app.services.trash_pick_filter_engine import TrashPickFilterEngine
+                clean, discarded = TrashPickFilterEngine.partition(cached.get("candidates") or [])
+                cached["candidates"] = clean
+                cached["trash_discarded"] = int(cached.get("trash_discarded") or 0) + len(discarded)
                 return cached
         except Exception:
             pass
