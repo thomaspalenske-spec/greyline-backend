@@ -124,6 +124,17 @@ class GreyLineSimExecutionEngine:
         if shares <= 0:
             return {"status": "SKIPPED_ZERO_SHARES", "symbol": symbol, "exit_reason": reason}
         action = "SELL" if position_long else "BUYTOCOVER"
+        # A SELL is rejected ("long N with N remaining on sell orders") while a broker protective
+        # StopMarket reserves the shares — clear it first, exactly as the trend/carry/flatten exit
+        # paths do. Without this, momentum doctrine exits (ATR stop + TP scale-outs) silently fail
+        # to reduce the position. The stop engine re-arms on the remaining shares next cycle. Only
+        # a long SELL collides with a resting sell-stop; BUYTOCOVER (short) does not.
+        if action == "SELL":
+            try:
+                from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+                BrokerProtectiveStopEngine().clear_stop(symbol)
+            except Exception:
+                pass
         res = self.booking.place_order(symbol, shares, action=action, order_type="Market", tif="DAY")
         return {"status": "SIM_EXIT_BOOKED", "symbol": symbol, "shares": shares,
                 "action": action, "exit_reason": reason, "order_id": res.get("order_id"),
@@ -263,6 +274,13 @@ class GreyLineSimExecutionEngine:
                     "contracts": qty, "exit_reason": reason, "urgency": urgency,
                     "detail": plan.get("rationale")}
 
+        # Clear any resting protective stop on this contract before the SELLTOCLOSE, so it isn't
+        # rejected for reserved contracts (no-op when none is armed — e.g. VRP legs carry none).
+        try:
+            from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
+            BrokerProtectiveStopEngine().clear_stop(option_symbol)
+        except Exception:
+            pass
         res = self.booking.place_order(
             option_symbol, qty, action="SELLTOCLOSE",
             order_type=plan["order_type"],

@@ -83,6 +83,44 @@ class BackgroundSchedulerService:
         except Exception:
             pass
 
+    # Status substrings that mean "this step RAN and BROKE" vs "nothing to do". Only faults alert.
+    _FAULT_MARKERS = ("DEGRADED", "ERROR", "STALE", "_FAIL", "FAILED", "EXCEPTION", "UNBOUND")
+    _BENIGN_MARKERS = ("NOT_DUE", "DISABLED", "NO_SIGNAL", "MARKET_CLOSED", "ONCE", "ALREADY", "SKIPPED_NOT")
+
+    @classmethod
+    def _watch_armed_sleeve_faults(cls, market_hours, sleeve_statuses):
+        """During a REGULAR SESSION, alert off-box if any sleeve or pre-sleeve step FAULTED (degraded,
+        stale, errored) even though the cycle recorded COMPLETE — the 'looks fine but silently didn't
+        trade' surface, and the exact class the #2 try-wrapping would otherwise turn from a loud
+        3-strikes failure into a silent degrade. Benign skips (not-due, disabled, no-signal, market-
+        closed) are ignored so it can't spam. dispatch()'s fingerprint cooldown throttles repeats;
+        a new set of faulting steps re-alerts."""
+        try:
+            if not market_hours.get("is_regular_session"):
+                return
+            faulted = []
+            for name, status in sleeve_statuses.items():
+                s = str(status or "").upper()
+                if not s or any(b in s for b in cls._BENIGN_MARKERS):
+                    continue
+                if any(f in s for f in cls._FAULT_MARKERS):
+                    faulted.append(f"{name}={status}")
+            if not faulted:
+                return
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if not eng.has_external_channel():
+                return
+            eng.dispatch(
+                title="GreyLine sleeve FAULTED during session",
+                message=("cycle COMPLETED but these armed steps did not run clean (possible silent "
+                         "non-trade): " + "; ".join(faulted[:8])),
+                severity="CRITICAL",
+                fingerprint="SLEEVE_FAULT:" + ",".join(sorted(f.split("=")[0] for f in faulted)),
+            )
+        except Exception:
+            pass
+
     @classmethod
     def _record_result(cls, status, started, error=None):
         try:
@@ -246,9 +284,23 @@ class BackgroundSchedulerService:
         cls._load_state()
         started = datetime.utcnow().isoformat()
 
-        market_hours = MarketHoursEngine().status()
-        token = TradeStationTokenMaintenanceEngine().evaluate()
-        decision = DecisionSchedulerEngine().run_manual_cycle()
+        # These three run BEFORE any sleeve opens. An unguarded throw here would unwind the whole
+        # cycle so NOTHING opens (the silent-open-failure class). Degrade each instead. market_hours
+        # fails safe to "closed" so opens skip (and the armed-sleeve-skip watch below makes that
+        # loud) rather than crash the cycle.
+        try:
+            market_hours = MarketHoursEngine().status()
+        except Exception as exc:
+            market_hours = {"is_regular_session": False, "is_open": False,
+                            "status": "MARKET_HOURS_DEGRADED", "error": repr(exc)}
+        try:
+            token = TradeStationTokenMaintenanceEngine().evaluate()
+        except Exception as exc:
+            token = {"status": "TOKEN_MAINT_DEGRADED", "error": repr(exc)}
+        try:
+            decision = DecisionSchedulerEngine().run_manual_cycle()
+        except Exception as exc:
+            decision = {"status": "DECISION_CYCLE_DEGRADED", "error": repr(exc)}
 
         try:
             forecast_grading = (
@@ -268,8 +320,14 @@ class BackgroundSchedulerService:
         # limit was 1 — so only ONE symbol's forward price was recorded per cycle, far too
         # sparse to grade against. Quotes are deduped by distinct symbol, so a higher limit
         # widens universe coverage without extra quote calls.
-        forward = ForwardOutcomeCaptureEngine().capture(limit=60)
-        learning = DecisionLearningMemoryEngine().record_current_learning()
+        try:
+            forward = ForwardOutcomeCaptureEngine().capture(limit=60)
+        except Exception as exc:
+            forward = {"status": "FORWARD_CAPTURE_DEGRADED", "error": repr(exc)}
+        try:
+            learning = DecisionLearningMemoryEngine().record_current_learning()
+        except Exception as exc:
+            learning = {"status": "LEARNING_DEGRADED", "error": repr(exc)}
 
         # Drift-free skill read, persisted as a time series so the edge (or its absence)
         # becomes visible as data accumulates. Grades each decision at T+horizon against the
@@ -419,8 +477,16 @@ class BackgroundSchedulerService:
         except Exception as exc:
             uw_retention = {"pruned": False, "error": repr(exc),
                             "status": "UW_RETENTION_DEGRADED"}
-        paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
-        options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
+        # Position management runs before the opening sleeves; an unguarded throw here would abort
+        # every opener below. Degrade so opens still run.
+        try:
+            paper_position_manager = PaperPositionManagerEngine().manage_open_positions()
+        except Exception as exc:
+            paper_position_manager = {"status": "PAPER_POSITION_MANAGER_DEGRADED", "error": repr(exc)}
+        try:
+            options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
+        except Exception as exc:
+            options_position_manager = {"status": "OPTIONS_POSITION_MANAGER_DEGRADED", "error": repr(exc)}
 
         # Conditional-VRP short-premium (defined-risk iron condors). GATED OFF by default. When
         # armed: MANAGE open condors every cycle (take-profit / expiry / hard-stop), and OPEN new
@@ -778,6 +844,19 @@ class BackgroundSchedulerService:
         cls._last_run = started
         cls._last_status = "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
         cls._record_result("COMPLETE", started)
+
+        # #3: a COMPLETE cycle can still hide an armed sleeve that silently faulted. Alert on that.
+        def _st(r):
+            return r.get("status") if isinstance(r, dict) else None
+        cls._watch_armed_sleeve_faults(market_hours, {
+            "decision": _st(decision), "token": _st(token), "forward": _st(forward),
+            "learning": _st(learning), "paper_position_manager": _st(paper_position_manager),
+            "options_position_manager": _st(options_position_manager), "market_hours": _st(market_hours),
+            "vol_carry": _st(vol_carry), "trend_following": _st(trend_following),
+            "tbill_sweep": _st(tbill_sweep), "momentum_reversal": _st(momentum_reversal),
+            "momentum_exit": _st(momentum_exit), "earnings_vol_harvest": _st(earnings_vol_harvest),
+            "vrp_short_premium": _st(vrp_short_premium), "broker_stops": _st(broker_stops),
+        })
         cls._save_state()
 
         ImmutableAuditLedgerEngine().record(
