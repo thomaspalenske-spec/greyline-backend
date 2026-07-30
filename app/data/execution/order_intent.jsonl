@@ -1,0 +1,2 @@
+{"ts": "2026-07-29T18:13:50.637734", "strategy": "tbill", "symbol": "SGOV", "action": "BUY", "qty": 3, "limit": 100.68, "bid": 100.67, "ask": 100.68, "mid": 100.67500000000001, "order_id": "964499543"}
+{"ts": "2026-07-29T18:26:01.352037", "strategy": "tbill", "symbol": "SGOV", "action": "SELL", "qty": 3, "limit": 100.67, "bid": 100.67, "ask": 100.68, "mid": 100.67500000000001, "order_id": "964503792"}

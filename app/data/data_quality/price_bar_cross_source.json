@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-07-24T15:48:05.793579",
+  "timestamp": "2026-07-29T18:56:35.537850",
   "source": "TRADESTATION_BARCHARTS",
-  "universe_size": 1782,
-  "cursor_started_at": 25,
+  "universe_size": 2130,
+  "cursor_started_at": 225,
   "checked": 40,
   "compared_days_each": 120,
   "tolerance_pct": 0.1,
@@ -12,280 +12,280 @@
   "unreachable": [],
   "results": [
     {
-      "symbol": "AAPG",
+      "symbol": "AIB",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "AAPL",
+      "symbol": "AIBZ",
+      "days_compared": 120,
+      "max_deviation_pct": 1.836,
+      "bad_days": 1,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AIDX",
+      "days_compared": 108,
+      "max_deviation_pct": 1.955,
+      "bad_days": 1,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AIFA",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "AARD",
+      "symbol": "AIFC",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "AAT",
+      "symbol": "AIFF",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "AAUC",
+      "symbol": "AIFU",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "AB",
+      "symbol": "AIG",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABAT",
+      "symbol": "AIHS",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABBV",
+      "symbol": "AII",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABCB",
+      "symbol": "AIIA",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABCL",
+      "symbol": "AIIO",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABEO",
+      "symbol": "AIIOW",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABEV",
+      "symbol": "AIIR",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABG",
+      "symbol": "AIMD",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABI",
-      "days_compared": 50,
-      "max_deviation_pct": 0.0,
-      "bad_days": 0,
-      "verdict": "MATCH"
-    },
-    {
-      "symbol": "ABLLW",
+      "symbol": "AIMDW",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABLV",
+      "symbol": "AIN",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABLVW",
+      "symbol": "AIO",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABM",
+      "symbol": "AIOS",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABNB",
-      "days_compared": 120,
-      "max_deviation_pct": 0.004,
-      "bad_days": 0,
-      "verdict": "MATCH"
-    },
-    {
-      "symbol": "ABOS",
+      "symbol": "AIOT",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABR",
+      "symbol": "AIP",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABSI",
+      "symbol": "AIR",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABT",
+      "symbol": "AIRE",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABTC",
+      "symbol": "AIRG",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABTS",
+      "symbol": "AIRI",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABUS",
+      "symbol": "AIRJ",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABVC",
+      "symbol": "AIRJW",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABVX",
+      "symbol": "AIRO",
+      "days_compared": 120,
+      "max_deviation_pct": 1.324,
+      "bad_days": 1,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AIRS",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABX",
+      "symbol": "AIRT",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ABXL",
+      "symbol": "AIRTP",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ACA",
+      "symbol": "AISP",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ACAA",
-      "days_compared": 51,
-      "max_deviation_pct": 0.0,
-      "bad_days": 0,
-      "verdict": "MATCH"
-    },
-    {
-      "symbol": "ACAAU",
-      "days_compared": 75,
-      "max_deviation_pct": 0.0,
-      "bad_days": 0,
-      "verdict": "MATCH"
-    },
-    {
-      "symbol": "ACAAW",
-      "days_compared": 32,
-      "max_deviation_pct": 0.0,
-      "bad_days": 0,
-      "verdict": "MATCH"
-    },
-    {
-      "symbol": "ACAD",
+      "symbol": "AISPW",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ACB",
+      "symbol": "AIT",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ACCL",
+      "symbol": "AIV",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ACCO",
+      "symbol": "AIXC",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ACCS",
+      "symbol": "AIXI",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,
       "verdict": "MATCH"
     },
     {
-      "symbol": "ACDC",
+      "symbol": "AIZ",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AIZN",
+      "days_compared": 120,
+      "max_deviation_pct": 0.0,
+      "bad_days": 0,
+      "verdict": "MATCH"
+    },
+    {
+      "symbol": "AJG",
       "days_compared": 120,
       "max_deviation_pct": 0.0,
       "bad_days": 0,

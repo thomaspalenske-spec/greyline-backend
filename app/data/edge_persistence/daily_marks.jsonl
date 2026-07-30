@@ -1,0 +1,6 @@
+{"date": "2026-07-29", "sleeve": "trend", "deployed": 1226.48, "unrealized": -0.18, "market_value": 1226.3, "positions": 4, "ts": "2026-07-29T23:54:49.929364"}
+{"date": "2026-07-29", "sleeve": "tbill", "deployed": 1409.38, "unrealized": 0.12, "market_value": 1409.52, "positions": 1, "ts": "2026-07-29T23:54:49.929374"}
+{"date": "2026-07-29", "sleeve": "carry", "deployed": 897.76, "unrealized": -4.64, "market_value": 893.12, "positions": 1, "ts": "2026-07-29T23:54:49.929380"}
+{"date": "2026-07-30", "sleeve": "trend", "deployed": 1226.48, "unrealized": 0.06, "market_value": 1226.54, "positions": 4, "ts": "2026-07-30T00:02:37.085806"}
+{"date": "2026-07-30", "sleeve": "tbill", "deployed": 1409.38, "unrealized": 0.12, "market_value": 1409.52, "positions": 1, "ts": "2026-07-30T00:02:37.085818"}
+{"date": "2026-07-30", "sleeve": "carry", "deployed": 897.76, "unrealized": -8.8, "market_value": 888.96, "positions": 1, "ts": "2026-07-30T00:02:37.085826"}

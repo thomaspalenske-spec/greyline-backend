@@ -1,15 +1,15 @@
 {
-  "timestamp": "2026-07-24T18:32:56.585752",
+  "timestamp": "2026-07-29T02:08:46.946570",
   "destination": "/Users/thomaspalenske/Library/Mobile Documents/com~apple~CloudDocs/GreyLineBackup",
   "off_machine": true,
   "destination_note": "cloud-synced (off-machine)",
   "tier2_included": false,
-  "files_backed_up": 11,
-  "bytes": 5220511,
-  "verified_by_hash": 11,
+  "files_backed_up": 16,
+  "bytes": 22550694,
+  "verified_by_hash": 16,
   "mismatched": [],
   "errors": [],
-  "snapshot": "/Users/thomaspalenske/Library/Mobile Documents/com~apple~CloudDocs/GreyLineBackup/snapshots/2026-07-24",
+  "snapshot": "/Users/thomaspalenske/Library/Mobile Documents/com~apple~CloudDocs/GreyLineBackup/snapshots/2026-07-29",
   "ok": true,
   "status": "BACKUP_VERIFIED"
 }

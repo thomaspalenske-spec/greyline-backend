@@ -1,0 +1,2 @@
+{"timestamp": "2026-07-28T23:41:39.095419", "amount": -4101.63, "source": "legacy_flatten_backfill", "note": "legacy momentum book flattened 2026-07-27 (last mark); realized before tracking existed"}
+{"timestamp": "2026-07-29T15:00:42.606833", "amount": -68.0, "source": "broker_daily_realized", "note": "daily realized moved to -68.0"}
