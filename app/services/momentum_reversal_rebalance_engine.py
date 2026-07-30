@@ -244,10 +244,32 @@ class MomentumReversalRebalanceEngine:
         except Exception as e:
             sim_booking = {"status": "SIM_BOOKING_ERROR", "error": str(e)[:200], "placed": 0}
 
+        # RECONCILER (place_order body-verification): the ledger recorded each open ABOVE, but a SIM
+        # order can be REJECTED (place_order now reports ok=False from the response body). Void any
+        # open leg the broker did NOT confirm, so a rejected order can't sit as a phantom position.
+        # Only runs on a clean SIM_BOOKED result (per-leg ok known); on DISABLED/ERROR the ledger
+        # stands alone (nothing to reconcile against). Best-effort — never breaks the decision path.
+        voided = []
+        try:
+            if sim_booking.get("status") == "SIM_BOOKED":
+                booked_ok = {str(b.get("symbol")).upper() for b in (sim_booking.get("booked") or [])
+                             if b.get("ok")}
+                for leg in opened:
+                    sym = str(leg.get("symbol")).upper()
+                    if sym not in booked_ok:
+                        v = self.ledger.void_latest(sym, reason="SIM booking rejected/unconfirmed")
+                        if v.get("voided"):
+                            voided.append(sym)
+                if voided:
+                    opened = [l for l in opened if str(l.get("symbol")).upper() not in set(voided)]
+        except Exception:
+            pass
+
         self._save_state({
             "last_rebalance_at": now.isoformat(), "as_of": asof, "data_source": source,
             "held_before": len(held), "free_slots": free_slots, "opened": len(opened),
             "sim_placed": sim_booking.get("placed", 0), "sim_status": sim_booking.get("status"),
+            "sim_voided_rejects": len(voided),
         })
         return self._result("REBALANCE_COMPLETE", rebalanced=True, as_of=asof, data_source=source,
                             held_before=len(held), free_slots=free_slots, opened=opened,

@@ -35,6 +35,30 @@ def _safe_json(response):
         return None
 
 
+def _interpret_order(status_code, payload):
+    """True order success from the BODY, not just HTTP 200. TradeStation returns 200 with a per-order
+    REJECT in the body — OrderID '0'/absent plus an Error/Message (insufficient BP, bad increment,
+    "sell N hold fewer", bad symbol). Treating HTTP 200 as 'filled' records rejected orders as booked
+    (condor legs recorded while a wing was rejected -> naked short; exits marking the ledger CLOSED
+    over still-held positions; stops 'armed' that aren't). Returns (ok, order_id, reject_reason)."""
+    if status_code not in (200, 201):
+        return False, None, f"HTTP {status_code}"
+    if not isinstance(payload, dict):
+        return False, None, "no JSON body"
+    if payload.get("Errors"):                          # top-level request/validation errors
+        return False, None, str(payload.get("Errors"))[:200]
+    orders = payload.get("Orders") or []
+    if not orders or not isinstance(orders[0], dict):
+        return False, None, "no Orders in response"
+    o = orders[0]
+    oid = o.get("OrderID")
+    valid_id = bool(oid) and str(oid).strip() not in ("", "0")
+    if o.get("Error") or not valid_id:
+        reason = o.get("Error") or o.get("Message") or "no OrderID returned"
+        return False, (str(oid) if valid_id else None), str(reason)[:200]
+    return True, str(oid), None
+
+
 class TradeStationSimBookingEngine:
 
     def __init__(self):
@@ -125,10 +149,16 @@ class TradeStationSimBookingEngine:
         """Validate an order (cost, buying-power, route) WITHOUT placing it."""
         body = self._build_order(symbol, quantity, action, order_type, limit_price, stop_price, tif)
         resp = self._request("POST", f"{SIM_HOST}/v3/orderexecution/orderconfirm", json_body=body)
+        payload = _safe_json(resp)
+        # a confirm reject is a 200 with top-level Errors — don't call it ok on HTTP 200 alone
+        ok = resp.status_code == 200 and isinstance(payload, dict) and not payload.get("Errors")
+        reason = None if ok else (str((payload or {}).get("Errors"))[:200]
+                                  if isinstance(payload, dict) and payload.get("Errors")
+                                  else f"HTTP {resp.status_code}")
         return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
-                "http_status": resp.status_code, "ok": resp.status_code == 200,
+                "http_status": resp.status_code, "ok": ok, "reject_reason": reason,
                 "request": {k: v for k, v in body.items() if k != "AccountID"},
-                "response_json": _safe_json(resp)}
+                "response_json": payload}
 
     def place_order(self, symbol, quantity, action="BUY", order_type="Market",
                     limit_price=None, stop_price=None, tif="DAY"):
@@ -136,14 +166,12 @@ class TradeStationSimBookingEngine:
         body = self._build_order(symbol, quantity, action, order_type, limit_price, stop_price, tif)
         resp = self._request("POST", f"{SIM_HOST}/v3/orderexecution/orders", json_body=body)
         payload = _safe_json(resp)
-        order_id = None
-        if isinstance(payload, dict):
-            orders = payload.get("Orders") or []
-            if orders and isinstance(orders[0], dict):
-                order_id = orders[0].get("OrderID")
+        # ok is derived from the BODY (valid OrderID, no Error) — NOT HTTP 200. A body-level reject
+        # now reports ok=False / order_id=None so callers can't record it as a filled position.
+        ok, order_id, reject_reason = _interpret_order(resp.status_code, payload)
         return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
-                "http_status": resp.status_code, "ok": resp.status_code in (200, 201),
-                "order_id": order_id,
+                "http_status": resp.status_code, "ok": ok,
+                "order_id": order_id, "reject_reason": reject_reason,
                 "request": {k: v for k, v in body.items() if k != "AccountID"},
                 "response_json": payload}
 
@@ -151,7 +179,8 @@ class TradeStationSimBookingEngine:
         """Cancel a working order in the SIM account. Guard runs first, fail-closed."""
         self._assert_sim()
         resp = self._request("DELETE", f"{SIM_HOST}/v3/orderexecution/orders/{order_id}")
+        payload = _safe_json(resp)
+        ok = resp.status_code in (200, 201) and not (isinstance(payload, dict) and payload.get("Error"))
         return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
-                "order_id": order_id, "http_status": resp.status_code,
-                "ok": resp.status_code in (200, 201),
-                "response_json": _safe_json(resp)}
+                "order_id": order_id, "http_status": resp.status_code, "ok": ok,
+                "response_json": payload}
