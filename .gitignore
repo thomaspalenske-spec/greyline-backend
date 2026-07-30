@@ -111,3 +111,18 @@ app/data/forecast_outcomes.jsonl
 app/data/forecast_outcome_grades.jsonl
 app/data/.vrp_panel_last_record
 app/data/data_quality/price_bar_tradability.json
+
+# High-churn RUNTIME state — the service rewrites these every scheduler cycle, so they only add
+# noise to git status (never code). Untracked 2026-07-29; disk copies persist (the service keeps
+# reading/writing them) and data redundancy is handled by the off-machine backup, not git. Kept
+# TRACKED: foundational data (earnings/, historical_total_return/, historical CSVs, price_history_
+# quarantine/) and momentum rebalance_state.json (7-day cadence state, low churn).
+app/data/uw_flow/
+app/data/data_quality/
+app/data/notifications/
+app/data/mission_pnl/
+app/data/risk/
+app/data/edge_persistence/
+app/data/execution/
+app/data/options_reality/
+app/data/momentum_reversal/top_candidates_cache.json
