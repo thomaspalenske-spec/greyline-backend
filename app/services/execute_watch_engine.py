@@ -92,10 +92,16 @@ class ExecuteWatchEngine:
         held = self._held_symbols()
         rejects = self._rejected_symbols()
         free_cash = self._free_cash()
+        # Momentum's cap is now %-of-equity (SleeveCapitalBudgetEngine), so the "can it fire" view
+        # must read the same live budget the executor uses — not the retired static env var.
         try:
-            mom_cap = float(getenv("GREYLINE_MOMENTUM_CAPITAL_USD", "") or 0)
-        except (TypeError, ValueError):
-            mom_cap = 0.0
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            mom_cap = SleeveCapitalBudgetEngine.budget_usd("momentum")
+        except Exception:
+            try:
+                mom_cap = float(getenv("GREYLINE_MOMENTUM_CAPITAL_USD", "") or 0)
+            except (TypeError, ValueError):
+                mom_cap = 0.0
         per_name = mom_cap / self.MOMENTUM_TOP_N if self.MOMENTUM_TOP_N else 0.0
         # momentum's own free slots = its cap not yet spent on momentum names
         mom_held = len(held - self.SLEEVE_INSTRUMENTS)
@@ -110,20 +116,28 @@ class ExecuteWatchEngine:
             # actually free. Checking cross-book free_cash here was wrong — it made $250 semis look
             # affordable to a $100/name sleeve.
             whole_shares = int(per_name // share_px) if share_px > 0 else 0
+            # Status vocabulary (display-only; NOT the decision-layer EXECUTE/WATCH/REJECT signal):
+            #   BOUGHT  = already held
+            #   QUEUED  = meets the signal AND is affordable — will buy at the next momentum rebalance
+            #             (momentum runs on a 7-day cadence, it is NOT an intraday buyer)
+            #   BLOCKED = meets the signal but CANNOT fire — too expensive for the per-name budget, no
+            #             free cash, or a prior order was rejected
+            #   WATCH   = ranked below the buy cutoff, or the sleeve is unfunded
             if sym in held:
                 status, reason = "BOUGHT", "held"
             elif sym in rejects:
-                status, reason = "EXECUTE", "blocked: order rejected (glitch)"
+                status, reason = "BLOCKED", "a prior order was rejected (glitch) and it isn't held — needs a retry"
             elif mom_cap <= 0:
                 status, reason = "WATCH", "momentum unfunded ($0 capital)"
             elif whole_shares < 1:
-                status, reason = "EXECUTE", (f"blocked: ${round(share_px)} share > ${round(per_name)}/name "
-                                             f"momentum budget (cap ${round(mom_cap)} / {self.MOMENTUM_TOP_N} slots)")
+                status, reason = "BLOCKED", (f"can't afford: 1 share (${round(share_px)}) exceeds the "
+                                             f"${round(per_name)}/name momentum budget "
+                                             f"(cap ${round(mom_cap)} / {self.MOMENTUM_TOP_N} slots)")
             elif free_cash < share_px:
-                status, reason = "EXECUTE", f"blocked: no free cash (need ~${round(share_px)}, have ${round(free_cash)})"
+                status, reason = "BLOCKED", f"no free cash (need ~${round(share_px)}, have ${round(free_cash)})"
             elif i < free_slots:
-                status, reason = "EXECUTE", (f"meets signal + affords {whole_shares} share(s) @ ${round(per_name)}/name, "
-                                             "not deployed — rebalance runs at the next session")
+                status, reason = "QUEUED", (f"meets signal + affords {whole_shares} share(s) @ ${round(per_name)}/name — "
+                                            "will buy at the next momentum rebalance (7-day cadence), not intraday")
             else:
                 status, reason = "WATCH", f"ranked below the buy cutoff (slot {i+1} > {free_slots} free)"
             watch.append({"rank": c.get("rank", i + 1), "symbol": sym,
@@ -133,19 +147,25 @@ class ExecuteWatchEngine:
                           "reversal_5d_move_pct": c.get("reversal_5d_move_pct"),
                           "status": status, "reason": reason})
 
-        execute_blocked = [w for w in watch if w["status"] == "EXECUTE"]
+        queued = [w for w in watch if w["status"] == "QUEUED"]      # will fire at the next rebalance
+        blocked = [w for w in watch if w["status"] == "BLOCKED"]    # meets signal but cannot fire
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "candidates_as_of": as_of, "data_source": source,
             "free_cash": free_cash, "momentum_capital": mom_cap, "momentum_free_slots": free_slots,
-            "execute_blocked_count": len(execute_blocked),
-            "execute_blocked": execute_blocked,
+            "queued_count": len(queued), "queued": queued,
+            "blocked_count": len(blocked), "blocked": blocked,
+            # backward-compat aliases (old key names) — the two together are every non-held, meets-signal name
+            "execute_blocked_count": len(queued) + len(blocked),
+            "execute_blocked": queued + blocked,
             "watch": watch,                                   # ranked, closest-to-firing on top (clean only)
             "discarded_trash_count": len(discarded),
             "discarded_trash": [{"symbol": d.get("symbol"), "last_close": d.get("last_close"),
                                  "reason": d.get("discard_reason")} for d in discarded],
             "note": ("WATCH = buy opportunities ranked by conviction (closest to firing on top). "
-                     "EXECUTE = meets criteria but can't fire (no capital / glitch / should-fire-but-"
-                     "not-deployed). Candidates from the cached universe scan — see candidates_as_of."),
+                     "QUEUED = meets criteria + affordable, will buy at the next momentum rebalance (7-day "
+                     "cadence). BLOCKED = meets criteria but can't fire (too expensive for the per-name "
+                     "budget / no free cash / rejected order). See each row's reason. Candidates from the "
+                     "cached universe scan — see candidates_as_of."),
             "status": "EXECUTE_WATCH",
         }

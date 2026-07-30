@@ -68,12 +68,24 @@ class CapitalAllocatorEngine:
             return "backtest_priors", 0
 
     def _current_allocs(self, equity):
-        return {
-            "trend": self._f(getenv("GREYLINE_TREND_ALLOC_USD"), 3000),
-            "carry": self._f(getenv("GREYLINE_VOL_CARRY_ALLOC_USD"), 2000),
-            "momentum": self._f(getenv("GREYLINE_MOMENTUM_CAPITAL_USD"), 10000),
-            "vrp": 1200.0, "earnings": 900.0,        # risk caps
-        }
+        # Live sleeve budgets are now %-of-equity via SleeveCapitalBudgetEngine (the recommendation
+        # compares its evidence-based target against the ACTUAL live budget, so read from there).
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine as B
+            return {
+                "trend": B.budget_usd("trend"),
+                "carry": B.budget_usd("vol_carry"),
+                "momentum": B.budget_usd("momentum"),
+                "vrp": B.budget_usd("vrp", clamp_to_cash=False),
+                "earnings": B.budget_usd("earnings", clamp_to_cash=False),
+            }
+        except Exception:
+            return {
+                "trend": self._f(getenv("GREYLINE_TREND_ALLOC_USD"), 3000),
+                "carry": self._f(getenv("GREYLINE_VOL_CARRY_ALLOC_USD"), 2000),
+                "momentum": self._f(getenv("GREYLINE_MOMENTUM_CAPITAL_USD"), 10000),
+                "vrp": 1200.0, "earnings": 900.0,        # risk caps
+            }
 
     def recommend(self):
         equity = self._equity()

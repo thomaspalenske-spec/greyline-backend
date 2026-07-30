@@ -48,6 +48,13 @@ class VolTermStructureCarryEngine:
 
     @classmethod
     def _alloc(cls):
+        # %-of-equity budget (scales with the account, clamped to live deployable cash). Falls back
+        # to the legacy static-dollar env var only if the central resolver is unavailable.
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            return SleeveCapitalBudgetEngine.budget_usd("vol_carry")
+        except Exception:
+            pass
         try:
             return float(getenv("GREYLINE_VOL_CARRY_ALLOC_USD", "") or 2000.0)
         except (TypeError, ValueError):

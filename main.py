@@ -242,6 +242,8 @@ app.include_router(open_positions.router)
 
 from app.routes import account_summary
 app.include_router(account_summary.router)
+from app.routes import sleeve_budgets
+app.include_router(sleeve_budgets.router)
 
 from app.routes import top_candidates
 app.include_router(top_candidates.router)

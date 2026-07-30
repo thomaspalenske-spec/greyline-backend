@@ -33,7 +33,29 @@ class EarningsVolHarvestEngine:
     MAX_CONCURRENT = 3          # small sleeve
     LIMIT_PER_DAY = 2
     MAX_LOSS_PER_POSITION_USD = 300
-    PORTFOLIO_RISK_CAP_USD = 900   # smaller cap than the VRP book — this is an unproven probe
+    DEFAULT_PORTFOLIO_RISK_CAP_USD = 900   # fallback if the equity read fails (was the static probe cap)
+
+    @property
+    def PORTFOLIO_RISK_CAP_USD(self):
+        # Now %-of-equity (scales with the account), not a static $900. It's a defined-RISK cap, not
+        # a cash outlay, so scaled off equity but NOT cash-clamped. Resolved LAZILY on first access
+        # and cached (constructing the engine does no broker read). getattr(eng,
+        # "PORTFOLIO_RISK_CAP_USD") in the opportunity board sees the live value. Settable (tests);
+        # falls back to the class default if the resolver is unavailable.
+        cached = getattr(self, "_prc_cache", None)
+        if cached is not None:
+            return cached
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            val = SleeveCapitalBudgetEngine.budget_usd("earnings", clamp_to_cash=False)
+        except Exception:
+            val = type(self).DEFAULT_PORTFOLIO_RISK_CAP_USD
+        self._prc_cache = val
+        return val
+
+    @PORTFOLIO_RISK_CAP_USD.setter
+    def PORTFOLIO_RISK_CAP_USD(self, value):
+        self._prc_cache = float(value)
 
     @staticmethod
     def enabled():

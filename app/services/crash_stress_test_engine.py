@@ -103,7 +103,7 @@ class CrashStressTestEngine:
             from app.services.portfolio_greeks_engine import PortfolioGreeksEngine
             from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
             nv = PortfolioGreeksEngine().book_greeks().get("net_vega") or 0.0
-            cap = ConditionalVRPShortPremiumEngine.PORTFOLIO_RISK_CAP_USD
+            cap = ConditionalVRPShortPremiumEngine().PORTFOLIO_RISK_CAP_USD   # instance: %-of-equity (lazy)
         except Exception:
             nv, cap = 0.0, 1200.0
         return {

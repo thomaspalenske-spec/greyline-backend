@@ -44,7 +44,20 @@ class TbillCashSweepEngine:
         return (getenv("GREYLINE_TBILL_SYMBOL", "") or cls.DEFAULT_SYMBOL).strip().upper()
 
     @classmethod
-    def _operating_buffer(cls):
+    def _operating_buffer(cls, equity=None):
+        # Ready cash kept liquid for the NEXT sleeve deployment. Now %-of-equity
+        # (GREYLINE_TBILL_OPERATING_BUFFER_PCT, default 5%) so it scales with the account and no
+        # longer strands a big fixed slug of cash — consistent with the 100%-deployable posture (the
+        # old fixed $2,500 was ~25% of a $10k book held permanently out of play). This is dry powder,
+        # NOT a deployment ceiling: when a sleeve draws it down the sweep sells SGOV back to refund it.
+        # Falls back to the legacy fixed-dollar var, then the fixed default.
+        pct_raw = getenv("GREYLINE_TBILL_OPERATING_BUFFER_PCT", "")
+        if str(pct_raw).strip() and equity:
+            try:
+                pct = max(0.0, min(100.0, float(pct_raw)))
+                return round((pct / 100.0) * float(equity), 2)
+            except (TypeError, ValueError):
+                pass
         try:
             return float(getenv("GREYLINE_TBILL_OPERATING_BUFFER_USD", "") or cls.DEFAULT_OPERATING_BUFFER_USD)
         except (TypeError, ValueError):
@@ -83,7 +96,7 @@ class TbillCashSweepEngine:
             total += self._f(x.get("MarketValue"))
         return round(total, 2)
 
-    def _reserve(self, positions):
+    def _reserve(self, positions, equity=None):
         """DEMAND-DRIVEN reserve (replaces the old static GREYLINE_TBILL_RESERVE_USD). Keep liquid
         only (a) what the sleeves have ALREADY committed in non-SGOV positions — that's positions,
         not cash — plus (b) an operating cash buffer for the NEXT deployment. Everything above that
@@ -93,7 +106,7 @@ class TbillCashSweepEngine:
         A FAILED positions read aborts the whole sweep upstream (plan() bails on _live_positions()
         None) — so this never runs on a zeroed read; floored at the min-cash line as a backstop."""
         committed = self._non_sgov_position_value(positions)
-        buffer = self._operating_buffer()
+        buffer = self._operating_buffer(equity)
         return round(max(committed + buffer, self.DEFAULT_MIN_CASH_USD), 2)
 
     # ---- inputs -------------------------------------------------------------------------------
@@ -149,7 +162,7 @@ class TbillCashSweepEngine:
         px = last or ask or bid
         if px <= 0:
             return {"status": "NO_QUOTE", "symbol": sym}
-        reserve = self._reserve(positions)
+        reserve = self._reserve(positions, equity)
         target_value = max(0.0, equity - reserve)
         target_shares = int(math.floor(target_value / px))
         delta = target_shares - held

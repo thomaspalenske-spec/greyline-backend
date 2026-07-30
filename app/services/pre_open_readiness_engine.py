@@ -68,40 +68,29 @@ class PreOpenReadinessEngine:
                 f"sleeves armed for the open: {flags}" if any_on
                 else f"NO sleeves armed — nothing will open at the bell: {flags}")
 
-        # 3. capital coordination INVARIANT (hard). There is no coordinator engine — the six sleeves
-        # each spend a private static env allocation. The T-bill sweep is now DEMAND-DRIVEN: it holds
-        # (committed non-SGOV positions + an operating cash buffer) liquid and parks everything above
-        # that in SGOV for yield, selling SGOV back when a sleeve needs cash. So the sweep can no
-        # longer starve the sleeves (it yields to their demand), and the ONLY hard guarantee left is
-        # that the sleeves can't COLLECTIVELY over-commit the book:  sum(sleeve allocations) <= book.
-        # Still require every sleeve var EXPLICITLY set — a blank momentum var defaults to the FULL
-        # $10k book (this env has dropped/reverted exported vars before), so a MISSING var is a FAIL.
-        _CAP_VARS = ["GREYLINE_ACCOUNT_CAPITAL_BASE", "GREYLINE_TREND_ALLOC_USD",
-                     "GREYLINE_VOL_CARRY_ALLOC_USD", "GREYLINE_MOMENTUM_CAPITAL_USD"]
-        missing = [k for k in _CAP_VARS if not (getenv(k, "") or "").strip()]
-
-        def _n(k, d):
-            try:
-                return float(getenv(k, "") or d)
-            except (TypeError, ValueError):
-                return d
-        base = _n("GREYLINE_ACCOUNT_CAPITAL_BASE", 10000)
-        trend = _n("GREYLINE_TREND_ALLOC_USD", 3000)
-        carry = _n("GREYLINE_VOL_CARRY_ALLOC_USD", 2000)
-        mom = _n("GREYLINE_MOMENTUM_CAPITAL_USD", 10000)
-        buffer = _n("GREYLINE_TBILL_OPERATING_BUFFER_USD", 2500)
-        vrp_cap, earn_cap = 1200, 900   # VRP/earnings defined-risk caps
-        sleeves = trend + carry + mom + vrp_cap + earn_cap
-        detail = (f"sleeves trend {trend:.0f}+carry {carry:.0f}+momentum {mom:.0f}+VRP {vrp_cap}+earnings {earn_cap} "
-                  f"= {sleeves:.0f} vs book {base:.0f}; T-bill sweep (demand-driven) parks idle cash "
-                  f"above (committed + {buffer:.0f} buffer) into SGOV")
-        if missing:
+        # 3. capital coordination INVARIANT (hard). Sleeve budgets are now %-OF-EQUITY, resolved
+        # centrally by SleeveCapitalBudgetEngine (each sleeve targets pct*equity, clamped to live
+        # deployable cash so no single sleeve over-commits). The T-bill sweep stays DEMAND-DRIVEN:
+        # it parks idle cash (above committed non-SGOV positions + an operating buffer) into SGOV
+        # for yield and sells SGOV back when a sleeve draws cash. The book-level guarantee left is
+        # that the sleeve TARGETS don't COLLECTIVELY exceed 100% of equity — 100% is intended (the
+        # book should deploy up to all available cash when sleeves have opportunities); >100% would
+        # mean the targets over-subscribe the book before cash-clamping even applies.
+        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+        pct_table = SleeveCapitalBudgetEngine.pct_table()
+        total_pct = round(sum(pct_table.values()), 2)
+        base_set = bool((getenv("GREYLINE_ACCOUNT_CAPITAL_BASE", "") or "").strip())
+        detail = ("sleeve targets " + " + ".join(f"{k} {v:.0f}%" for k, v in pct_table.items())
+                  + f" = {total_pct:.0f}% of equity (%-of-equity, scales with the account; clamped to "
+                  f"live deployable cash). T-bill sweep parks idle cash above (committed + buffer) into SGOV.")
+        if not base_set:
             add("capital_params", "FAIL",
-                f"UNSET capital var(s) {missing} — unsafe code fallbacks would apply (blank momentum -> "
-                f"full book). Set them explicitly in .env. " + detail)
-        elif sleeves > base:
+                "UNSET GREYLINE_ACCOUNT_CAPITAL_BASE — the equity/return denominator is undefined. "
+                "Set it explicitly in .env. " + detail)
+        elif total_pct > 100.5:
             add("capital_params", "FAIL",
-                "capital invariant BROKEN — sleeves COLLECTIVELY exceed the book -> over-committed. " + detail)
+                f"capital invariant BROKEN — sleeve targets sum to {total_pct:.0f}% > 100% of equity, "
+                "so they over-subscribe the book before cash-clamping. " + detail)
         else:
             add("capital_params", "PASS", detail)
 

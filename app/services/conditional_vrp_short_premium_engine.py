@@ -76,7 +76,7 @@ class ConditionalVRPShortPremiumEngine:
     # Positions are CORRELATED — a vol spike hits every condor at once — so the tail is bounded at
     # the PORTFOLIO level, not just per position. Total defined risk across all open + new condors
     # may not exceed this. Even a simultaneous max-loss across the book stays survivable.
-    PORTFOLIO_RISK_CAP_USD = 1200.0       # 12% of the book, worst-case correlated loss
+    DEFAULT_PORTFOLIO_RISK_CAP_USD = 1200.0   # fallback if the equity read fails (was the static cap)
     # VEGA BUDGET: a vol desk sizes by its net vol EXPOSURE, not just its max loss. This caps the
     # book's total net SHORT vega (|$ P&L per +1 vol point|). At -300, a 4-vol-pt spike ~= the
     # portfolio dollar cap, so the two risk metrics agree. Env-tunable (GREYLINE_VEGA_BUDGET_USD).
@@ -96,6 +96,29 @@ class ConditionalVRPShortPremiumEngine:
     TESTED_SHORT_DELTA = 0.45
 
     _SYM = re.compile(r"^(\S+)\s+(\d{6})([CP])(\d+(?:\.\d+)?)$")
+
+    @property
+    def PORTFOLIO_RISK_CAP_USD(self):
+        # Now %-of-equity (scales with the account) instead of a static $1,200. It's a defined-RISK
+        # cap (worst-case correlated max loss), NOT a cash outlay, so it's scaled off equity but NOT
+        # clamped to cash. Resolved LAZILY on first access and cached, so merely constructing the
+        # engine (e.g. for build_condor) does NO broker read. getattr(eng, "PORTFOLIO_RISK_CAP_USD")
+        # — used by the premium-harvest OS and opportunity board — sees the live value. Settable
+        # (tests / overrides); falls back to the class default if the resolver is unavailable.
+        cached = getattr(self, "_prc_cache", None)
+        if cached is not None:
+            return cached
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            val = SleeveCapitalBudgetEngine.budget_usd("vrp", clamp_to_cash=False)
+        except Exception:
+            val = type(self).DEFAULT_PORTFOLIO_RISK_CAP_USD
+        self._prc_cache = val
+        return val
+
+    @PORTFOLIO_RISK_CAP_USD.setter
+    def PORTFOLIO_RISK_CAP_USD(self, value):
+        self._prc_cache = float(value)
 
     @staticmethod
     def enabled():

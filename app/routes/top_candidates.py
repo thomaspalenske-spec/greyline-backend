@@ -111,12 +111,19 @@ def _attach_exec_status(result):
     baked into the 15-min cache."""
     try:
         from app.services.execute_watch_engine import ExecuteWatchEngine
-        stat = {str(w.get("symbol") or "").upper(): w
-                for w in (ExecuteWatchEngine().view().get("watch") or [])}
+        view = ExecuteWatchEngine().view()
+        stat = {str(w.get("symbol") or "").upper(): w for w in (view.get("watch") or [])}
         for c in (result.get("candidates") or []):
             w = stat.get(str(c.get("symbol") or "").upper())
             c["exec_status"] = (w or {}).get("status")
             c["exec_reason"] = (w or {}).get("reason")
+        # Momentum's real per-name budget (%-of-equity now — NOT a hardcoded $1,000), so the panel's
+        # Est. Cost / shares column matches the ACTUAL sizing and the per-row reason instead of
+        # contradicting them. per_name = momentum capital / TOP_N (the same divisor the sizer uses).
+        cap = view.get("momentum_capital")
+        result["momentum_capital"] = cap
+        if cap and ExecuteWatchEngine.MOMENTUM_TOP_N:
+            result["momentum_per_name"] = round(float(cap) / float(ExecuteWatchEngine.MOMENTUM_TOP_N), 2)
     except Exception:
         pass
     return result

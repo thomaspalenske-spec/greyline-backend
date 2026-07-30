@@ -687,7 +687,7 @@ th {
 
       <div class="card" id="execute_watch_card">
         <div class="section-title">Execute / Watch — Buy Opportunities <span id="ew_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">WATCH = buy candidates ranked by conviction (closest to firing on top). EXECUTE = meets the buy criteria but can't fire — blocked by no free capital, a rejected order, or not deploying.</div>
+        <div class="sub" style="margin-bottom:10px;">WATCH = ranked by conviction (closest to firing on top). <b>QUEUED</b> = meets the criteria + affordable, buys at the next momentum rebalance (7-day cadence, not intraday). <b>BLOCKED</b> = meets the criteria but can't fire (too expensive for the per-name budget / no free cash / rejected order). The reason is shown on each row.</div>
         <table>
           <thead>
             <tr><th>Rank</th><th>Symbol</th><th>Conviction</th><th>12-1 Mom</th><th>5d Rev</th><th>Price</th><th>Status</th><th>Reason</th></tr>
@@ -987,7 +987,9 @@ async function refreshTopCandidates() {
     const cands = (d.candidates || []).filter(c =>
       String(c.directional_bias || "").toUpperCase() === "BULLISH" ||
       String(c.side || "").toUpperCase() === "BUY");
-    const perName = 1000;   // ~$10k book / top 10 names, whole-share
+    // Momentum's REAL per-name budget (%-of-equity, from the resolver) — not a hardcoded $1,000.
+    // This keeps Est. Cost / shares consistent with the per-row QUEUED/BLOCKED reason.
+    const perName = Number(d.momentum_per_name) || 249;
     if (asof) {
       const src = String(d.data_source || "").replace("TRADESTATION_LIVE_CACHED", "live (cached bars)").replace("TRADESTATION_LIVE", "live");
       asof.textContent = d.as_of ? `— as of ${d.as_of} · ${src}` : "";
@@ -1011,7 +1013,7 @@ async function refreshTopCandidates() {
         <td><strong>${(c.conviction != null ? Number(c.conviction).toFixed(3) : "—")}</strong></td>
         <td>${px > 0 ? fmtMoney(px) : "—"}</td>
         <td>${shares > 0 ? `${fmtMoney(cost)}<br><span class="sub">${shares} shares</span>` : "—"}</td>
-        <td>${c.exec_status ? `<span class="badge ${c.exec_status === "EXECUTE" ? "unmanaged" : c.exec_status === "BOUGHT" ? "open" : "neutral"}">${c.exec_status}</span>` : "—"}</td>
+        <td>${c.exec_status ? `<span class="badge ${c.exec_status === "BLOCKED" ? "unmanaged" : c.exec_status === "BOUGHT" ? "open" : "neutral"}">${c.exec_status}</span>` : "—"}</td>
         <td><span class="sub">${c.exec_reason || "—"}</span></td>
       </tr>`;
     }).join("");
@@ -1031,10 +1033,10 @@ async function refreshExecuteWatch() {
   try {
     const d = await getJSON("/execute-watch");
     const watch = d.watch || [];
-    if (summary) summary.textContent = `${d.execute_blocked_count || 0} EXECUTE-blocked · ${watch.length} watched · $${Math.round(d.free_cash || 0).toLocaleString()} free`;
+    if (summary) summary.textContent = `${d.queued_count || 0} queued · ${d.blocked_count || 0} blocked · ${watch.length} watched · $${Math.round(d.free_cash || 0).toLocaleString()} free`;
     if (!watch.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">No buy candidates (cache: ${d.candidates_as_of || "—"}).</span></td></tr>`; return; }
     body.innerHTML = watch.map(w => {
-      const badge = w.status === "EXECUTE" ? "unmanaged" : w.status === "BOUGHT" ? "open" : "neutral";
+      const badge = w.status === "BLOCKED" ? "unmanaged" : w.status === "BOUGHT" ? "open" : "neutral";
       return `<tr>
         <td>#${w.rank}</td>
         <td><strong>${w.symbol}</strong></td>
@@ -1071,7 +1073,7 @@ async function refreshOpportunityBoard() {
         continue;
       }
       html += cands.map(c => {
-        const badge = c.status === "EXECUTE" ? "unmanaged" : c.status === "BOUGHT" ? "open" : c.status === "ARMED" ? "open" : "neutral";
+        const badge = c.status === "BLOCKED" ? "unmanaged" : (c.status === "BOUGHT" || c.status === "ARMED") ? "open" : "neutral";
         return `<tr>
         <td><strong>${c.symbol}</strong></td>
         <td><span class="sub">${c.instrument || ""}</span></td>

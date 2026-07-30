@@ -88,6 +88,7 @@ def test_dryrun_respects_daily_limit(monkeypatch):
 def test_dryrun_respects_risk_cap(monkeypatch):
     monkeypatch.setenv("GREYLINE_EARNINGS_VOL_ENABLED", "true")
     eng = ENG()
+    eng.PORTFOLIO_RISK_CAP_USD = 900         # pin the cap (now %-of-equity) so this test is deterministic
     monkeypatch.setattr(eng, "_candidates", lambda today=None: [
         {"ticker": t, "report_date": _iso(1), "days_to_report": 1, "iv_rank": 0.8, "implied_move_pct": 8}
         for t in ("AAA", "BBB", "CCC", "DDD", "EEE")])

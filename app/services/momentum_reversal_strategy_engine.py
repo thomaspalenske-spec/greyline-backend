@@ -65,7 +65,17 @@ class MomentumReversalStrategyEngine:
 
     def __init__(self, top_n=None, capital_base=None):
         self.top_n = int(top_n) if top_n else self.TOP_N
-        self.capital_base = float(capital_base) if capital_base else self.CAPITAL_BASE
+        if capital_base is not None:
+            self.capital_base = float(capital_base)       # explicit override (tests, callers)
+        else:
+            # %-of-equity budget: scales with the account instead of a static $ cap. A 0 budget
+            # (no deployable cash) legitimately means "deploy nothing", so respect it (is-None, not
+            # truthiness). Falls back to the static CAPITAL_BASE only if the resolver is unavailable.
+            try:
+                from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+                self.capital_base = SleeveCapitalBudgetEngine.budget_usd("momentum")
+            except Exception:
+                self.capital_base = self.CAPITAL_BASE
         self.signal = DirectionalSignalEngine()
 
     # --- selection (pure; the alpha logic) -------------------------------------

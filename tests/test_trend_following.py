@@ -5,6 +5,8 @@ cash below the 200-DMA, size whole shares from a slot, and take the held size fr
 Dry-run / injected data so no real order is placed.
 """
 
+import os
+
 from app.services.trend_following_engine import TrendFollowingEngine as T
 
 
@@ -40,6 +42,9 @@ def _patch(monkeypatch, tmp_path, prices, held=None):
     monkeypatch.setattr(T, "HIST", tmp_path)
     monkeypatch.setattr(T, "BASKET", ["AAA", "BBB"])
     monkeypatch.setattr(T, "SMA", 200)
+    # alloc is now %-of-equity via SleeveCapitalBudgetEngine; for deterministic sizing these tests
+    # drive it from the GREYLINE_TREND_ALLOC_USD env var they set (the pre-conversion contract).
+    monkeypatch.setattr(T, "_alloc", classmethod(lambda cls: float(os.getenv("GREYLINE_TREND_ALLOC_USD", "") or 3000.0)))
     _hist(tmp_path, "AAA", 100)
     _hist(tmp_path, "BBB", 100)
     monkeypatch.setattr("app.services.tradestation_quote_live_engine.TradeStationQuoteLiveEngine",

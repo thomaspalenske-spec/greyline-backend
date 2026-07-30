@@ -27,6 +27,8 @@ app/data/master_decisions/master_decision_events.jsonl
 # GreyLine runtime/cache artifacts
 app/data/battlefield_history.jsonl
 app/data/market_battlefield/
+app/data/operator_reports/
+app/data/reality_guard/
 app/data/market_battlefield_snapshot_cache.json
 app/data/options_paper_trading/options_paper_trade_ledger.jsonl
 app/data/paper_trading/paper_trade_ledger.jsonl
