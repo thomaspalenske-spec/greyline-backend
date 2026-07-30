@@ -543,6 +543,17 @@ class BackgroundSchedulerService:
         except Exception as exc:
             trend_following = {"error": repr(exc), "status": "TREND_DEGRADED"}
 
+        # MANAGED-FUTURES / TSMOM sleeve (forward test, gated OFF): the crisis-convex diversifier.
+        # run_cycle handles the monthly cadence, disabled, and unfunded (0-budget) paths internally,
+        # so this is a pure no-op until GREYLINE_MANAGED_FUTURES_ENABLED + a non-zero ALLOC_PCT are set.
+        try:
+            from app.services.managed_futures_engine import ManagedFuturesEngine
+            _mf = ManagedFuturesEngine()
+            managed_futures = (_mf.run_cycle(is_regular_session=(market_hours.get("is_regular_session") is True))
+                               if _mf.enabled() else {"status": "MF_DISABLED"})
+        except Exception as exc:
+            managed_futures = {"error": repr(exc), "status": "MF_DEGRADED"}
+
         # EARNINGS-VOL harvest (forward test, gated): sell a tiny defined-risk condor into a rich-IV
         # name's earnings, once/day, RTH only. Positions land in the VRP ledger with strategy tag, so
         # the reconcile+manage above and the protective-stop/dashboard machinery already cover them.
@@ -877,6 +888,7 @@ class BackgroundSchedulerService:
             "learning": _st(learning), "paper_position_manager": _st(paper_position_manager),
             "options_position_manager": _st(options_position_manager), "market_hours": _st(market_hours),
             "vol_carry": _st(vol_carry), "trend_following": _st(trend_following),
+            "managed_futures": _st(managed_futures),
             "tbill_sweep": _st(tbill_sweep), "momentum_reversal": _st(momentum_reversal),
             "momentum_exit": _st(momentum_exit), "earnings_vol_harvest": _st(earnings_vol_harvest),
             "vrp_short_premium": _st(vrp_short_premium), "broker_stops": _st(broker_stops),
