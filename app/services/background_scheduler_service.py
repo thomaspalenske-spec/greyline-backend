@@ -795,6 +795,15 @@ class BackgroundSchedulerService:
             _dr.alert_if_stale()
         except Exception:
             pass
+        # GIT off-machine backup of the unrecoverable data — the ONLY off-machine channel the service
+        # can actually use (macOS TCC sandboxes this LaunchAgent from iCloud AND external volumes, so
+        # DisasterRecoveryEngine's filesystem backup silently fails from here; a network git push does
+        # not). Self-gated (~12h); best-effort.
+        try:
+            from app.services.git_data_backup_engine import GitDataBackupEngine
+            git_backup = GitDataBackupEngine().run_if_due()
+        except Exception as exc:
+            git_backup = {"status": "GIT_DATA_BACKUP_DEGRADED", "error": repr(exc)}
 
         # Broker-side disaster stops: the only protection that survives THIS process dying.
         # Every doctrine exit (ATR stop, TP ladder, maturity liquidation) needs the scheduler

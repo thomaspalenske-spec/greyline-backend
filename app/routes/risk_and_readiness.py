@@ -25,3 +25,18 @@ def scheduled_reports():
     """Preview the auto pre-open pager + post-close report (what they'd say now; does not send)."""
     from app.services.scheduled_operator_reports_engine import ScheduledOperatorReportsEngine
     return ScheduledOperatorReportsEngine.preview()
+
+
+@router.get("/git-data-backup")
+def git_data_backup_status():
+    """Status of the off-machine git backup of the unrecoverable data (the service-compatible channel)."""
+    from app.services.git_data_backup_engine import GitDataBackupEngine
+    return GitDataBackupEngine().status()
+
+
+@router.post("/git-data-backup/run")
+def git_data_backup_run():
+    """Run the git backup NOW in the service process — the test of whether the background service
+    can actually push (keychain access), and the manual trigger."""
+    from app.services.git_data_backup_engine import GitDataBackupEngine
+    return GitDataBackupEngine().backup()

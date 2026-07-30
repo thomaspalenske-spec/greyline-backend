@@ -126,3 +126,6 @@ app/data/edge_persistence/
 app/data/execution/
 app/data/options_reality/
 app/data/momentum_reversal/top_candidates_cache.json
+
+# Nested git repo used for off-machine backup of unrecoverable data (pushes to its own branch)
+app/data/.data_backup/

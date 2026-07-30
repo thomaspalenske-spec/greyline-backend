@@ -487,6 +487,18 @@ class GreyLineRealityGuardEngine:
         forward-only — no API can rebuild them. One disk failure restarts the options edge
         experiment from zero. A same-disk copy does not count and is reported as such.
         """
+        # PRIMARY off-machine channel is the GIT backup — the only one the always-on service can run
+        # (macOS TCC blocks this LaunchAgent from iCloud + external volumes). If it's fresh, that's
+        # real off-machine protection the service itself maintains and can verify.
+        try:
+            from app.services.git_data_backup_engine import GitDataBackupEngine
+            gh = GitDataBackupEngine().hours_since()
+            if gh is not None and gh <= 26:
+                return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": True,
+                        "detail": f"unrecoverable data backed up off-machine via git ({gh}h ago, "
+                                  f"branch '{GitDataBackupEngine.BRANCH}')"}
+        except Exception:
+            pass
         try:
             from app.services.disaster_recovery_engine import DisasterRecoveryEngine
             st = DisasterRecoveryEngine().status()
