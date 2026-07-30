@@ -563,6 +563,14 @@ class BackgroundSchedulerService:
         except Exception as exc:
             condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
 
+        # BEST-CONDORS list for the dashboard: recompute the ranked buildable condors (off UW) at most
+        # once/10min and cache to a file, so the /best-condors route (dashboard card) is always instant.
+        try:
+            from app.services.best_condors_engine import BestCondorsEngine
+            best_condors = BestCondorsEngine().recompute_if_due()
+        except Exception as exc:
+            best_condors = {"error": repr(exc), "status": "BEST_CONDORS_DEGRADED"}
+
         # MF SHADOW forward-test: mark the FULL long/short strategy's hypothetical P&L on settled bars
         # (NO orders). Runs regardless of the live sleeve — it's how the real diversification edge
         # accumulates while the sleeve is parked. Self-gated to once per new settled bar.

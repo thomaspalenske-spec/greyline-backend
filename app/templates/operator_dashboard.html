@@ -707,6 +707,17 @@ th {
         </table>
       </div>
 
+      <div class="card" id="best_condors_card">
+        <div class="section-title">Best Iron Condors <span id="bc_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Defined-risk iron condors VRP + earnings would sell, built off <a href="/best-condors" style="color:inherit;">Unusual Whales</a> greeks + NBBO (the SIM sandbox's option quotes are unusable for condors). Ranked by return-on-risk. Max gain = net credit collected; max loss is defined and capped. Cached ~10 min.</div>
+        <table>
+          <thead>
+            <tr><th>Symbol</th><th>Sleeve</th><th>Expiry</th><th>IV Rank</th><th>Max Gain</th><th>Max Loss</th><th>Return / Risk</th><th>Structure (short put · short call · wings)</th></tr>
+          </thead>
+          <tbody id="best_condors_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+        </table>
+      </div>
+
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
         <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
         <table>
@@ -1090,6 +1101,34 @@ async function refreshOpportunityBoard() {
   }
 }
 
+async function refreshBestCondors() {
+  const body = document.getElementById("best_condors_body");
+  const summary = document.getElementById("bc_summary");
+  if (!body) return;
+  try {
+    const d = await getJSON("/best-condors");
+    const rows = d.condors || [];
+    if (summary) summary.textContent = `${rows.length} buildable · off Unusual Whales`;
+    if (!rows.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">No condors qualify right now — needs a rich-IV, liquid name whose defined-risk condor fits the per-position cap.</span></td></tr>`; return; }
+    body.innerHTML = rows.map(c => {
+      const ror = c.return_on_risk != null ? (c.return_on_risk * 100).toFixed(1) + "%" : "—";
+      const ivr = c.iv_rank != null ? (c.iv_rank * 100).toFixed(0) : "—";
+      return `<tr>
+        <td><strong>${c.symbol}</strong></td>
+        <td><span class="badge ${c.sleeve === "Earnings" ? "neutral" : "open"}">${c.sleeve}</span></td>
+        <td>${c.expiration || "—"}${c.dte != null ? `<br><span class="sub">${c.dte}d</span>` : ""}</td>
+        <td>${ivr}</td>
+        <td><span class="green">${fmtMoney(c.max_gain_usd)}</span></td>
+        <td><span class="red">${fmtMoney(c.max_loss_usd)}</span></td>
+        <td><strong>${ror}</strong></td>
+        <td><span class="sub">SP ${c.short_put} · SC ${c.short_call} · wings ${c.wing_put}/${c.wing_call} × ${c.quantity}</span></td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8"><span class="red">Best condors unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshAll() {
   setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
   checkDashboardVersion();  // fire-and-forget: self-reload once if new dashboard code was deployed
@@ -1099,6 +1138,7 @@ async function refreshAll() {
   refreshTopCandidates();   // fire-and-forget: cached endpoint, must never stall the main loop
   refreshExecuteWatch();    // fire-and-forget: reads the cached candidates, never stalls the loop
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
+  refreshBestCondors();     // fire-and-forget: cached (~10min), built off UW, never stalls the loop
 
   const [ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/options-account-dashboard"),
