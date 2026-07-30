@@ -51,6 +51,19 @@ class PriceBarIntegrityEngine:
     DUP_MIN_SYMBOLS = 4       # ...but only above DUP_MIN_PRICE, where collision is unlikely
     DUP_MIN_PRICE = 25.0      # below this, 2-decimal collisions happen by chance
     DUP_HARD_MIN_SYMBOLS = 15  # this many agreeing is corruption at ANY price level
+    # $25-par PREFERRED stocks and baby bonds legitimately CLUSTER at par by design, so several of
+    # them sharing a $25.xx close on the same day is NOT a cross-symbol copy error. Near a par value
+    # require the HARD (15) threshold; away from par the 4-symbol rule stands. (Removed 8 false-positive
+    # criticals that were all $25-par preferreds: AGNCL/BIPJ/BWNB/AQNB/... — 2026-07-30.)
+    PAR_VALUES = (25.0, 50.0, 100.0, 1000.0)
+    PAR_BAND = 2.0
+
+    @classmethod
+    def _near_par(cls, close):
+        try:
+            return any(abs(float(close) - p) <= cls.PAR_BAND for p in cls.PAR_VALUES)
+        except (TypeError, ValueError):
+            return False
     STALE_DAYS = 7
 
     CRITICAL_TYPES = ("OHLC_VIOLATION", "DUPLICATE_CROSS_SYMBOL", "NONPOSITIVE")
@@ -138,9 +151,13 @@ class PriceBarIntegrityEngine:
         for date, by_close in dup_window.items():
             for close_val, syms in by_close.items():
                 uniq = sorted(set(syms))
-                improbable = (len(uniq) >= self.DUP_HARD_MIN_SYMBOLS
-                              or (len(uniq) >= self.DUP_MIN_SYMBOLS
-                                  and float(close_val) >= self.DUP_MIN_PRICE))
+                if self._near_par(close_val):
+                    # par clustering (preferreds/baby bonds) — only a mass agreement is corruption
+                    improbable = len(uniq) >= self.DUP_HARD_MIN_SYMBOLS
+                else:
+                    improbable = (len(uniq) >= self.DUP_HARD_MIN_SYMBOLS
+                                  or (len(uniq) >= self.DUP_MIN_SYMBOLS
+                                      and float(close_val) >= self.DUP_MIN_PRICE))
                 if improbable:
                     issues.append({"symbol": ", ".join(uniq[:8]) + ("…" if len(uniq) > 8 else ""),
                                    "date": date, "type": "DUPLICATE_CROSS_SYMBOL",

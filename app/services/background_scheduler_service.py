@@ -769,6 +769,18 @@ class BackgroundSchedulerService:
         except Exception as exc:
             lineage = {"status": "LINEAGE_VERIFY_DEGRADED", "error": repr(exc)}
 
+        # DATA AUTO-REMEDIATION (self-gates once/day): the missing piece that used to need a manual
+        # script. Appends stale bars from TradeStation (append-only — never the Yahoo full-backfill),
+        # repairs OHLC violations (clamp only, backed up), and re-accepts lineage ONLY on a clean
+        # restatement (no changed symbol also integrity-critical) — else it holds + alerts. Refresh
+        # fixes DATA_FRESHNESS/REGIME_GATE (they read the CSVs directly) the same cycle. Runs after the
+        # validators so it acts on their freshest reports. Gated by GREYLINE_DATA_AUTOREMEDIATE.
+        try:
+            from app.services.data_remediation_engine import DataRemediationEngine
+            data_remediation = DataRemediationEngine().run_if_due()
+        except Exception as exc:
+            data_remediation = {"status": "DATA_REMEDIATION_DEGRADED", "error": repr(exc)}
+
         # Options reality capture. The options mission cannot be backtested (no historical
         # contract data exists from UW or TradeStation), so this forward panel is the only
         # evidence an options edge can ever be verified against. A missed day is permanent.

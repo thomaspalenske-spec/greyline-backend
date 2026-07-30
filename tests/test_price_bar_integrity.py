@@ -48,6 +48,23 @@ def test_catches_cross_symbol_duplicate_corruption(eng, tmp_path):
     assert dup and "5 symbols" in dup[0]["detail"]
 
 
+def test_par_value_preferred_clustering_is_not_flagged(eng, tmp_path):
+    # $25-par preferreds / baby bonds legitimately share par-ish closes — must NOT be a false critical
+    for sym in ("AGNCL", "BIPJ", "BWNB", "AQNB", "CHSCO"):
+        _write(tmp_path, sym, ["2026-07-01,25,25.1,24.9,25.04,1000\n"])
+    r = eng.scan(full=True, save=False)
+    assert not any(i["type"] == "DUPLICATE_CROSS_SYMBOL" for i in r["issues"])
+    assert r["critical_count"] == 0
+
+
+def test_duplicate_at_nonpar_price_still_caught(eng, tmp_path):
+    # away from any par value, 4+ symbols sharing an idiosyncratic close is still corruption
+    for sym in ("AAA", "BBB", "CCC", "DDD"):
+        _write(tmp_path, sym, ["2026-07-01,140,150,139,147.2345,1000\n"])
+    r = eng.scan(full=True, save=False)
+    assert any(i["type"] == "DUPLICATE_CROSS_SYMBOL" for i in r["issues"])
+
+
 def test_catches_nonpositive_price(eng, tmp_path):
     _write(tmp_path, "CCC", ["2026-07-01,0,0,0,0,0\n"])
     r = eng.scan(full=True, save=False)
