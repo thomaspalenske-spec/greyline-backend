@@ -761,6 +761,23 @@ async function getJSON(url) {
   return await res.json();
 }
 
+// SELF-RELOAD ON DEPLOY: the page auto-refreshes DATA every 15s but never reloads its own JS, so a
+// tab left open keeps rendering with old code (old columns/panels) until a manual hard-refresh. This
+// embeds the code stamp the tab loaded with and compares it to the server's current stamp; when they
+// differ — i.e. new dashboard code was deployed — the tab reloads itself ONCE. After the reload the
+// embedded stamp matches the server's, so it can't loop.
+const DASH_VERSION = "{{ code_version }}";
+let _dashReloading = false;
+async function checkDashboardVersion() {
+  try {
+    const d = await getJSON("/dashboard-version");
+    if (d && d.version && DASH_VERSION && d.version !== DASH_VERSION && !_dashReloading) {
+      _dashReloading = true;
+      location.reload();
+    }
+  } catch (e) { /* transient — try again next cycle */ }
+}
+
 async function postCommand(command) {
   return fetch("/ai-command", {
     method: "POST",
@@ -1073,6 +1090,7 @@ async function refreshOpportunityBoard() {
 
 async function refreshAll() {
   setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
+  checkDashboardVersion();  // fire-and-forget: self-reload once if new dashboard code was deployed
   await refreshCockpitBanner();
   await refreshCommanderSummary();
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
