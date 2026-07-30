@@ -72,7 +72,7 @@ class ConditionalVRPShortPremiumEngine:
     SHORT_DELTA = 0.20             # reference / symmetric fallback
     SHORT_PUT_DELTA = 0.25         # put nearer ATM — capture the overpriced put skew
     SHORT_CALL_DELTA = 0.15        # call further OTM — cheap skew, less premium there, less upside risk
-    MAX_LOSS_PER_POSITION_USD = 300.0     # 3% of the $10k book, capped BEFORE the trade
+    DEFAULT_MAX_LOSS_PER_POSITION_USD = 500.0   # fallback/floor if the resolver is unavailable
     # Positions are CORRELATED — a vol spike hits every condor at once — so the tail is bounded at
     # the PORTFOLIO level, not just per position. Total defined risk across all open + new condors
     # may not exceed this. Even a simultaneous max-loss across the book stays survivable.
@@ -119,6 +119,27 @@ class ConditionalVRPShortPremiumEngine:
     @PORTFOLIO_RISK_CAP_USD.setter
     def PORTFOLIO_RISK_CAP_USD(self, value):
         self._prc_cache = float(value)
+
+    @property
+    def MAX_LOSS_PER_POSITION_USD(self):
+        # Per-condor max-loss cap, now %-of-equity with a floor (max(5% equity, $500)) via the central
+        # SleeveCapitalBudgetEngine — scales with the book, never below the min viable defined-risk size.
+        # Lazy cached (no broker read on construct); getattr readers (build_condor, status, premium-harvest,
+        # earnings via this instance) all see the live value. Settable for tests. Falls back to the default.
+        cached = getattr(self, "_pcl_cache", None)
+        if cached is not None:
+            return cached
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            val = SleeveCapitalBudgetEngine.per_condor_max_loss()
+        except Exception:
+            val = type(self).DEFAULT_MAX_LOSS_PER_POSITION_USD
+        self._pcl_cache = val
+        return val
+
+    @MAX_LOSS_PER_POSITION_USD.setter
+    def MAX_LOSS_PER_POSITION_USD(self, value):
+        self._pcl_cache = float(value)
 
     @staticmethod
     def enabled():
@@ -179,12 +200,15 @@ class ConditionalVRPShortPremiumEngine:
             "oi": int(self._f(contract.get("DailyOpenInterest"))),
         }
 
-    def build_condor(self, symbol, contracts, put_delta=None, call_delta=None):
+    def build_condor(self, symbol, contracts, put_delta=None, call_delta=None, max_loss_cap=None):
         """Construct a defined-risk iron condor from a chain snapshot, or a skip reason.
 
         `contracts` is the raw chain list (each with Side/Bid/Ask/Delta/Legs). Defaults to the
-        asymmetric put-tilt (put nearer ATM); a caller can force specific short deltas. Returns a
-        dict describing the 4 legs, net credit, max loss and sized quantity — or {'skip': reason}."""
+        asymmetric put-tilt (put nearer ATM); a caller can force specific short deltas. `max_loss_cap`
+        overrides the per-condor max-loss ceiling (earnings uses a higher cap than VRP so higher-priced
+        names with wider strike spacing still qualify as defined-risk). Returns the 4 legs, net credit,
+        max loss and sized quantity — or {'skip': reason}."""
+        cap = self.MAX_LOSS_PER_POSITION_USD if max_loss_cap is None else float(max_loss_cap)
         put_delta = self._put_delta() if put_delta is None else put_delta
         call_delta = self._call_delta() if call_delta is None else call_delta
         calls = [self._leg(c) for c in contracts
@@ -218,7 +242,7 @@ class ConditionalVRPShortPremiumEngine:
                 credit = (short_leg["bid"] + other_short["bid"]) - (w["ask"] + other_w["ask"])
                 other_width = abs(other_short["strike"] - other_w["strike"])
                 max_loss = max(width, other_width) * 100 - credit * 100
-                if credit >= self.MIN_CREDIT and 0 < max_loss <= self.MAX_LOSS_PER_POSITION_USD:
+                if credit >= self.MIN_CREDIT and 0 < max_loss <= cap:
                     best = w                                    # widest fitting wing on this side
                     break
             return best
@@ -229,7 +253,7 @@ class ConditionalVRPShortPremiumEngine:
         wing_put = pick_wing(put_cands, False, short_put, short_call, call_cands)
         if not wing_call or not wing_put:
             return {"skip": "no wing keeps one condor's max loss within the per-position cap "
-                            f"(${self.MAX_LOSS_PER_POSITION_USD}) — not tradeable as defined-risk"}
+                            f"(${cap}) — not tradeable as defined-risk"}
 
         call_width = wing_call["strike"] - short_call["strike"]
         put_width = short_put["strike"] - wing_put["strike"]
@@ -238,9 +262,9 @@ class ConditionalVRPShortPremiumEngine:
             return {"skip": f"credit {round(credit, 2)} below floor"}
         max_width = max(call_width, put_width)
         max_loss_per = max_width * 100 - credit * 100
-        if max_loss_per <= 0 or max_loss_per > self.MAX_LOSS_PER_POSITION_USD:
+        if max_loss_per <= 0 or max_loss_per > cap:
             return {"skip": f"max loss ${round(max_loss_per, 0)} exceeds per-position cap"}
-        qty = int(self.MAX_LOSS_PER_POSITION_USD // max_loss_per)
+        qty = int(cap // max_loss_per)
         if qty < 1:
             return {"skip": "cannot size within per-position cap"}
 

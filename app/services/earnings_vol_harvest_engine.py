@@ -32,7 +32,9 @@ class EarningsVolHarvestEngine:
     REPORT_WITHIN_DAYS = 2      # reporting in the next 1-2 sessions — sell near peak pre-earnings IV
     MAX_CONCURRENT = 3          # small sleeve
     LIMIT_PER_DAY = 2
-    MAX_LOSS_PER_POSITION_USD = 300
+    # Per-condor max-loss cap is CENTRAL now (SleeveCapitalBudgetEngine.per_condor_max_loss =
+    # max(5% equity, $500 floor)) — build_condor defaults to it via the shared VRP instance, so both
+    # condor sleeves share one cap. No local override here.
     DEFAULT_PORTFOLIO_RISK_CAP_USD = 900   # fallback if the equity read fails (was the static probe cap)
 
     @property

@@ -158,6 +158,29 @@ class SleeveCapitalBudgetEngine:
             budget = min(budget, cash)
         return round(max(0.0, budget), 2)
 
+    CONDOR_MAX_LOSS_PCT_DEFAULT = 5.0        # per-condor max loss as % of equity
+    CONDOR_MAX_LOSS_FLOOR_USD = 500.0        # ...but never below this (strikes are quantized — below
+    #                                          a floor, wide-strike names can't form a defined-risk condor)
+
+    @classmethod
+    def per_condor_max_loss(cls):
+        """Per-CONDOR max-loss cap = max(pct-of-equity, floor). The % scales the cap up as the book
+        grows (consistent with the sleeve portfolio caps); the floor stops a drawdown from shrinking it
+        below the minimum size at which a condor is still tradeable — the exact 'too tight' problem that
+        skipped the higher-priced earnings names at a fixed $300. Env: GREYLINE_CONDOR_MAX_LOSS_PCT /
+        GREYLINE_CONDOR_MAX_LOSS_FLOOR_USD."""
+        equity, _ = cls._live()
+        eq = equity if equity else cls.DEFAULT_BASE_USD
+        try:
+            pct = float(getenv("GREYLINE_CONDOR_MAX_LOSS_PCT", "") or cls.CONDOR_MAX_LOSS_PCT_DEFAULT)
+        except (TypeError, ValueError):
+            pct = cls.CONDOR_MAX_LOSS_PCT_DEFAULT
+        try:
+            floor = float(getenv("GREYLINE_CONDOR_MAX_LOSS_FLOOR_USD", "") or cls.CONDOR_MAX_LOSS_FLOOR_USD)
+        except (TypeError, ValueError):
+            floor = cls.CONDOR_MAX_LOSS_FLOOR_USD
+        return round(max((pct / 100.0) * eq, floor), 2)
+
     @classmethod
     def snapshot(cls):
         """Human/endpoint view of the live budget book."""
