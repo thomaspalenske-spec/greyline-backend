@@ -554,6 +554,15 @@ class BackgroundSchedulerService:
         except Exception as exc:
             managed_futures = {"error": repr(exc), "status": "MF_DEGRADED"}
 
+        # MF SHADOW forward-test: mark the FULL long/short strategy's hypothetical P&L on settled bars
+        # (NO orders). Runs regardless of the live sleeve — it's how the real diversification edge
+        # accumulates while the sleeve is parked. Self-gated to once per new settled bar.
+        try:
+            from app.services.managed_futures_shadow_engine import ManagedFuturesShadowEngine
+            managed_futures_shadow = ManagedFuturesShadowEngine().mark()
+        except Exception as exc:
+            managed_futures_shadow = {"error": repr(exc), "status": "MF_SHADOW_DEGRADED"}
+
         # EARNINGS-VOL harvest (forward test, gated): sell a tiny defined-risk condor into a rich-IV
         # name's earnings, once/day, RTH only. Positions land in the VRP ledger with strategy tag, so
         # the reconcile+manage above and the protective-stop/dashboard machinery already cover them.

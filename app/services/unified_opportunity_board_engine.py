@@ -106,8 +106,12 @@ class UnifiedOpportunityBoardEngine:
                 "side": "SELL_PREMIUM",
                 "score": round(self._f(c.get("iv_rank")) * 100, 1),   # 0-100 for a readable score
                 "score_label": "IV rank",
-                "status": "ARMED",
-                "reason": f"sells a condor in-session before the {c.get('report_date')} report",
+                # reflect the ACTUAL arm state — the sleeve can be disabled (don't paint a disabled
+                # sleeve's candidates green "ARMED" as if they'll fire).
+                "status": ("ARMED" if st.get("armed") else "OFF"),
+                "reason": (f"sells a condor in-session before the {c.get('report_date')} report"
+                           if st.get("armed") else
+                           f"earnings sleeve OFF — would sell a condor before the {c.get('report_date')} report if armed"),
                 "detail": (f"reports {c.get('report_date')} (T-{c.get('days_to_report')}) · "
                            f"implied move {self._f(c.get('implied_move_pct')):.1f}%"),
             })
@@ -117,7 +121,7 @@ class UnifiedOpportunityBoardEngine:
             "edge": "sell a defined-risk condor into a rich-IV name's earnings, harvest the IV crush",
             "instrument": "OPTION (short condor)",
             "score_basis": "IV rank 0-100 (how rich implied vol is vs its own year)",
-            "action": (f"armed · {st.get('open_positions', 0)} open · "
+            "action": (f"{'armed' if st.get('armed') else 'OFF'} · {st.get('open_positions', 0)} open · "
                        f"${self._f(st.get('open_risk_usd')):.0f}/${self._f(st.get('portfolio_cap_usd')):.0f} risk used · "
                        "opens once/day in-session before the report"),
             "candidates": rows,

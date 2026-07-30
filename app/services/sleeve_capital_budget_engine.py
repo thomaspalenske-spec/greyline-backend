@@ -29,15 +29,17 @@ from time import time
 
 class SleeveCapitalBudgetEngine:
 
-    # Default targets as PERCENT of live mission equity. Sum = 100 -> the whole book is deployable.
-    # These keep the operator's prior RELATIVE weights (trend 2217 / carry 1583 / momentum 2000 /
-    # vrp 1200 / earnings 900, i.e. 28/20/25/15/12 of the old $7,900), just rescaled to fill 100%.
+    # Default targets as PERCENT of live mission equity. The 5 core sleeves sum to 100 -> the whole
+    # book is deployable. managed_futures is a tracked sleeve too but defaults to 0 (funded via
+    # GREYLINE_MANAGED_FUTURES_ALLOC_PCT when armed); when it's funded, another sleeve is reduced to
+    # keep the live sum <= 100 (2026-07-30: it REPLACED trend — trend set to 0% + disabled).
     DEFAULT_PCT = {
         "momentum": 25.0,
         "trend": 28.0,
         "vol_carry": 20.0,
         "vrp": 15.0,
         "earnings": 12.0,
+        "managed_futures": 0.0,
     }
     # Aliases so callers can use either name for the carry sleeve.
     _ALIAS = {"carry": "vol_carry"}
