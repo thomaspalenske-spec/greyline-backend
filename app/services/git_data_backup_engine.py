@@ -48,7 +48,7 @@ class GitDataBackupEngine:
         if h is not None and h < self.DUE_HOURS:
             return {"status": "GIT_BACKUP_NOT_DUE", "hours_since": h}
         r = self.backup()
-        if r.get("pushed"):
+        if r.get("ok"):   # ok now means pushed AND complete (all TIER1 files present)
             self._mark()
         return r
 
@@ -97,6 +97,7 @@ class GitDataBackupEngine:
             return {"status": "GIT_BACKUP_NO_REMOTE", "detail": info, "ok": False}
 
         files = self._tier1_files()
+        expected = len(files)
         if not files:
             return {"status": "GIT_BACKUP_NOTHING", "ok": False, "files": 0}
 
@@ -120,19 +121,28 @@ class GitDataBackupEngine:
         if changed:
             stamp = datetime.utcnow().isoformat()
             self._git("commit", "-q", "-m", f"unrecoverable-data backup {stamp} ({copied} files)")
+        # COMPLETENESS: don't report success on a partial mirror. If fewer files copied than the TIER1
+        # set expects (a swallowed copy failure), the backup is INCOMPLETE even if the push succeeds —
+        # the same "trust the marker's count" fantasy the iCloud path was hardened against.
+        complete = (copied == expected)
         if not push:
-            return {"status": "GIT_BACKUP_COMMITTED_LOCAL" if changed else "GIT_BACKUP_NO_CHANGE",
-                    "ok": True, "files": copied, "branch": self.BRANCH, "pushed": False}
+            return {"status": "GIT_BACKUP_INCOMPLETE" if not complete else
+                    ("GIT_BACKUP_COMMITTED_LOCAL" if changed else "GIT_BACKUP_NO_CHANGE"),
+                    "ok": complete, "files": copied, "expected": expected, "complete": complete,
+                    "branch": self.BRANCH, "pushed": False}
         # ALWAYS sync the remote to local (force — single-writer snapshot branch, history irrelevant).
         # Idempotent when already in sync; also flushes any commit an earlier failed push left behind.
         pr = self._git("push", "-q", "--force", "origin", f"HEAD:{self.BRANCH}", timeout=180)
         pushed = pr.returncode == 0
-        return {"status": ("GIT_BACKUP_PUSHED" if changed else "GIT_BACKUP_IN_SYNC") if pushed
+        ok = pushed and complete
+        return {"status": ("GIT_BACKUP_INCOMPLETE" if not complete else
+                           ("GIT_BACKUP_PUSHED" if changed else "GIT_BACKUP_IN_SYNC")) if pushed
                           else "GIT_BACKUP_PUSH_FAILED",
-                "ok": pushed, "files": copied, "branch": self.BRANCH, "pushed": pushed,
-                "changed": changed,
-                "detail": (f"remote '{self.BRANCH}' now matches local ({copied} files)") if pushed
-                          else ("push failed: " + (pr.stderr or "")[:160])}
+                "ok": ok, "files": copied, "expected": expected, "complete": complete,
+                "branch": self.BRANCH, "pushed": pushed, "changed": changed,
+                "detail": ((f"remote '{self.BRANCH}' has {copied}/{expected} files"
+                            + ("" if complete else " — INCOMPLETE, some TIER1 files failed to copy")))
+                          if pushed else ("push failed: " + (pr.stderr or "")[:160])}
 
     def status(self):
         exists = (self.REPO / ".git").exists()

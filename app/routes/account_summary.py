@@ -33,6 +33,28 @@ def account_summary():
     view = BrokerAccountViewEngine().snapshot()
     rows = view.get("positions", [])
 
+    # DEGRADED-READ GUARD: if the broker read FAILED this cycle, positions are UNKNOWN — not zero.
+    # Without this, deployed/unrealized collapse to 0 and cash_on_hand=equity, publishing a fantasy
+    # "0 positions, all cash" book (the same class the risk governor already guards). Publish
+    # UNKNOWN (null) money tiles + a degraded flag so the dashboard can't render fantasy numbers.
+    if not view.get("reads_ok", True):
+        from app.services.mission_realized_pnl_engine import MissionRealizedPnlEngine
+        try:
+            realized = MissionRealizedPnlEngine().cumulative_realized()
+        except Exception:
+            realized = None
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "account_mode": view.get("account_mode"), "account_label": view.get("account_label"),
+            "reads_ok": False, "degraded": True,
+            "starting_capital": round(base, 2), "realized_pnl": realized,
+            "deployed_capital": None, "deployed_pct_of_equity": None, "open_market_value": None,
+            "tbill_sweep_value": None, "cash_on_hand": None, "buying_power": None,
+            "unrealized_pnl": None, "total_equity": None, "total_return_pct": None,
+            "open_position_count": None,
+            "status": "ACCOUNT_SUMMARY_BROKER_READ_DEGRADED",
+        }
+
     # The T-bill sweep (SGOV) is a CASH-EQUIVALENT parking lot, not deployed risk capital — it is
     # ~0-duration Treasuries the sweep sells back on demand. Counting it as "deployed" overstates
     # risk and understates buying power: once the demand-driven sweep runs, deployed would jump to

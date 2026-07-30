@@ -1203,16 +1203,21 @@ async function refreshAll() {
     // the options-only engine, so they showed $0 deployed / $0 unrealized while real
     // equity was held, and a Total Return that belonged entirely to the RETIRED signal.
     const acct = (typeof acctRes !== "undefined" && acctRes.status === "fulfilled") ? acctRes.value : null;
-    setText("equity", fmtMoney(acct ? acct.total_equity : equity));
-    setText("cash", fmtMoney(acct ? acct.cash_on_hand : cash));
-    setText("buying_power", fmtMoney(acct ? acct.buying_power : cash));
-    setText("deployed", fmtMoney(acct ? acct.deployed_capital : deployed));
+    // DEGRADED broker read: positions are UNKNOWN, not zero — show "—" for the broker-derived money
+    // tiles instead of a fantasy all-cash book. (Server sends null tiles + degraded:true.)
+    const deg = !!(acct && acct.degraded);
+    const dm = v => deg ? "—" : fmtMoney(v);
+    const dp = v => deg ? "—" : fmtPct(v);
+    setText("equity", deg ? "—" : fmtMoney(acct ? acct.total_equity : equity));
+    setText("cash", deg ? "—" : fmtMoney(acct ? acct.cash_on_hand : cash));
+    setText("buying_power", deg ? "—" : fmtMoney(acct ? acct.buying_power : cash));
+    setText("deployed", deg ? "—" : fmtMoney(acct ? acct.deployed_capital : deployed));
     const deployedVal = acct ? acct.deployed_capital : deployed;
     const equityVal = acct ? acct.total_equity : equity;
     setText("deployed_pct", `${fmtPct((deployedVal / Math.max(equityVal, 1)) * 100)} of Equity`);
-    setText("unrealized", fmtMoney(acct ? acct.unrealized_pnl : unrealized));
-    setText("total_return", fmtPct(acct ? acct.total_return_pct : totalReturn));
-    setText("open_trades", acct ? acct.open_position_count : open.length);
+    setText("unrealized", deg ? "—" : fmtMoney(acct ? acct.unrealized_pnl : unrealized));
+    setText("total_return", deg ? "—" : fmtPct(acct ? acct.total_return_pct : totalReturn));
+    setText("open_trades", deg ? "—" : (acct ? acct.open_position_count : open.length));
     setText("total_trades", acct ? acct.total_trade_count : (l.option_trade_count ?? trades.length));
     setText("open_trade_count", acct ? acct.open_position_count : (l.open_option_trade_count ?? open.length));
     setText("closed_trade_count", acct ? acct.closed_trade_count : (l.closed_option_trade_count ?? 0));
