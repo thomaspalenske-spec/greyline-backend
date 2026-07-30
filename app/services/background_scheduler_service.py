@@ -846,6 +846,15 @@ class BackgroundSchedulerService:
         except Exception as exc:
             health = {"status": "SYSTEM_HEALTH_DASHBOARD_DEGRADED", "error": repr(exc)}
 
+        # Scheduled operator self-reports: pre-open readiness pager (~9:25 ET) and post-close summary
+        # (~16:05 ET), once/day, texted off-box. So knowing the open fired cleanly never depends on a
+        # human checking. Best-effort; runs after all trading; can never affect it.
+        try:
+            from app.services.scheduled_operator_reports_engine import ScheduledOperatorReportsEngine
+            scheduled_reports = ScheduledOperatorReportsEngine.run(market_hours)
+        except Exception as exc:
+            scheduled_reports = {"status": "SCHEDULED_REPORTS_DEGRADED", "error": repr(exc)}
+
         cls._cycle_count += 1
         cls._last_run = started
         cls._last_status = "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"

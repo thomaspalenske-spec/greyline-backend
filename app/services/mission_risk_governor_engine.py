@@ -26,6 +26,8 @@ class MissionRiskGovernorEngine:
     HALT_MARKER = DIR / "opens_halted.json"
     ALERT_STATE = DIR / "governor_alert_state.json"
     IDLE_MARKER = DIR / "armed_idle_since.json"
+    POS_COUNT = DIR / "last_position_count.json"   # last non-empty broker read (empty-read sanity)
+    POS_COUNT_TRUST_MIN = 90.0                     # trust a recent non-empty count for this long
     THROTTLE_MIN = 30.0
 
     # "armed but not trading" watch: the failure that sat SILENT on the 2026-07-29 open (strategies
@@ -126,9 +128,33 @@ class MissionRiskGovernorEngine:
             _tb = TbillCashSweepEngine.symbol()
             deployed = sum(self._f(r.get("entry_price")) * self._f(r.get("quantity")) for r in rows
                            if ((str(r.get("symbol") or "").split() or [""])[0]).upper() != _tb)
+            # EMPTY-READ SANITY: a 200 with an EMPTY positions array can be a transient glitch, not a
+            # genuinely flat book. If we just saw positions and now see none, treat the read as SUSPECT
+            # (reads_ok False) so a real drawdown can't read as ~flat (unrealized 0) and skip the halt.
+            if rows:
+                self._record_position_count(len(rows))
+            elif reads_ok and self._recent_position_count() > 0:
+                reads_ok = False   # empty-but-recently-nonempty -> don't trust; skip loss/idle checks
         except Exception:
             reads_ok = False
         return round(base + realized + unrealized, 2), round(deployed, 2), reads_ok
+
+    def _record_position_count(self, n):
+        try:
+            self.DIR.mkdir(parents=True, exist_ok=True)
+            self.POS_COUNT.write_text(json.dumps({"count": int(n), "at": datetime.utcnow().isoformat()}))
+        except Exception:
+            pass
+
+    def _recent_position_count(self):
+        """Last non-empty broker position count, but only if recorded recently (else 0 — a genuine
+        flatten ages out, so an intentionally-empty book eventually reads as trusted-empty)."""
+        try:
+            rec = json.loads(self.POS_COUNT.read_text())
+            age = (datetime.utcnow() - datetime.fromisoformat(rec["at"])).total_seconds() / 60.0
+            return int(rec.get("count", 0)) if age <= self.POS_COUNT_TRUST_MIN else 0
+        except Exception:
+            return 0
 
     def _sod_equity(self, current, persist=True):
         """Start-of-day mission equity; recorded on the first read of each UTC day. `persist=False`

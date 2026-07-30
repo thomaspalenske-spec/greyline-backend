@@ -18,3 +18,10 @@ def mission_risk_governor():
 def pre_open_readiness():
     """Audit every link in the open chain — reset, capital, data feeds, armed paths, guard, accounting."""
     return PreOpenReadinessEngine().audit()
+
+
+@router.get("/scheduled-reports")
+def scheduled_reports():
+    """Preview the auto pre-open pager + post-close report (what they'd say now; does not send)."""
+    from app.services.scheduled_operator_reports_engine import ScheduledOperatorReportsEngine
+    return ScheduledOperatorReportsEngine.preview()
