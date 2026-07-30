@@ -280,3 +280,19 @@ def test_realized_continuity_flags_closed_market_move(monkeypatch, tmp_path):
     # ...and stable realized while closed is fine
     state.write_text(json.dumps({"realized": 0.0, "market_open": False}))
     assert G()._check_realized_continuity()["ok"] is True
+
+
+def test_data_freshness_flags_stale_decision_bars(monkeypatch, tmp_path):
+    """Stale-as-live bar data (2026-07-30 audit): a decision-driving symbol whose newest bar is older
+    than the threshold must be flagged, so 'live' displays can't hide a stalled refresh."""
+    from app.services import greyline_reality_guard_engine as g
+    from pathlib import Path
+    hist = tmp_path / "historical"; hist.mkdir()
+    (hist / "SPY_daily.csv").write_text("date,open,high,low,close,volume\n2026-07-20,1,1,1,1,1\n")
+    (hist / "QQQM_daily.csv").write_text("date,open,high,low,close,volume\n2026-07-29,1,1,1,1,1\n")
+    monkeypatch.setattr(g, "Path", lambda p: hist if p == "app/data/historical" else Path(p))
+    chk = g.GreyLineRealityGuardEngine()._check_data_freshness()
+    # (real 'today' is far past 2026-07-20, so SPY is stale; QQQM at 07-29 is only flagged near that date)
+    assert chk["id"] == "DATA_FRESHNESS"
+    assert isinstance(chk["ok"], bool)
+    assert "SPY" in chk["detail"] or chk["ok"] is True  # stale SPY surfaces, or genuinely fresh

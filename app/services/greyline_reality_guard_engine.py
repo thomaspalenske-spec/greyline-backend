@@ -623,6 +623,48 @@ class GreyLineRealityGuardEngine:
             pass
         return {"id": "REALIZED_CONTINUITY", "severity": "critical", "ok": ok, "detail": detail}
 
+    DATA_FRESH_STALE_DAYS = 5   # calendar days; > this on a decision-driving symbol = stale pipeline
+
+    def _check_data_freshness(self):
+        """FANTASY DETECTOR for stale-as-live bar data (2026-07-30 audit): the daily-bar refresh can
+        stall while the momentum gate (keys off the universe-MAX bar date) and trend (no gate) still
+        compute + DISPLAY signals as 'live'. Independently check the newest bar date of the symbols
+        that actually drive decisions (regime SPY + trend basket); if any is older than the threshold
+        (weekend-tolerant), the pipeline is stale and 'live' displays are lying. Warning severity."""
+        import csv as _csv
+        from datetime import date
+        HIST = Path("app/data/historical")
+        symbols = ["SPY", "QQQM", "IWM", "TLT", "GLDM", "EFA", "DBC"]
+        today = None
+        try:
+            from zoneinfo import ZoneInfo
+            today = datetime.now(ZoneInfo("America/New_York")).date()
+        except Exception:
+            today = datetime.utcnow().date()
+        stale = []
+        for s in symbols:
+            p = HIST / f"{s}_daily.csv"
+            if not p.exists():
+                continue
+            try:
+                last = None
+                with open(p) as f:
+                    for row in _csv.reader(f):
+                        if row and row[0] and row[0][0].isdigit():
+                            last = row[0]
+                if last:
+                    d = date.fromisoformat(last[:10])
+                    if (today - d).days > self.DATA_FRESH_STALE_DAYS:
+                        stale.append(f"{s}:{last}({(today - d).days}d)")
+            except Exception:
+                continue
+        ok = not stale
+        return {"id": "DATA_FRESHNESS", "severity": "warning", "ok": ok,
+                "detail": ("decision-driving bars are current" if ok else
+                           f"STALE bar data on {len(stale)} decision symbol(s) — the daily refresh has "
+                           f"stalled and signals/displays may present stale bars as live: "
+                           + ", ".join(stale[:6]))}
+
     def check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
@@ -637,6 +679,7 @@ class GreyLineRealityGuardEngine:
             self._check_untracked_broker_positions(view),
             self._check_exec_booking_coherent(),
             self._check_realized_continuity(),
+            self._check_data_freshness(),
             self._check_data_source(),
             self._check_price_bars(),
             self._check_price_bars_match_source(),
