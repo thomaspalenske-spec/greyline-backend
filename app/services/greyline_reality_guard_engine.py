@@ -506,9 +506,18 @@ class GreyLineRealityGuardEngine:
             return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": False,
                     "detail": f"last off-machine backup was {age}h ago — forward-only data "
                               f"since then is unprotected"}
+        # VERIFY the mirror is actually COMPLETE — don't trust the marker's claimed count. A partial
+        # run left latest/ with 3 of 17 files while the marker (and this check) reported "17 verified"
+        # (2026-07-30). Count the real off-machine files vs what should be protected.
+        exp, got = st.get("expected_files"), st.get("off_machine_files")
+        if exp is not None and got is not None and got < exp:
+            return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": False,
+                    "detail": (f"off-machine mirror INCOMPLETE — only {got} of {exp} unrecoverable "
+                               f"files present in latest/ (partial/failed backup; marker claims "
+                               f"{st.get('files_protected')}). Re-run the backup.")}
         return {"id": "BACKUP_CURRENT", "severity": "warning", "ok": True,
-                "detail": (f"{st.get('files_protected')} unrecoverable files verified "
-                           f"off-machine, {age}h ago")}
+                "detail": (f"{got if got is not None else st.get('files_protected')} of "
+                           f"{exp} unrecoverable files verified off-machine, {age}h ago")}
 
     def _check_broker_side_protection(self):
         """Open longs should have a failsafe that survives this process dying.

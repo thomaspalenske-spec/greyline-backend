@@ -247,6 +247,18 @@ class DisasterRecoveryEngine:
         except Exception:
             return None
 
+    def _offmachine_file_count(self):
+        """ACTUAL number of files sitting in the off-machine latest/ mirror right now — counted from
+        disk, NOT read from the marker. The marker's claimed count once said 17 while latest/ held
+        only 3 (a partial run), and every monitor believed it. Verify reality."""
+        try:
+            latest = self.dest() / "latest"
+            if not latest.exists():
+                return 0
+            return sum(1 for p in latest.rglob("*") if p.is_file() and p.name != ".DS_Store")
+        except Exception:
+            return None
+
     def status(self):
         last = self.last_backup()
         dest = self.dest()
@@ -261,12 +273,25 @@ class DisasterRecoveryEngine:
                                - datetime.fromisoformat(last["timestamp"])).total_seconds() / 3600, 1)
             except Exception:
                 pass
+        # VERIFY reality vs the marker: expected = files that SHOULD be protected (current on-disk
+        # TIER1 set); off_machine = what's ACTUALLY in latest/. Complete only if the mirror holds
+        # them all. A shortfall means a partial/failed backup the marker is lying about.
+        try:
+            expected = len(self._collect(list(self.TIER1)))
+        except Exception:
+            expected = None
+        off_files = self._offmachine_file_count()
+        off_complete = bool(off and expected is not None and off_files is not None
+                            and off_files >= expected)
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "destination": str(dest), "off_machine": off, "destination_note": note,
             "last_backup_at": (last or {}).get("timestamp"),
             "hours_since_backup": age_h,
-            "files_protected": (last or {}).get("files_backed_up", 0),
+            "files_protected": (last or {}).get("files_backed_up", 0),   # marker's CLAIM
+            "expected_files": expected,                                   # what SHOULD be protected
+            "off_machine_files": off_files,                               # what IS off-machine (real)
+            "off_machine_complete": off_complete,                         # verified, not trusted
             "verified": (last or {}).get("verified_by_hash", 0),
             "unprotected_unrecoverable_paths": unprotected,
             "why_it_matters": ("options_reality and the PIT/earnings panels accrue FORWARD ONLY "
