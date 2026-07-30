@@ -4,8 +4,11 @@ The account lost 41% actively trading with no proven edge, while its idle cash e
 single highest-confidence improvement is to hold that idle capital in a ~0-duration Treasury ETF
 (SGOV / BIL, ~4.5% yield, near-zero volatility) — a guaranteed-positive baseline that already beats
 the tiny condor book's expected value. This engine holds `mission_equity - RESERVE` in the T-bill
-proxy, keeping RESERVE liquid so the premium strategies can still open, and rebalances only when the
-gap is material (no churn).
+proxy and rebalances only when the gap is material (no churn). RESERVE is DEMAND-DRIVEN: it tracks
+the capital the sleeves have actually committed (non-SGOV positions) plus a small operating cash
+buffer, not a fixed dollar figure — so idle capital a static reserve would have left in zero-yield
+cash instead earns the T-bill rate, and SGOV is sold back (this engine is bidirectional) the moment
+a sleeve needs the cash.
 
 HONEST CAVEAT: in a LIVE account SGOV pays monthly distributions (the yield). In the PAPER SIM it is
 UNCERTAIN whether TradeStation credits those distributions — so the yield may not visibly accrue in
@@ -20,9 +23,10 @@ from os import getenv
 
 class TbillCashSweepEngine:
 
-    DEFAULT_SYMBOL = "SGOV"          # iShares 0-3 Month Treasury; ~$100.5, monthly distributions
-    DEFAULT_RESERVE_USD = 2500.0     # keep this much liquid for the premium strategies (caps ~$2.1k)
-    MIN_REBALANCE_USD = 200.0        # don't churn for small deltas
+    DEFAULT_SYMBOL = "SGOV"              # iShares 0-3 Month Treasury; ~$100.5, monthly distributions
+    DEFAULT_OPERATING_BUFFER_USD = 2500.0  # ready cash kept for the NEXT sleeve deployment
+    DEFAULT_MIN_CASH_USD = 500.0         # never sweep liquid below this, whatever the math says
+    MIN_REBALANCE_USD = 200.0            # don't churn for small deltas
 
     @staticmethod
     def _f(v):
@@ -40,11 +44,42 @@ class TbillCashSweepEngine:
         return (getenv("GREYLINE_TBILL_SYMBOL", "") or cls.DEFAULT_SYMBOL).strip().upper()
 
     @classmethod
-    def _reserve(cls):
+    def _operating_buffer(cls):
         try:
-            return float(getenv("GREYLINE_TBILL_RESERVE_USD", "") or cls.DEFAULT_RESERVE_USD)
+            return float(getenv("GREYLINE_TBILL_OPERATING_BUFFER_USD", "") or cls.DEFAULT_OPERATING_BUFFER_USD)
         except (TypeError, ValueError):
-            return cls.DEFAULT_RESERVE_USD
+            return cls.DEFAULT_OPERATING_BUFFER_USD
+
+    def _non_sgov_position_value(self):
+        """Market value of every NON-SGOV position — capital the trading sleeves have already
+        committed. It's positions, not cash, so it must be held OUT of the sweep (counted as
+        'already spent'), never swept into T-bills."""
+        try:
+            from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+            sym = self.symbol()
+            total = 0.0
+            for x in ((TradeStationPositionsLiveEngine().get_positions().get("response_json") or {})
+                      .get("Positions") or []):
+                if str(x.get("Symbol") or "").split()[0].upper() == sym:
+                    continue                                   # exclude SGOV itself
+                if int(self._f(x.get("Quantity"))) == 0:
+                    continue
+                total += self._f(x.get("MarketValue"))
+            return round(total, 2)
+        except Exception:
+            return 0.0
+
+    def _reserve(self):
+        """DEMAND-DRIVEN reserve (replaces the old static GREYLINE_TBILL_RESERVE_USD). Keep liquid
+        only (a) what the sleeves have ALREADY committed in non-SGOV positions — that's positions,
+        not cash — plus (b) an operating cash buffer for the NEXT deployment. Everything above that
+        is idle and belongs in T-bills earning yield: SGOV is cash-equivalent and this engine sells
+        it back (bidirectional, ~T+1) when a sleeve draws cash next cycle. The old static $8,500
+        reserve over-held zero-yield cash — it kept ~$8,500 liquid while the sleeves used ~$2,100.
+        Floored at the min-cash line so a bad read can never sweep the account dry."""
+        committed = self._non_sgov_position_value()
+        buffer = self._operating_buffer()
+        return round(max(committed + buffer, self.DEFAULT_MIN_CASH_USD), 2)
 
     # ---- inputs -------------------------------------------------------------------------------
 

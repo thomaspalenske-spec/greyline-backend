@@ -69,17 +69,15 @@ class PreOpenReadinessEngine:
                 else f"NO sleeves armed — nothing will open at the bell: {flags}")
 
         # 3. capital coordination INVARIANT (hard). There is no coordinator engine — the six sleeves
-        # each spend a private static env allocation, and coordination holds ONLY by the arithmetic:
-        # the T-bill sweep parks (equity - reserve) in SGOV and leaves `reserve` liquid; the trading
-        # sleeves draw from that liquid pool. So total-deployment <= book is exactly equivalent to
-        #     sum(sleeve allocations) <= reserve   AND   reserve <= book.
-        # This ALSO requires every capital var to be EXPLICITLY set: the code fallbacks are each
-        # dangerous on their own — a blank momentum var defaults to the FULL $10k book, a blank
-        # reserve to $2,500 (which would sweep $7,500 into SGOV and starve every sleeve). This env
-        # has dropped/reverted exported vars before, so a MISSING var is a FAIL, not a warning.
+        # each spend a private static env allocation. The T-bill sweep is now DEMAND-DRIVEN: it holds
+        # (committed non-SGOV positions + an operating cash buffer) liquid and parks everything above
+        # that in SGOV for yield, selling SGOV back when a sleeve needs cash. So the sweep can no
+        # longer starve the sleeves (it yields to their demand), and the ONLY hard guarantee left is
+        # that the sleeves can't COLLECTIVELY over-commit the book:  sum(sleeve allocations) <= book.
+        # Still require every sleeve var EXPLICITLY set — a blank momentum var defaults to the FULL
+        # $10k book (this env has dropped/reverted exported vars before), so a MISSING var is a FAIL.
         _CAP_VARS = ["GREYLINE_ACCOUNT_CAPITAL_BASE", "GREYLINE_TREND_ALLOC_USD",
-                     "GREYLINE_VOL_CARRY_ALLOC_USD", "GREYLINE_MOMENTUM_CAPITAL_USD",
-                     "GREYLINE_TBILL_RESERVE_USD"]
+                     "GREYLINE_VOL_CARRY_ALLOC_USD", "GREYLINE_MOMENTUM_CAPITAL_USD"]
         missing = [k for k in _CAP_VARS if not (getenv(k, "") or "").strip()]
 
         def _n(k, d):
@@ -91,21 +89,19 @@ class PreOpenReadinessEngine:
         trend = _n("GREYLINE_TREND_ALLOC_USD", 3000)
         carry = _n("GREYLINE_VOL_CARRY_ALLOC_USD", 2000)
         mom = _n("GREYLINE_MOMENTUM_CAPITAL_USD", 10000)
-        reserve = _n("GREYLINE_TBILL_RESERVE_USD", 2500)
+        buffer = _n("GREYLINE_TBILL_OPERATING_BUFFER_USD", 2500)
         vrp_cap, earn_cap = 1200, 900   # VRP/earnings defined-risk caps
         sleeves = trend + carry + mom + vrp_cap + earn_cap
         detail = (f"sleeves trend {trend:.0f}+carry {carry:.0f}+momentum {mom:.0f}+VRP {vrp_cap}+earnings {earn_cap} "
-                  f"= {sleeves:.0f} must fit the liquid pool (reserve {reserve:.0f}); book {base:.0f}; "
-                  f"total deploy ~{sleeves + max(0, base - reserve):.0f}")
+                  f"= {sleeves:.0f} vs book {base:.0f}; T-bill sweep (demand-driven) parks idle cash "
+                  f"above (committed + {buffer:.0f} buffer) into SGOV")
         if missing:
             add("capital_params", "FAIL",
-                f"UNSET capital var(s) {missing} — unsafe code fallbacks would apply (blank momentum -> full book, "
-                f"blank reserve -> 2500 starves sleeves). Set them explicitly in .env. " + detail)
-        elif sleeves > reserve or reserve > base:
+                f"UNSET capital var(s) {missing} — unsafe code fallbacks would apply (blank momentum -> "
+                f"full book). Set them explicitly in .env. " + detail)
+        elif sleeves > base:
             add("capital_params", "FAIL",
-                "capital invariant BROKEN — " + detail
-                + ("; sleeves EXCEED the reserve pool -> the sweep will starve them" if sleeves > reserve else "")
-                + ("; reserve EXCEEDS book" if reserve > base else ""))
+                "capital invariant BROKEN — sleeves COLLECTIVELY exceed the book -> over-committed. " + detail)
         else:
             add("capital_params", "PASS", detail)
 
