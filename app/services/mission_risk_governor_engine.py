@@ -119,13 +119,21 @@ class MissionRiskGovernorEngine:
             reads_ok = bool(snap.get("reads_ok", True))   # False = broker read failed this cycle
             rows = snap.get("positions", []) or []
             unrealized = sum(self._f(r.get("unrealized_pnl")) for r in rows)
-            deployed = sum(self._f(r.get("entry_price")) * self._f(r.get("quantity")) for r in rows)
+            # DEPLOYED = at-risk capital only. Exclude the T-bill sweep (SGOV) — it's a cash-equivalent
+            # parking lot, not deployed risk; counting it would inflate deployed_pct after the sweep and
+            # (harmlessly) skew the idle/over-deploy checks. Matches /account-summary's deployed figure.
+            from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+            _tb = TbillCashSweepEngine.symbol()
+            deployed = sum(self._f(r.get("entry_price")) * self._f(r.get("quantity")) for r in rows
+                           if ((str(r.get("symbol") or "").split() or [""])[0]).upper() != _tb)
         except Exception:
             reads_ok = False
         return round(base + realized + unrealized, 2), round(deployed, 2), reads_ok
 
-    def _sod_equity(self, current):
-        """Start-of-day mission equity; recorded on the first read of each UTC day."""
+    def _sod_equity(self, current, persist=True):
+        """Start-of-day mission equity; recorded on the first read of each UTC day. `persist=False`
+        (a degraded broker read) returns the value transiently WITHOUT writing it, so a bad first
+        read of the day can't poison the daily-loss baseline — the next clean read records the SOD."""
         today = datetime.utcnow().date().isoformat()
         try:
             rec = json.loads(self.SOD.read_text())
@@ -133,6 +141,8 @@ class MissionRiskGovernorEngine:
                 return self._f(rec.get("equity"))
         except Exception:
             pass
+        if not persist:
+            return current
         self.DIR.mkdir(parents=True, exist_ok=True)
         self.SOD.write_text(json.dumps({"date": today, "equity": current}))
         return current
@@ -147,7 +157,10 @@ class MissionRiskGovernorEngine:
     def snapshot(self):
         base = self._base()
         equity, deployed, reads_ok = self._equity_and_deployed()
-        sod = self._sod_equity(equity)
+        # Don't let a DEGRADED read write the start-of-day baseline: a missing-unrealized equity
+        # persisted as SOD would skew the -4%/-7% daily-loss ladder all day. On a bad read, return
+        # the transient value WITHOUT persisting; the next clean read of the day records the real SOD.
+        sod = self._sod_equity(equity, persist=reads_ok)
         daily = round(equity - sod, 2)
         return {
             "timestamp": datetime.utcnow().isoformat(),

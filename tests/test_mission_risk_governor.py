@@ -20,7 +20,7 @@ def _patch(mp, tmp, equity, sod, deployed):
     mp.setattr(G, "HALT_MARKER", tmp / "halt.json")
     mp.setattr(G, "ALERT_STATE", tmp / "alert.json")
     mp.setattr(G, "_equity_and_deployed", lambda self: (equity, deployed, True))  # reads_ok=True
-    mp.setattr(G, "_sod_equity", lambda self, cur: sod)
+    mp.setattr(G, "_sod_equity", lambda self, cur, persist=True: sod)
     mp.setattr("app.services.operator_notification_engine.OperatorNotificationEngine",
                lambda: FakeNotifier())
     FakeNotifier.calls = []

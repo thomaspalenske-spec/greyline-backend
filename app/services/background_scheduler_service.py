@@ -837,8 +837,14 @@ class BackgroundSchedulerService:
             survivorship["departures"] = _surv.detect_departures()
         except Exception as exc:
             survivorship = {"status": "SURVIVORSHIP_ARCHIVE_DEGRADED", "error": repr(exc)}
-        from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
-        health = SystemHealthDashboardEngine().status()
+        # Wrapped like every other step: this runs AFTER all trading, but an unguarded throw here
+        # would abort before _record_result("COMPLETE"), falsely marking a successful cycle FAILED
+        # (and could trip the 3-strike off-box alert). Degrade instead.
+        try:
+            from app.services.system_health_dashboard_engine import SystemHealthDashboardEngine
+            health = SystemHealthDashboardEngine().status()
+        except Exception as exc:
+            health = {"status": "SYSTEM_HEALTH_DASHBOARD_DEGRADED", "error": repr(exc)}
 
         cls._cycle_count += 1
         cls._last_run = started

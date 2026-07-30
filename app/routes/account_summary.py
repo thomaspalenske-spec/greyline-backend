@@ -33,8 +33,22 @@ def account_summary():
     view = BrokerAccountViewEngine().snapshot()
     rows = view.get("positions", [])
 
-    cost_basis = round(sum(r["entry_price"] * r["quantity"] for r in rows), 2)
-    market_value = round(sum(r["current_price"] * r["quantity"] for r in rows), 2)
+    # The T-bill sweep (SGOV) is a CASH-EQUIVALENT parking lot, not deployed risk capital — it is
+    # ~0-duration Treasuries the sweep sells back on demand. Counting it as "deployed" overstates
+    # risk and understates buying power: once the demand-driven sweep runs, deployed would jump to
+    # ~74% and buying power drop to ~$2.5k with ZERO new risk taken. So split it out: DEPLOYED =
+    # at-risk (non-SGOV) positions only; SGOV market value folds back into cash/buying-power.
+    from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+    _tbill = TbillCashSweepEngine.symbol()
+
+    def _is_tbill(r):
+        return ((str(r.get("symbol") or "").split() or [""])[0]).upper() == _tbill
+
+    at_risk = [r for r in rows if not _is_tbill(r)]
+    cost_basis = round(sum(r["entry_price"] * r["quantity"] for r in at_risk), 2)          # deployed = at-risk only
+    at_risk_market_value = round(sum(r["current_price"] * r["quantity"] for r in at_risk), 2)
+    market_value = round(sum(r["current_price"] * r["quantity"] for r in rows), 2)          # all positions (for equity)
+    tbill_value = round(sum(r["current_price"] * r["quantity"] for r in rows if _is_tbill(r)), 2)
     unrealized = round(sum(r["unrealized_pnl"] for r in rows), 2)
 
     # Mission-book equity = $10k base + CUMULATIVE realized (closed trades) + live unrealized. The
@@ -45,11 +59,10 @@ def account_summary():
     realized = MissionRealizedPnlEngine().cumulative_realized()
     mission_equity = round(base + realized + unrealized, 2)
 
-    # Mission CASH = equity minus the market value of open positions (i.e. base + realized - cost).
-    # The dashboard read `cash_on_hand`/`buying_power` off this response, but they were never here,
-    # so both boxes showed $0.00 while ~60% of the book was actually in cash. The mission is cash-
-    # funded with no margin, so buying power = cash on hand.
-    cash_on_hand = round(mission_equity - market_value, 2)
+    # Mission CASH = equity minus AT-RISK (non-SGOV) market value — so SGOV, being cash-equivalent,
+    # counts toward cash/buying-power rather than being locked away as "deployed". The mission is
+    # cash-funded with no margin, so buying power = cash on hand.
+    cash_on_hand = round(mission_equity - at_risk_market_value, 2)
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -62,6 +75,7 @@ def account_summary():
         "deployed_capital": cost_basis,
         "deployed_pct_of_equity": round(100 * cost_basis / mission_equity, 2) if mission_equity else 0,
         "open_market_value": market_value,
+        "tbill_sweep_value": tbill_value,          # SGOV held (cash-equivalent, counted in cash below)
         "cash_on_hand": cash_on_hand,
         "buying_power": cash_on_hand,
         "unrealized_pnl": unrealized,
