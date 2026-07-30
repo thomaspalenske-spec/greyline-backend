@@ -45,11 +45,13 @@ class VRPResearchEngine:
     CACHE = Path("app/data/research/vrp_vol_history")
     OUT = Path("app/data/research/vrp_study.json")
 
-    # A liquid, optionable, sector-spread universe — where VRP is best measured and most tradeable.
-    # Illiquid names have no reliable IV series, so the engine filters to those with real vol data
-    # (>= MIN_ROWS); passing a broad liquid list and letting that filter run is safe. Configurable
-    # via run(names=...). Each new name costs one (cached) UW call.
-    DEFAULT_NAMES = [
+    # The traded universe is DERIVED from live option-liquidity (OptionableUniverseEngine screens UW's
+    # /screener/stocks by total option open interest) — see the DEFAULT_NAMES property below. This list
+    # is the CURATED FALLBACK: the fail-safe used whenever the derived screen is unavailable, so the
+    # universe can never silently empty. It is a liquid, optionable, sector-spread set where VRP is best
+    # measured and most tradeable. Illiquid names have no reliable IV series, so downstream filters drop
+    # those with no real vol data (>= MIN_ROWS). Configurable via run(names=...).
+    CURATED_FALLBACK = [
         # mega/large-cap tech + semis
         "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "GOOG", "META", "TSLA", "AVGO", "AMD",
         "NFLX", "ORCL", "CRM", "ADBE", "CSCO", "TXN", "QCOM", "INTC", "AMAT", "MU",
@@ -82,6 +84,23 @@ class VRPResearchEngine:
         "XLC", "XLI", "XLU", "XLB", "XLV", "XLY", "XLP", "XLRE", "XBI", "XOP",
         "KRE", "ARKK", "EEM", "EFA", "FXI", "SLV", "HYG", "IBIT",
     ]
+
+    @property
+    def DEFAULT_NAMES(self):
+        """The option-liquidity-derived universe, or the curated fallback if it isn't available.
+
+        Reads OptionableUniverseEngine's cached screen (cheap file read, never a live call); the
+        scheduler refreshes that cache on a monthly TTL. Fail-safe by construction: any failure or an
+        implausibly thin screen returns the curated list, so candidate selection never sees an empty
+        universe."""
+        try:
+            from app.services.optionable_universe_engine import OptionableUniverseEngine
+            derived = OptionableUniverseEngine().names()
+            if derived:
+                return derived
+        except Exception:
+            pass
+        return self.CURATED_FALLBACK
 
     MIN_ROWS = 60
     MIN_NAMES_PER_MONTH = 5

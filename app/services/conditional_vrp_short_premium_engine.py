@@ -522,9 +522,19 @@ class ConditionalVRPShortPremiumEngine:
             con.update({"expiration": exp, "iv_rank": c["iv_rank"], "iv": c["iv"]})
             candidates.append(con)
 
-        # richest skew first (None skew sorts last), then fill within slots, the DOLLAR cap AND the
-        # VEGA BUDGET — two risk dimensions a vol desk manages: max loss (tail) and vol exposure.
-        candidates.sort(key=lambda x: (x.get("skew") if x.get("skew") is not None else -9), reverse=True)
+        # RETURN-ON-RISK first (premium captured per dollar of defined risk), skew as the tiebreaker.
+        # The portfolio risk cap is finite, so whoever fills it first wins — that has to be the highest
+        # premium-per-risk condor, NOT merely the steepest-skew one. Skew still says which tail is most
+        # overpriced, but on its own it let a 4.6%-ROR name crowd out a 25%-ROR name once the budget was
+        # spent. Rank by ROR, break ties by skew, then fill within slots, the DOLLAR cap AND the VEGA
+        # BUDGET — the two risk dimensions a vol desk manages: max loss (tail) and vol exposure.
+        candidates.sort(
+            key=lambda x: (
+                x.get("return_on_risk") if x.get("return_on_risk") is not None else -9,
+                x.get("skew") if x.get("skew") is not None else -9,
+            ),
+            reverse=True,
+        )
         vega_budget = self._vega_budget()
         vega_used = abs(self._current_book_vega())     # net short vega already on the book
         built = []

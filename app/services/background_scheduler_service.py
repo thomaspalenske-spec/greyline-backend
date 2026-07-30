@@ -563,6 +563,16 @@ class BackgroundSchedulerService:
         except Exception as exc:
             condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
 
+        # OPTIONABLE UNIVERSE: derive the VRP/condor candidate universe from live option open interest
+        # (UW /screener/stocks) instead of a hand-typed list. Re-screens ONCE PER TRADING DAY at the
+        # 16:00 ET close (settled data) so it never goes stale; bootstraps immediately if unset. Fail-safe
+        # (a broken screen keeps the last good cache; VRP falls back to the curated list if none exists).
+        try:
+            from app.services.optionable_universe_engine import OptionableUniverseEngine
+            optionable_universe = OptionableUniverseEngine().recompute_if_due(market_hours)
+        except Exception as exc:
+            optionable_universe = {"error": repr(exc), "status": "OPTIONABLE_UNIVERSE_DEGRADED"}
+
         # BEST-CONDORS list for the dashboard: recompute the ranked buildable condors (off UW) at most
         # once/10min and cache to a file, so the /best-condors route (dashboard card) is always instant.
         try:

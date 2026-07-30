@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.services.condor_shadow_engine import CondorShadowEngine
 from app.services.best_condors_engine import BestCondorsEngine
+from app.services.optionable_universe_engine import OptionableUniverseEngine
 
 router = APIRouter()
 
@@ -18,3 +19,11 @@ def condor_shadow():
 def best_condors(limit: int = 12):
     """Ranked list of buildable iron condors (VRP + earnings, off UW). Reads the scheduler's cache."""
     return BestCondorsEngine().cached(limit=limit)
+
+
+@router.get("/optionable-universe")
+def optionable_universe(limit: int = 300):
+    """The VRP/condor universe DERIVED from live option open interest (not a hand-typed list).
+
+    Reads the scheduler's monthly screen. Shows the rule, the ranked membership, and cache age."""
+    return OptionableUniverseEngine().report(limit=limit)
