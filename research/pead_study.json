@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-07-24T16:26:59.658095",
+  "engine": "PEADResearchEngine",
+  "hypothesis": "PRE-REGISTERED H1: most-positive earnings surprises outperform most-negative over the following weeks (long-short spread). Primary horizon 40d; 20d/60d secondary; Bonferroni by 3.",
+  "design": {
+    "entry": "close 2 trading days after report date \u2014 the announcement jump is deliberately forfeited, only DRIFT is measured",
+    "return": "ABNORMAL (stock minus equal-weight universe over the same window)",
+    "unit_of_inference": "monthly cohort spread (earnings cluster; events are NOT independent)",
+    "inference": "sign-flip permutation on cohort spreads",
+    "input": "total-return adjusted closes"
+  },
+  "symbols_with_prices": 895,
+  "earnings_events_loaded": 96602,
+  "results_by_horizon": {
+    "20": {
+      "horizon_days": 20,
+      "cohorts": 342,
+      "events": 70214,
+      "mean_spread_pct": -0.115,
+      "hit_rate": 0.547,
+      "spread_sharpe_per_cohort": -0.021,
+      "p_value": 0.6997,
+      "p_value_bonferroni": 1.0,
+      "significant_after_correction": false
+    },
+    "40": {
+      "horizon_days": 40,
+      "cohorts": 341,
+      "events": 70157,
+      "mean_spread_pct": 0.001,
+      "hit_rate": 0.534,
+      "spread_sharpe_per_cohort": 0.0,
+      "p_value": 0.9992,
+      "p_value_bonferroni": 1.0,
+      "significant_after_correction": false
+    },
+    "60": {
+      "horizon_days": 60,
+      "cohorts": 340,
+      "events": 69486,
+      "mean_spread_pct": 0.655,
+      "hit_rate": 0.547,
+      "spread_sharpe_per_cohort": 0.068,
+      "p_value": 0.2194,
+      "p_value_bonferroni": 0.6581,
+      "significant_after_correction": false
+    }
+  },
+  "primary": {
+    "horizon_days": 40,
+    "cohorts": 341,
+    "events": 70157,
+    "mean_spread_pct": 0.001,
+    "hit_rate": 0.534,
+    "spread_sharpe_per_cohort": 0.0,
+    "p_value": 0.9992,
+    "p_value_bonferroni": 1.0,
+    "significant_after_correction": false
+  },
+  "survivorship": {
+    "survivorship_free": false,
+    "effect": "universe holds only survivors -> any positive result is an UPPER bound; a null is conservative"
+  },
+  "verdict": "NO_PEAD_EDGE_DETECTED",
+  "status": "PEAD_STUDY_COMPLETE"
+}

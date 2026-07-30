@@ -1,0 +1,248 @@
+{
+  "timestamp": "2026-07-24T00:48:56.989144",
+  "source": "UW_LISTINGS_SNAPSHOT",
+  "snapshot_fetched": "2026-07-19",
+  "artifact_cutoff": "2026-04-20",
+  "real_stocks_tracked": 13329,
+  "greyline_universe": 557,
+  "windows": [
+    {
+      "window": [
+        "2010-01-01",
+        "2026-04-20"
+      ],
+      "years": 16.25,
+      "listed_at_start": 3896,
+      "disappeared": 1681,
+      "disappearance_rate_pct": 43.1,
+      "annualized_disappearance_pct": 2.66,
+      "absent_from_greyline_universe": 1674,
+      "seasoned_listed_at_start": 3623,
+      "seasoned_disappeared": 1605,
+      "seasoned_disappearance_rate_pct": 44.3,
+      "sample_absent": [
+        {
+          "ticker": "SPLS",
+          "name": "Staples Inc",
+          "delisted": "2026-04-10"
+        },
+        {
+          "ticker": "SEE",
+          "name": "Sealed Air Corp",
+          "delisted": "2026-04-09"
+        },
+        {
+          "ticker": "HOLX",
+          "name": "Hologic Inc",
+          "delisted": "2026-04-07"
+        },
+        {
+          "ticker": "SWKH",
+          "name": "Swk Holdings Corp",
+          "delisted": "2026-04-07"
+        },
+        {
+          "ticker": "ARIS",
+          "name": "ARI Network Services Inc",
+          "delisted": "2026-04-06"
+        },
+        {
+          "ticker": "EXAS",
+          "name": "Exact Sciences Corp",
+          "delisted": "2026-03-24"
+        },
+        {
+          "ticker": "TGNA",
+          "name": "TEGNA Inc",
+          "delisted": "2026-03-20"
+        },
+        {
+          "ticker": "MBCN",
+          "name": "Middlefield Banc Corp",
+          "delisted": "2026-03-03"
+        },
+        {
+          "ticker": "SOHO",
+          "name": "Sotherly Hotels Inc",
+          "delisted": "2026-02-13"
+        },
+        {
+          "ticker": "DVAX",
+          "name": "Dynavax Technologies Corp",
+          "delisted": "2026-02-11"
+        },
+        {
+          "ticker": "THS",
+          "name": "Treehouse Foods Inc",
+          "delisted": "2026-02-11"
+        },
+        {
+          "ticker": "HI",
+          "name": "Hillenbrand Inc",
+          "delisted": "2026-02-10"
+        }
+      ]
+    },
+    {
+      "window": [
+        "2015-01-01",
+        "2026-04-20"
+      ],
+      "years": 11.25,
+      "listed_at_start": 4888,
+      "disappeared": 2092,
+      "disappearance_rate_pct": 42.8,
+      "annualized_disappearance_pct": 3.8,
+      "absent_from_greyline_universe": 2082,
+      "seasoned_listed_at_start": 3557,
+      "seasoned_disappeared": 1517,
+      "seasoned_disappearance_rate_pct": 42.6,
+      "sample_absent": [
+        {
+          "ticker": "SPLS",
+          "name": "Staples Inc",
+          "delisted": "2026-04-10"
+        },
+        {
+          "ticker": "SEE",
+          "name": "Sealed Air Corp",
+          "delisted": "2026-04-09"
+        },
+        {
+          "ticker": "HOLX",
+          "name": "Hologic Inc",
+          "delisted": "2026-04-07"
+        },
+        {
+          "ticker": "SWKH",
+          "name": "Swk Holdings Corp",
+          "delisted": "2026-04-07"
+        },
+        {
+          "ticker": "ARIS",
+          "name": "ARI Network Services Inc",
+          "delisted": "2026-04-06"
+        },
+        {
+          "ticker": "FFWM",
+          "name": "First Foundation Inc",
+          "delisted": "2026-04-01"
+        },
+        {
+          "ticker": "EXAS",
+          "name": "Exact Sciences Corp",
+          "delisted": "2026-03-24"
+        },
+        {
+          "ticker": "AIB",
+          "name": "Apollo Investment Corp Pfd.",
+          "delisted": "2026-03-20"
+        },
+        {
+          "ticker": "TGNA",
+          "name": "TEGNA Inc",
+          "delisted": "2026-03-20"
+        },
+        {
+          "ticker": "IROQ",
+          "name": "IF Bancorp Inc",
+          "delisted": "2026-03-16"
+        },
+        {
+          "ticker": "ALEX",
+          "name": "Alexander & Baldwin Inc",
+          "delisted": "2026-03-12"
+        },
+        {
+          "ticker": "MBCN",
+          "name": "Middlefield Banc Corp",
+          "delisted": "2026-03-03"
+        }
+      ]
+    },
+    {
+      "window": [
+        "2020-01-01",
+        "2026-04-20"
+      ],
+      "years": 6.25,
+      "listed_at_start": 5197,
+      "disappeared": 1363,
+      "disappearance_rate_pct": 26.2,
+      "annualized_disappearance_pct": 4.2,
+      "absent_from_greyline_universe": 1359,
+      "seasoned_listed_at_start": 2785,
+      "seasoned_disappeared": 699,
+      "seasoned_disappearance_rate_pct": 25.1,
+      "sample_absent": [
+        {
+          "ticker": "SPLS",
+          "name": "Staples Inc",
+          "delisted": "2026-04-10"
+        },
+        {
+          "ticker": "SEE",
+          "name": "Sealed Air Corp",
+          "delisted": "2026-04-09"
+        },
+        {
+          "ticker": "HOLX",
+          "name": "Hologic Inc",
+          "delisted": "2026-04-07"
+        },
+        {
+          "ticker": "SWKH",
+          "name": "Swk Holdings Corp",
+          "delisted": "2026-04-07"
+        },
+        {
+          "ticker": "ARIS",
+          "name": "ARI Network Services Inc",
+          "delisted": "2026-04-06"
+        },
+        {
+          "ticker": "FFWM",
+          "name": "First Foundation Inc",
+          "delisted": "2026-04-01"
+        },
+        {
+          "ticker": "BBU",
+          "name": "Brookfield Business Partners L.P.",
+          "delisted": "2026-03-31"
+        },
+        {
+          "ticker": "EXAS",
+          "name": "Exact Sciences Corp",
+          "delisted": "2026-03-24"
+        },
+        {
+          "ticker": "AIB",
+          "name": "Apollo Investment Corp Pfd.",
+          "delisted": "2026-03-20"
+        },
+        {
+          "ticker": "CMLSQ",
+          "name": "Cumulus Media Inc. Class A",
+          "delisted": "2026-03-20"
+        },
+        {
+          "ticker": "TGNA",
+          "name": "TEGNA Inc",
+          "delisted": "2026-03-20"
+        },
+        {
+          "ticker": "IROQ",
+          "name": "IF Bancorp Inc",
+          "delisted": "2026-03-16"
+        }
+      ]
+    }
+  ],
+  "interpretation": {
+    "measured": "disappearance rate \u2014 fraction of stocks trading at window-start that had delisted (vanished from a survivor-only universe) by window-end",
+    "is_an_upper_bound": "the raw rate bounds NAMES MISSING, not the return overstatement. Acquisitions (dominant for large caps) are captured at the deal price, not a return you missed; only failures bias a survivor-only backtest.",
+    "cannot_measure": "exact return bias \u2014 UW carries no delisting REASON, so acquisition vs failure cannot be separated from this feed. Large-cap survivorship bias is academically ~+1-2%/yr.",
+    "unfixable_for_free": "delisted-company PRICES are needed to actually include these names; TradeStation and UW both return empty for them. Only a survivorship-free vendor (CRSP/Norgate/Sharadar) closes it."
+  },
+  "status": "SURVIVORSHIP_BIAS_QUANTIFIED"
+}
