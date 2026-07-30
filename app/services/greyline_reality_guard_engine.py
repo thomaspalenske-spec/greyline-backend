@@ -23,10 +23,19 @@ Invariants (a CRITICAL failure means "fantasy detected", the dashboard must go r
                             not absurdly stale.
 """
 
+import json
 from datetime import datetime, timedelta
 from os import getenv
+from pathlib import Path
 
 REAL_DATA_SOURCES = {"TRADESTATION_LIVE", "TRADESTATION_LIVE_CACHED", "CSV_HISTORICAL"}
+
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
 MAX_CANDIDATE_STALE_DAYS = 5
 
 
@@ -550,6 +559,49 @@ class GreyLineRealityGuardEngine:
                            "are invisible when the operator is away (the silent-backfill case). "
                            "Set GREYLINE_ALERT_WEBHOOK_URL or GREYLINE_ALERT_NTFY_TOPIC")}
 
+    REALIZED_CONTINUITY_STATE = Path("app/data/reality_guard/realized_continuity.json")
+    REALIZED_MOVE_EPS = 1.0   # dollars; ignore rounding noise
+
+    def _check_realized_continuity(self):
+        """FANTASY DETECTOR for the class that slipped past every other check (2026-07-30): the
+        realized-P&L ledger booking a spurious delta at a day boundary (broker daily realized resets
+        on ET; the tracker keyed it to UTC -> double-booked then ERASED a real loss overnight, equity
+        read a fantasy +$74). Invariant: REALIZED P&L CAN ONLY CHANGE FROM FILLS, AND FILLS ONLY
+        HAPPEN DURING THE REGULAR SESSION. So if cumulative realized moves across a MARKET-CLOSED
+        interval, that's not a real trade — it's a ledger/day-boundary artifact. Critical = go red.
+        Stateful: persists (realized, market_open) each check; the first run just baselines (ok)."""
+        try:
+            from app.services.mission_realized_pnl_engine import MissionRealizedPnlEngine
+            from app.services.market_hours_engine import MarketHoursEngine
+            now_realized = float(MissionRealizedPnlEngine().cumulative_realized())
+            now_open = MarketHoursEngine().status().get("is_regular_session") is True
+        except Exception as e:
+            return {"id": "REALIZED_CONTINUITY", "severity": "critical", "ok": True,
+                    "detail": f"could not evaluate (fail-open): {str(e)[:80]}"}
+        prev = None
+        try:
+            prev = json.loads(self.REALIZED_CONTINUITY_STATE.read_text())
+        except Exception:
+            prev = None
+        ok, detail = True, f"realized ${round(now_realized, 2)} stable"
+        if prev is not None:
+            prev_realized = _num(prev.get("realized"))
+            delta = round(now_realized - prev_realized, 2)
+            closed_across = (not now_open) and (not bool(prev.get("market_open")))
+            if abs(delta) >= self.REALIZED_MOVE_EPS and closed_across:
+                ok = False
+                detail = (f"realized moved ${delta} (to ${round(now_realized, 2)}) while the market was "
+                          "CLOSED — realized only comes from fills; this is a ledger/day-boundary "
+                          "artifact, not a real trade.")
+        try:
+            self.REALIZED_CONTINUITY_STATE.parent.mkdir(parents=True, exist_ok=True)
+            self.REALIZED_CONTINUITY_STATE.write_text(json.dumps(
+                {"realized": round(now_realized, 2), "market_open": now_open,
+                 "at": datetime.utcnow().isoformat()}))
+        except Exception:
+            pass
+        return {"id": "REALIZED_CONTINUITY", "severity": "critical", "ok": ok, "detail": detail}
+
     def check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
@@ -563,6 +615,7 @@ class GreyLineRealityGuardEngine:
             self._check_phantom_positions(view),
             self._check_untracked_broker_positions(view),
             self._check_exec_booking_coherent(),
+            self._check_realized_continuity(),
             self._check_data_source(),
             self._check_price_bars(),
             self._check_price_bars_match_source(),

@@ -260,3 +260,23 @@ def test_broker_side_protection_clean_when_nothing_exposed(monkeypatch):
         FakeStopEngine)
     chk = g.GreyLineRealityGuardEngine()._check_broker_side_protection()
     assert chk["ok"] is True
+
+
+def test_realized_continuity_flags_closed_market_move(monkeypatch, tmp_path):
+    """The 2026-07-30 fantasy class: realized P&L moving while the market is CLOSED (a day-boundary
+    ledger artifact, not a real fill) must be flagged CRITICAL so the dashboard goes red."""
+    from app.services import greyline_reality_guard_engine as g
+    import json
+    G = g.GreyLineRealityGuardEngine
+    state = tmp_path / "rc.json"
+    monkeypatch.setattr(G, "REALIZED_CONTINUITY_STATE", state)
+    state.write_text(json.dumps({"realized": -74.4, "market_open": False}))
+    monkeypatch.setattr("app.services.mission_realized_pnl_engine.MissionRealizedPnlEngine.cumulative_realized",
+                        lambda self: 0.0)   # jumped +74.4 overnight
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine.status",
+                        lambda self: {"is_regular_session": False})
+    chk = G()._check_realized_continuity()
+    assert chk["severity"] == "critical" and chk["ok"] is False
+    # ...and stable realized while closed is fine
+    state.write_text(json.dumps({"realized": 0.0, "market_open": False}))
+    assert G()._check_realized_continuity()["ok"] is True
