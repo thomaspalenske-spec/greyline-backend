@@ -554,6 +554,15 @@ class BackgroundSchedulerService:
         except Exception as exc:
             managed_futures = {"error": repr(exc), "status": "MF_DEGRADED"}
 
+        # CONDOR SHADOW forward-test: record the VRP/earnings condors the sleeves would open (built off
+        # UW's clean greeks+NBBO) and mark them to market off UW — the options-premium forward-test the
+        # SIM sandbox can't run. NO orders. Self-gated once/day. Gated by GREYLINE_CONDOR_SHADOW.
+        try:
+            from app.services.condor_shadow_engine import CondorShadowEngine
+            condor_shadow = CondorShadowEngine().run_if_due()
+        except Exception as exc:
+            condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
+
         # MF SHADOW forward-test: mark the FULL long/short strategy's hypothetical P&L on settled bars
         # (NO orders). Runs regardless of the live sleeve — it's how the real diversification edge
         # accumulates while the sleeve is parked. Self-gated to once per new settled bar.

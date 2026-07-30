@@ -72,6 +72,10 @@ class ConditionalVRPShortPremiumEngine:
     SHORT_DELTA = 0.20             # reference / symmetric fallback
     SHORT_PUT_DELTA = 0.25         # put nearer ATM — capture the overpriced put skew
     SHORT_CALL_DELTA = 0.15        # call further OTM — cheap skew, less premium there, less upside risk
+    MAX_ADAPT_SHORT_DELTA = 0.40   # band-aware fallback ceiling: when the SIM's narrow strike band can't
+    #                                reach the target-delta short, place the short as far OTM as the band
+    #                                allows — but NEVER closer than this (a >0.40-delta short is a near-ATM
+    #                                coin flip, not a premium harvest); skip instead.
     DEFAULT_MAX_LOSS_PER_POSITION_USD = 500.0   # fallback/floor if the resolver is unavailable
     # Positions are CORRELATED — a vol spike hits every condor at once — so the tail is bounded at
     # the PORTFOLIO level, not just per position. Total defined risk across all open + new condors
@@ -223,8 +227,23 @@ class ConditionalVRPShortPremiumEngine:
         def nearest(legs, target):
             return min(legs, key=lambda l: abs(l["delta"] - target))
 
-        short_call = nearest(calls, call_delta)
-        short_put = nearest(puts, put_delta)
+        # BAND-AWARE short selection. The SIM sandbox lists only a narrow strike band (it ignores
+        # strikeProximity), so on a high-IV name the far-OTM target-delta strike can fall OUTSIDE the
+        # band — or land on the OUTERMOST strike, leaving no room for a wing beyond it (the exact reason
+        # rich-IV names skipped). Restrict shorts to strikes that HAVE a further-OTM strike available
+        # (so a protective wing can be bought), then take the one nearest the target delta — i.e. as far
+        # OTM as the band allows. A quality floor (MAX_ADAPT_SHORT_DELTA) still refuses a near-ATM short.
+        max_call_k = max((l["strike"] for l in calls), default=None)
+        min_put_k = min((l["strike"] for l in puts), default=None)
+        call_short_pool = [l for l in calls if max_call_k is not None and l["strike"] < max_call_k]
+        put_short_pool = [l for l in puts if min_put_k is not None and l["strike"] > min_put_k]
+        if not call_short_pool or not put_short_pool:
+            return {"skip": "strike band too narrow to place a short with a wing beyond it"}
+        short_call = nearest(call_short_pool, call_delta)
+        short_put = nearest(put_short_pool, put_delta)
+        if abs(short_call["delta"]) > self.MAX_ADAPT_SHORT_DELTA or abs(short_put["delta"]) > self.MAX_ADAPT_SHORT_DELTA:
+            return {"skip": f"strike band too narrow — the furthest-OTM placeable short is >"
+                            f"{self.MAX_ADAPT_SHORT_DELTA} delta (too close to ATM to sell)"}
 
         # ADAPTIVE WINGS: buy the WIDEST wing (most tail protection / best credit) whose resulting
         # single-condor max loss still fits the per-position cap. A wide chain gives more choices;
@@ -235,8 +254,11 @@ class ConditionalVRPShortPremiumEngine:
                 width = (w["strike"] - short_leg["strike"]) if is_call else (short_leg["strike"] - w["strike"])
                 if width <= 0:
                     continue
-                # pair with the nearest affordable wing on the other side to estimate max loss
-                other_w = min(other_cands, key=lambda l: abs(l["delta"] - w["delta"]), default=None)
+                # pair with the SAME-WIDTH wing on the other side (a symmetric condor). Matching by
+                # DELTA instead mated a near wing on one side with a FAR wing on the other, inflating
+                # max loss (via max(width, other_width)) and wrongly blocking otherwise-valid condors.
+                other_target = (other_short["strike"] - width) if is_call else (other_short["strike"] + width)
+                other_w = min(other_cands, key=lambda l: abs(l["strike"] - other_target), default=None)
                 if not other_w:
                     continue
                 credit = (short_leg["bid"] + other_short["bid"]) - (w["ask"] + other_w["ask"])
@@ -299,14 +321,26 @@ class ConditionalVRPShortPremiumEngine:
     # ------------------------------------------------------------ planning
 
     def _chain(self, symbol):
+        # PRIMARY: Unusual Whales. The TradeStation SIM sandbox streams only a narrow, garbage-quoted
+        # strike band (a $1-fair wing quoted at $4), so a defined-risk condor could never form on it.
+        # UW gives clean per-strike greeks + NBBO; prefer a liquid MONTHLY expiry near the DTE target
+        # (the adaptive engine sometimes picks a weekly with ~0 two-sided quotes even on SPY).
+        from app.services.uw_option_chain_engine import UWOptionChainEngine
+        uw = UWOptionChainEngine()
+        if uw.enabled():
+            try:
+                target = int(getenv("GREYLINE_DTE_TARGET", "") or 42)
+                exp = uw.monthly_expiry(target_dte=target)
+                if exp:
+                    snap = uw.get_chain_snapshot(symbol=symbol, expiration=exp)
+                    if snap.get("contracts"):
+                        return exp, snap["contracts"]
+            except Exception:
+                pass
+        # FALLBACK: TradeStation sandbox chain (adaptive EV-best expiry within the sane band).
         from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
         from app.services.adaptive_dte_selection_engine import AdaptiveDTESelectionEngine
-        # TENOR from the live market, not a fixed literal: the EV-best expiration in a sane band
-        # (or a band-clamped static target when adaptive is off/degraded). Never returns a sub-band
-        # tenor, so the old 7-DTE / MANAGE_DTE collision cannot recur.
         exp = AdaptiveDTESelectionEngine().select(symbol)
-        # strike_proximity reaches the OTM strikes the wings need (without it the stream centres on
-        # near-ATM and the condor can never be capped).
         snap = TradeStationOptionChainLiveEngine().get_chain_snapshot(
             symbol=symbol, expiration=exp, option_type="All", max_contracts=160, strike_proximity=40)
         return exp, snap.get("contracts", []) or []

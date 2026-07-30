@@ -46,7 +46,10 @@ def test_chain_without_otm_wings_yields_no_trade_not_a_naked_strangle():
     near_atm = [_c("Call", 100, 5.0, 5.1, 0.50), _c("Call", 101, 4.5, 4.6, 0.45),
                 _c("Put", 100, 5.0, 5.1, -0.50), _c("Put", 99, 4.5, 4.6, -0.45)]
     con = e.build_condor("XYZ", near_atm)
-    assert "skip" in con and "wing" in con["skip"].lower()
+    # MUST skip (never sell an uncapped strangle). A near-ATM-only chain now trips either the
+    # no-OTM-wing check OR the band-aware delta floor (shorts too close to ATM) — both are safe refusals.
+    assert "skip" in con
+    assert any(w in con["skip"].lower() for w in ("wing", "atm", "narrow", "delta"))
 
 
 def test_sizing_caps_max_loss_per_position():

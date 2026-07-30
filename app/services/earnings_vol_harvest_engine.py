@@ -158,6 +158,8 @@ class EarningsVolHarvestEngine:
         from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
         vrp = ConditionalVRPShortPremiumEngine()
         chain = TradeStationOptionChainLiveEngine()
+        from app.services.uw_option_chain_engine import UWOptionChainEngine
+        _uw = UWOptionChainEngine()
 
         slots = max(0, self.MAX_CONCURRENT - len(self._open_symbols()))
         budget_left = self.PORTFOLIO_RISK_CAP_USD - self._open_risk()
@@ -170,8 +172,18 @@ class EarningsVolHarvestEngine:
             if not exp:
                 skipped.append({"ticker": c["ticker"], "skip": "no expiry after report"})
                 continue
-            snap = chain.get_chain_snapshot(symbol=c["ticker"], expiration=exp,
-                                            option_type="All", max_contracts=160, strike_proximity=40)
+            # UW chain first (clean greeks + NBBO); TradeStation sandbox fallback. Same report-driven
+            # expiry (nearest after the report — captures the IV crush), just a better data source.
+            snap = None
+            if _uw.enabled():
+                try:
+                    s = _uw.get_chain_snapshot(symbol=c["ticker"], expiration=exp)
+                    snap = s if s.get("contracts") else None
+                except Exception:
+                    snap = None
+            if snap is None:
+                snap = chain.get_chain_snapshot(symbol=c["ticker"], expiration=exp,
+                                                option_type="All", max_contracts=160, strike_proximity=40)
             con = vrp.build_condor(c["ticker"], snap.get("contracts", []) or [])
             if con.get("skip"):
                 skipped.append({"ticker": c["ticker"], "skip": con["skip"]})
