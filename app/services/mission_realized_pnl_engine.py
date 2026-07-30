@@ -91,7 +91,16 @@ class MissionRealizedPnlEngine:
         daily = self._broker_daily_realized()
         if daily is None:
             return {"status": "NO_BROKER_REALIZED", "booked": 0.0}
-        today = datetime.utcnow().date().isoformat()
+        # DAY KEY MUST MATCH THE BROKER'S RESET (ET trading day), NOT UTC. The broker's daily realized
+        # resets at the ET session boundary; keying booked_today to utcnow().date() rolled it over at
+        # 00:00 UTC (8pm ET) while the broker figure was still yesterday's — double-booking the day's
+        # loss, then erasing it with a +delta at the real ET reset. Use the market (ET) date so the
+        # tracker resets in lockstep with the broker.
+        try:
+            from app.services.market_hours_engine import MarketHoursEngine
+            today = str(MarketHoursEngine().status().get("date")) or datetime.utcnow().date().isoformat()
+        except Exception:
+            today = datetime.utcnow().date().isoformat()
         try:
             state = json.loads(self.STATE.read_text())
         except Exception:
