@@ -71,7 +71,7 @@ class ExecuteWatchEngine:
     def _free_cash(self):
         try:
             from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
-            eq, dep = MissionRiskGovernorEngine()._equity_and_deployed()
+            eq, dep, _ = MissionRiskGovernorEngine()._equity_and_deployed()
             return round(eq - dep, 2)
         except Exception:
             return 0.0

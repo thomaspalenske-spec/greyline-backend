@@ -36,6 +36,8 @@ async def operator_dashboard(request: Request):
 
 
 @router.get("/dashboard-version")
-async def dashboard_version():
-    """Current dashboard code stamp — the open page polls this to self-reload after a deploy."""
+def dashboard_version():
+    """Current dashboard code stamp — the open page polls this to self-reload after a deploy.
+    Kept a plain (non-async) def so the endpoint-schema audit, which calls each GET bare, gets the
+    dict directly rather than a coroutine."""
     return {"version": _code_version()}

@@ -50,34 +50,49 @@ class TbillCashSweepEngine:
         except (TypeError, ValueError):
             return cls.DEFAULT_OPERATING_BUFFER_USD
 
-    def _non_sgov_position_value(self):
-        """Market value of every NON-SGOV position — capital the trading sleeves have already
-        committed. It's positions, not cash, so it must be held OUT of the sweep (counted as
-        'already spent'), never swept into T-bills."""
+    @staticmethod
+    def _sym0(x):
+        """First token of a position Symbol, IndexError-safe ("".split() is [])."""
+        return ((str(x.get("Symbol") or "").split() or [""])[0]).upper()
+
+    def _live_positions(self):
+        """The live positions list, or None if the READ FAILED (vs [] for a genuinely empty account).
+        None MUST abort the sweep: treating a failed read as zero collapses the reserve AND reads
+        held-SGOV as 0, so the engine would over-BUY SGOV into a phantom overdraft. A present
+        'Positions' key (even empty) is a successful read."""
         try:
             from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
-            sym = self.symbol()
-            total = 0.0
-            for x in ((TradeStationPositionsLiveEngine().get_positions().get("response_json") or {})
-                      .get("Positions") or []):
-                if str(x.get("Symbol") or "").split()[0].upper() == sym:
-                    continue                                   # exclude SGOV itself
-                if int(self._f(x.get("Quantity"))) == 0:
-                    continue
-                total += self._f(x.get("MarketValue"))
-            return round(total, 2)
+            rj = TradeStationPositionsLiveEngine().get_positions().get("response_json")
+            if not isinstance(rj, dict) or "Positions" not in rj:
+                return None
+            return rj.get("Positions") or []
         except Exception:
-            return 0.0
+            return None
 
-    def _reserve(self):
+    def _non_sgov_position_value(self, positions):
+        """Market value of every NON-SGOV position — capital the trading sleeves have already
+        committed. It's positions, not cash, so it stays OUT of the sweep (counted as 'already
+        spent'), never swept into T-bills."""
+        sym = self.symbol()
+        total = 0.0
+        for x in (positions or []):
+            if self._sym0(x) == sym:
+                continue                                   # exclude SGOV itself
+            if int(self._f(x.get("Quantity"))) == 0:
+                continue
+            total += self._f(x.get("MarketValue"))
+        return round(total, 2)
+
+    def _reserve(self, positions):
         """DEMAND-DRIVEN reserve (replaces the old static GREYLINE_TBILL_RESERVE_USD). Keep liquid
         only (a) what the sleeves have ALREADY committed in non-SGOV positions — that's positions,
         not cash — plus (b) an operating cash buffer for the NEXT deployment. Everything above that
         is idle and belongs in T-bills earning yield: SGOV is cash-equivalent and this engine sells
         it back (bidirectional, ~T+1) when a sleeve draws cash next cycle. The old static $8,500
         reserve over-held zero-yield cash — it kept ~$8,500 liquid while the sleeves used ~$2,100.
-        Floored at the min-cash line so a bad read can never sweep the account dry."""
-        committed = self._non_sgov_position_value()
+        A FAILED positions read aborts the whole sweep upstream (plan() bails on _live_positions()
+        None) — so this never runs on a zeroed read; floored at the min-cash line as a backstop."""
+        committed = self._non_sgov_position_value(positions)
         buffer = self._operating_buffer()
         return round(max(committed + buffer, self.DEFAULT_MIN_CASH_USD), 2)
 
@@ -102,16 +117,11 @@ class TbillCashSweepEngine:
             unrealized = 0.0
         return round(base + realized + unrealized, 2)
 
-    def _held_shares(self):
-        try:
-            from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
-            sym = self.symbol()
-            for x in ((TradeStationPositionsLiveEngine().get_positions().get("response_json") or {})
-                      .get("Positions") or []):
-                if str(x.get("Symbol") or "").upper() == sym and x.get("AssetType") == "STOCK":
-                    return int(self._f(x.get("Quantity")))
-        except Exception:
-            pass
+    def _held_shares(self, positions):
+        sym = self.symbol()
+        for x in (positions or []):
+            if self._sym0(x) == sym and x.get("AssetType") == "STOCK":
+                return int(self._f(x.get("Quantity")))
         return 0
 
     def _quote(self):
@@ -127,13 +137,19 @@ class TbillCashSweepEngine:
 
     def plan(self):
         sym = self.symbol()
+        # ONE positions read drives both held-SGOV and the committed-capital reserve. If it FAILED,
+        # abort — never trade on a zeroed read (that path over-buys SGOV into a phantom overdraft).
+        positions = self._live_positions()
+        if positions is None:
+            return {"status": "NO_POSITIONS_READ", "symbol": sym,
+                    "detail": "positions read failed — sweep aborted, will not size off a zeroed read"}
         equity = self._mission_equity()
-        held = self._held_shares()
+        held = self._held_shares(positions)
         bid, ask, last = self._quote()
         px = last or ask or bid
         if px <= 0:
             return {"status": "NO_QUOTE", "symbol": sym}
-        reserve = self._reserve()
+        reserve = self._reserve(positions)
         target_value = max(0.0, equity - reserve)
         target_shares = int(math.floor(target_value / px))
         delta = target_shares - held
@@ -148,7 +164,7 @@ class TbillCashSweepEngine:
         if not self.enabled():
             return {"status": "TBILL_SWEEP_DISABLED", "acted": False}
         p = self.plan()
-        if p.get("status") == "NO_QUOTE":
+        if p.get("status") in ("NO_QUOTE", "NO_POSITIONS_READ"):
             return {**p, "acted": False}
         delta = p["delta_shares"]
         if abs(p["delta_value"]) < self.MIN_REBALANCE_USD or delta == 0:

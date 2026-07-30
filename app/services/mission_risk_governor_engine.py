@@ -51,7 +51,7 @@ class MissionRiskGovernorEngine:
     def reset_sod(self, equity=None):
         """Reset start-of-day equity — call after a rebaseline so daily P&L isn't a reset artifact."""
         if equity is None:
-            equity, _ = self._equity_and_deployed()
+            equity, _, _ = self._equity_and_deployed()
         self.DIR.mkdir(parents=True, exist_ok=True)
         self.SOD.write_text(json.dumps({"date": datetime.utcnow().date().isoformat(), "equity": equity}))
         return equity
@@ -112,15 +112,17 @@ class MissionRiskGovernorEngine:
             realized = MissionRealizedPnlEngine().cumulative_realized()
         except Exception:
             realized = 0.0
-        deployed, unrealized = 0.0, 0.0
+        deployed, unrealized, reads_ok = 0.0, 0.0, False
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
-            rows = BrokerAccountViewEngine().snapshot().get("positions", []) or []
+            snap = BrokerAccountViewEngine().snapshot()
+            reads_ok = bool(snap.get("reads_ok", True))   # False = broker read failed this cycle
+            rows = snap.get("positions", []) or []
             unrealized = sum(self._f(r.get("unrealized_pnl")) for r in rows)
             deployed = sum(self._f(r.get("entry_price")) * self._f(r.get("quantity")) for r in rows)
         except Exception:
-            pass
-        return round(base + realized + unrealized, 2), round(deployed, 2)
+            reads_ok = False
+        return round(base + realized + unrealized, 2), round(deployed, 2), reads_ok
 
     def _sod_equity(self, current):
         """Start-of-day mission equity; recorded on the first read of each UTC day."""
@@ -144,12 +146,12 @@ class MissionRiskGovernorEngine:
 
     def snapshot(self):
         base = self._base()
-        equity, deployed = self._equity_and_deployed()
+        equity, deployed, reads_ok = self._equity_and_deployed()
         sod = self._sod_equity(equity)
         daily = round(equity - sod, 2)
         return {
             "timestamp": datetime.utcnow().isoformat(),
-            "mission_equity": equity, "start_of_day_equity": sod,
+            "mission_equity": equity, "start_of_day_equity": sod, "reads_ok": reads_ok,
             "daily_pnl": daily, "daily_pnl_pct": round(100 * daily / base, 2) if base else 0.0,
             "deployed": deployed, "deployed_pct": round(100 * deployed / base, 2) if base else 0.0,
             "warn_at_pct": -self._warn_pct(), "halt_at_pct": -self._halt_pct(),
@@ -197,6 +199,14 @@ class MissionRiskGovernorEngine:
         s = self.snapshot()
         base = self._base()
         alerts = []
+        # If the broker account couldn't be read this cycle, deployed/unrealized are UNKNOWN (not
+        # zero). Acting on a failed read as if it were zero would false-fire a CRITICAL "armed but
+        # NOT trading" or "past HALT loss limit" mid-open — the operator chases a phantom. Skip the
+        # loss-ladder + over-deploy + idle checks entirely; a persistent read failure is caught by
+        # the scheduler-cycle-health alert + reality guard, not by treating unknown as zero.
+        if not s.get("reads_ok", True):
+            return {**s, "armed_count": len(self._armed()), "armed_idle": False,
+                    "alerts_fired": [], "skipped": "broker_read_degraded"}
         # daily loss ladder
         if s["daily_pnl"] <= -self._halt_pct() / 100.0 * base:
             self.DIR.mkdir(parents=True, exist_ok=True)
