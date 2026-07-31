@@ -184,3 +184,46 @@ class TradeStationSimBookingEngine:
         return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
                 "order_id": order_id, "http_status": resp.status_code, "ok": ok,
                 "response_json": payload}
+
+    # ---- ATOMIC multi-leg (spread) orders -----------------------------------------------------
+    # A condor placed as 4 SEPARATE limit orders can leg in — a wing's limit rests unfilled while the
+    # marketable short fills, leaving a naked short (undefined risk). A single multi-leg order fills all
+    # legs together or not at all, eliminating that window. `legs` = [{symbol, quantity, action}, ...].
+    def _build_multileg_order(self, legs, order_type, limit_price, tif):
+        acct = self._assert_sim()
+        body = {
+            "AccountID": acct,
+            "OrderType": order_type,               # Limit for a defined-net-price spread
+            "TimeInForce": {"Duration": tif},
+            "Route": "Intelligent",
+            "Legs": [{"Symbol": str(l["symbol"]).upper(), "Quantity": str(int(l["quantity"])),
+                      "TradeAction": l["action"]} for l in legs],
+        }
+        if order_type in ("Limit", "StopLimit") and limit_price is not None:
+            body["LimitPrice"] = str(limit_price)   # NET price across the legs (credit for a short condor)
+        return body
+
+    def place_multileg(self, legs, order_type="Limit", limit_price=None, tif="DAY"):
+        """Place ONE atomic multi-leg order (all legs fill together or none). ok is BODY-verified."""
+        body = self._build_multileg_order(legs, order_type, limit_price, tif)
+        resp = self._request("POST", f"{SIM_HOST}/v3/orderexecution/orders", json_body=body)
+        payload = _safe_json(resp)
+        ok, order_id, reject_reason = _interpret_order(resp.status_code, payload)
+        return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
+                "http_status": resp.status_code, "ok": ok, "order_id": order_id,
+                "reject_reason": reject_reason, "legs": legs, "limit_price": limit_price,
+                "response_json": payload}
+
+    def confirm_multileg(self, legs, order_type="Limit", limit_price=None, tif="DAY"):
+        """VALIDATE a multi-leg order (does the SIM accept the spread body / route / BP?) WITHOUT placing
+        it — used to verify multi-leg support safely before enabling the atomic path."""
+        body = self._build_multileg_order(legs, order_type, limit_price, tif)
+        resp = self._request("POST", f"{SIM_HOST}/v3/orderexecution/orderconfirm", json_body=body)
+        payload = _safe_json(resp)
+        ok = resp.status_code == 200 and isinstance(payload, dict) and not payload.get("Errors")
+        reason = None if ok else (str((payload or {}).get("Errors"))[:200]
+                                  if isinstance(payload, dict) and payload.get("Errors")
+                                  else f"HTTP {resp.status_code}")
+        return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
+                "http_status": resp.status_code, "ok": ok, "reject_reason": reason,
+                "legs": legs, "response_json": payload}

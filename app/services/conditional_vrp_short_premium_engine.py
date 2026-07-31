@@ -149,6 +149,13 @@ class ConditionalVRPShortPremiumEngine:
     def enabled():
         return (getenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "") or "").strip().lower() == "true"
 
+    @staticmethod
+    def _atomic_orders_enabled():
+        """Place condors as a single ATOMIC multi-leg order (no naked-leg window). Gated OFF by default
+        until the SIM's multi-leg support is verified; the legged-in path + naked auto-remediation are
+        the fallback. Flag: GREYLINE_CONDOR_ATOMIC_ORDER."""
+        return (getenv("GREYLINE_CONDOR_ATOMIC_ORDER", "") or "").strip().lower() == "true"
+
     @classmethod
     def _vega_budget(cls):
         try:
@@ -449,7 +456,17 @@ class ConditionalVRPShortPremiumEngine:
             old_c, old_ml = self._f(r.get("credit_total")), self._f(r.get("max_loss_total"))
             if naked:
                 r["naked_exposure"] = True
-                nakeds.append({"symbol": r.get("symbol"), "note": "filled short with no filled wing"})
+                # SAFETY NET: don't just alert — auto-complete the missing tail cap. Only when the sleeve
+                # AND booking are genuinely live (never auto-trade a disabled book), and bounded by a retry
+                # cap so a persistently-unfillable wing can't loop. See _remediate_naked.
+                remediation = None
+                if not dry_run and self.enabled() and self._booking_active():
+                    try:
+                        remediation = self._remediate_naked(r, parsed, self._booking())
+                    except Exception as e:
+                        remediation = [{"error": repr(e)[:120]}]
+                nakeds.append({"symbol": r.get("symbol"), "note": "filled short with no filled wing",
+                               "attempts": r.get("naked_remediation_attempts"), "remediation": remediation})
                 continue                                           # do NOT overwrite risk with a wrong cap
             r.pop("naked_exposure", None)
             max_w = max([w for w in (cw, pw)] or [0.0])
@@ -474,14 +491,99 @@ class ConditionalVRPShortPremiumEngine:
                 from app.services.external_alert_engine import ExternalAlertEngine
                 eng = ExternalAlertEngine()
                 if eng.has_external_channel():
-                    eng.dispatch(title="GreyLine NAKED option exposure",
-                                 message=f"reconciler found a filled short with no filled wing: {nakeds}",
-                                 severity="CRITICAL", fingerprint=f"VRP_NAKED:{nakeds}")
+                    acted = any(n.get("remediation") for n in nakeds)
+                    tail = (" Auto-remediation is completing the missing wing — verify it filled next cycle."
+                            if acted else
+                            " Auto-remediation is OFF (sleeve/booking disabled) — complete the wing or "
+                            "buy-to-close the short MANUALLY.")
+                    syms = sorted(str(n.get("symbol")) for n in nakeds)
+                    eng.dispatch(
+                        title="GreyLine NAKED option exposure" + (" — auto-remediating" if acted else ""),
+                        message=f"reconciler found a filled short with no filled wing: {syms}." + tail,
+                        severity="CRITICAL",
+                        # fingerprint on the STABLE symbol set (not the per-cycle remediation detail) so the
+                        # cooldown dedup actually works and doesn't re-page every cycle.
+                        fingerprint=f"VRP_NAKED:{syms}")
             except Exception:
                 pass
         return {"timestamp": datetime.utcnow().isoformat(), "reconciled": len(changed),
                 "changes": changed, "naked": nakeds,
                 "status": "VRP_FILLS_RECONCILED" if not dry_run else "VRP_FILLS_RECONCILE_DRYRUN"}
+
+    # ---- naked-exposure auto-remediation (the safety net) --------------------------------------
+    MAX_NAKED_REMEDIATION_ATTEMPTS = 3
+
+    @staticmethod
+    def _booking_active():
+        """Only auto-trade a remediation when execution is genuinely live — never touch a disabled book."""
+        return ((getenv("GREYLINE_PAPER_EXECUTION_ENABLED", "") or "").strip().lower() == "true"
+                and (getenv("GREYLINE_SIM_BOOKING_ENABLED", "") or "").strip().lower() == "true")
+
+    @staticmethod
+    def _option_ask(q, sym):
+        try:
+            rj = (q.get_quote(sym).get("response_json") or {})
+            row = (rj.get("Quotes") or [rj])[0] if isinstance(rj, dict) else {}
+            a = float(row.get("Ask") or 0)
+            return a if a > 0 else None
+        except Exception:
+            return None
+
+    def _remediate_naked(self, r, parsed, b):
+        """Auto-complete a naked condor: cancel each unfilled wing's stale (unfillable) limit order and
+        re-buy the wing at a marketable limit, restoring the tail cap — exactly the manual procedure.
+        Bounded by MAX_NAKED_REMEDIATION_ATTEMPTS; once those are spent and it's still naked, buy-to-close
+        the still-uncovered short(s) — a guaranteed way to remove the undefined risk. Records actions on
+        the ledger row for transparency."""
+        from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+        q = TradeStationQuoteLiveEngine()
+        qty = int(r.get("quantity") or 0)
+        attempts = int(r.get("naked_remediation_attempts") or 0)
+        actions = []
+        if qty <= 0:
+            return actions
+        unfilled_wings = [p for p in parsed if not p["short"] and p["fill"] is None]
+
+        def wing_missing(short_p):
+            return not any((not w["short"]) and w["type"] == short_p["type"] and w["fill"] is not None
+                           for w in parsed)
+        uncovered_shorts = [p for p in parsed if p["short"] and p["fill"] is not None and wing_missing(p)]
+
+        if attempts < self.MAX_NAKED_REMEDIATION_ATTEMPTS and unfilled_wings:
+            for p in unfilled_wings:
+                sym = p["lg"]["symbol"]
+                oid = p["lg"].get("order_id")
+                if oid:
+                    try:
+                        b.cancel_order(oid)                        # kill the stale limit before re-buying
+                    except Exception:
+                        pass
+                ask = self._option_ask(q, sym)
+                if not ask:
+                    actions.append({"wing": sym, "action": "rebuy", "ok": False, "reason": "no ask quote"})
+                    continue
+                px = self._tick_round(ask)
+                rr = b.place_order(sym, qty, action="BUYTOOPEN", order_type="Limit",
+                                   limit_price=px, tif="DAY")
+                if rr.get("ok") and rr.get("order_id"):
+                    p["lg"]["order_id"] = rr.get("order_id")     # track the new order for next-cycle checks
+                actions.append({"wing": sym, "action": "rebuy_marketable", "ok": rr.get("ok"),
+                                "order_id": rr.get("order_id"), "limit": px,
+                                "reject": rr.get("reject_reason")})
+            r["naked_remediation_attempts"] = attempts + 1
+        elif uncovered_shorts:
+            # retries exhausted and still naked → cover the short outright (defined risk beats a live naked)
+            for p in uncovered_shorts:
+                sym = p["lg"]["symbol"]
+                ask = self._option_ask(q, sym)
+                if not ask:
+                    actions.append({"short": sym, "action": "cover", "ok": False, "reason": "no ask quote"})
+                    continue
+                rr = b.place_order(sym, qty, action="BUYTOCLOSE", order_type="Limit",
+                                   limit_price=self._tick_round(ask), tif="DAY")
+                actions.append({"short": sym, "action": "cover_last_resort", "ok": rr.get("ok"),
+                                "order_id": rr.get("order_id"), "reject": rr.get("reject_reason")})
+        return actions
 
     def plan(self, names=None, limit=None):
         """Build defined-risk condors for today's rich-IV candidates. Places nothing."""
@@ -616,21 +718,38 @@ class ConditionalVRPShortPremiumEngine:
         for con in pl["planned"]:
             qty = con["quantity"]
             placed_legs, leg_err = [], False
-            # BUY the wings FIRST so the tail cap exists before the short legs are live.
-            order = [("wing_call", "BUYTOOPEN"), ("wing_put", "BUYTOOPEN"),
-                     ("short_call", "SELLTOOPEN"), ("short_put", "SELLTOOPEN")]
-            for name, action in order:
-                leg = con["legs"][name]
-                px = leg["ask"] if action == "BUYTOOPEN" else leg["bid"]   # marketable limit
-                r = b.place_order(leg["symbol"], qty, action=action, order_type="Limit",
-                                  limit_price=self._tick_round(px), tif="DAY")
+            legs_spec = [("wing_call", "BUYTOOPEN"), ("wing_put", "BUYTOOPEN"),
+                         ("short_call", "SELLTOOPEN"), ("short_put", "SELLTOOPEN")]
+            if self._atomic_orders_enabled():
+                # ATOMIC: submit the condor as ONE multi-leg order — all four legs fill together or none,
+                # so a wing can never rest unfilled while the short fills (the naked-leg window is gone).
+                # LimitPrice = net credit across the legs.
+                ml_legs = [{"symbol": con["legs"][n]["symbol"], "quantity": qty, "action": a}
+                           for n, a in legs_spec]
+                net = self._tick_round(abs(self._f(con.get("credit_per_condor"))))
+                r = b.place_multileg(ml_legs, order_type="Limit", limit_price=net, tif="DAY")
                 if r.get("ok"):
-                    placed_legs.append({"symbol": leg["symbol"], "action": action,
-                                        "order_id": r.get("order_id"), "limit": self._tick_round(px)})
+                    placed_legs = [{"symbol": l["symbol"], "action": l["action"],
+                                    "order_id": r.get("order_id"), "atomic": True} for l in ml_legs]
                 else:
                     leg_err = True
-                    errors.append({"symbol": leg["symbol"], "http": r.get("http_status")})
-                    break
+                    errors.append({"symbol": con["symbol"], "atomic": True,
+                                   "reject": r.get("reject_reason"), "http": r.get("http_status")})
+            else:
+                # LEGACY: 4 separate orders, wings FIRST so the tail cap exists before the shorts go live.
+                # (The reconciler's naked auto-remediation backstops any leg-in that still slips through.)
+                for name, action in legs_spec:
+                    leg = con["legs"][name]
+                    px = leg["ask"] if action == "BUYTOOPEN" else leg["bid"]   # marketable limit
+                    r = b.place_order(leg["symbol"], qty, action=action, order_type="Limit",
+                                      limit_price=self._tick_round(px), tif="DAY")
+                    if r.get("ok"):
+                        placed_legs.append({"symbol": leg["symbol"], "action": action,
+                                            "order_id": r.get("order_id"), "limit": self._tick_round(px)})
+                    else:
+                        leg_err = True
+                        errors.append({"symbol": leg["symbol"], "http": r.get("http_status")})
+                        break
             if leg_err:
                 continue
             # PROVENANCE for later PROOF: an edge can only be validated if the conditions it was

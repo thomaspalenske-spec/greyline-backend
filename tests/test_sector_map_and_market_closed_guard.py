@@ -66,6 +66,9 @@ def test_unmapped_symbols_are_surfaced(tmp_path):
     e = PortfolioExposureEngine()
     e.equity_ledger = ledger
     e.option_ledger = tmp_path / "none.jsonl"
+    # Hermetic: pin broker holdings empty+healthy so a live/cached TradeStation read can't leak real
+    # (unmapped) positions into the assertion when the suite runs alongside broker-touching tests.
+    e._broker_positions = lambda: ([], False)
     out = e.evaluate()
 
     assert out["unmapped_symbols"] == ["ZZZZ"]
