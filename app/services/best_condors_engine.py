@@ -10,7 +10,7 @@ ROUTE only ever READS the cache, so the dashboard card is always instant and nev
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 CACHE = Path("app/data/condor_shadow/best_condors.json")
@@ -32,9 +32,19 @@ class BestCondorsEngine:
 
         def k(name):
             return (legs.get(name) or {}).get("strike")
+        # DTE is computed from `expiration` (the condor dicts carry no `entry_dte` — reading that key
+        # left the card's days-to-expiry blank on EVERY row, the same silent key-mismatch class as the
+        # earnings dry-run shape bug).
+        exp = con.get("expiration")
+        dte = None
+        if exp:
+            try:
+                dte = (date.fromisoformat(str(exp)[:10]) - date.today()).days
+            except Exception:
+                dte = None
         return {
-            "symbol": con.get("symbol"), "sleeve": sleeve, "expiration": con.get("expiration"),
-            "dte": con.get("entry_dte"), "iv_rank": self._f(con.get("iv_rank")),
+            "symbol": con.get("symbol"), "sleeve": sleeve, "expiration": exp,
+            "dte": dte, "iv_rank": self._f(con.get("iv_rank")),
             "quantity": int(con.get("quantity") or 1),
             "max_gain_usd": round(self._f(con.get("credit_total")) or 0, 2),
             "max_loss_usd": round(self._f(con.get("max_loss_total")) or 0, 2),
@@ -44,32 +54,35 @@ class BestCondorsEngine:
         }
 
     def _gather(self):
-        rows = []
+        # errors are SURFACED (not silently swallowed): a sleeve that throws would otherwise vanish from
+        # the card with no trace — the same silent-drop class we just fixed elsewhere.
+        rows, errors = [], {}
         try:
             from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
             for con in (ConditionalVRPShortPremiumEngine().plan().get("planned") or []):
                 rows.append(self._fmt(con, "VRP"))
-        except Exception:
-            pass
+        except Exception as e:
+            errors["VRP"] = repr(e)[:160]
         try:
             from app.services.earnings_vol_harvest_engine import EarningsVolHarvestEngine
             r = EarningsVolHarvestEngine().open_positions(dry_run=True)
             for con in (r.get("planned") if isinstance(r.get("planned"), list) else []) or []:
                 rows.append(self._fmt(con, "Earnings"))
-        except Exception:
-            pass
+        except Exception as e:
+            errors["Earnings"] = repr(e)[:160]
         rows.sort(key=lambda x: (x.get("return_on_risk") or -9), reverse=True)   # best risk-adjusted first
-        return rows
+        return rows, errors
 
     # ---- compute (scheduler) -------------------------------------------------------------------
     def recompute(self):
-        rows = self._gather()
+        rows, errors = self._gather()
         data = {
             "timestamp": datetime.utcnow().isoformat(), "computed_epoch": time.time(),
             "count": len(rows), "condors": rows, "source": "UNUSUAL_WHALES",
+            "sleeve_errors": errors,
             "note": ("Defined-risk iron condors VRP + earnings would sell, built off Unusual Whales "
                      "greeks + NBBO, ranked by return-on-risk. Max gain = net credit; max loss defined + capped."),
-            "status": "BEST_CONDORS_READY",
+            "status": "BEST_CONDORS_DEGRADED" if errors else "BEST_CONDORS_READY",
         }
         try:
             CACHE.parent.mkdir(parents=True, exist_ok=True)
