@@ -166,6 +166,11 @@ def open_positions():
         mult = 100 if r.get("asset_type") == "OPTION" else 1
         qty_abs = abs(float(r.get("quantity") or 0))
         r["initial_cost"] = round(float(r.get("entry_price") or 0) * mult * qty_abs, 2)
+        # Net cash paid at ENTRY, SIGNED — the true "what we paid": + = a DEBIT (you paid — a long, or a
+        # bought wing), − = a CREDIT (you were paid — a short option leg). Unlike "Cost" (always the
+        # positive notional), this shows the cash DIRECTION and sums across a condor to its net basis
+        # (a net credit for short premium).
+        r["net_paid"] = round(float(r.get("entry_price") or 0) * mult * float(r.get("quantity") or 0), 2)
         # Full-contract CURRENT value + the underlying spot, so the operator can check the math:
         # underlying price -> premium/sh -> x100xqty = total contract.
         if r.get("asset_type") == "OPTION":
@@ -234,6 +239,7 @@ def open_positions():
             "stop_loss": None, "targets": [], "tps_filled": None,
             "limit_buy": limit, "pending": True,
             "initial_cost": round(float(limit or 0) * mult * abs(float(pb.get("quantity") or 0)), 2),
+            "net_paid": round(float(limit or 0) * mult * abs(float(pb.get("quantity") or 0)), 2),  # a buy = debit you'll pay
             "status": "PENDING", "stage": f"waiting · limit ${limit}" if limit else "waiting",
         })
 

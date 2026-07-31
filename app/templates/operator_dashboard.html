@@ -719,6 +719,19 @@ th {
         </table>
       </div>
 
+      <div class="card" id="condor_exits_card" style="min-width:0;">
+        <div class="section-title">Open Condor Exits</div>
+        <div class="sub" style="margin-bottom:10px;">Where each OPEN condor exits — the net BUYBACK cost to close. Profit-take at 50% of credit; hard-stop at 80% of the defined max loss; VRP liquidates at DTE ≤ 21, earnings condors exit on the IV crush. (Live P/L is on Open Positions below.)</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>Type</th><th>DTE</th><th>Credit</th><th>Max Loss</th><th>Profit-Take (buyback ≤)</th><th>Hard-Stop (buyback ≥)</th><th>Time Exit</th></tr>
+            </thead>
+            <tbody id="condor_exits_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
         <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
         <table>
@@ -734,7 +747,7 @@ th {
         <div class="pos-scroll">
         <table>
           <thead>
-            <tr><th>Symbol</th><th>P/L</th><th>P/L %</th><th>Side</th><th>Shares</th><th>Limit Buy</th><th>Entry</th><th>Current</th><th>Cost</th><th>Stop</th><th>Take-Profits (TP1·TP2·TP3)</th><th>Status</th><th>Stage</th></tr>
+            <tr><th>Symbol</th><th>P/L</th><th>P/L %</th><th>Side</th><th>Shares</th><th>Limit Buy</th><th>Entry</th><th>Current</th><th>Cost</th><th>Paid</th><th>Stop</th><th>Take-Profits (TP1·TP2·TP3)</th><th>Status</th><th>Stage</th></tr>
           </thead>
           <tbody id="positions"></tbody>
         </table>
@@ -1071,6 +1084,31 @@ async function refreshBestCondors() {
   }
 }
 
+async function refreshCondorExits() {
+  const body = document.getElementById("condor_exits_body");
+  if (!body) return;
+  try {
+    const d = await getJSON("/condor-exits");
+    const rows = d.condors || [];
+    if (!rows.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">No open condors.</span></td></tr>`; return; }
+    body.innerHTML = rows.map(c => {
+      const isEarn = c.strategy === "earnings_vol";
+      return `<tr>
+        <td><strong>${c.symbol}</strong>${c.quantity ? ` <span class="sub">×${c.quantity}</span>` : ""}</td>
+        <td><span class="badge ${isEarn ? "neutral" : "open"}">${isEarn ? "earnings" : "VRP"}</span></td>
+        <td>${c.dte != null ? c.dte : "—"}</td>
+        <td>${fmtMoney(c.credit_total)}</td>
+        <td><span class="red">${fmtMoney(c.max_loss_total)}</span></td>
+        <td><span class="green">${fmtMoney(c.profit_take_buyback)}</span> <span class="sub">lock +${fmtMoney(c.profit_take_lock)}</span></td>
+        <td><span class="red">${fmtMoney(c.hard_stop_buyback)}</span> <span class="sub">loss −${fmtMoney(c.hard_stop_loss)}</span></td>
+        <td><span class="sub">${c.time_exit || "—"}</span></td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8"><span class="red">Condor exits unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshAll() {
   // "Fetched", NOT "Last Update": this is the browser clock at refresh time, not the age of any cache.
   // Each card carries its own as_of/cache age; this only says when the page last pulled.
@@ -1081,6 +1119,7 @@ async function refreshAll() {
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshBestCondors();     // fire-and-forget: cached (~10min), built off UW, never stalls the loop
+  refreshCondorExits();     // static exit levels off the ledger (no live quotes) — never stalls the loop
 
   const [ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/options-account-dashboard"),
@@ -1302,6 +1341,10 @@ async function refreshAll() {
         : (curVal != null ? fmtMoney(curVal) : dash);
       const limitCell = p.limit_buy != null ? `<span class="yellow">${fmtMoney(p.limit_buy)}</span>` : dash;
       const costCell = p.initial_cost != null ? fmtMoney(p.initial_cost) : dash;
+      // "Paid" = the TRUE signed cash at entry: a debit for longs/wings (you paid), a CREDIT for shorts
+      // (you were paid — shown green with "cr"). Unlike "Cost" (absolute size), this reads the direction.
+      const paidCell = p.net_paid == null ? dash
+        : (p.net_paid < 0 ? `<span class="green">${fmtMoney(Math.abs(p.net_paid))} cr</span>` : fmtMoney(p.net_paid));
       // Every lifecycle state gets a distinct, legible badge — not raw text mixed into the
       // row. OPEN=green, CLOSING=yellow (order queued), UNMANAGED=red (real risk GreyLine is
       // not managing), PENDING=blue (limit buy not yet filled).
@@ -1321,14 +1364,15 @@ async function refreshAll() {
         <td>${entryCell}</td>
         <td>${curCell}</td>
         <td>${costCell}</td>
+        <td>${paidCell}</td>
         <td>${p.pending ? dash : stopCell}</td>
         <td>${p.pending ? dash : tpCell}</td>
         <td>${statusCell}</td>
         <td><span class="sub">${p.stage || ""}</span></td>
       </tr>`;
     }).join("") || (bookReadFailed
-      ? `<tr><td colspan="13"><span class="red">⚠ Could not read the broker — positions UNKNOWN (not necessarily flat). Retrying…</span></td></tr>`
-      : `<tr><td colspan="13"><span class="sub">Account is flat — no open positions.</span></td></tr>`);
+      ? `<tr><td colspan="14"><span class="red">⚠ Could not read the broker — positions UNKNOWN (not necessarily flat). Retrying…</span></td></tr>`
+      : `<tr><td colspan="14"><span class="sub">Account is flat — no open positions.</span></td></tr>`);
 
     renderEquityCurve();   // real recorded equity series — never a cumsum over open positions
   }

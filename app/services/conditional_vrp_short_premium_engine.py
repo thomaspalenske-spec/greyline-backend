@@ -948,3 +948,40 @@ class ConditionalVRPShortPremiumEngine:
                 "managed": len(decisions), "decisions": decisions,
                 "acted": bool(self.enabled() and not dry_run), "status": "VRP_SHORT_PREMIUM_MANAGED"}
 
+    def open_condor_exits(self):
+        """READ-ONLY exit levels for every OPEN condor — the price targets the exit doctrine acts on.
+        Expressed as NET BUYBACK cost (what you pay to close): profit-take fires when the buyback falls
+        to (1-frac)*credit; the hard-stop fires when it rises to credit + mult*max_loss. Static — read
+        straight from the ledger, NO live quotes and NO orders — so it is cheap to poll from the dashboard.
+        The live current buyback / P&L is on the Open Positions card."""
+        try:
+            rows = [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
+        except Exception:
+            return {"timestamp": datetime.utcnow().isoformat(), "condors": [], "status": "NO_VRP_LEDGER"}
+        out = []
+        for r in rows:
+            if r.get("status") != "OPEN":
+                continue
+            cr, ml = self._f(r.get("credit_total")), self._f(r.get("max_loss_total"))
+            strat = r.get("strategy") or "vrp"
+            dte = self._dte(r.get("expiration"))
+            time_exit = (f"~1 session after {r.get('report_date')} report (IV crush)"
+                         if strat == "earnings_vol" else f"liquidate at DTE ≤ {self.MANAGE_DTE}")
+            out.append({
+                "symbol": r.get("symbol"), "strategy": strat, "expiration": r.get("expiration"),
+                "dte": dte, "quantity": r.get("quantity"),
+                "credit_total": round(cr, 2), "max_loss_total": round(ml, 2),
+                "profit_take_buyback": round(cr * (1 - self.PROFIT_TAKE_FRAC), 2),
+                "profit_take_lock": round(cr * self.PROFIT_TAKE_FRAC, 2),
+                "hard_stop_buyback": round(cr + self.HARD_STOP_LOSS_MULT * ml, 2),
+                "hard_stop_loss": round(self.HARD_STOP_LOSS_MULT * ml, 2),
+                "time_exit": time_exit,
+            })
+        out.sort(key=lambda c: c["dte"] if c.get("dte") is not None else 999)
+        return {
+            "timestamp": datetime.utcnow().isoformat(), "condors": out,
+            "doctrine": {"profit_take_frac": self.PROFIT_TAKE_FRAC,
+                         "hard_stop_loss_mult": self.HARD_STOP_LOSS_MULT, "manage_dte": self.MANAGE_DTE},
+            "status": "CONDOR_EXITS",
+        }
+
