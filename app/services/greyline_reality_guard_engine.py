@@ -801,6 +801,47 @@ class GreyLineRealityGuardEngine:
                 "detail": ("the sanctioned readout aggregates all canonical decisions cleanly" if not degraded
                            else f"{len(degraded)} readout section(s) degraded: " + ", ".join(degraded))}
 
+    def _check_candidate_surfaces_healthy(self):
+        """VRP + Iron Condor list + Opportunity Board must not silently break — catching BOTH regression
+        classes we fixed: (1) a sleeve/edge that THROWS returns [] and reads as 'no opportunities', and
+        (2) a key the producer stopped providing renders a BLANK field (the entry_dte class). Checks the
+        surfaced error markers AND that rendered rows carry their required fields. VRP is covered via both
+        the Iron Condor sleeve_errors and the board's VRP edge."""
+        import json as _json
+        from pathlib import Path as _Path
+
+        problems = []
+        # --- Iron Condor list (BestCondorsEngine, aggregating the VRP + earnings sleeves) ---
+        try:
+            d = _json.loads(_Path("app/data/condor_shadow/best_condors.json").read_text())
+            for sleeve, err in (d.get("sleeve_errors") or {}).items():
+                problems.append(f"IronCondor[{sleeve}] threw: {str(err)[:45]}")
+            req = ("return_on_risk", "dte", "short_put", "short_call", "wing_put", "wing_call")
+            for c in (d.get("condors") or []):
+                blank = [f for f in req if c.get(f) is None]
+                if blank:
+                    problems.append(f"IronCondor[{c.get('symbol')}] blank fields {blank}")
+                    break                              # one example is enough
+        except Exception:
+            pass                                       # a missing cache is DECISION_CACHES_FRESH's concern
+        # --- Opportunity Board (momentum + earnings + VRP edges) ---
+        try:
+            from app.services.unified_opportunity_board_engine import UnifiedOpportunityBoardEngine
+            b = UnifiedOpportunityBoardEngine().board()
+            for edge in (b.get("degraded_edges") or []):
+                problems.append(f"Board[{edge}] threw")
+            for g in (b.get("groups") or []):
+                for c in (g.get("candidates") or []):
+                    if c.get("score") is None or c.get("status") is None:
+                        problems.append(f"Board[{g.get('strategy')}/{c.get('symbol')}] blank score/status")
+                        break
+        except Exception as e:
+            problems.append(f"Board could not be built: {str(e)[:60]}")
+        return {"id": "CANDIDATE_SURFACES_HEALTHY", "severity": "warning", "ok": not problems,
+                "detail": ("VRP + Iron Condor + Opportunity Board surfaces intact — no thrown sleeve, no "
+                           "blank required field" if not problems else
+                           f"{len(problems)} surface issue(s): " + "; ".join(problems[:4]))}
+
     def check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
@@ -820,6 +861,7 @@ class GreyLineRealityGuardEngine:
             self._check_data_freshness(),
             self._check_decision_caches_fresh(),
             self._check_readout_integrity(),
+            self._check_candidate_surfaces_healthy(),
             self._check_data_source(),
             self._check_price_bars(),
             self._check_price_bars_match_source(),

@@ -183,13 +183,18 @@ class UnifiedOpportunityBoardEngine:
     def board(self):
         groups = [self._momentum_group(), self._earnings_group(), self._vrp_group()]
         total = sum(len(g.get("candidates") or []) for g in groups)
+        # A top-level flag for PROGRAMMATIC consumers (the reality guard): a group that threw is already
+        # surfaced per-group (its `error` key, rendered red on the card), but nothing could see "a sleeve
+        # is broken" without walking the groups. Now it can.
+        degraded_edges = [g.get("strategy") for g in groups if g.get("error")]
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "groups": groups,
             "total_candidates": total,
+            "degraded_edges": degraded_edges,
             "sort_policy": ("sorted WITHIN each edge by that edge's native score; NOT cross-ranked — "
                             "a directional-equity excess return and a defined-risk condor credit are "
                             "different units. A single cross-instrument ranking waits on EdgePersistence "
                             "measuring each sleeve's realized live edge (see /edge-persistence)."),
-            "status": "OPPORTUNITY_BOARD",
+            "status": "OPPORTUNITY_BOARD_DEGRADED" if degraded_edges else "OPPORTUNITY_BOARD",
         }
