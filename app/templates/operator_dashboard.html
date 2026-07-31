@@ -1108,6 +1108,15 @@ async function refreshAll() {
       card.style.display = "none";
       body.innerHTML = "";
     }
+  } else {
+    // A FAILED alert fetch must NOT read as "no alerts". Show the card with a visible feed-down warning
+    // rather than silently leaving it hidden/stale — errored is not empty, especially for a warning feed.
+    const card = document.getElementById("position_alert_card");
+    const body = document.getElementById("position_alerts");
+    if (card && body) {
+      card.style.display = "block";
+      body.innerHTML = `<tr><td colspan="8"><span class="red">⚠ Position alert feed unavailable — could not check for alerts this cycle.</span></td></tr>`;
+    }
   }
 
 
