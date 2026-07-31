@@ -30,7 +30,14 @@ def _confirmed_bearish():
 
 
 def test_blocked_when_execution_disabled(monkeypatch):
-    monkeypatch.delenv("GREYLINE_PAPER_EXECUTION_ENABLED", raising=False)
+    import os
+    # The engine reads GREYLINE_PAPER_EXECUTION_ENABLED via its module-level getenv, and a .env reload
+    # (triggered by other engines mid-suite) re-populates it into os.environ — defeating a plain delenv
+    # (the documented .env precedence trap; .env ships PAPER_EXECUTION=true for SIM booking). Patch the
+    # module's getenv so the paper-exec gate reads OFF deterministically, independent of os.environ/.env.
+    real = os.getenv
+    monkeypatch.setattr(f"{MOD}.getenv",
+                        lambda k, d="": "" if k == "GREYLINE_PAPER_EXECUTION_ENABLED" else real(k, d))
     out = MomentumReversalRebalanceEngine().rebalance(force=True)
     assert out["rebalanced"] is False
     assert "EXECUTION_DISABLED" in out["status"]
