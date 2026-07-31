@@ -221,7 +221,11 @@ class EarningsVolHarvestEngine:
             budget_left -= con["max_loss_total"]
 
         if dry_run:
-            return {"status": "EARNINGS_VOL_DRYRUN", "planned": len(planned),
+            # `planned` is the FULL list of built condor dicts (legs / return_on_risk / credit) — the
+            # shape BestCondorsEngine and CondorShadowEngine read (both guard isinstance(list)). It was
+            # returning len(planned) (an int), so those consumers silently got [] and earnings condors
+            # never reached the Iron Condor card despite building fine.
+            return {"status": "EARNINGS_VOL_DRYRUN", "planned": planned, "planned_count": len(planned),
                     "candidates": [{k: p.get(k) for k in ("symbol", "expiration", "report_date",
                      "credit_total", "max_loss_total", "iv_rank")} for p in planned],
                     "skipped": skipped[:8]}
