@@ -563,6 +563,12 @@ class ConditionalVRPShortPremiumEngine:
             "vega_budget_usd": round(vega_budget, 1),
             "vega_deployed_usd": round(vega_used, 1),
             "total_new_vega_usd": round(sum(abs(self._f(b.get("net_vega"))) for b in built), 1),
+            # This plan is RE-PRICED off live option quotes on every call — two calls a minute apart return
+            # different max-loss/credit dollars. Mark it point-in-time so a consumer can't quote it as a
+            # constant, and so it reads consistently with the cached Best Iron Condors surface.
+            "point_in_time": True,
+            "precision": ("figures rebuilt from live option quotes each call — ± / vary run-to-run, "
+                          "never a fixed constant"),
             "status": "VRP_SHORT_PREMIUM_PLAN",
         }
 
@@ -571,6 +577,25 @@ class ConditionalVRPShortPremiumEngine:
     def _booking(self):
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         return TradeStationSimBookingEngine()
+
+    @staticmethod
+    def _alert_condor_close_failed(row, leg_results):
+        """Best-effort external alert when a condor close did not fully confirm — a partial leaves the
+        unit UNHEDGED (possible naked short), so it must be surfaced, never silently marked CLOSED."""
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if eng.has_external_channel():
+                sym = row.get("symbol")
+                failed = [lr["symbol"] for lr in leg_results if not lr["ok"]]
+                eng.dispatch(
+                    title="GreyLine condor close UNCONFIRMED — possible unhedged leg",
+                    message=(f"{sym} condor close did not fully confirm; unconfirmed leg(s): "
+                             f"{', '.join(failed) or 'n/a'}. Left OPEN (not marked CLOSED). The unit may "
+                             "be partially closed / unhedged — check the position NOW."),
+                    severity="CRITICAL", fingerprint=f"CONDOR_CLOSE_UNCONFIRMED:{sym}")
+        except Exception:
+            pass
 
     @staticmethod
     def _tick_round(price, is_option=True):
@@ -734,26 +759,47 @@ class ConditionalVRPShortPremiumEngine:
                                   "pnl": round(pnl_total, 2), "dte": dte})
                 continue
 
+            committed = False
             if self.enabled() and not dry_run:
                 b = self._booking()
-                for leg in r["legs"]:
+                # Close SHORTS first (BUYTOCLOSE), then wings (SELLTOCLOSE). If a short buyback fails we
+                # have NOT yet sold its protective wing, so an out-of-order partial can never manufacture
+                # a naked short. A MARKETABLE LIMIT caps the price; a rejected/gapped leg reports ok=False.
+                legs_ordered = sorted(r["legs"], key=lambda lg: 0 if lg["action"] == "SELLTOOPEN" else 1)
+                leg_results, all_ok = [], True
+                for leg in legs_ordered:
                     close_action = "BUYTOCLOSE" if leg["action"] == "SELLTOOPEN" else "SELLTOCLOSE"
                     bid, ask = leg_quotes.get(leg["symbol"], (0.0, 0.0))
                     if bid > 0 and ask > 0:
-                        # MARKETABLE LIMIT (not a naked market order): buy back shorts at the ask,
-                        # sell wings at the bid — fills at top of book, but the limit is a hard cap so
-                        # a thin OTM wing can't fill us THROUGH it. Fills immediately, so marking the
-                        # unit CLOSED here stays truthful (no phantom).
                         px = ask if close_action == "BUYTOCLOSE" else bid
-                        b.place_order(leg["symbol"], r["quantity"], action=close_action,
-                                      order_type="Limit", limit_price=self._tick_round(px), tif="DAY")
+                        res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
+                                            order_type="Limit", limit_price=self._tick_round(px), tif="DAY")
                     else:
-                        b.place_order(leg["symbol"], r["quantity"], action=close_action,
-                                      order_type="Market", tif="DAY")   # no usable quote: flagged fallback
-                r["status"] = "CLOSED"; r["closed_at"] = datetime.utcnow().isoformat()
-                r["close_reason"] = reason; r["realized_pnl"] = round(pnl_total, 2)
+                        res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
+                                            order_type="Market", tif="DAY")   # no usable quote: fallback
+                    ok_leg = bool(res.get("ok"))
+                    all_ok = all_ok and ok_leg
+                    leg_results.append({"symbol": leg["symbol"], "action": close_action, "ok": ok_leg,
+                                        "status": res.get("status"), "order_id": res.get("order_id")})
+                r.setdefault("close_attempts", []).append(
+                    {"at": datetime.utcnow().isoformat(), "reason": reason, "legs": leg_results, "all_ok": all_ok})
+                if all_ok:
+                    # Every leg confirmed at the broker — only NOW is the unit truly flat. Marking CLOSED
+                    # or banking realized before this would be fantasy P&L on a still-live position.
+                    r["status"] = "CLOSED"; r["closed_at"] = datetime.utcnow().isoformat()
+                    r["close_reason"] = reason; r["realized_pnl"] = round(pnl_total, 2)
+                    r.pop("manager_status", None); r.pop("manager_status_reason", None)
+                    committed = True
+                else:
+                    # A partially-closed condor is UNHEDGED (e.g. wing sold, short buyback rejected).
+                    # Never mark CLOSED on a partial. Leave OPEN, flag it, alert — this must be surfaced.
+                    closed_n = sum(1 for lr in leg_results if lr["ok"])
+                    r["manager_status"] = "VRP_CONDOR_CLOSE_UNCONFIRMED"
+                    r["manager_status_reason"] = (f"{closed_n}/{len(leg_results)} legs confirmed — "
+                                                  "position may be unhedged")
+                    self._alert_condor_close_failed(r, leg_results)
             decisions.append({"symbol": r["symbol"], "action": "CLOSE", "reason": reason,
-                              "pnl": round(pnl_total, 2), "dte": dte})
+                              "committed": committed, "pnl": round(pnl_total, 2), "dte": dte})
 
         if self.enabled() and not dry_run and any(d["action"] == "CLOSE" for d in decisions):
             with open(self.LEDGER, "w") as f:

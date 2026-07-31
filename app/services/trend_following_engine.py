@@ -77,12 +77,24 @@ class TrendFollowingEngine:
         row = (rj.get("Quotes") or [rj])[0] if isinstance(rj, dict) else {}
         return self._f(row.get("Bid")), self._f(row.get("Ask")), self._f(row.get("Last") or row.get("Close"))
 
+    MAX_STALE_DAYS = 4          # allow a 3-day holiday weekend; beyond it the daily refresh has stalled
+
     def _signal(self, sym, live_last):
-        """(uptrend, last, sma) using CSV history + today's live price as the latest close."""
+        """(uptrend, last, sma) using CSV history + today's live price as the latest close.
+
+        Returns {"stale": reason} when the newest CSV bar is too old to trade on — never build a
+        200-DMA decision from a window that ends days in the past and glue today's live price onto it
+        (a stalled daily refresh would otherwise trade on stale bars labelled 'live')."""
         closes = self._closes(sym)
         if len(closes) < self.SMA:
             return None
         ds = sorted(closes)
+        try:
+            age = (datetime.utcnow().date() - datetime.fromisoformat(ds[-1]).date()).days
+            if age > self.MAX_STALE_DAYS:
+                return {"stale": f"newest bar {ds[-1]} is {age} calendar days old (max {self.MAX_STALE_DAYS})"}
+        except (ValueError, TypeError):
+            return {"stale": f"unusable newest bar date {ds[-1]!r}"}
         recent = [closes[d] for d in ds[-(self.SMA - 1):]]        # last 199 historical closes
         last = live_last if live_last > 0 else closes[ds[-1]]
         sma = (sum(recent) + last) / self.SMA                     # 199 history + today = 200
@@ -101,12 +113,17 @@ class TrendFollowingEngine:
         q = TradeStationQuoteLiveEngine()
         pos = TradeStationPositionsLiveEngine()
         slot = self._alloc() / len(self.BASKET)
-        legs, invested, uptrends = [], 0.0, 0
+        legs, invested, uptrends, stale_syms = [], 0.0, 0, []
         for sym in self.BASKET:
             bid, ask, last = self._quote(q, sym)
             sig = self._signal(sym, last)
             if sig is None:
                 legs.append({"symbol": sym, "skipped": "insufficient history"})
+                continue
+            if sig.get("stale"):
+                # Never trade this symbol on stale bars — skip it, no target (existing position untouched).
+                legs.append({"symbol": sym, "skipped": f"STALE_DATA: {sig['stale']}"})
+                stale_syms.append(sym)
                 continue
             px = last or ask or bid
             held = self._held(pos, sym)
@@ -120,7 +137,7 @@ class TrendFollowingEngine:
                          "delta_usd": round((target - held) * px, 2)})
         return {"status": "TREND_PLAN", "alloc_usd": self._alloc(), "slot_usd": round(slot, 2),
                 "assets_in_uptrend": uptrends, "of": len(self.BASKET),
-                "deployed_usd": round(invested, 2), "legs": legs}
+                "deployed_usd": round(invested, 2), "legs": legs, "stale_symbols": stale_syms}
 
     def run_cycle(self, is_regular_session=True, dry_run=False):
         if not self.enabled():

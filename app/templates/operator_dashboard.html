@@ -616,7 +616,7 @@ th {
     <div class="topbar">
       <div>
         <span class="status-pill"><span class="dot"></span> PAPER AUTO</span>
-        <span class="sub" id="last_update">Last Update: --</span>
+        <span class="sub" id="last_update">Fetched: --</span>
       </div>
       <div class="actions">
         <button onclick="refreshAll()">Refresh Now</button>
@@ -675,27 +675,6 @@ th {
     </section>
 
     <section class="content">
-      <div class="card" id="candidates_card">
-        <div class="section-title">Top Candidates — Equity Longs <span id="candidates_asof" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div id="candidates_momentum_banner" style="display:none;"></div>
-        <div class="sub" style="margin-bottom:10px;">The momentum-reversal signal's long picks, traded as WHOLE-SHARE EQUITY (2026-07-24: OTM options retired — the backtest proved they can't carry the edge). A pick is a 12-month uptrend that just pulled back short-term. Long-only, regime-gated. <span id="candidates_open_note">These open at the next market session.</span></div>
-        <table>
-          <thead><tr><th>#</th><th>Symbol</th><th>Instrument</th><th>Side</th><th>12-1 Momentum</th><th>5-Day Reversal</th><th>Conviction</th><th>Price</th><th>Est. Cost</th><th>Status</th><th>Reason</th></tr></thead>
-          <tbody id="candidates_body"><tr><td colspan="11"><span class="sub">Loading…</span></td></tr></tbody>
-        </table>
-      </div>
-
-      <div class="card" id="execute_watch_card">
-        <div class="section-title">Execute / Watch — Buy Opportunities <span id="ew_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">WATCH = ranked by conviction (closest to firing on top). <b>QUEUED</b> = meets the criteria + affordable, buys at the next momentum rebalance (7-day cadence, not intraday). <b>BLOCKED</b> = meets the criteria but can't fire (too expensive for the per-name budget / no free cash / rejected order). The reason is shown on each row.</div>
-        <table>
-          <thead>
-            <tr><th>Rank</th><th>Symbol</th><th>Conviction</th><th>12-1 Mom</th><th>5d Rev</th><th>Price</th><th>Status</th><th>Reason</th></tr>
-          </thead>
-          <tbody id="execute_watch_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
-        </table>
-      </div>
-
       <div class="card" id="opportunity_board_card">
         <div class="section-title">Opportunity Board — Equity + Options <span id="ob_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Every live candidate across the harvesting sleeves, grouped by edge and sorted by each edge's <em>native</em> score. Deliberately NOT cross-ranked — a directional-equity conviction and a defined-risk condor's IV rank are different units; one blended "expected profit" number on unproven edges would be false precision. A true cross-instrument ranking waits on <a href="/edge-persistence" style="color:inherit;">measured live edge</a>.</div>
@@ -709,7 +688,7 @@ th {
 
       <div class="card" id="best_condors_card">
         <div class="section-title">Best Iron Condors <span id="bc_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">Defined-risk iron condors VRP + earnings would sell, built off <a href="/best-condors" style="color:inherit;">Unusual Whales</a> greeks + NBBO (the SIM sandbox's option quotes are unusable for condors). Ranked by return-on-risk. Max gain = net credit collected; max loss is defined and capped. Cached ~10 min.</div>
+        <div class="sub" style="margin-bottom:10px;">Defined-risk iron condors VRP + earnings would sell, built off <a href="/best-condors" style="color:inherit;">Unusual Whales</a> greeks + NBBO (the SIM sandbox's option quotes are unusable for condors). Ranked by return-on-risk. Max gain = net credit collected; max loss is defined and capped. Figures are point-in-time (rebuilt from live quotes; ± run-to-run) — cache age shown above.</div>
         <table>
           <thead>
             <tr><th>Symbol</th><th>Sleeve</th><th>Expiry</th><th>IV Rank</th><th>Max Gain</th><th>Max Loss</th><th>Return / Risk</th><th>Structure (short put · short call · wings)</th></tr>
@@ -829,29 +808,38 @@ function setClassBySign(id, value) {
   el.classList.add(Number(value || 0) >= 0 ? "green" : "red");
 }
 
-function drawCurve(trades) {
+// Plot the REAL recorded mission-equity series (/portfolio-equity-timeline). Never fabricate: the old
+// version cumulatively summed realized/unrealized P&L over the currently-open positions in broker order
+// and rendered it as an equity-over-time curve — it was not a time series at all. With fewer than 2 real
+// equity points we say so rather than draw a made-up line.
+async function renderEquityCurve() {
   const svg = document.getElementById("equity_curve");
-  svg.innerHTML = "";
-  let points = [0];
-  let running = 0;
-  trades.forEach(t => {
-    running += Number(t.realized_pnl || t.unrealized_pnl || 0);
-    points.push(running);
-  });
+  if (!svg) return;
+  let series = [];
+  try {
+    const d = await getJSON("/portfolio-equity-timeline");
+    series = (d.series || []).filter(p => Number.isFinite(Number(p.mission_equity)));
+  } catch (e) { series = []; }
 
-  const w = 700, h = 220, pad = 24;
-  const min = Math.min(...points, -1);
-  const max = Math.max(...points, 1);
-  const x = i => pad + i * ((w - pad*2) / Math.max(points.length - 1, 1));
-  const y = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
-
-  for (let i = 0; i < 5; i++) {
-    const yy = pad + i * ((h-pad*2)/4);
-    svg.innerHTML += `<line x1="${pad}" y1="${yy}" x2="${w-pad}" y2="${yy}" stroke="rgba(255,255,255,.12)" />`;
+  if (series.length < 2) {
+    svg.innerHTML = `<text x="350" y="110" text-anchor="middle" fill="rgba(255,255,255,.5)" font-size="13">Equity history is still being recorded — no verified curve to plot yet.</text>`;
+    return;
   }
 
-  const d = points.map((p,i) => `${i===0 ? "M" : "L"} ${x(i)} ${y(p)}`).join(" ");
-  svg.innerHTML += `<path d="${d}" fill="none" stroke="#ff4d57" stroke-width="4" />`;
+  const pts = series.map(p => Number(p.mission_equity));
+  const w = 700, h = 220, pad = 24;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const x = i => pad + i * ((w - pad*2) / Math.max(pts.length - 1, 1));
+  const y = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
+  let html = "";
+  for (let i = 0; i < 5; i++) {
+    const yy = pad + i * ((h-pad*2)/4);
+    html += `<line x1="${pad}" y1="${yy}" x2="${w-pad}" y2="${yy}" stroke="rgba(255,255,255,.12)" />`;
+  }
+  const dd = pts.map((p,i) => `${i===0 ? "M" : "L"} ${x(i)} ${y(p)}`).join(" ");
+  const up = pts[pts.length - 1] >= pts[0];
+  html += `<path d="${dd}" fill="none" stroke="${up ? '#22c55e' : '#ff4d57'}" stroke-width="4" />`;
+  svg.innerHTML = html;
 }
 
 async function ackPositionAlert(tradeId) {
@@ -969,101 +957,6 @@ async function refreshRealityGuard() {
   }
 }
 
-async function refreshTopCandidates() {
-  const body = document.getElementById("candidates_body");
-  const asof = document.getElementById("candidates_asof");
-  if (!body) return;
-  try {
-    const d = await getJSON("/top-candidates");
-    // MOMENTUM KILL SWITCH: these picks only OPEN when momentum is enabled. When it's off (clean
-    // VRP test) the whole panel is a DISABLED strategy's hypothetical picks (equal-$1000 sizing on
-    // junk names) — noise that reads as fabricated. Hide the entire card so the dashboard shows
-    // only what's actually happening.
-    const momOn = d.momentum_enabled !== false;
-    const card = document.getElementById("candidates_card");
-    if (card) card.style.display = momOn ? "" : "none";
-    if (!momOn) return;
-    const banner = document.getElementById("candidates_momentum_banner");
-    const openNote = document.getElementById("candidates_open_note");
-    if (banner) {
-      banner.style.display = momOn ? "none" : "block";
-      banner.style.marginBottom = "10px";
-      banner.innerHTML = momOn ? "" :
-        `<span class="red" style="font-weight:700;">⚠ MOMENTUM DISABLED</span> <span class="sub">— kill switch is OFF for the clean VRP test. Shown for reference only; these will NOT open.</span>`;
-    }
-    if (openNote) openNote.textContent = momOn
-      ? "These open at the next market session."
-      : "These will NOT open — the momentum strategy is disabled.";
-    // EQUITY vehicle now: show the signal's LONG picks (bullish), not option contracts.
-    const cands = (d.candidates || []).filter(c =>
-      String(c.directional_bias || "").toUpperCase() === "BULLISH" ||
-      String(c.side || "").toUpperCase() === "BUY");
-    // Momentum's REAL per-name budget (%-of-equity, from the resolver) — not a hardcoded $1,000.
-    // This keeps Est. Cost / shares consistent with the per-row QUEUED/BLOCKED reason.
-    const perName = Number(d.momentum_per_name) || 249;
-    if (asof) {
-      const src = String(d.data_source || "").replace("TRADESTATION_LIVE_CACHED", "live (cached bars)").replace("TRADESTATION_LIVE", "live");
-      asof.textContent = d.as_of ? `— as of ${d.as_of} · ${src}` : "";
-    }
-    const pctCell = (v) => {
-      const n = Number(v || 0);
-      return `<span class="${n >= 0 ? "green" : "red"}">${n > 0 ? "+" : ""}${n.toFixed(1)}%</span>`;
-    };
-    const rows = cands.slice(0, 10).map((c, i) => {
-      const px = Number(c.last_close || 0);
-      const shares = px > 0 ? Math.floor(perName / px) : 0;
-      const cost = shares * px;
-      return `
-      <tr>
-        <td>${i + 1}</td>
-        <td><strong>${c.symbol}</strong></td>
-        <td><span class="badge open">EQUITY</span><br><span class="sub">whole shares</span></td>
-        <td><span class="green">LONG</span></td>
-        <td>${pctCell(c.momentum_12_1_pct)}</td>
-        <td>${pctCell(c.reversal_5d_move_pct)}<br><span class="sub">buys the dip</span></td>
-        <td><strong>${(c.conviction != null ? Number(c.conviction).toFixed(3) : "—")}</strong></td>
-        <td>${px > 0 ? fmtMoney(px) : "—"}</td>
-        <td>${shares > 0 ? `${fmtMoney(cost)}<br><span class="sub">${shares} shares</span>` : "—"}</td>
-        <td>${c.exec_status ? `<span class="badge ${c.exec_status === "BLOCKED" ? "unmanaged" : c.exec_status === "BOUGHT" ? "open" : "neutral"}">${c.exec_status}</span>` : "—"}</td>
-        <td><span class="sub">${c.exec_reason || "—"}</span></td>
-      </tr>`;
-    }).join("");
-    const stale = !String(d.data_source || "").startsWith("TRADESTATION_LIVE");
-    const emptyMsg = stale
-      ? "Waiting on a live data feed — candidates refresh when real bars arrive."
-      : "No confirmed long signals right now (12-1 momentum and 5-day reversal must agree).";
-    body.innerHTML = rows || `<tr><td colspan="8"><span class="sub">${emptyMsg}</span></td></tr>`;
-  } catch (e) {
-    body.innerHTML = `<tr><td colspan="11"><span class="red">⚠ Candidates unavailable — could not read the strategy (${String(e).slice(0,50)}).</span></td></tr>`;
-  }
-}
-
-async function refreshExecuteWatch() {
-  const body = document.getElementById("execute_watch_body");
-  const summary = document.getElementById("ew_summary");
-  try {
-    const d = await getJSON("/execute-watch");
-    const watch = d.watch || [];
-    if (summary) summary.textContent = `${d.queued_count || 0} queued · ${d.blocked_count || 0} blocked · ${watch.length} watched · $${Math.round(d.free_cash || 0).toLocaleString()} free`;
-    if (!watch.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">No buy candidates (cache: ${d.candidates_as_of || "—"}).</span></td></tr>`; return; }
-    body.innerHTML = watch.map(w => {
-      const badge = w.status === "BLOCKED" ? "unmanaged" : w.status === "BOUGHT" ? "open" : "neutral";
-      return `<tr>
-        <td>#${w.rank}</td>
-        <td><strong>${w.symbol}</strong></td>
-        <td>${w.conviction != null ? Number(w.conviction).toFixed(2) : "—"}</td>
-        <td>${w.momentum_12_1_pct != null ? w.momentum_12_1_pct + "%" : "—"}</td>
-        <td>${w.reversal_5d_move_pct != null ? w.reversal_5d_move_pct + "%" : "—"}</td>
-        <td>${w.last_close != null ? "$" + w.last_close : "—"}</td>
-        <td><span class="badge ${badge}">${w.status}</span></td>
-        <td><span class="sub">${w.reason || ""}</span></td>
-      </tr>`;
-    }).join("");
-  } catch (e) {
-    body.innerHTML = `<tr><td colspan="8"><span class="red">Execute/Watch unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
-  }
-}
-
 async function refreshOpportunityBoard() {
   const body = document.getElementById("opportunity_board_body");
   const summary = document.getElementById("ob_summary");
@@ -1108,7 +1001,12 @@ async function refreshBestCondors() {
   try {
     const d = await getJSON("/best-condors");
     const rows = d.condors || [];
-    if (summary) summary.textContent = `${rows.length} buildable · off Unusual Whales`;
+    if (summary) {
+      const age = Number(d.cache_age_seconds);
+      const ageTxt = Number.isFinite(age) ? ` · as of ${Math.round(age / 60)}m ago` : "";
+      summary.textContent = `${rows.length} buildable · off Unusual Whales${ageTxt} · live-quote ± (varies run-to-run)`;
+      summary.classList.toggle("red", Number.isFinite(age) && age > 900);   // stale past the ~10min TTL
+    }
     if (!rows.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">No condors qualify right now — needs a rich-IV, liquid name whose defined-risk condor fits the per-position cap.</span></td></tr>`; return; }
     body.innerHTML = rows.map(c => {
       const ror = c.return_on_risk != null ? (c.return_on_risk * 100).toFixed(1) + "%" : "—";
@@ -1130,13 +1028,13 @@ async function refreshBestCondors() {
 }
 
 async function refreshAll() {
-  setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
+  // "Fetched", NOT "Last Update": this is the browser clock at refresh time, not the age of any cache.
+  // Each card carries its own as_of/cache age; this only says when the page last pulled.
+  setText("last_update", "Fetched: " + new Date().toLocaleTimeString());
   checkDashboardVersion();  // fire-and-forget: self-reload once if new dashboard code was deployed
   await refreshCockpitBanner();
   await refreshCommanderSummary();
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
-  refreshTopCandidates();   // fire-and-forget: cached endpoint, must never stall the main loop
-  refreshExecuteWatch();    // fire-and-forget: reads the cached candidates, never stalls the loop
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshBestCondors();     // fire-and-forget: cached (~10min), built off UW, never stalls the loop
 
@@ -1357,7 +1255,7 @@ async function refreshAll() {
       ? `<tr><td colspan="13"><span class="red">⚠ Could not read the broker — positions UNKNOWN (not necessarily flat). Retrying…</span></td></tr>`
       : `<tr><td colspan="13"><span class="sub">Account is flat — no open positions.</span></td></tr>`);
 
-    drawCurve(rowsAll);   // real open book, not the retired options ledger
+    renderEquityCurve();   // real recorded equity series — never a cumsum over open positions
   }
 }
 

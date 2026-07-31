@@ -110,9 +110,11 @@ def test_exit_manager_mirrors_scale_and_close():
     mgr = MomentumExitManagerEngine()
     mgr._sim = FakeSim()
     trade = {"symbol": "AAPL", "side": "BUY", "original_quantity": 100.0, "doctrine_state": {}}
-    # TP1 banks 25 of 100 (25%) -> 25% of 8 SIM shares = 2; then STOP closes the rest
-    mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 25.0, "reason": "TP1"}])
-    mgr._mirror_exits_to_sim(trade, [{"type": "CLOSE", "qty": 75.0, "reason": "STOP"}])
+    # TP1 banks 25 of 100 (25%) -> 25% of 8 SIM shares = 2; then STOP closes the rest.
+    # state is the object the caller commits; sim_* bookkeeping accumulates into it across passes.
+    st = trade["doctrine_state"]
+    mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 25.0, "reason": "TP1"}], st)
+    mgr._mirror_exits_to_sim(trade, [{"type": "CLOSE", "qty": 75.0, "reason": "STOP"}], st)
     assert mgr._sim.exits == [(2, "TP1")]        # 8 * 0.25 = 2 whole shares
     assert mgr._sim.closes == [("STOP", 0)]      # separate pass: TP1 has settled, nothing in flight
     assert trade["doctrine_state"]["sim_shares_original"] == 8.0
@@ -142,7 +144,8 @@ def test_close_nets_out_scales_booked_in_the_same_pass():
     trade = {"symbol": "INTC", "side": "BUY", "original_quantity": 4.0, "doctrine_state": {}}
     mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 1.0, "reason": "TP1"},
                                      {"type": "SCALE", "qty": 1.0, "reason": "TP2"},
-                                     {"type": "CLOSE", "qty": 2.0, "reason": "STOP"}])
+                                     {"type": "CLOSE", "qty": 2.0, "reason": "STOP"}],
+                             trade["doctrine_state"])
     assert mgr._sim.orders == [(1, "TP1"), (1, "TP2"), (2.0, "STOP")]
     assert sum(o[0] for o in mgr._sim.orders) == 4.0    # exactly flat, never short
 
@@ -206,7 +209,8 @@ def test_scale_sizing_is_cumulative_not_per_slice():
         mgr._sim = FakeSim()
         trade = {"symbol": "AMZN", "side": "BUY", "original_quantity": 100.0, "doctrine_state": {}}
         for i, tp in enumerate(("TP1", "TP2", "TP3")):        # one target per cycle, as live
-            mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 25.0, "reason": tp}])
+            mgr._mirror_exits_to_sim(trade, [{"type": "SCALE", "qty": 25.0, "reason": tp}],
+                                     trade["doctrine_state"])
         return mgr._sim.orders
 
     # 2 shares: 25% floors to 0, but the cumulative 50% at TP2 is a whole share

@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.services.condor_shadow_engine import CondorShadowEngine
 from app.services.best_condors_engine import BestCondorsEngine
 from app.services.optionable_universe_engine import OptionableUniverseEngine
+from app.services.decision_readout_engine import DecisionReadoutEngine
 
 router = APIRouter()
 
@@ -27,3 +28,11 @@ def optionable_universe(limit: int = 300):
 
     Reads the scheduler's monthly screen. Shows the rule, the ranked membership, and cache age."""
     return OptionableUniverseEngine().report(limit=limit)
+
+
+@router.get("/decision-readout")
+def decision_readout(condor_limit: int = 12):
+    """The single sanctioned readout of what GreyLine has ACTUALLY decided — the same cached decisions
+    the dashboard renders, aggregated and provenance-stamped (source, as_of, point-in-time). Nothing
+    recomputed, so it matches the operator's screen. The canonical source for 'what will the system do'."""
+    return DecisionReadoutEngine().readout(condor_limit=condor_limit)

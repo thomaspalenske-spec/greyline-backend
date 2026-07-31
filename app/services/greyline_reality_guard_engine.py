@@ -665,6 +665,112 @@ class GreyLineRealityGuardEngine:
                            f"stalled and signals/displays may present stale bars as live: "
                            + ", ".join(stale[:6]))}
 
+    def _recently_closed_symbols(self, days):
+        """Symbols on ledger trades marked CLOSED (with realized P&L booked) in the last `days`.
+
+        Covers all three books. These are the closes that BANKED realized P&L — the moment a close
+        is committed on intent rather than a confirmed fill, this is where the fantasy gets recorded."""
+        import json
+        from pathlib import Path
+
+        def _recent(ts):
+            try:
+                return (datetime.utcnow() - datetime.fromisoformat(str(ts).replace("Z", ""))).days <= days
+            except Exception:
+                return False
+
+        syms = set()
+        try:
+            from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+            for t in PaperTradeLedgerEngine()._read_all():
+                if (t.get("status") == "CLOSED" and t.get("realized_pnl") is not None
+                        and _recent(t.get("exit_timestamp")) and t.get("symbol")):
+                    syms.add(str(t["symbol"]).upper())
+        except Exception:
+            pass
+        for fn, key in ((("app/data/options_paper_trading/options_paper_trade_ledger.jsonl"), "option_symbol"),
+                        (("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl"), None)):
+            try:
+                f = Path(fn)
+                if not f.exists():
+                    continue
+                for line in f.read_text().splitlines():
+                    if not line.strip():
+                        continue
+                    t = json.loads(line)
+                    if t.get("status") != "CLOSED" or not _recent(t.get("exit_timestamp") or t.get("closed_at")):
+                        continue
+                    if key and t.get(key):
+                        syms.add(str(t[key]).upper())
+                    elif not key:                      # VRP condor unit — a failed close strands leg(s)
+                        for lg in t.get("legs", []) or []:
+                            if lg.get("symbol"):
+                                syms.add(str(lg["symbol"]).upper())
+            except Exception:
+                pass
+        return syms
+
+    def _check_exits_filled_not_intended(self, view):
+        """A ledger trade marked CLOSED (realized P&L banked) whose symbol the broker STILL holds and
+        that no OPEN ledger explains = the close was committed on INTENT, not a confirmed fill. The
+        realized dollars are fantasy and the position is still live. This is the exact Root-A failure:
+        momentum/condor exits that flip CLOSED + bank realized without checking the broker `ok`."""
+        CLOSE_LOOKBACK_DAYS = 4
+        try:
+            broker_syms = {str(p.get("symbol") or "").upper() for p in (view.get("positions") or [])}
+            recently_closed = self._recently_closed_symbols(CLOSE_LOOKBACK_DAYS)
+            still_open = self.managed_symbols()          # legit current holdings (incl. re-buys)
+            suspects = sorted((recently_closed & broker_syms) - still_open)
+        except Exception as e:
+            return {"id": "EXITS_FILLED_NOT_INTENDED", "severity": "critical", "ok": False,
+                    "detail": f"could not cross-check closed trades vs broker: {str(e)[:120]}"}
+        return {
+            "id": "EXITS_FILLED_NOT_INTENDED", "severity": "critical", "ok": not suspects,
+            "detail": ("every recently-CLOSED trade is actually flat at the broker" if not suspects
+                       else f"{len(suspects)} trade(s) marked CLOSED with realized P&L banked, but the "
+                            f"broker STILL holds them — fantasy realized P&L / unhedged position: "
+                            + ", ".join(suspects[:8])),
+            "suspects": suspects,
+        }
+
+    def _check_decision_caches_fresh(self):
+        """The condor and optionable-universe DECISION caches the dashboard renders as live must not be
+        silently frozen by a stalled scheduler. DATA_FRESHNESS covers daily bars; this covers the two
+        decision caches it doesn't."""
+        import json
+        import time
+        from pathlib import Path
+
+        stale = []
+        for label, path, max_age_s in (
+                ("best-condors", "app/data/condor_shadow/best_condors.json", 24 * 3600),
+                ("optionable-universe", "app/data/research/optionable_universe.json", 4 * 86400)):
+            try:
+                d = json.loads(Path(path).read_text())
+                age = time.time() - float(d.get("computed_epoch") or 0)
+                if age > max_age_s:
+                    stale.append(f"{label} ({round(age / 3600)}h old)")
+            except Exception:
+                pass                                     # missing cache is handled by its own warming state
+        return {"id": "DECISION_CACHES_FRESH", "severity": "warning", "ok": not stale,
+                "detail": ("condor + universe decision caches are current" if not stale
+                           else "STALE decision cache(s) rendered as live — scheduler may be wedged: "
+                                + ", ".join(stale))}
+
+    def _check_readout_integrity(self):
+        """The single sanctioned readout (/decision-readout) must aggregate every canonical decision
+        cleanly — a degraded section means an answer sourced from it would be missing or divergent."""
+        try:
+            from app.services.decision_readout_engine import DecisionReadoutEngine
+            r = DecisionReadoutEngine().readout()
+            degraded = r.get("degraded_sections") or []
+        except Exception as e:
+            return {"id": "READOUT_INTEGRITY", "severity": "warning", "ok": False,
+                    "detail": f"sanctioned readout could not be built: {str(e)[:120]}"}
+        return {"id": "READOUT_INTEGRITY", "severity": "warning", "ok": not degraded,
+                "detail": ("the sanctioned readout aggregates all canonical decisions cleanly" if not degraded
+                           else f"{len(degraded)} readout section(s) degraded: " + ", ".join(degraded))}
+
     def check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
@@ -677,9 +783,12 @@ class GreyLineRealityGuardEngine:
             self._check_broker_reads(view),
             self._check_phantom_positions(view),
             self._check_untracked_broker_positions(view),
+            self._check_exits_filled_not_intended(view),
             self._check_exec_booking_coherent(),
             self._check_realized_continuity(),
             self._check_data_freshness(),
+            self._check_decision_caches_fresh(),
+            self._check_readout_integrity(),
             self._check_data_source(),
             self._check_price_bars(),
             self._check_price_bars_match_source(),

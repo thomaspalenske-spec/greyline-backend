@@ -32,6 +32,16 @@ class PortfolioEquityTimelineEngine:
             "balance_response_preview_present": bool(balance_preview),
             "execution_enabled": False
         }
+        # Record the ACTUAL mission equity so the timeline is a real (time, equity) series the dashboard
+        # can plot — without this the points carried no equity value and any "equity curve" built from
+        # them was fabricated.
+        try:
+            from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
+            eq = MissionRiskGovernorEngine().snapshot().get("mission_equity")
+            if eq is not None:
+                point["mission_equity"] = round(float(eq), 2)
+        except Exception:
+            pass
 
         if self.timeline_file.exists():
             timeline = json.loads(self.timeline_file.read_text())

@@ -159,10 +159,9 @@ class OptionsPaperTradeLedgerEngine:
             except Exception:
                 continue
             if trade.get("status") == "OPEN":
-                manager_status = str(trade.get("manager_status") or "")
-                pnl_pct = float(trade.get("unrealized_pnl_pct") or 0)
-                if manager_status == "OPTION_MARKET_CLOSED_LAST_QUOTE_MARK" and pnl_pct <= -35:
-                    continue
+                # Committed cost stays committed regardless of how the position is MARKED. Dropping a
+                # deeply-underwater open position here frees imaginary cash to redeploy (an unreliable
+                # MARK must suppress unrealized P&L, never erase the cost basis).
                 deployed += float(trade.get("estimated_cost") or 0)
         return round(deployed, 2)
 
@@ -188,10 +187,20 @@ class OptionsPaperTradeLedgerEngine:
     def account_free_cash(self, account_base=10000.0):
         """Idle cash across BOTH books — the honest sizing base for a new options position.
 
-        account_base + realized P&L - (open options cost + open equity cost), floored at 0.
-        This is the single number every options sizing decision should draw on so the two
-        books never over-commit the shared account.
+        Delegates to the SINGLE cross-book resolver the equity sleeves use (SleeveCapitalBudgetEngine:
+        LIVE mission_equity − at-risk market value, which folds in BOTH books' cumulative realized P&L).
+        The old private formula used a STATIC $10k base and credited only the OPTIONS ledger's realized,
+        so after any equity-book drawdown it believed there was more cash than existed. Falls back to a
+        corrected local cost-basis computation only when the broker read is degraded.
         """
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            _, cash = SleeveCapitalBudgetEngine._live()
+            if cash is not None:
+                return round(max(0.0, cash), 2)
+        except Exception:
+            pass
+        # Degraded broker read only: cost-basis across BOTH books (underwater positions still count).
         deployed = self._open_deployed_capital() + self._equity_book_deployed()
         free = account_base + self._closed_realized_pnl() - deployed
         return round(max(0.0, free), 2)

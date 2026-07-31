@@ -127,7 +127,7 @@ class UnifiedOpportunityBoardEngine:
             "candidates": rows,
         }
 
-    # ---- source 3: variance risk premium (defined-risk condor) — STATE ROW, no chain stream --
+    # ---- source 3: variance risk premium (defined-risk condor) — off Unusual Whales --------------
     def _vrp_group(self):
         try:
             from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
@@ -138,18 +138,47 @@ class UnifiedOpportunityBoardEngine:
         except Exception as e:
             return {"strategy": "Variance Risk Premium", "instrument": "OPTION", "error": str(e)[:120],
                     "candidates": []}
-        return {
+        # Buildable VRP condors come from the SAME Unusual-Whales-sourced cache the Best Iron Condors
+        # card reads. UW works after hours (the SIM chain stream is dark then), so this section is
+        # populated round-the-clock. Full economics (gain/loss/strikes) stay on Best Iron Condors — here
+        # we show the candidate NAMES scored by IV rank, consistent with the Earnings IV-Crush group.
+        rows = []
+        try:
+            from app.services.best_condors_engine import BestCondorsEngine
+            for c in (BestCondorsEngine().cached(limit=50).get("condors") or []):
+                if str(c.get("sleeve") or "").upper() != "VRP":
+                    continue
+                gain, loss = self._f(c.get("max_gain_usd")), self._f(c.get("max_loss_usd"))
+                ror = self._f(c.get("return_on_risk")) * 100
+                rows.append({
+                    "symbol": str(c.get("symbol") or "").upper(),
+                    "instrument": "OPTION (short condor)",
+                    "side": "SELL_PREMIUM",
+                    "score": round(self._f(c.get("iv_rank")) * 100, 1),   # 0-100, same unit as earnings
+                    "score_label": "IV rank",
+                    "status": ("ARMED" if armed else "OFF"),
+                    "reason": (f"sells a defined-risk condor to harvest rich IV — ${gain:.0f} credit / "
+                               f"${loss:.0f} risk" if armed else
+                               "VRP sleeve OFF — would sell a rich-IV condor if armed"),
+                    "detail": (f"exp {c.get('expiration')} · SP {c.get('short_put')} · "
+                               f"SC {c.get('short_call')} · R/R {ror:.0f}% (full economics on Best Iron Condors)"),
+                })
+        except Exception:
+            pass
+        rows.sort(key=lambda r: r["score"], reverse=True)   # native sort: by IV rank
+        out = {
             "strategy": "Variance Risk Premium (VRP)",
             "edge": "sell index/liquid-equity condors to harvest the variance risk premium (rich IV)",
             "instrument": "OPTION (short condor)",
-            "score_basis": "condor EV = market-implied POP x credit vs defined risk (scored per contract)",
+            "score_basis": ("IV rank 0-100 (how rich implied vol is vs its own year); "
+                            "ranked economics on the Best Iron Condors card"),
             "action": (f"{'armed' if armed else 'OFF'} · ${open_risk:.0f}/${cap:.0f} risk used · "
-                       "scores contracts DURING the session (needs the live option-chain stream)"),
-            # No discrete after-hours pick list: VRP isn't a ranked name list, it's a condition-driven
-            # harvester whose contracts can only be priced from live chains. Shown as a state row.
-            "candidates": [],
-            "note": "no discrete candidates after hours — the condor scorer runs at the open on live chains",
+                       f"{len(rows)} buildable condor(s) off Unusual Whales"),
+            "candidates": rows,
         }
+        if not rows:
+            out["note"] = "no buildable VRP condors cached right now — refreshes each scheduler cycle"
+        return out
 
     def board(self):
         groups = [self._momentum_group(), self._earnings_group(), self._vrp_group()]

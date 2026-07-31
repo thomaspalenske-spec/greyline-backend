@@ -138,7 +138,7 @@ class MomentumExitManagerEngine:
             self._sim = GreyLineSimExecutionEngine()
         return self._sim
 
-    def _mirror_exits_to_sim(self, trade, actions):
+    def _mirror_exits_to_sim(self, trade, actions, state):
         """Mirror the doctrine's exit actions into the SIM account as real orders.
         No-op unless SIM booking is enabled and a SIM position exists for the symbol.
         CLOSE flattens the whole SIM position (exact); SCALE removes the same fraction of
@@ -155,14 +155,16 @@ class MomentumExitManagerEngine:
         are reported as SKIPPED_ZERO_SHARES — never guessed, never silently dropped."""
         sim = self._sim_exec()
         if not sim.enabled() or not actions:
-            return
+            return {"attempted": False, "ok": True, "reason": "SIM booking off — internal ledger only"}
         symbol = trade.get("symbol")
         position_long = trade.get("side") == "BUY"
-        state = trade.setdefault("doctrine_state", {})
+        # sim_* bookkeeping accumulates into the SAME `state` object the caller commits, so a confirmed
+        # exit advances doctrine + bookkeeping together, and an unconfirmed one persists only bookkeeping.
         if "sim_shares_original" not in state:
             qty, _ = sim.sim_position(symbol)
             if qty <= 0:
-                return   # no SIM counterpart (sub-share entry, or opened before booking was on)
+                # No SIM counterpart to confirm against (sub-share entry / opened before booking was on).
+                return {"attempted": False, "ok": True, "reason": "no SIM counterpart to confirm"}
             state["sim_shares_original"] = qty
         sim_orig = float(state.get("sim_shares_original") or 0)
         original_internal = float(trade.get("original_quantity") or 0) or 1.0
@@ -174,6 +176,7 @@ class MomentumExitManagerEngine:
         # totals live in doctrine_state alongside sim_shares_original.
         banked_fraction = float(state.get("sim_internal_banked") or 0)
         banked_shares = int(state.get("sim_shares_banked") or 0)
+        all_ok, fail_reason = True, None
         for a in actions:
             if a["type"] == "SCALE":
                 banked_fraction += float(a["qty"])
@@ -185,12 +188,41 @@ class MomentumExitManagerEngine:
                 booked_in_pass += booked
                 state["sim_internal_banked"] = banked_fraction
                 state["sim_shares_banked"] = banked_shares
+                # SKIPPED_ZERO_SHARES = nothing to bank this pass (a legitimate no-op); a real book must
+                # come back SIM_EXIT_BOOKED with a broker-confirmed ok.
+                ok_a = res.get("status") == "SKIPPED_ZERO_SHARES" or (
+                    res.get("status") == "SIM_EXIT_BOOKED" and bool(res.get("ok")))
             else:  # CLOSE — flatten the remaining SIM position exactly
                 res = sim.close_position(symbol, position_long, reason=a["reason"],
                                          already_booked=booked_in_pass)
+                # Already flat (NO_SIM_POSITION) confirms the close; otherwise at least one leg must book.
+                ok_a = res.get("status") == "NO_SIM_POSITION" or (
+                    res.get("status") == "SIM_BOOKED" and int(res.get("placed") or 0) > 0)
+            if not ok_a:
+                all_ok = False
+                fail_reason = f"{a['reason']} → {res.get('status')}"
             events.append({"at": datetime.utcnow().isoformat(), "reason": a["reason"],
-                           "type": a["type"], "result": res.get("status"),
+                           "type": a["type"], "result": res.get("status"), "ok": ok_a,
                            "shares": res.get("shares"), "order_id": res.get("order_id")})
+        return {"attempted": True, "ok": all_ok, "reason": fail_reason}
+
+    @staticmethod
+    def _alert_unconfirmed_exit(trade, mirror):
+        """Best-effort external alert when a momentum exit did NOT confirm at the broker — the row is
+        left OPEN with no realized banked, so the operator must look rather than trust a silent CLOSE."""
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if eng.has_external_channel():
+                sym = trade.get("symbol")
+                eng.dispatch(
+                    title="GreyLine momentum exit NOT confirmed",
+                    message=(f"{sym} exit did not confirm at the broker ({mirror.get('reason')}). "
+                             "Ledger left OPEN, no realized P&L banked — the position may still be live. "
+                             "Check now."),
+                    severity="CRITICAL", fingerprint=f"MOM_EXIT_UNCONFIRMED:{sym}")
+        except Exception:
+            pass
 
     # ---- live application over the ledger ----
     def manage_open_positions(self):
@@ -225,17 +257,35 @@ class MomentumExitManagerEngine:
                     t["doctrine_state"] = state
                     changed = True
                 continue
+            # Reflect the exit into the SIM (paper broker) FIRST — the exit is only REAL if the broker
+            # confirms it. Banking realized P&L or flipping CLOSED on INTENT records fantasy P&L and can
+            # leave the position live (Reality Guard EXITS_FILLED_NOT_INTENDED catches exactly this).
+            try:
+                mirror = self._mirror_exits_to_sim(t, actions, state)
+            except Exception as e:
+                mirror = {"attempted": True, "ok": False, "reason": f"mirror raised: {str(e)[:80]}"}
+            if mirror.get("attempted") and not mirror.get("ok"):
+                # Broker did NOT confirm — do not bank realized, do not advance the doctrine, do not
+                # CLOSE. Persist ONLY the sim_* bookkeeping (what actually booked) so the retry next
+                # cycle can't double-book; decide() re-issues the unconfirmed exit. Leave the row OPEN.
+                ds = t.setdefault("doctrine_state", {})
+                for k, v in state.items():
+                    if k.startswith("sim_"):
+                        ds[k] = v
+                t["manager_status"] = "MOMENTUM_EXIT_UNCONFIRMED"
+                t["manager_status_reason"] = mirror.get("reason") or "SIM exit not confirmed by broker"
+                self._alert_unconfirmed_exit(t, mirror)
+                changed = True
+                continue
+            # Confirmed at the broker (or no SIM counterpart to confirm against) — commit ledger state.
             realized = sum(a["realized"] for a in actions)
             t["realized_pnl"] = round(float(t.get("realized_pnl") or 0) + realized, 2)
             t["doctrine_state"] = state
             t["quantity"] = state["remaining_quantity"]
             t.setdefault("exit_events", []).extend(
                 {**a, "at": now.isoformat()} for a in actions)
-            # Mirror the same exit actions into the SIM account (best-effort, gated).
-            try:
-                self._mirror_exits_to_sim(t, actions)
-            except Exception:
-                pass
+            t.pop("manager_status", None)
+            t.pop("manager_status_reason", None)
             scaled += sum(1 for a in actions if a["type"] == "SCALE")
             if state["remaining_quantity"] <= 0:
                 t["status"] = "CLOSED"

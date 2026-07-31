@@ -94,13 +94,22 @@ class ManagedFuturesEngine:
         m = sum(xs) / n
         return math.sqrt(sum((x - m) ** 2 for x in xs) / (n - 1))
 
+    MAX_STALE_DAYS = 4          # allow a 3-day holiday weekend; beyond it the daily refresh has stalled
+
     def _signal(self, sym, live_last):
         """Blended multi-horizon TSMOM sign in [-1,1] + trailing annualized vol, using CSV history
-        plus today's live price as the latest close. None if history is too short."""
+        plus today's live price as the latest close. None if history is too short; {"stale": reason}
+        when the newest bar is too old to trade on (a stalled refresh must not TSMOM on stale bars)."""
         closes = self._closes(sym)
         if len(closes) < max(self.LOOKBACKS) + 2:
             return None
         ds = sorted(closes)
+        try:
+            age = (datetime.utcnow().date() - datetime.fromisoformat(ds[-1]).date()).days
+            if age > self.MAX_STALE_DAYS:
+                return {"stale": f"newest bar {ds[-1]} is {age} calendar days old (max {self.MAX_STALE_DAYS})"}
+        except (ValueError, TypeError):
+            return {"stale": f"unusable newest bar date {ds[-1]!r}"}
         series = [closes[d] for d in ds]
         last = live_last if live_last > 0 else series[-1]
         series = series[:-1] + [last] if live_last > 0 else series      # today's price as latest
@@ -127,11 +136,15 @@ class ManagedFuturesEngine:
         budget = self._budget()
         shorts = self.allow_shorts()
 
-        sigs, pxs = {}, {}
+        sigs, pxs, stale_syms = {}, {}, []
         for sym in self.BASKET:
             bid, ask, last = self._quote(q, sym)
             sig = self._signal(sym, last)
             if sig is None:
+                continue
+            if sig.get("stale"):
+                # Never TSMOM on stale bars — skip this symbol (no target; existing position untouched).
+                stale_syms.append(sym)
                 continue
             px = last or ask or bid
             if px <= 0:
@@ -145,7 +158,8 @@ class ManagedFuturesEngine:
         legs, deployed = [], 0.0
         for sym in self.BASKET:
             if sym not in sigs:
-                legs.append({"symbol": sym, "skipped": "insufficient history / no quote"})
+                legs.append({"symbol": sym, "skipped": ("STALE_DATA" if sym in stale_syms
+                                                        else "insufficient history / no quote")})
                 continue
             s = sigs[sym]
             notional_signed = budget * raw[sym] / gross                 # real long/short target $

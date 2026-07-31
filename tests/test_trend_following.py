@@ -11,12 +11,17 @@ from app.services.trend_following_engine import TrendFollowingEngine as T
 
 
 def _hist(tmp_path, sym, level, n=210):
-    """Write n daily closes all at `level` so the 200-SMA ~= level."""
+    """Write n daily closes all at `level` so the 200-SMA ~= level.
+
+    Dates END TODAY so the engine's decision-time staleness gate (refuses bars > 4 days old) passes —
+    otherwise a fixed past date would be flagged stale and the sleeve would correctly skip the symbol."""
+    from datetime import date, timedelta
     p = tmp_path / f"{sym}_daily.csv"
+    last = date.today()
     with open(p, "w") as f:
         f.write("date,open,high,low,close,volume\n")
         for i in range(n):
-            d = f"2024-{1 + i // 28:02d}-{1 + i % 28:02d}"
+            d = (last - timedelta(days=(n - 1 - i))).isoformat()
             f.write(f"{d},{level},{level},{level},{level},1000\n")
 
 
