@@ -24,11 +24,14 @@ router = APIRouter()
 CACHE = Path("app/data/momentum_reversal/top_candidates_cache.json")
 TTL_SECONDS = 900  # 15 min
 # We STORE a deeper bench than the panel displays. The panel shows the top `top_n` tradeable slots,
-# but the Opportunity Board and Execute/Watch read this same cache to show the "next up" bench —
-# and once the held names are hidden, a 5-deep cache leaves almost nothing on the bench. Storing 15
-# is display-only: the actual momentum buys come from MomentumReversalRebalanceEngine's own fresh
+# but the Opportunity Board and Execute/Watch read this same cache to show the "next up" bench.
+# The held names (~10, the full momentum book) occupy the top conviction slots and are hidden on the
+# board, so the bench must be deep enough to clear them AND still show a useful next-up list — a
+# 15-deep bench left only ~5 visible. 30 clears the ~10 held and surfaces ~20 next-up names.
+# (There are ~700 clean signals in a broad regime; showing "all" would be absurd, so we cap here.)
+# Display-only: the actual momentum buys come from MomentumReversalRebalanceEngine's own fresh
 # universe scan, NOT this cache, so a deeper bench never changes what gets bought.
-BENCH_N = 15
+BENCH_N = 30
 
 
 def _compute(top_n):
