@@ -1264,9 +1264,9 @@ async function refreshAll() {
       const statusCell = `<span class="badge ${badgeCls}">${p.pending ? "PENDING" : (p.status || "—")}</span>`;
       return `
       <tr${p.pending ? ' style="opacity:.75;"' : ''}>
-        <td><strong>${p.symbol}</strong><br><span class="sub">${p.asset_type}</span></td>
-        <td><span class="${sideCls}">${p.side}</span></td>
-        <td>${shares}</td>
+        <td><strong>${p.symbol || "—"}</strong><br><span class="sub">${p.asset_type || ""}</span></td>
+        <td><span class="${sideCls}">${p.side || "—"}</span></td>
+        <td>${shares != null ? shares : "—"}</td>
         <td>${limitCell}</td>
         <td>${entryCell}</td>
         <td>${curCell}</td>
@@ -1276,7 +1276,7 @@ async function refreshAll() {
         <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
         <td class="${sign}">${p.pending ? dash : (p.unrealized_pnl_pct > 0 ? "+" : "") + p.unrealized_pnl_pct + "%"}</td>
         <td>${statusCell}</td>
-        <td><span class="sub">${p.stage}</span></td>
+        <td><span class="sub">${p.stage || ""}</span></td>
       </tr>`;
     }).join("") || (bookReadFailed
       ? `<tr><td colspan="13"><span class="red">⚠ Could not read the broker — positions UNKNOWN (not necessarily flat). Retrying…</span></td></tr>`
