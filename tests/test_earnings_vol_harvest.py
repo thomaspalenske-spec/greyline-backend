@@ -19,6 +19,22 @@ def _iso(days):
     return date.fromordinal(TODAY.toordinal() + days).isoformat()
 
 
+def _session_iso(n):
+    """The date exactly `n` TRADING SESSIONS (Mon-Fri) after TODAY — mirrors the engine's _sessions_to.
+    Using calendar-day offsets made the candidate-window test weekday-fragile: run on a Friday, _iso(1)/
+    _iso(2) land on the weekend (0 sessions) and everything filtered out. Session offsets are deterministic
+    any day. n=0 is TODAY (the reports-today exclusion case)."""
+    from datetime import timedelta
+    if n == 0:
+        return TODAY.isoformat()
+    d, c = TODAY, 0
+    while c < n:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            c += 1
+    return d.isoformat()
+
+
 def _panel(tmp_path, records):
     p = tmp_path / "panel.jsonl"
     p.write_text("\n".join(json.dumps(r) for r in records))
@@ -33,13 +49,13 @@ def test_disabled_is_noop(monkeypatch):
 
 def test_candidates_filter_rich_iv_and_soon(monkeypatch, tmp_path):
     recs = [
-        {"kind": "implied", "ticker": "AAA", "report_date": _iso(1), "iv_rank": 0.70, "implied_move_pct": 8},
-        {"kind": "implied", "ticker": "FAR", "report_date": _iso(10), "iv_rank": 0.90, "implied_move_pct": 9},  # too far
-        {"kind": "implied", "ticker": "LOW", "report_date": _iso(1), "iv_rank": 0.30, "implied_move_pct": 7},   # IV too low
-        {"kind": "implied", "ticker": "BBB", "report_date": _iso(2), "iv_rank": 0.85, "implied_move_pct": 10},
-        {"kind": "implied", "ticker": "HII", "report_date": _iso(1), "iv_rank": 80.0, "implied_move_pct": 9},   # 0-100 scale, rich
-        {"kind": "implied", "ticker": "LOO", "report_date": _iso(1), "iv_rank": 40.0, "implied_move_pct": 6},   # 0-100 scale, NOT rich
-        {"kind": "implied", "ticker": "TDY", "report_date": _iso(0), "iv_rank": 0.90, "implied_move_pct": 9},   # reports TODAY -> excluded
+        {"kind": "implied", "ticker": "AAA", "report_date": _session_iso(1), "iv_rank": 0.70, "implied_move_pct": 8},
+        {"kind": "implied", "ticker": "FAR", "report_date": _session_iso(6), "iv_rank": 0.90, "implied_move_pct": 9},  # too far
+        {"kind": "implied", "ticker": "LOW", "report_date": _session_iso(1), "iv_rank": 0.30, "implied_move_pct": 7},   # IV too low
+        {"kind": "implied", "ticker": "BBB", "report_date": _session_iso(2), "iv_rank": 0.85, "implied_move_pct": 10},
+        {"kind": "implied", "ticker": "HII", "report_date": _session_iso(1), "iv_rank": 80.0, "implied_move_pct": 9},   # 0-100 scale, rich
+        {"kind": "implied", "ticker": "LOO", "report_date": _session_iso(1), "iv_rank": 40.0, "implied_move_pct": 6},   # 0-100 scale, NOT rich
+        {"kind": "implied", "ticker": "TDY", "report_date": _session_iso(0), "iv_rank": 0.90, "implied_move_pct": 9},   # reports TODAY -> excluded
     ]
     eng = ENG()
     monkeypatch.setattr(ENG, "PANEL", _panel(tmp_path, recs))
@@ -53,7 +69,7 @@ def test_candidates_filter_rich_iv_and_soon(monkeypatch, tmp_path):
 
 
 def test_candidates_dedup_against_open(monkeypatch, tmp_path):
-    recs = [{"kind": "implied", "ticker": "AAA", "report_date": _iso(1), "iv_rank": 0.7, "implied_move_pct": 8}]
+    recs = [{"kind": "implied", "ticker": "AAA", "report_date": _session_iso(1), "iv_rank": 0.7, "implied_move_pct": 8}]
     eng = ENG()
     monkeypatch.setattr(ENG, "PANEL", _panel(tmp_path, recs))
     monkeypatch.setattr(eng, "_open_symbols", lambda: {"AAA"})   # already positioned
@@ -82,7 +98,9 @@ def test_dryrun_respects_daily_limit(monkeypatch):
 
     r = eng.open_positions(dry_run=True)
     assert r["status"] == "EARNINGS_VOL_DRYRUN"
-    assert r["planned"] == eng.LIMIT_PER_DAY          # capped at 2/day, not all 4
+    # `planned` is the full list of planned condors; `planned_count` is the int (shape fixed 2026-07-22)
+    assert r["planned_count"] == eng.LIMIT_PER_DAY          # capped at 2/day, not all 4
+    assert len(r["planned"]) == eng.LIMIT_PER_DAY
 
 
 def test_dryrun_respects_risk_cap(monkeypatch):
@@ -105,4 +123,5 @@ def test_dryrun_respects_risk_cap(monkeypatch):
                         "credit_total": 40.0, "max_loss_total": 200.0, "credit_per_condor": 0.4,
                         "return_on_risk": 0.2, "legs": {}})
     r = eng.open_positions(dry_run=True)
-    assert r["planned"] == 0                           # a $200 condor doesn't fit $100 headroom
+    assert r["planned_count"] == 0                      # a $200 condor doesn't fit $100 headroom
+    assert r["planned"] == []

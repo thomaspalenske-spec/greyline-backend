@@ -1,12 +1,18 @@
 """Survivorship: the past can't be fixed, so the forward record must never be lost."""
 
 import json
+from datetime import datetime, timedelta
 
 import pytest
 
 from app.services.universe_survivorship_engine import UniverseSurvivorshipEngine
 
 HDR = "date,open,high,low,close,volume\n"
+
+# An "alive" symbol's last bar must be recent RELATIVE TO TODAY (inside STALE_DAYS), or the test rots:
+# a hardcoded date silently crosses the staleness cutoff as wall-clock time advances and the live name
+# gets flagged as departed. Computed each run so it stays inside the window.
+RECENT = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
 
 
 @pytest.fixture
@@ -33,7 +39,7 @@ def test_membership_on_an_unarchived_date_returns_none_not_todays_list(eng, tmp_
 def test_a_departing_symbol_is_retained_not_deleted(eng, tmp_path):
     """A delisting is the observation a survivorship-free dataset is MADE of. TradeStation
     returns 'Invalid Symbol' for dead tickers, so a file discarded now is gone forever."""
-    _sym(tmp_path, "ALIVE", "2026-07-20")
+    _sym(tmp_path, "ALIVE", RECENT)                     # last bar yesterday -> inside STALE_DAYS, alive
     _sym(tmp_path, "DEAD", "2026-01-05")                # feed went quiet long ago
     out = eng.detect_departures()
     assert out["newly_recorded"] == ["DEAD"]
