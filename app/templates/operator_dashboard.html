@@ -348,6 +348,19 @@ table {
     overflow-x: auto !important;
 }
 
+/* Open Positions is a 13-column table (…Take-Profits, P/L, P/L %, Status, Stage). Give it its OWN
+   scroll box so every column is reachable — horizontal scroll for width, vertical for length — with the
+   header sticky while scrolling. The card delegates scrolling to this inner box. */
+/* min-width:0 is the critical bit — the card is a CSS-grid item, whose default min-width:auto makes it
+   grow to the 13-column table's width (overflowing the page) instead of letting the inner box scroll. */
+#open_positions_card { min-width: 0 !important; overflow: visible !important; max-height: none !important; }
+.pos-scroll { overflow: auto; max-height: 700px; max-width: 100%; }
+.pos-scroll table { width: max-content !important; min-width: 100%; }
+.pos-scroll thead th {
+    position: sticky; top: 0; z-index: 100;
+    background: #161b22; color: #dbe4ee; border-bottom: 2px solid #2d333b;
+}
+
 td,
 th {
     white-space: nowrap !important;
@@ -707,14 +720,16 @@ th {
         </table>
       </div>
 
-      <div class="card">
+      <div class="card" id="open_positions_card">
         <div class="section-title">OPEN POSITIONS</div>
+        <div class="pos-scroll">
         <table>
           <thead>
             <tr><th>Symbol</th><th>Side</th><th>Shares</th><th>Limit Buy</th><th>Entry</th><th>Current</th><th>Cost</th><th>Stop</th><th>Take-Profits (TP1·TP2·TP3)</th><th>P/L</th><th>P/L %</th><th>Status</th><th>Stage</th></tr>
           </thead>
           <tbody id="positions"></tbody>
         </table>
+        </div>
       </div>
     </section>
 
