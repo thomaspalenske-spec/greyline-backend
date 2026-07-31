@@ -1,7 +1,15 @@
 {
-  "computed_epoch": 1785462869.957729,
-  "generated_at": "2026-07-31T01:54:29.957714",
-  "new_this_run": [],
+  "computed_epoch": 1785528625.326404,
+  "generated_at": "2026-07-31T20:10:25.326388",
+  "new_this_run": [
+    "ASPI",
+    "EME",
+    "ETSY",
+    "IMOS",
+    "JBL",
+    "LVS",
+    "WU"
+  ],
   "sectors": {
     "A": "HEALTHCARE",
     "AA": "MATERIALS",
@@ -137,6 +145,7 @@
     "ASAN": "TECHNOLOGY",
     "ASML": "TECHNOLOGY",
     "ASND": "HEALTHCARE",
+    "ASPI": "MATERIALS",
     "ASRV": "FINANCIALS",
     "ASST": "COMMUNICATIONS",
     "ASTE": "INDUSTRIALS",
@@ -503,6 +512,7 @@
     "ELV": "HEALTHCARE",
     "EMA": "UTILITIES",
     "EMBJ": "INDUSTRIALS",
+    "EME": "INDUSTRIALS",
     "EMPD": "CONSUMER_DISCRETIONARY",
     "EMR": "INDUSTRIALS",
     "ENB": "ENERGY",
@@ -535,6 +545,7 @@
     "ETN": "INDUSTRIALS",
     "ETON": "HEALTHCARE",
     "ETR": "UTILITIES",
+    "ETSY": "CONSUMER_DISCRETIONARY",
     "EVC": "COMMUNICATIONS",
     "EVLV": "INDUSTRIALS",
     "EVR": "FINANCIALS",
@@ -750,6 +761,7 @@
     "IMKTA": "CONSUMER_STAPLES",
     "IMMP": "HEALTHCARE",
     "IMO": "ENERGY",
+    "IMOS": "TECHNOLOGY",
     "IMTX": "HEALTHCARE",
     "INBX": "HEALTHCARE",
     "INCY": "HEALTHCARE",
@@ -797,6 +809,7 @@
     "JAZZ": "HEALTHCARE",
     "JBHT": "INDUSTRIALS",
     "JBIO": "HEALTHCARE",
+    "JBL": "TECHNOLOGY",
     "JBLU": "INDUSTRIALS",
     "JBS": "CONSUMER_STAPLES",
     "JCI": "INDUSTRIALS",
@@ -890,6 +903,7 @@
     "LUV": "INDUSTRIALS",
     "LUXE": "CONSUMER_DISCRETIONARY",
     "LVO": "COMMUNICATIONS",
+    "LVS": "CONSUMER_DISCRETIONARY",
     "LWLG": "MATERIALS",
     "LXRX": "HEALTHCARE",
     "LYB": "MATERIALS",
@@ -1617,6 +1631,7 @@
     "WST": "HEALTHCARE",
     "WTFC": "FINANCIALS",
     "WTRG": "UTILITIES",
+    "WU": "FINANCIALS",
     "WULF": "FINANCIALS",
     "WVE": "HEALTHCARE",
     "WW": "CONSUMER_DISCRETIONARY",
@@ -1658,8 +1673,10 @@
     "ZVIA": "CONSUMER_STAPLES",
     "ZYME": "HEALTHCARE"
   },
-  "session_date": "2026-07-30",
+  "session_date": "2026-07-31",
   "source": "UNUSUAL_WHALES /screener/stocks (OI reused + marketcap), merged",
-  "symbols": 1654,
-  "unresolved": []
+  "symbols": 1661,
+  "unresolved": [
+    "BITO"
+  ]
 }

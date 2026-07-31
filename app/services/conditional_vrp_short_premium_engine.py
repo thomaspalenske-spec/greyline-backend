@@ -983,13 +983,26 @@ class ConditionalVRPShortPremiumEngine:
     def open_condor_exits(self):
         """READ-ONLY exit levels for every OPEN condor — the price targets the exit doctrine acts on.
         Expressed as NET BUYBACK cost (what you pay to close): profit-take fires when the buyback falls
-        to (1-frac)*credit; the hard-stop fires when it rises to credit + mult*max_loss. Static — read
-        straight from the ledger, NO live quotes and NO orders — so it is cheap to poll from the dashboard.
-        The live current buyback / P&L is on the Open Positions card."""
+        to (1-frac)*credit; the hard-stop fires when it rises to credit + mult*max_loss. Levels are read
+        straight from the ledger. Also attaches a best-effort per-condor unrealized P&L (and % return on
+        the defined max loss) from a SINGLE broker positions read — null if the read fails, so the static
+        exit levels always render. No orders."""
         try:
             rows = [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
         except Exception:
             return {"timestamp": datetime.utcnow().isoformat(), "condors": [], "status": "NO_VRP_LEDGER"}
+
+        # Best-effort LIVE P&L per condor from ONE broker positions read (the broker's marks) — cheaper and
+        # steadier than re-quoting every leg. P/L = credit + Σ(current leg MarketValues) (a short leg's MV is
+        # negative), i.e. credit − current cost-to-close. Empty/None on a failed read → P/L renders "—".
+        marks = {}
+        try:
+            from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+            for p in ((TradeStationSimBookingEngine().positions().get("response_json") or {}).get("Positions") or []):
+                marks[str(p.get("symbol") or p.get("Symbol") or "").upper()] = self._f(p.get("MarketValue"))
+        except Exception:
+            marks = {}
+
         out = []
         for r in rows:
             if r.get("status") != "OPEN":
@@ -999,10 +1012,16 @@ class ConditionalVRPShortPremiumEngine:
             dte = self._dte(r.get("expiration"))
             time_exit = (f"~1 session after {r.get('report_date')} report (IV crush)"
                          if strat == "earnings_vol" else f"liquidate at DTE ≤ {self.MANAGE_DTE}")
+            legsyms = [str(lg.get("symbol") or "").upper() for lg in (r.get("legs") or [])]
+            pnl = pnl_pct = None
+            if marks and legsyms and all(s in marks for s in legsyms):
+                pnl = round(cr + sum(marks[s] for s in legsyms), 2)          # credit − current cost-to-close
+                pnl_pct = round(pnl / ml * 100, 1) if ml else None           # return on the defined max loss
             out.append({
                 "symbol": r.get("symbol"), "strategy": strat, "expiration": r.get("expiration"),
                 "dte": dte, "quantity": r.get("quantity"),
                 "credit_total": round(cr, 2), "max_loss_total": round(ml, 2),
+                "pnl": pnl, "pnl_pct": pnl_pct,
                 "profit_take_buyback": round(cr * (1 - self.PROFIT_TAKE_FRAC), 2),
                 "profit_take_lock": round(cr * self.PROFIT_TAKE_FRAC, 2),
                 "hard_stop_buyback": round(cr + self.HARD_STOP_LOSS_MULT * ml, 2),

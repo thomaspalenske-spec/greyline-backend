@@ -721,13 +721,13 @@ th {
 
       <div class="card" id="condor_exits_card" style="min-width:0;">
         <div class="section-title">Open Condor Exits</div>
-        <div class="sub" style="margin-bottom:10px;">Where each OPEN condor exits — the net BUYBACK cost to close. Profit-take at 50% of credit; hard-stop at 80% of the defined max loss; VRP liquidates at DTE ≤ 21, earnings condors exit on the IV crush. (Live P/L is on Open Positions below.)</div>
+        <div class="sub" style="margin-bottom:10px;">Where each OPEN condor exits — the net BUYBACK cost to close. Profit-take at 50% of credit; hard-stop at 80% of the defined max loss; VRP liquidates at DTE ≤ 21, earnings condors exit on the IV crush. P/L is the live unrealized (P/L % = return on the defined max loss).</div>
         <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>Symbol</th><th>Type</th><th>DTE</th><th>Credit</th><th>Max Loss</th><th>Profit-Take (buyback ≤)</th><th>Hard-Stop (buyback ≥)</th><th>Time Exit</th></tr>
+              <tr><th>Symbol</th><th>Type</th><th>DTE</th><th>Credit</th><th>Max Loss</th><th>P/L</th><th>P/L %</th><th>Profit-Take (buyback ≤)</th><th>Hard-Stop (buyback ≥)</th><th>Time Exit</th></tr>
             </thead>
-            <tbody id="condor_exits_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+            <tbody id="condor_exits_body"><tr><td colspan="10"><span class="sub">Loading…</span></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1027,7 +1027,7 @@ async function refreshOpportunityBoard() {
       html += `<tr><td colspan="6" style="padding-top:14px;">
         <strong>${g.strategy || ""}</strong> <span class="sub">· ${g.instrument || ""}</span><br>
         <span class="sub">${g.edge || ""}</span><br>
-        <span class="sub" style="opacity:.85;">${g.action || ""}${g.error ? " — <span class='red'>"+g.error+"</span>" : ""}</span>
+        <span class="sub" style="opacity:.85;">${g.action || ""}${g.error ? " — <span class='red'>"+g.error+"</span>" : ""}</span>${g.held_note ? `<br><span class="sub" style="opacity:.7;font-style:italic;">${g.held_note}</span>` : ""}
       </td></tr>`;
       if (!cands.length) {
         html += `<tr><td colspan="6"><span class="sub">${g.note || "no candidates right now"}</span></td></tr>`;
@@ -1090,7 +1090,7 @@ async function refreshCondorExits() {
   try {
     const d = await getJSON("/condor-exits");
     const rows = d.condors || [];
-    if (!rows.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">No open condors.</span></td></tr>`; return; }
+    if (!rows.length) { body.innerHTML = `<tr><td colspan="10"><span class="sub">No open condors.</span></td></tr>`; return; }
     body.innerHTML = rows.map(c => {
       const isEarn = c.strategy === "earnings_vol";
       return `<tr>
@@ -1099,13 +1099,15 @@ async function refreshCondorExits() {
         <td>${c.dte != null ? c.dte : "—"}</td>
         <td>${fmtMoney(c.credit_total)}</td>
         <td><span class="red">${fmtMoney(c.max_loss_total)}</span></td>
+        <td class="${c.pnl == null ? "" : c.pnl >= 0 ? "green" : "red"}">${c.pnl == null ? "—" : fmtMoney(c.pnl)}</td>
+        <td class="${c.pnl == null ? "" : c.pnl >= 0 ? "green" : "red"}">${c.pnl_pct == null ? "—" : (c.pnl_pct > 0 ? "+" : "") + c.pnl_pct + "%"}</td>
         <td><span class="green">${fmtMoney(c.profit_take_buyback)}</span> <span class="sub">lock +${fmtMoney(c.profit_take_lock)}</span></td>
         <td><span class="red">${fmtMoney(c.hard_stop_buyback)}</span> <span class="sub">loss −${fmtMoney(c.hard_stop_loss)}</span></td>
         <td><span class="sub">${c.time_exit || "—"}</span></td>
       </tr>`;
     }).join("");
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="8"><span class="red">Condor exits unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+    body.innerHTML = `<tr><td colspan="10"><span class="red">Condor exits unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
   }
 }
 

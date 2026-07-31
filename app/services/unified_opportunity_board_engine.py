@@ -53,16 +53,24 @@ class UnifiedOpportunityBoardEngine:
             exec_stat = {}
 
         rows = []
+        held = 0
         for c in cands:
             sym = str(c.get("symbol") or "").upper()
             w = exec_stat.get(sym) or {}
+            status = w.get("status") or "—"
+            # Names already HELD live in the Open Positions table — hide them here so the board is a
+            # clean "what's next up" view (full visibility into the queued candidates, not a repeat of
+            # what we already own).
+            if str(status).upper() == "BOUGHT":
+                held += 1
+                continue
             rows.append({
                 "symbol": sym,
                 "instrument": "EQUITY",
                 "side": c.get("side"),
                 "score": round(self._f(c.get("conviction")), 3),
                 "score_label": "conviction",
-                "status": w.get("status") or "—",
+                "status": status,
                 "reason": w.get("reason") or "",
                 "detail": (f"12-1 mom {round(self._f(c.get('momentum_12_1_pct')),0):.0f}% · "
                            f"5d rev {round(self._f(c.get('reversal_5d_move_pct')),0):.0f}% · "
@@ -87,6 +95,9 @@ class UnifiedOpportunityBoardEngine:
             "score_basis": "conviction (percentile-rank blend of the two legs, 0-2)",
             "action": (f"rebalances on a 7-day cadence — next due {next_due}" if next_due
                        else "rebalances on a 7-day cadence"),
+            "held_hidden": held,
+            "held_note": (f"{held} held name(s) hidden — they're in Open Positions. Still fully analyzed "
+                          f"each rebalance (GreyLine can add to a position it already owns)." if held else ""),
             "candidates": rows,
         }
 
