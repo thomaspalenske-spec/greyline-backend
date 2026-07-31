@@ -734,7 +734,7 @@ th {
         <div class="pos-scroll">
         <table>
           <thead>
-            <tr><th>Symbol</th><th>Side</th><th>Shares</th><th>Limit Buy</th><th>Entry</th><th>Current</th><th>Cost</th><th>Stop</th><th>Take-Profits (TP1·TP2·TP3)</th><th>P/L</th><th>P/L %</th><th>Status</th><th>Stage</th></tr>
+            <tr><th>Symbol</th><th>P/L</th><th>Side</th><th>Shares</th><th>Limit Buy</th><th>Entry</th><th>Current</th><th>Cost</th><th>Stop</th><th>Take-Profits (TP1·TP2·TP3)</th><th>P/L %</th><th>Status</th><th>Stage</th></tr>
           </thead>
           <tbody id="positions"></tbody>
         </table>
@@ -1313,6 +1313,7 @@ async function refreshAll() {
       return `
       <tr${p.pending ? ' style="opacity:.75;"' : ''}>
         <td><strong>${p.symbol || "—"}</strong><br><span class="sub">${p.asset_type || ""}</span></td>
+        <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
         <td><span class="${sideCls}">${p.side || "—"}</span></td>
         <td>${shares != null ? shares : "—"}</td>
         <td>${limitCell}</td>
@@ -1321,7 +1322,6 @@ async function refreshAll() {
         <td>${costCell}</td>
         <td>${p.pending ? dash : stopCell}</td>
         <td>${p.pending ? dash : tpCell}</td>
-        <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
         <td class="${sign}">${p.pending ? dash : (p.unrealized_pnl_pct > 0 ? "+" : "") + p.unrealized_pnl_pct + "%"}</td>
         <td>${statusCell}</td>
         <td><span class="sub">${p.stage || ""}</span></td>
