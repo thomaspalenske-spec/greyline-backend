@@ -1067,7 +1067,9 @@ async function refreshAll() {
     document.getElementById("orders_allowed").className = "value " + (ord ? "green" : "red");
 
     const schedulerRunning = !!(s.thread_alive || s.last_status === "BACKGROUND_SCHEDULER_CYCLE_COMPLETE");
-    const tokenReady = String(s.token_status || s.broker_token_status || "READY").toUpperCase();
+    // Unknown token status is NOT "ready" — default to CHECK (yellow), never green, so a missing/renamed
+    // token field can't render the broker token as confirmed-ready.
+    const tokenReady = String(s.token_status || s.broker_token_status || "CHECK").toUpperCase();
     setStatusValue("ready_execution", ex ? "READY" : "BLOCKED", ex ? "green" : "red");
     setStatusValue("ready_orders", ord ? "READY" : "BLOCKED", ord ? "green" : "red");
     setStatusValue("ready_scheduler", schedulerRunning ? "RUNNING" : "CHECK", schedulerRunning ? "green" : "yellow");
@@ -1075,8 +1077,10 @@ async function refreshAll() {
     setText("ready_refresh", new Date().toLocaleTimeString());
   } else {
     // The scheduler-status read FAILED this cycle — flag it rather than leaving the readiness tiles
-    // showing stale green (a failed read is not a confirmation of readiness).
+    // showing stale green (a failed read is not a confirmation of readiness). Both scheduler and token
+    // status come from this one response, so neither can be confirmed now.
     setStatusValue("ready_scheduler", "UNAVAILABLE", "yellow");
+    setStatusValue("ready_token", "UNAVAILABLE", "yellow");
     setText("ready_refresh", new Date().toLocaleTimeString() + " (status read failed)");
   }
 
