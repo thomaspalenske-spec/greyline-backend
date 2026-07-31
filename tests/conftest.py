@@ -22,6 +22,7 @@ _EXEMPT_MODULES = {
     "test_credential_security_audit",  # shells out to git in the real repo
     "test_route_audit",                # drives every live route (needs real env)
     "test_schema_audit",               # drives every live route (needs real env)
+    "test_end_to_end_trade_readiness", # audits the LIVE trade-firing chain (real data + broker reads)
 }
 
 

@@ -34,6 +34,16 @@ class PreOpenReadinessEngine:
             return None
 
     def audit(self):
+        # Load .env FIRST so every check reads the real configured flags/capital base. Without this a
+        # fresh-process caller (a CLI run, a test, a cron) reads the strategy/capital env as unset until
+        # some engine happens to reload it mid-audit — making the early flag/capital checks disagree with
+        # the later ones. The live service already loads .env at startup, so this is idempotent there.
+        try:
+            from app.services.env_reload import reload_env
+            reload_env()
+        except Exception:
+            pass
+
         checks = []
 
         def add(name, status, detail):
@@ -122,8 +132,12 @@ class PreOpenReadinessEngine:
         except Exception as e:
             add("carry_signal_data", "FAIL", f"quote engine error: {repr(e)[:80]}")
 
-        # 6. armed strategy paths execute without throwing (dry / plan only)
-        for name, fn in [("carry", self._probe_carry), ("trend", self._probe_trend), ("tbill", self._probe_tbill)]:
+        # 6. armed strategy paths surface a decision without throwing (READ-ONLY — never books). Covers
+        # ALL SIX sleeves: momentum/vrp/earnings read their (scheduler-populated) decision caches; carry/
+        # trend/tbill dry-plan. None of these can place an order, so this is safe on the live route too.
+        for name, fn in [("momentum", self._probe_momentum), ("vrp", self._probe_vrp),
+                         ("earnings", self._probe_earnings), ("carry", self._probe_carry),
+                         ("trend", self._probe_trend), ("tbill", self._probe_tbill)]:
             try:
                 add(f"{name}_path", "PASS", fn())
             except Exception as e:
@@ -155,6 +169,11 @@ class PreOpenReadinessEngine:
         except Exception as e:
             add("mission_accounting", "WARN", f"governor error: {repr(e)[:80]}")
 
+        # 9. THE TRADE-FIRING SPINE — the links that decide whether a decided order actually books at the
+        # bell: execution authority (the real gate), broker reachability, the SIM fail-closed guard, the
+        # order-body verification, scheduler liveness, and the exposure breaker. All read-only.
+        self._trade_firing_spine(add)
+
         fails = [c for c in checks if c["status"] == "FAIL"]
         warns = [c for c in checks if c["status"] == "WARN"]
         overall = "NOT_READY" if fails else ("READY_WITH_WARNINGS" if warns else "READY")
@@ -175,3 +194,187 @@ class PreOpenReadinessEngine:
         from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
         p = TbillCashSweepEngine().plan()
         return f"plan status {p.get('status')}, target {p.get('target_shares')} sh"
+
+    # ---- six-sleeve decision-surface probes (READ-ONLY, never book) -----------------------------
+    def _probe_momentum(self):
+        """Momentum reads its scheduler-populated candidate cache + cadence state. NEVER calls
+        rebalance() — that path books when due. Mirrors the Opportunity Board's read."""
+        import json
+        from datetime import date
+        from app.services.momentum_reversal_rebalance_engine import MomentumReversalRebalanceEngine as R
+        armed = self._flag("GREYLINE_MOMENTUM_ENABLED")
+        try:
+            c = json.loads(Path("app/data/momentum_reversal/top_candidates_cache.json").read_text())
+            n, src, asof = len(c.get("candidates") or []), c.get("data_source"), str(c.get("as_of") or "")[:10]
+            surface = f"{n} cached candidate(s), data_source {src} as_of {asof}"
+        except Exception:
+            surface = "no candidate cache yet (populates on the next scheduler cycle)"
+        try:
+            st = json.loads(Path("app/data/momentum_reversal/rebalance_state.json").read_text())
+            last = date.fromisoformat(str(st.get("last_rebalance_at"))[:10])
+            nd = date.fromordinal(last.toordinal() + R.MIN_CALENDAR_DAYS)
+            cadence = f"7-day cadence, last {last.isoformat()}, next due {nd.isoformat()}"
+        except Exception:
+            cadence = "no prior rebalance recorded — would open on the next due cycle"
+        return f"{'armed' if armed else 'OFF'}; {surface}; {cadence}"
+
+    def _probe_vrp(self):
+        """VRP reads the scheduler-built BestCondors cache (buildable condors + any sleeve error) —
+        fast + read-only. Avoids a live 200-name chain scan on the audit path."""
+        from app.services.best_condors_engine import BestCondorsEngine
+        armed = self._flag("GREYLINE_VRP_SHORT_PREMIUM_ENABLED")
+        cached = BestCondorsEngine().cached(limit=50)
+        vrp = [c for c in (cached.get("condors") or []) if str(c.get("sleeve") or "").upper() == "VRP"]
+        err = (cached.get("sleeve_errors") or {}).get("VRP")
+        if err:
+            raise RuntimeError(f"VRP sleeve error in best_condors: {err}")
+        return f"{'armed' if armed else 'OFF'}; {len(vrp)} buildable condor(s) cached off Unusual Whales"
+
+    def _probe_earnings(self):
+        """Earnings reads its status() (candidate names + risk usage) — no condor build, no order."""
+        from app.services.earnings_vol_harvest_engine import EarningsVolHarvestEngine
+        st = EarningsVolHarvestEngine().status()
+        armed = bool(st.get("armed"))
+        cands = len(st.get("candidates_now") or [])
+        return (f"{'armed' if armed else 'OFF'}; {cands} name(s) reporting within the window; "
+                f"{st.get('open_positions', 0)} open, "
+                f"${self._num(st.get('open_risk_usd'))}/${self._num(st.get('portfolio_cap_usd'))} risk used")
+
+    @staticmethod
+    def _num(v):
+        try:
+            return f"{float(v):.0f}"
+        except (TypeError, ValueError):
+            return "?"
+
+    # ---- the trade-firing spine (READ-ONLY; safe on the live /pre-open-readiness route) ----------
+    def _trade_firing_spine(self, add):
+        from os import getenv as _ge
+
+        # (a) EXECUTION AUTHORITY — the real gate. A paper order fires only when BOTH the governor
+        # allows placement AND SIM booking routes it to the broker (paper-on-but-booking-off just
+        # fabricates in the local ledger — the EXEC_BOOKING_COHERENT trap).
+        try:
+            from app.services.execution_governor import ExecutionGovernor
+            perm = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
+            sim_book = (_ge("GREYLINE_SIM_BOOKING_ENABLED", "") or "").strip().lower() == "true"
+            can_place = bool(perm.get("order_placement_allowed"))
+            paper = bool(perm.get("paper_execution_enabled"))
+            live_off = not bool(perm.get("live_order_placement_allowed"))
+            if can_place and sim_book:
+                add("execution_authority", "PASS",
+                    f"paper execution ARMED + SIM booking ON → orders WILL book to the Paper account "
+                    f"(mode {perm.get('execution_mode')}; live placement OFF={live_off}, as intended)")
+            elif can_place and not sim_book:
+                add("execution_authority", "FAIL",
+                    "paper execution ON but GREYLINE_SIM_BOOKING_ENABLED is OFF → decided orders would "
+                    "only fabricate in the local ledger, never reach the broker (EXEC_BOOKING_COHERENT trap)")
+            elif paper and not can_place:
+                add("execution_authority", "WARN",
+                    f"paper flagged on but order_placement_allowed is False: {perm.get('status')}")
+            else:
+                add("execution_authority", "FAIL",
+                    f"execution DISABLED → nothing books at the bell (status {perm.get('status')}, "
+                    f"paper={paper}, order_placement_allowed={can_place})")
+        except Exception as e:
+            add("execution_authority", "FAIL", f"execution governor threw: {repr(e)[:80]}")
+
+        # (b) BROKER CONNECTIVITY — token read + account resolves to SIM + balances/positions/orders read.
+        try:
+            from app.services.tradestation_token_status_engine import TradeStationTokenStatusEngine
+            from app.services.tradestation_account_source_engine import TradeStationAccountSourceEngine
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            tok = TradeStationTokenStatusEngine().evaluate()
+            src = TradeStationAccountSourceEngine().resolve()
+            view = BrokerAccountViewEngine().snapshot()
+            tok_ok, src_ok, reads_ok = (bool(tok.get("ready_for_read_only")),
+                                        bool(src.get("ok")), bool(view.get("reads_ok")))
+            if tok_ok and src_ok and reads_ok:
+                add("broker_connectivity", "PASS",
+                    f"token ready (read-only), account {src.get('label')} [{src.get('mode')}] resolved, "
+                    f"balances/positions/orders read OK ({len(view.get('positions') or [])} live position(s))")
+            else:
+                bad = []
+                if not tok_ok:
+                    bad.append(f"token {tok.get('status')}")
+                if not src_ok:
+                    bad.append(f"account source unresolved ({src.get('error')})")
+                if not reads_ok:
+                    bad.append(f"broker reads degraded ({view.get('status')})")
+                add("broker_connectivity", "FAIL", "cannot reach the trading account: " + "; ".join(bad))
+        except Exception as e:
+            add("broker_connectivity", "FAIL", f"broker read threw: {repr(e)[:80]}")
+
+        # (c) SIM FAIL-CLOSED GUARD — booking is structurally incapable of touching the real account.
+        try:
+            from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+            acct = TradeStationSimBookingEngine()._assert_sim()
+            add("sim_booking_target_safe", "PASS",
+                f"booking targets SIM account {str(acct)[:3]}*** on the sandbox host — live orders fail-closed")
+        except Exception as e:
+            add("sim_booking_target_safe", "FAIL",
+                f"SIM fail-closed guard tripped (won't book / misconfigured): {repr(e)[:100]}")
+
+        # (d) ORDER-PATH INTEGRITY — success is verified from the BODY (valid OrderID, no Error), NOT
+        # HTTP 200. Synthetic payloads only — no network, no order. Proves a rejected order can't be
+        # recorded as filled (the naked-short / phantom-position class).
+        try:
+            from app.services.tradestation_sim_booking_engine import _interpret_order
+            ok_s, oid_s, _ = _interpret_order(200, {"Orders": [{"OrderID": "123456"}]})
+            ok_r, _, rr = _interpret_order(200, {"Orders": [{"OrderID": "0", "Error": "Insufficient BP"}]})
+            ok_e, _, _ = _interpret_order(200, {"Errors": [{"Message": "bad request"}]})
+            ok_h, _, _ = _interpret_order(500, {})
+            good = (ok_s is True and oid_s == "123456" and ok_r is False and bool(rr)
+                    and ok_e is False and ok_h is False)
+            add("order_path_integrity", "PASS" if good else "FAIL",
+                "order success is verified from the response BODY (valid OrderID, no Error), not HTTP 200 "
+                "— a body-level reject can't be recorded as a filled position"
+                if good else
+                f"BODY-verification guard BROKEN: success={ok_s} reject={ok_r} errors={ok_e} http500={ok_h}")
+        except Exception as e:
+            add("order_path_integrity", "FAIL", f"order-body verifier threw: {repr(e)[:80]}")
+
+        # (e) SCHEDULER LIVENESS — the cycle that attempts the opens. thread_alive is PROCESS-LOCAL: the
+        # running service holds the trading thread, so no-thread-here is unknown-not-down (WARN), never a
+        # false FAIL. Healthy = last cycle COMPLETE with no consecutive failures.
+        try:
+            from app.services.background_scheduler_service import BackgroundSchedulerService
+            st = BackgroundSchedulerService.status()
+            alive = bool(st.get("thread_alive"))
+            consec = int(st.get("consecutive_failures") or 0)
+            last = str(st.get("last_status") or "")
+            if alive and consec == 0 and last.endswith("COMPLETE"):
+                add("scheduler_liveness", "PASS",
+                    f"scheduler thread alive; last cycle {last}; success {st.get('cycle_success_rate_pct')}% "
+                    f"over {st.get('cycle_count')} cycle(s)")
+            elif alive:
+                add("scheduler_liveness", "WARN",
+                    f"scheduler alive but check the last cycle: last={last or 'n/a'}, "
+                    f"consecutive_failures={consec}, last_error={st.get('last_error')}")
+            else:
+                add("scheduler_liveness", "WARN",
+                    "no scheduler thread in THIS process — confirm on the live service via "
+                    "GET /background-scheduler/status (thread_alive there must be True)")
+        except Exception as e:
+            add("scheduler_liveness", "WARN", f"scheduler status threw: {repr(e)[:80]}")
+
+        # (f) EXPOSURE BREAKER — room to add risk. Now fails CLOSED on a degraded broker read (unknown
+        # book blocks new concentration-gated risk). A breach is a legitimate risk-full state, not a fault.
+        try:
+            from app.services.position_exposure_limit_engine import PositionExposureLimitEngine
+            lim = PositionExposureLimitEngine().evaluate()
+            if lim.get("limits_ok"):
+                add("exposure_gate", "PASS",
+                    f"room to add risk: {lim.get('open_position_count')}/{lim.get('max_open_positions')} "
+                    f"positions, max sector {lim.get('max_sector_exposure_pct_observed')}%/"
+                    f"{lim.get('max_sector_exposure_pct_limit')}%")
+            elif lim.get("degraded") or not lim.get("compute_ok"):
+                add("exposure_gate", "WARN",
+                    f"exposure UNVERIFIABLE (broker read degraded) → breaker fails CLOSED, blocks new "
+                    f"concentration-gated risk: {lim.get('status')}")
+            else:
+                add("exposure_gate", "WARN",
+                    f"position/exposure limit BREACHED → no new concentration-gated risk until reduced: "
+                    f"{lim.get('breaches')}")
+        except Exception as e:
+            add("exposure_gate", "WARN", f"exposure limit threw: {repr(e)[:80]}")
