@@ -76,9 +76,11 @@ def test_disabled_by_default_opens_nothing(monkeypatch):
 
 
 def test_wings_bought_before_shorts_are_sold(monkeypatch):
-    """When arming, the tail cap (wings) must be established before the short legs go live."""
+    """When arming via the LEGACY legged-in path, the tail cap (wings) must be established before the
+    short legs go live. (The atomic path removes leg ordering entirely — pin the flag off to test this.)"""
     e = ConditionalVRPShortPremiumEngine()
     monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_CONDOR_ATOMIC_ORDER", "false")
     con = e.build_condor("XYZ", _full_chain())
     con.update({"expiration": "2026-07-31", "iv_rank": 0.9, "iv": 0.4})
     monkeypatch.setattr(e, "plan", lambda **k: {"planned": [con], "skipped": []})

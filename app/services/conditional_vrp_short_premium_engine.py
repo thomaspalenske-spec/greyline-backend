@@ -881,25 +881,45 @@ class ConditionalVRPShortPremiumEngine:
             committed = False
             if self.enabled() and not dry_run:
                 b = self._booking()
-                # Close SHORTS first (BUYTOCLOSE), then wings (SELLTOCLOSE). If a short buyback fails we
-                # have NOT yet sold its protective wing, so an out-of-order partial can never manufacture
-                # a naked short. A MARKETABLE LIMIT caps the price; a rejected/gapped leg reports ok=False.
-                legs_ordered = sorted(r["legs"], key=lambda lg: 0 if lg["action"] == "SELLTOOPEN" else 1)
-                leg_results, all_ok = [], True
-                for leg in legs_ordered:
-                    close_action = "BUYTOCLOSE" if leg["action"] == "SELLTOOPEN" else "SELLTOCLOSE"
-                    bid, ask = leg_quotes.get(leg["symbol"], (0.0, 0.0))
-                    if bid > 0 and ask > 0:
-                        px = ask if close_action == "BUYTOCLOSE" else bid
-                        res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
-                                            order_type="Limit", limit_price=self._tick_round(px), tif="DAY")
-                    else:
-                        res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
-                                            order_type="Market", tif="DAY")   # no usable quote: fallback
-                    ok_leg = bool(res.get("ok"))
-                    all_ok = all_ok and ok_leg
-                    leg_results.append({"symbol": leg["symbol"], "action": close_action, "ok": ok_leg,
-                                        "status": res.get("status"), "order_id": res.get("order_id")})
+                if self._atomic_orders_enabled():
+                    # ATOMIC CLOSE: one multi-leg order — all legs close together or none. A partial/naked
+                    # close is impossible; worst case it doesn't fill and the FULL (defined-risk) condor
+                    # stays open. Priced at the marketable net debit (pay ask to buy back shorts, receive
+                    # bid to sell wings) so it fills.
+                    close_legs, mk_debit = [], 0.0
+                    for lg in r["legs"]:
+                        ca = "BUYTOCLOSE" if lg["action"] == "SELLTOOPEN" else "SELLTOCLOSE"
+                        close_legs.append({"symbol": lg["symbol"], "quantity": r["quantity"], "action": ca})
+                        bid, ask = leg_quotes.get(lg["symbol"], (0.0, 0.0))
+                        mk_debit += (ask if ca == "BUYTOCLOSE" else -bid)
+                    res = b.place_multileg(close_legs, order_type="Limit",
+                                           limit_price=self._tick_round(abs(mk_debit)), tif="DAY")
+                    all_ok = bool(res.get("ok"))
+                    leg_results = [{"symbol": l["symbol"], "action": l["action"], "ok": all_ok,
+                                    "order_id": res.get("order_id"), "atomic": True, "status": res.get("status")}
+                                   for l in close_legs]
+                else:
+                    # LEGACY leg-by-leg: close SHORTS first (BUYTOCLOSE), then wings (SELLTOCLOSE). If a short
+                    # buyback fails we have NOT yet sold its protective wing, so an out-of-order partial can't
+                    # manufacture a naked short. A MARKETABLE LIMIT caps the price; a rejected leg reports ok=False.
+                    # (Note: ok = order ACCEPTED, not filled — a marketable limit that doesn't fill can still
+                    # leave the unit unhedged; the atomic path above closes that gap. Reconciler backstops it.)
+                    legs_ordered = sorted(r["legs"], key=lambda lg: 0 if lg["action"] == "SELLTOOPEN" else 1)
+                    leg_results, all_ok = [], True
+                    for leg in legs_ordered:
+                        close_action = "BUYTOCLOSE" if leg["action"] == "SELLTOOPEN" else "SELLTOCLOSE"
+                        bid, ask = leg_quotes.get(leg["symbol"], (0.0, 0.0))
+                        if bid > 0 and ask > 0:
+                            px = ask if close_action == "BUYTOCLOSE" else bid
+                            res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
+                                                order_type="Limit", limit_price=self._tick_round(px), tif="DAY")
+                        else:
+                            res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
+                                                order_type="Market", tif="DAY")   # no usable quote: fallback
+                        ok_leg = bool(res.get("ok"))
+                        all_ok = all_ok and ok_leg
+                        leg_results.append({"symbol": leg["symbol"], "action": close_action, "ok": ok_leg,
+                                            "status": res.get("status"), "order_id": res.get("order_id")})
                 r.setdefault("close_attempts", []).append(
                     {"at": datetime.utcnow().isoformat(), "reason": reason, "legs": leg_results, "all_ok": all_ok})
                 if all_ok:
