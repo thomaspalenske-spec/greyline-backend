@@ -94,17 +94,6 @@ class EarningsVolHarvestEngine:
 
     # ---- candidate selection -------------------------------------------------------------------
 
-    def _optionable_universe(self):
-        """The same option-liquidity universe the VRP condor sleeve trades (VRPResearchEngine.DEFAULT_NAMES
-        = the derived optionable universe, curated-fallback if unavailable). None only on hard failure, so
-        the caller leaves the earnings feed ungated rather than emptying it."""
-        try:
-            from app.services.vrp_research_engine import VRPResearchEngine
-            u = set(VRPResearchEngine().DEFAULT_NAMES)
-            return u or None
-        except Exception:
-            return None
-
     def _candidates(self, today=None):
         """Rich-IV names reporting within REPORT_WITHIN_DAYS, from the earnings panel's implied
         records — deduped against what's already open."""
@@ -114,7 +103,6 @@ class EarningsVolHarvestEngine:
         except Exception:
             return []
         open_syms = self._open_symbols()
-        universe = self._optionable_universe()          # the SAME option-liquidity universe VRP condors use
         seen, out = set(), []
         for r in panel:
             if r.get("kind") != "implied":
@@ -123,11 +111,11 @@ class EarningsVolHarvestEngine:
             rd = str(r.get("report_date") or "")[:10]
             if not t or not rd or t in seen or t in open_syms:
                 continue
-            # Gate by the shared optionable universe so BOTH feeds of the Iron Condor table draw from one
-            # universe and an earnings condor only forms on a deeply-tradeable name. Fail-safe: if the
-            # universe can't be resolved, don't gate (never silently drop every candidate).
-            if universe is not None and t not in universe:
-                continue
+            # NO optionable-universe gate here (by design): earnings IV-crush is a CATALYST edge whose
+            # payoff is fattest on volatile mid-caps that VRP's strict top-liquidity universe excludes.
+            # Its lens is breadth, not top-tier liquidity; tradeability is enforced downstream at
+            # construction (build_condor on the UW chain + the round-trip execution-cost gate), the same
+            # floor both sleeves share. Gating here would throw away exactly where the crush edge is biggest.
             try:
                 dte = (date.fromisoformat(rd) - today).days
             except ValueError:
