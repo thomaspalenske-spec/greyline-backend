@@ -245,6 +245,9 @@ class BackgroundSchedulerService:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "token_status": token_status,
+            # Reflects THIS (running scheduler) process's view of the flag — so the next condor open/close
+            # this scheduler does will be a single atomic multi-leg order when true.
+            "condor_atomic_orders": (getenv("GREYLINE_CONDOR_ATOMIC_ORDER", "") or "").strip().lower() == "true",
             "scheduler_enabled": cls._enabled,
             "cycle_count": cls._cycle_count,
             "last_run": cls._last_run,
