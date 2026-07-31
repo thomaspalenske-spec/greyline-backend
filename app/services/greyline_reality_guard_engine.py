@@ -710,6 +710,36 @@ class GreyLineRealityGuardEngine:
                 pass
         return syms
 
+    def _check_open_positions_match_broker(self, view):
+        """The dashboard's Open Positions MUST equal the TradeStation account EXACTLY. Compare the set the
+        dashboard renders (the broker view) to the RAW TradeStation Positions API, symbol + quantity, so
+        the view's transformation can never silently drop, add, or missize a real holding. The broker
+        view preserves the raw TS symbol verbatim (OSI for options), so this is apples-to-apples."""
+        if not view.get("reads_ok", True):
+            return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "warning", "ok": True,
+                    "detail": "broker read degraded — comparison skipped (BROKER_READS_OK owns that)"}
+        try:
+            from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+            raw = (TradeStationPositionsLiveEngine().get_positions().get("response_json") or {}).get("Positions") or []
+            ts = {str(p.get("Symbol") or "").upper(): round(float(p.get("Quantity") or 0), 4)
+                  for p in raw if p.get("Symbol")}
+            dash = {str(p.get("symbol") or "").upper(): round(float(p.get("quantity") or 0), 4)
+                    for p in (view.get("positions") or []) if p.get("symbol")}
+        except Exception as e:
+            return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "critical", "ok": False,
+                    "detail": f"could not compare dashboard positions to TradeStation: {str(e)[:120]}"}
+        ts_side = {k: ts[k] for k in ts if dash.get(k) != ts[k]}           # in TS, missing/wrong on dash
+        dash_side = {k: dash[k] for k in dash if ts.get(k) != dash[k]}     # on dash, missing/wrong in TS
+        ok = not ts_side and not dash_side
+        return {
+            "id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "critical", "ok": ok,
+            "detail": (f"the dashboard's open positions exactly match the TradeStation account "
+                       f"({len(dash)} position(s))" if ok else
+                       f"MISMATCH — dashboard vs TradeStation diverge. TS-only/wrong-qty: {ts_side}; "
+                       f"dashboard-only/wrong-qty: {dash_side}"),
+            "tradestation_count": len(ts), "dashboard_count": len(dash),
+        }
+
     def _check_exits_filled_not_intended(self, view):
         """A ledger trade marked CLOSED (realized P&L banked) whose symbol the broker STILL holds and
         that no OPEN ledger explains = the close was committed on INTENT, not a confirmed fill. The
@@ -783,6 +813,7 @@ class GreyLineRealityGuardEngine:
             self._check_broker_reads(view),
             self._check_phantom_positions(view),
             self._check_untracked_broker_positions(view),
+            self._check_open_positions_match_broker(view),
             self._check_exits_filled_not_intended(view),
             self._check_exec_booking_coherent(),
             self._check_realized_continuity(),
