@@ -354,12 +354,21 @@ table {
 /* min-width:0 is the critical bit — the card is a CSS-grid item, whose default min-width:auto makes it
    grow to the 13-column table's width (overflowing the page) instead of letting the inner box scroll. */
 #open_positions_card { min-width: 0 !important; overflow: visible !important; max-height: none !important; }
-.pos-scroll { overflow: auto; max-height: 700px; max-width: 100%; }
+/* The box fits the VIEWPORT (max-height:65vh) so the horizontal scrollbar — pinned to the box's bottom
+   edge — is always on-screen when the card is in view, no matter which rows you've scrolled to. rows
+   scroll INSIDE the box (overflow-y), so the h-bar never drifts off with them. overflow-x:scroll keeps
+   the h-bar always present, and the header stays sticky. */
+.pos-scroll { overflow-x: scroll; overflow-y: auto; max-height: 65vh; max-width: 100%; }
 .pos-scroll table { width: max-content !important; min-width: 100%; }
 .pos-scroll thead th {
     position: sticky; top: 0; z-index: 100;
     background: #161b22; color: #dbe4ee; border-bottom: 2px solid #2d333b;
 }
+/* chunky, always-visible scrollbars so the horizontal one is easy to grab at any scroll position */
+.pos-scroll::-webkit-scrollbar { height: 14px; width: 12px; }
+.pos-scroll::-webkit-scrollbar-track { background: #0d1117; }
+.pos-scroll::-webkit-scrollbar-thumb { background: #3d444d; border-radius: 7px; border: 2px solid #0d1117; }
+.pos-scroll::-webkit-scrollbar-thumb:hover { background: #545c66; }
 
 td,
 th {
