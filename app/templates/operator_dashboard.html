@@ -815,12 +815,17 @@ function setClassBySign(id, value) {
 async function renderEquityCurve() {
   const svg = document.getElementById("equity_curve");
   if (!svg) return;
-  let series = [];
+  let series = [], failed = false;
   try {
     const d = await getJSON("/portfolio-equity-timeline");
     series = (d.series || []).filter(p => Number.isFinite(Number(p.mission_equity)));
-  } catch (e) { series = []; }
+  } catch (e) { failed = true; }
 
+  // Distinguish a ROUTE FAILURE from genuinely-no-data-yet — an error must never read as "no history".
+  if (failed) {
+    svg.innerHTML = `<text x="350" y="110" text-anchor="middle" fill="var(--red)" font-size="13">Equity timeline unavailable — could not load.</text>`;
+    return;
+  }
   if (series.length < 2) {
     svg.innerHTML = `<text x="350" y="110" text-anchor="middle" fill="rgba(255,255,255,.5)" font-size="13">Equity history is still being recorded — no verified curve to plot yet.</text>`;
     return;
