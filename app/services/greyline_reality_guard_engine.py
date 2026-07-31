@@ -597,8 +597,12 @@ class GreyLineRealityGuardEngine:
             now_realized = float(MissionRealizedPnlEngine().cumulative_realized())
             now_open = MarketHoursEngine().status().get("is_regular_session") is True
         except Exception as e:
-            return {"id": "REALIZED_CONTINUITY", "severity": "critical", "ok": True,
-                    "detail": f"could not evaluate (fail-open): {str(e)[:80]}"}
+            # Fail CLOSED, like the sibling critical checks (account-source, phantom-positions): a
+            # CRITICAL fantasy detector that cannot evaluate is an UNKNOWN, not a pass. Silently
+            # returning ok:True let a thrown MissionRealizedPnl/MarketHours read mask the exact
+            # day-boundary artifact this exists to catch.
+            return {"id": "REALIZED_CONTINUITY", "severity": "critical", "ok": False,
+                    "detail": f"could not evaluate (fail-closed — treated as UNKNOWN): {str(e)[:80]}"}
         prev = None
         try:
             prev = json.loads(self.REALIZED_CONTINUITY_STATE.read_text())

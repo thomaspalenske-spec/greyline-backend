@@ -37,11 +37,17 @@ class PortfolioEquityTimelineEngine:
         # them was fabricated.
         try:
             from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
-            eq = MissionRiskGovernorEngine().snapshot().get("mission_equity")
-            if eq is not None:
+            g = MissionRiskGovernorEngine().snapshot()
+            eq = g.get("mission_equity")
+            # Only plot equity from a HEALTHY read. On a degraded read the governor drops unrealized to 0,
+            # so its equity is artificially flat — recording it would write a fake flat/dip into the
+            # plotted curve. Tag the point degraded and omit the equity instead.
+            if not g.get("reads_ok", True):
+                point["degraded"] = True
+            elif eq is not None:
                 point["mission_equity"] = round(float(eq), 2)
         except Exception:
-            pass
+            point["degraded"] = True
 
         if self.timeline_file.exists():
             timeline = json.loads(self.timeline_file.read_text())

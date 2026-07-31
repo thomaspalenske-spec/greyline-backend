@@ -127,15 +127,18 @@ class SleeveCapitalBudgetEngine:
 
     @classmethod
     def _live(cls):
-        """(equity, deployable_cash) with a short TTL cache. Either may be None on a failed read."""
+        """(equity, deployable_cash) with a short TTL cache. Either may be None on a failed read.
+
+        A failed equity read returns equity=None — it does NOT mask the failure with the static base.
+        Masking it made the degraded branch in budget_usd() unreachable and silently sized every sleeve
+        off $10k (skipping the cash clamp too). Returning None lets callers take their explicit
+        fallback/degraded path, so a broker-read outage can't hand out full-base budgets as if real."""
         now = time()
         c = cls._cache
         if c["equity"] is not None and (now - c["t"]) < cls._CACHE_TTL_S:
             return c["equity"], c["cash"]
-        equity = cls._read_equity()
-        if equity is None:
-            equity = cls._base()          # last resort: the static book size, never a mystery number
-        cash = cls._read_deployable_cash(equity)
+        equity = cls._read_equity()          # None when the real read failed — surfaced, not masked
+        cash = cls._read_deployable_cash(equity) if equity is not None else None
         cls._cache = {"t": now, "equity": equity, "cash": cash}
         return equity, cash
 
@@ -149,8 +152,8 @@ class SleeveCapitalBudgetEngine:
         s = cls._canon(sleeve)
         equity, cash = cls._live()
         pct = cls.pct(s)
-        # If we couldn't read equity at all, _live() already substituted the static base; treat a
-        # base-only equity as "degraded" and prefer the explicit per-sleeve fallback dollar figure.
+        # A failed equity read (_live returns None) is degraded — prefer the explicit per-sleeve
+        # fallback dollar figure over sizing off a masked static base.
         if equity is None:
             return cls._FALLBACK_USD.get(s, 0.0)
         budget = (pct / 100.0) * equity
@@ -187,10 +190,12 @@ class SleeveCapitalBudgetEngine:
         equity, cash = cls._live()
         table = cls.pct_table()
         budgets = {s: cls.budget_usd(s) for s in table}
+        degraded = equity is None   # equity read failed → budgets below are explicit fallbacks, not live
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "mission_equity": equity,
             "deployable_cash": cash,
+            "degraded": degraded,
             "total_target_pct": cls.total_pct(),
             "deployable_100pct": cls.total_pct() >= 99.5,   # can the sleeves collectively use ~all cash
             "sleeves": {
@@ -201,5 +206,5 @@ class SleeveCapitalBudgetEngine:
                      "%.1f%% of equity — the book can deploy up to ~100%% of cash when sleeves have "
                      "opportunities. Book-level backstop is the daily-loss governor (-4%%/-7%%)."
                      % cls.total_pct()),
-            "status": "SLEEVE_BUDGET_OK",
+            "status": "SLEEVE_BUDGET_DEGRADED" if degraded else "SLEEVE_BUDGET_OK",
         }

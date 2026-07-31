@@ -143,9 +143,15 @@ class PreOpenReadinessEngine:
         try:
             from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
             g = MissionRiskGovernorEngine().snapshot()
-            add("mission_accounting", "PASS",
-                f"equity {g['mission_equity']} | deployed {g['deployed']} ({g['deployed_pct']}%) | "
-                f"daily P&L {g['daily_pnl']}")
+            if not g.get("reads_ok", True):
+                # A degraded broker read means the mission equity/deployed figures are UNKNOWN, not
+                # clean — don't PASS mission accounting the night before an open on a read that failed.
+                add("mission_accounting", "WARN",
+                    "broker read degraded — mission equity/deployed unavailable; accounting UNVERIFIED")
+            else:
+                add("mission_accounting", "PASS",
+                    f"equity {g['mission_equity']} | deployed {g['deployed']} ({g['deployed_pct']}%) | "
+                    f"daily P&L {g['daily_pnl']}")
         except Exception as e:
             add("mission_accounting", "WARN", f"governor error: {repr(e)[:80]}")
 

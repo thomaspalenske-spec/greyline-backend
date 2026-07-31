@@ -53,7 +53,10 @@ def test_limits_degrade_gracefully_on_error():
         MockExp.return_value.evaluate.side_effect = RuntimeError("boom")
         r = PositionExposureLimitEngine().evaluate()
     assert r["compute_ok"] is False
-    assert r["limits_ok"] is True  # degraded does not fabricate a breach
+    assert r["breaches"] == []       # no fabricated breach
+    # Fail CLOSED: this is a hard circuit breaker, so an unverifiable book (engine threw) must BLOCK
+    # new concentration-gated risk rather than read as OK. (Was the fail-OPEN bug the audit flagged.)
+    assert r["limits_ok"] is False
 
 
 # ---- direction-aware entry_allowed ----

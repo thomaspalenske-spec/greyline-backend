@@ -57,9 +57,11 @@ class HarvestProofEngine:
         if not n:
             return {"n": 0}
         pnl = [self._f(r.get("realized_pnl")) or 0.0 for r in rows]
-        caps = [(self._f(r.get("realized_pnl")) / self._f(r.get("credit_total")))
+        # Coerce the NUMERATOR to 0.0 too: the guards only check the denominator, so a closed record
+        # with a valid credit_total but a null realized_pnl was doing None / float → TypeError crash.
+        caps = [((self._f(r.get("realized_pnl")) or 0.0) / self._f(r.get("credit_total")))
                 for r in rows if self._f(r.get("credit_total"))]
-        rors = [(self._f(r.get("realized_pnl")) / self._f(r.get("max_loss_total")))
+        rors = [((self._f(r.get("realized_pnl")) or 0.0) / self._f(r.get("max_loss_total")))
                 for r in rows if self._f(r.get("max_loss_total"))]
         dtes = [self._f(r.get("entry_dte")) for r in rows if self._f(r.get("entry_dte")) is not None]
         holds = [h for h in (self._hold_days(r) for r in rows) if h is not None]

@@ -381,12 +381,19 @@ class OptionsAccountDashboardEngine:
         closed_trades = [t for t in trades if t.get("status") == "CLOSED"]
 
         realized_pnl = round(sum(float(t.get("realized_pnl") or 0) for t in closed_trades), 2)
-        unrealized_pnl = round(sum(float(t.get("unrealized_pnl") or 0) for t in open_trades), 2)
+        # Open options currently have NO live contract mark written to the ledger (the position manager
+        # updates the UNDERLYING price + doctrine state, not the option's own bid/ask), so summing
+        # t["unrealized_pnl"] would always be a hard 0 — presenting cost basis as a live mark, so a
+        # deeply-underwater open book reads as break-even. Only count positions that actually carry a
+        # mark; if none do, report unrealized as UNAVAILABLE (null), never a false 0.
+        marked = [t for t in open_trades if t.get("unrealized_pnl") is not None]
+        unrealized_marked = len(marked) > 0
+        unrealized_pnl = round(sum(float(t.get("unrealized_pnl") or 0) for t in marked), 2) if unrealized_marked else None
 
         # Committed cost stays committed regardless of MARK — never drop a deeply-underwater open
         # position, which would free imaginary cash (an unreliable mark suppresses unrealized, not cost).
         deployed_capital = round(sum(float(t.get("estimated_cost") or 0) for t in open_trades), 2)
-        open_position_value = round(deployed_capital + unrealized_pnl, 2)
+        open_position_value = round(deployed_capital + (unrealized_pnl or 0), 2)   # at cost when unmarked
         # These are OPTIONS-SLEEVE-scoped (this book's realized/unrealized against its notional base) —
         # they are NOT the whole account. cash_on_hand/current_equity/total_return describe the sleeve.
         cash_on_hand = round(self.starting_equity + realized_pnl - deployed_capital, 2)
@@ -426,8 +433,13 @@ class OptionsAccountDashboardEngine:
                            "is the shared account reality."),
             "capital_deployed_pct": capital_deployed_pct,
             "realized_pnl": realized_pnl,
-            "unrealized_pnl": unrealized_pnl,
+            "unrealized_pnl": unrealized_pnl,   # null when open positions carry no live contract mark
+            "unrealized_marked": unrealized_marked,
+            "mark_basis": "LIVE" if unrealized_marked else "COST",
             "total_return_pct": round(((current_equity - self.starting_equity) / self.starting_equity) * 100, 2),
+            "total_return_basis": ("MARK_TO_MARKET" if unrealized_marked else
+                                   "REALIZED_ONLY — open options marked at COST (no live option mark); "
+                                   "unrealized P&L unavailable"),
             "option_trade_count": len(trades),
             "open_option_trade_count": len(open_trades),
             "closed_option_trade_count": len(closed_trades),

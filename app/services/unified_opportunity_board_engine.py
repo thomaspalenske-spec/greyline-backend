@@ -143,9 +143,15 @@ class UnifiedOpportunityBoardEngine:
         # populated round-the-clock. Full economics (gain/loss/strikes) stay on Best Iron Condors — here
         # we show the candidate NAMES scored by IV rank, consistent with the Earnings IV-Crush group.
         rows = []
+        vrp_error = None
         try:
             from app.services.best_condors_engine import BestCondorsEngine
-            for c in (BestCondorsEngine().cached(limit=50).get("condors") or []):
+            cached = BestCondorsEngine().cached(limit=50)
+            # If the VRP sleeve THREW when best_condors last recomputed, its condors are absent — a broken
+            # sleeve, NOT a calm "none right now". Read best_condors' sleeve_errors so a failure surfaces
+            # as an error (→ degraded_edges, card renders red) instead of the benign empty note below.
+            vrp_error = (cached.get("sleeve_errors") or {}).get("VRP")
+            for c in (cached.get("condors") or []):
                 if str(c.get("sleeve") or "").upper() != "VRP":
                     continue
                 gain, loss = self._f(c.get("max_gain_usd")), self._f(c.get("max_loss_usd"))
@@ -163,8 +169,8 @@ class UnifiedOpportunityBoardEngine:
                     "detail": (f"exp {c.get('expiration')} · SP {c.get('short_put')} · "
                                f"SC {c.get('short_call')} · R/R {ror:.0f}% (full economics on Best Iron Condors)"),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            vrp_error = repr(e)[:160]
         rows.sort(key=lambda r: r["score"], reverse=True)   # native sort: by IV rank
         out = {
             "strategy": "Variance Risk Premium (VRP)",
@@ -176,7 +182,10 @@ class UnifiedOpportunityBoardEngine:
                        f"{len(rows)} buildable condor(s) off Unusual Whales"),
             "candidates": rows,
         }
-        if not rows:
+        if vrp_error:
+            # a broken sleeve is degraded, not empty — board().degraded_edges reads g["error"]
+            out["error"] = f"VRP condor build failed: {vrp_error}"
+        elif not rows:
             out["note"] = "no buildable VRP condors cached right now — refreshes each scheduler cycle"
         return out
 

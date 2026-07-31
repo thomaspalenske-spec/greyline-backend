@@ -615,7 +615,7 @@ th {
   <main class="main">
     <div class="topbar">
       <div>
-        <span class="status-pill"><span class="dot"></span> PAPER AUTO</span>
+        <span class="status-pill" id="topbar_pill"><span class="dot" id="topbar_dot"></span> <span id="topbar_mode">PAPER AUTO</span></span>
         <span class="sub" id="last_update">Fetched: --</span>
       </div>
       <div class="actions">
@@ -914,6 +914,16 @@ async function refreshCockpitBanner() {
     const killEl = document.getElementById("auth_killswitch");
     if (killEl) killEl.className = "readiness-value " + (paperEnabled === true ? "green" : paperEnabled === false ? "red" : "yellow");
 
+    // Top-bar + sidebar mode pill: reflect the REAL operating mode + execution authority, not a
+    // hardcoded green "PAPER AUTO". Green only when paper execution is actually armed (mirrors the
+    // kill-switch tile semantics right above), red when blocked, yellow when unknown.
+    const modeLabel = summary.operating_mode || "PAPER";
+    setText("topbar_mode", modeLabel);
+    setText("side_mode", modeLabel);
+    const pillColor = paperEnabled === true ? "var(--green)" : paperEnabled === false ? "var(--red)" : "var(--yellow)";
+    const topPill = document.getElementById("topbar_pill"); if (topPill) topPill.style.color = pillColor;
+    const topDot = document.getElementById("topbar_dot"); if (topDot) topDot.style.background = pillColor;
+
     const banner = document.getElementById("cockpit_banner");
     const headline = document.getElementById("cockpit_headline");
     const statusEl = document.getElementById("cockpit_status");
@@ -922,9 +932,17 @@ async function refreshCockpitBanner() {
     if (headline) headline.className = "cockpit-headline " + color;
     if (statusEl) statusEl.className = "cockpit-value " + color;
   } catch (e) {
+    // Cockpit read FAILED — blank every tile, strip the static green off Mission Status and the
+    // top-bar pill, so a failed read can't leave a stale (or hardcoded-green) verdict frozen on screen.
     setText("cockpit_headline", "Cockpit data loading...");
     const headline = document.getElementById("cockpit_headline");
     if (headline) headline.className = "cockpit-headline yellow";
+    ["cockpit_status", "cockpit_mode", "cockpit_reliability", "cockpit_unread"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = "—"; el.className = "cockpit-value yellow"; }
+    });
+    const topPill = document.getElementById("topbar_pill"); if (topPill) topPill.style.color = "var(--yellow)";
+    const topDot = document.getElementById("topbar_dot"); if (topDot) topDot.style.background = "var(--yellow)";
   }
 }
 
@@ -1073,7 +1091,11 @@ async function refreshAll() {
     setStatusValue("ready_execution", ex ? "READY" : "BLOCKED", ex ? "green" : "red");
     setStatusValue("ready_orders", ord ? "READY" : "BLOCKED", ord ? "green" : "red");
     setStatusValue("ready_scheduler", schedulerRunning ? "RUNNING" : "CHECK", schedulerRunning ? "green" : "yellow");
-    setStatusValue("ready_token", tokenReady.includes("READY") || tokenReady.includes("VALID") ? "READY" : tokenReady, tokenReady.includes("READY") || tokenReady.includes("VALID") ? "green" : "yellow");
+    const tokOk = tokenReady.includes("READY") || tokenReady.includes("VALID");
+    const tokLabel = tokOk ? "READY" : tokenReady, tokColor = tokOk ? "green" : "yellow";
+    setStatusValue("ready_token", tokLabel, tokColor);
+    setStatusValue("token_status", tokLabel, tokColor);   // was hardcoded green "READY" that JS never updated
+    setText("side_token", tokLabel);
     setText("ready_refresh", new Date().toLocaleTimeString());
   } else {
     // The scheduler-status read FAILED this cycle — flag it rather than leaving the readiness tiles
@@ -1081,6 +1103,8 @@ async function refreshAll() {
     // status come from this one response, so neither can be confirmed now.
     setStatusValue("ready_scheduler", "UNAVAILABLE", "yellow");
     setStatusValue("ready_token", "UNAVAILABLE", "yellow");
+    setStatusValue("token_status", "UNAVAILABLE", "yellow");
+    setText("side_token", "UNAVAILABLE");
     setText("ready_refresh", new Date().toLocaleTimeString() + " (status read failed)");
   }
 

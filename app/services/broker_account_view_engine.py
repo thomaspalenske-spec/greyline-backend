@@ -81,8 +81,14 @@ class BrokerAccountViewEngine:
                     # A working Limit/Market SELLTOCLOSE = this position is being LIQUIDATED now.
                     pending_closes.append(row)
 
+        # reads_ok requires the balance body to actually PARSE and carry a Balances record — not just
+        # an HTTP 200. A gateway/auth interstitial can return 200 with a non-JSON body, leaving
+        # response_json None → Balances=[] → equity 0 → a $10k / 0-position all-cash FANTASY that still
+        # read as healthy. A real account read always returns >=1 Balance, so gating on it fails closed
+        # on an empty/unparseable body. (Positions/Orders may legitimately be empty, so they aren't gated.)
+        balances_ok = bool(bal.get("response_json")) and bool(balances)
         reads_ok = (bal.get("http_status") == 200 and pos.get("http_status") == 200
-                    and ords.get("http_status") == 200)
+                    and ords.get("http_status") == 200 and balances_ok)
 
         positions = []
         for p in raw_positions:

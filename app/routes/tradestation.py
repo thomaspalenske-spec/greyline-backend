@@ -77,7 +77,10 @@ def tradestation_balance_live():
     return TradeStationBalanceLiveEngine().get_balance()
 
 
-@router.get("/tradestation-token-refresh")
+# POST, not GET: this consumes a TradeStation token refresh (a real broker side effect). As a GET, any
+# browser prefetch, uptime monitor, or crawler hitting the URL burned a refresh — and TS has warned about
+# excessive refreshes. POST keeps it off idempotent-GET paths, matching the /background-scheduler/* mutators.
+@router.post("/tradestation-token-refresh")
 def tradestation_token_refresh():
     return TradeStationTokenRefreshEngine().refresh_access_token()
 

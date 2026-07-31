@@ -27,7 +27,7 @@ def _tmp(monkeypatch, tmp_path):
 
 
 def test_open_records_entry_mid_and_dedupes(monkeypatch):
-    monkeypatch.setattr(C, "_candidate_condors", lambda self: [dict(_FAKE)])
+    monkeypatch.setattr(C, "_candidate_condors", lambda self: ([dict(_FAKE)], {}))
     e = C()
     assert len(e.open_new()) == 1
     row = json.loads((e._entries())[0] and json.dumps(e._entries()[0]))
@@ -37,7 +37,7 @@ def test_open_records_entry_mid_and_dedupes(monkeypatch):
 
 
 def test_day0_unrealized_is_zero_at_mid(monkeypatch):
-    monkeypatch.setattr(C, "_candidate_condors", lambda self: [dict(_FAKE)])
+    monkeypatch.setattr(C, "_candidate_condors", lambda self: ([dict(_FAKE)], {}))
     # current quotes == entry quotes -> current mid == entry mid -> ~0 unrealized
     monkeypatch.setattr(C, "_current_value", lambda self, legs: 1.0)
     e = C(); e.open_new()
@@ -45,7 +45,7 @@ def test_day0_unrealized_is_zero_at_mid(monkeypatch):
 
 
 def test_mark_closes_on_profit_take(monkeypatch):
-    monkeypatch.setattr(C, "_candidate_condors", lambda self: [dict(_FAKE)])
+    monkeypatch.setattr(C, "_candidate_condors", lambda self: ([dict(_FAKE)], {}))
     e = C(); e.open_new()
     # condor value decayed to 0.40 (<= 50% of the 1.00 entry) -> take profit
     monkeypatch.setattr(C, "_current_value", lambda self, legs: 0.40)
@@ -62,7 +62,7 @@ def test_disabled_is_noop(monkeypatch):
 
 
 def test_report_shape(monkeypatch):
-    monkeypatch.setattr(C, "_candidate_condors", lambda self: [dict(_FAKE)])
+    monkeypatch.setattr(C, "_candidate_condors", lambda self: ([dict(_FAKE)], {}))
     monkeypatch.setattr(C, "_current_value", lambda self, legs: 1.0)
     e = C(); e.open_new()
     r = e.report()

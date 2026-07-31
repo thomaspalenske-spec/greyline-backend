@@ -56,25 +56,43 @@ class CondorShadowEngine:
         with open(LEDGER, "a") as f:
             f.write(json.dumps(entry) + "\n")
 
+    ERRORS = STATE / "sleeve_errors.json"
+
+    def _write_sleeve_errors(self, errors):
+        try:
+            STATE.mkdir(parents=True, exist_ok=True)
+            self.ERRORS.write_text(json.dumps(errors or {}))
+        except Exception:
+            pass
+
+    def _read_sleeve_errors(self):
+        try:
+            return json.loads(self.ERRORS.read_text()) or {}
+        except Exception:
+            return {}
+
     # ---- what the sleeves WOULD open (built off UW) --------------------------------------------
     def _candidate_condors(self):
-        condors = []
+        """Returns (condors, errors). A sleeve that THROWS is recorded in `errors` rather than silently
+        vanishing — a silently-failing sleeve corrupts the forward-test verdict with survivorship (only
+        the days it happened to work get recorded). Mirrors best_condors._gather's sleeve_errors."""
+        condors, errors = [], {}
         try:
             from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
             for con in (ConditionalVRPShortPremiumEngine().plan().get("planned") or []):
                 con["_sleeve"] = "vrp"
                 condors.append(con)
-        except Exception:
-            pass
+        except Exception as e:
+            errors["vrp"] = repr(e)[:160]
         try:
             from app.services.earnings_vol_harvest_engine import EarningsVolHarvestEngine
             r = EarningsVolHarvestEngine().open_positions(dry_run=True)
             for con in (r.get("planned") if isinstance(r.get("planned"), list) else []) or []:
                 con["_sleeve"] = "earnings"
                 condors.append(con)
-        except Exception:
-            pass
-        return condors
+        except Exception as e:
+            errors["earnings"] = repr(e)[:160]
+        return condors, errors
 
     _LEGS = ("short_call", "wing_call", "short_put", "wing_put")
 
@@ -114,7 +132,9 @@ class CondorShadowEngine:
         entries = self._entries()
         open_keys = {(e["symbol"], e["expiration"]) for e in entries if e.get("status") == "OPEN"}
         added = []
-        for con in self._candidate_condors():
+        cands, errors = self._candidate_condors()
+        self._write_sleeve_errors(errors)   # persist so report() can surface a silently-failing sleeve
+        for con in cands:
             key = (con.get("symbol"), con.get("expiration"))
             if not key[0] or not key[1] or key in open_keys:
                 continue
@@ -225,13 +245,19 @@ class CondorShadowEngine:
                 marked += 1
         n = len(closed)
         accumulating = n < self.MIN_DAYS
+        # A sleeve that threw during candidate-generation is surfaced (not silently dropped) so the
+        # operator knows the forward-test is running on partial input and its verdict may be biased.
+        sleeve_errors = self._read_sleeve_errors()
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
             "open_condors": len(open_), "closed_condors": n, "min_closed": self.MIN_DAYS,
             "realized_pnl": realized, "unrealized_pnl": round(unrealized, 2), "open_marked": marked,
             "win_rate_pct": round(100 * wins / n, 1) if n else None,
-            "status": "CONDOR_SHADOW_ACCUMULATING" if accumulating else "CONDOR_SHADOW_MEASURING",
+            "sleeve_errors": sleeve_errors,
+            "degraded": bool(sleeve_errors),
+            "status": ("CONDOR_SHADOW_DEGRADED" if sleeve_errors else
+                       "CONDOR_SHADOW_ACCUMULATING" if accumulating else "CONDOR_SHADOW_MEASURING"),
             "verdict": (f"accumulating ({n}/{self.MIN_DAYS} closed) — not enough to trust yet" if accumulating
                         else f"measuring: {n} closed, realized ${realized}, win rate "
                              f"{round(100*wins/n,1) if n else 0}%"),

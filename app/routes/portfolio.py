@@ -51,7 +51,9 @@ def portfolio():
     return PortfolioAggregationEngine().aggregate_empty_portfolio()
 
 
-@router.get("/portfolio-repository-test")
+# POST, not GET: this WRITES a test snapshot to the repository (a side effect). Status is DERIVED from
+# the save/load results rather than a hardcoded PASS literal that read green regardless of what happened.
+@router.post("/portfolio-repository-test")
 def portfolio_repository_test():
     repo = PortfolioRepository()
 
@@ -68,11 +70,12 @@ def portfolio_repository_test():
     save_result = repo.save_snapshot(snapshot)
     load_result = repo.load_latest_snapshot()
 
+    ok = bool(save_result) and bool(load_result)
     return {
         "save_result": save_result,
         "load_result": load_result,
         "execution_enabled": False,
-        "status": "PORTFOLIO_REPOSITORY_TEST_PASS"
+        "status": "PORTFOLIO_REPOSITORY_TEST_PASS" if ok else "PORTFOLIO_REPOSITORY_TEST_FAIL"
     }
 
 
@@ -114,7 +117,7 @@ def live_portfolio_snapshot():
     return LivePortfolioSnapshotBuilder().build_snapshot()
 
 
-@router.get("/live-portfolio-snapshot-persist")
+@router.post("/live-portfolio-snapshot-persist")   # WRITES a snapshot — POST, not an idempotent GET
 def live_portfolio_snapshot_persist():
     return LivePortfolioSnapshotPersistenceService().save_and_verify_live_snapshot()
 
@@ -124,7 +127,7 @@ def live_portfolio_health():
     return LivePortfolioHealthDashboardService().get_health_status()
 
 
-@router.get("/portfolio-equity-timeline-record")
+@router.post("/portfolio-equity-timeline-record")   # APPENDS a timeline point — POST, not GET
 def portfolio_equity_timeline_record():
     return PortfolioEquityTimelineEngine().record_equity_point()
 
@@ -139,7 +142,7 @@ def portfolio_analytics():
     return PortfolioAnalyticsEngine().analyze()
 
 
-@router.get("/portfolio-analytics-persist")
+@router.post("/portfolio-analytics-persist")   # WRITES analytics — POST, not GET
 def portfolio_analytics_persist():
     return PortfolioAnalyticsPersistenceService().save_and_verify_analytics()
 
@@ -202,7 +205,7 @@ def live_account_drift():
 from app.services.live_monitoring_cycle_engine import LiveMonitoringCycleEngine
 
 
-@router.get("/live-monitoring-cycle")
+@router.post("/live-monitoring-cycle")   # RUNS a monitoring cycle (side effects) — POST, not GET
 def live_monitoring_cycle():
     return LiveMonitoringCycleEngine().run_cycle()
 
@@ -216,6 +219,6 @@ def live_monitoring_history():
 from app.services.live_monitoring_scheduler_engine import LiveMonitoringSchedulerEngine
 
 
-@router.get("/live-monitoring-scheduler-run")
+@router.post("/live-monitoring-scheduler-run")   # RUNS the scheduler once (side effects) — POST, not GET
 def live_monitoring_scheduler_run():
     return LiveMonitoringSchedulerEngine().run_once()

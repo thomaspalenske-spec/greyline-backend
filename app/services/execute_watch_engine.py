@@ -48,25 +48,29 @@ class ExecuteWatchEngine:
             return []
 
     def _held_symbols(self):
+        """Returns (held_set, ok). ok=False signals the broker read FAILED — an empty set then means
+        "unknown", not "nothing held". A silently-empty held set makes genuinely-held names fall through
+        to QUEUED/BLOCKED, so the panel could suggest buying something already owned. view() surfaces it."""
         try:
             from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
             rj = TradeStationPositionsLiveEngine().get_positions().get("response_json") or {}
             return {str(p.get("Symbol")).split()[0].upper() for p in (rj.get("Positions") or [])
-                    if int(self._f(p.get("Quantity"))) != 0}
+                    if int(self._f(p.get("Quantity"))) != 0}, True
         except Exception:
-            return set()
+            return set(), False
 
     def _rejected_symbols(self):
-        """Symbols with a recent REJECTED order — a glitch that blocked execution."""
+        """Symbols with a recent REJECTED order — a glitch that blocked execution. Returns (set, ok);
+        ok=False signals the orders read failed (empty = unknown, not "no rejects")."""
         try:
             from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
             out = set()
             for o in ((TradeStationSimBookingEngine().orders().get("response_json") or {}).get("Orders") or []):
                 if str(o.get("StatusDescription")) == "Rejected":
                     out.add(str((o.get("Legs") or [{}])[0].get("Symbol") or "").split()[0].upper())
-            return out
+            return out, True
         except Exception:
-            return set()
+            return set(), False
 
     def _free_cash(self):
         try:
@@ -89,8 +93,12 @@ class ExecuteWatchEngine:
             if str(t.get("symbol") or "").upper() not in seen:
                 discarded.append({"symbol": t.get("symbol"), "last_close": t.get("last_close"),
                                   "discard_reason": t.get("reason")})
-        held = self._held_symbols()
-        rejects = self._rejected_symbols()
+        held, held_ok = self._held_symbols()
+        rejects, rejects_ok = self._rejected_symbols()
+        # A failed broker read means the held/rejected classification is running on PARTIAL data — the
+        # panel could suggest buying a name that's actually already held. Surface it so the operator
+        # knows the executability column is unreliable this cycle rather than trusting a clean-looking view.
+        sources_failed = ([] + (["positions"] if not held_ok else []) + (["orders"] if not rejects_ok else []))
         free_cash = self._free_cash()
         # Momentum's cap is now %-of-equity (SleeveCapitalBudgetEngine), so the "can it fire" view
         # must read the same live budget the executor uses — not the retired static env var.
@@ -152,6 +160,8 @@ class ExecuteWatchEngine:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "candidates_as_of": as_of, "data_source": source,
+            "data_degraded": bool(sources_failed),
+            "sources_failed": sources_failed,   # broker reads that failed → executability is partial
             "free_cash": free_cash, "momentum_capital": mom_cap, "momentum_free_slots": free_slots,
             "queued_count": len(queued), "queued": queued,
             "blocked_count": len(blocked), "blocked": blocked,

@@ -14,6 +14,10 @@ def _engine(tmp_path, rows):
     eng = PortfolioExposureEngine()
     eng.equity_ledger = equity
     eng.option_ledger = tmp_path / "no_options.jsonl"
+    # Hermetic: these tests exercise the capital-base math off the PAPER ledger only. Pin the broker
+    # holdings to empty+healthy so a live/cached TradeStation read can't leak real positions into the
+    # count when the suite runs alongside broker-touching tests. (Returns (rows, degraded).)
+    eng._broker_positions = lambda: ([], False)
     return eng
 
 

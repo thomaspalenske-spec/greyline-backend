@@ -231,8 +231,20 @@ class BackgroundSchedulerService:
     @classmethod
     def status(cls):
         cls._load_state()
+        # Read-only token health so the dashboard's "Token" readiness tile reflects reality instead of
+        # sitting permanently on "CHECK" (this key was consumed by the template but never produced).
+        # evaluate() only READS the stored token file — it does NOT trigger a refresh (see the
+        # token-over-refresh incident), so it is safe to call on every 15s status poll. Unknown token
+        # state falls to "CHECK" (yellow), never a false green.
+        try:
+            from app.services.tradestation_token_status_engine import TradeStationTokenStatusEngine
+            _tok = TradeStationTokenStatusEngine().evaluate()
+            token_status = "READY" if _tok.get("ready_for_read_only") else "NOT_READY"
+        except Exception:
+            token_status = "CHECK"
         return {
             "timestamp": datetime.utcnow().isoformat(),
+            "token_status": token_status,
             "scheduler_enabled": cls._enabled,
             "cycle_count": cls._cycle_count,
             "last_run": cls._last_run,

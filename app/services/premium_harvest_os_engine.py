@@ -115,5 +115,12 @@ class PremiumHarvestOSEngine:
         except Exception as e:
             out["crash_stress"] = {"error": str(e)[:80]}
 
-        out["status"] = "PREMIUM_HARVEST_OS_STATUS"
+        # Top-level degraded rollup so a programmatic consumer / the reality guard can tell this
+        # unified view is degraded without walking all 8 sections (mirrors unified_board.degraded_edges
+        # and decision_readout.degraded_sections). Each section already captures its own {"error": ...}.
+        _sections = ("premium_catalog", "harvest", "risk_budget", "catalyst_defense",
+                     "out_of_sample_scoreboard", "book_greeks", "crash_stress")
+        degraded = [k for k in _sections if isinstance(out.get(k), dict) and out[k].get("error")]
+        out["degraded_sections"] = degraded
+        out["status"] = "PREMIUM_HARVEST_OS_DEGRADED" if degraded else "PREMIUM_HARVEST_OS_STATUS"
         return out

@@ -94,19 +94,36 @@ class ScheduledOperatorReportsEngine:
     def _post_close_report(cls, today):
         eq = dep = dep_pct = cash = daily_pct = None
         alerts = open_positions = None
+        failed = []
         try:
             from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
             s = MissionRiskGovernorEngine().snapshot()
+            if not s.get("reads_ok", True):
+                failed.append("mission governor (broker read degraded)")
             eq, dep_pct, daily_pct = s.get("mission_equity"), s.get("deployed_pct"), s.get("daily_pnl_pct")
             dep = s.get("deployed")
-        except Exception:
-            pass
+        except Exception as e:
+            failed.append(f"mission governor ({repr(e)[:60]})")
         try:
             from app.routes.account_summary import account_summary
             a = account_summary()
+            if a.get("degraded"):
+                failed.append("account summary (degraded read)")
             cash, open_positions = a.get("cash_on_hand"), a.get("open_position_count")
-        except Exception:
-            pass
+        except Exception as e:
+            failed.append(f"account summary ({repr(e)[:60]})")
+
+        # A failed/degraded read must NOT go out as a calm INFO with "$None" — that presents a broken
+        # accounting pipeline as a healthy green report. Surface it as a DEGRADED alert naming exactly
+        # what couldn't be read so a silent close-of-day accounting outage is visible.
+        if failed or eq is None:
+            detail = "; ".join(failed) or "mission equity unavailable"
+            return cls._dispatch(
+                "GreyLine daily close report — DEGRADED",
+                f"Close {today}: daily accounting is INCOMPLETE — could not read {detail}. "
+                "Check /account-summary and /background-scheduler/status.",
+                "WARNING", f"POSTCLOSE:{today}")
+
         msg = (f"Close {today}: equity ${eq}, daily P&L {daily_pct}%. At-risk deployed "
                f"${dep} ({dep_pct}%), cash ${cash}, {open_positions} open position(s). "
                "Sleeves ran their normal cycle; see /background-scheduler/status for detail.")

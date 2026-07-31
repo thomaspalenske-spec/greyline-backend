@@ -216,13 +216,18 @@ class PortfolioExposureEngine:
         """Live broker holdings, aggregated by underlying — the ACTUAL exposure. The ETF sleeves
         (vol-carry / trend / managed-futures / T-bill) book STRAIGHT to the broker, not the paper
         ledgers, so without this the concentration cap is blind to them. Same source Open Positions uses;
-        market_value isn't populated in the snapshot, so notional is computed from qty x mark."""
+        market_value isn't populated in the snapshot, so notional is computed from qty x mark.
+
+        Returns (rows, degraded). `degraded` is True when the broker read FAILED (reads_ok False or an
+        exception) — distinct from an empty book. A degraded read means the ETF-sleeve holdings are
+        UNKNOWN, not zero, so the caller must fail closed rather than report a falsely-clean, low
+        concentration computed from the paper ledgers alone."""
         agg = {}
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
             view = BrokerAccountViewEngine().snapshot()
             if not view.get("reads_ok", True):
-                return []
+                return [], True
             try:
                 from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
                 cash_sweep = TbillCashSweepEngine.symbol()      # SGOV = parked CASH, not a treasury bet
@@ -243,10 +248,10 @@ class PortfolioExposureEngine:
                 if is_opt:
                     e["asset_type"] = "OPTION"
         except Exception:
-            return []
+            return [], True
         for e in agg.values():
             e["notional"] = round(e["notional"], 2)
-        return list(agg.values())
+        return list(agg.values()), False
 
     def evaluate(self):
         equity_rows = self._read_jsonl(self.equity_ledger)
@@ -282,7 +287,8 @@ class PortfolioExposureEngine:
         # a name already in a ledger is never counted twice. This makes the concentration cap reflect
         # ACTUAL broker exposure — the same holdings the Open Positions card shows — not just the paper book.
         ledger_syms = {p["symbol"] for p in open_positions if p["symbol"]}
-        for bp in self._broker_positions():
+        broker_rows, broker_degraded = self._broker_positions()
+        for bp in broker_rows:
             if bp["symbol"] and bp["symbol"] not in ledger_syms:
                 open_positions.append({
                     "symbol": bp["symbol"], "asset_type": bp["asset_type"],
@@ -337,6 +343,12 @@ class PortfolioExposureEngine:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "PortfolioExposureEngine",
+            # When the broker read failed, the ETF-sleeve holdings are UNKNOWN (not zero) — the
+            # concentration numbers below are computed from the paper ledgers ALONE and understate real
+            # exposure. Surface it so the hard limit engine can fail closed instead of reading a
+            # falsely-clean book. reads_ok True only when the live broker holdings were actually seen.
+            "reads_ok": not broker_degraded,
+            "degraded": broker_degraded,
             "open_position_count": len(open_positions),
             "total_notional": total_notional,
             "capital_base": capital_base,
@@ -352,5 +364,5 @@ class PortfolioExposureEngine:
             "max_sector_exposure_pct_of_book": max_sector_pct_of_book,
             "concentration_risk": concentration_risk,
             "positions": open_positions,
-            "status": "PORTFOLIO_EXPOSURE_READY",
+            "status": "PORTFOLIO_EXPOSURE_DEGRADED" if broker_degraded else "PORTFOLIO_EXPOSURE_READY",
         }
