@@ -681,14 +681,25 @@ class ConditionalVRPShortPremiumEngine:
         return TradeStationSimBookingEngine()
 
     @staticmethod
-    def _alert_condor_close_failed(row, leg_results):
-        """Best-effort external alert when a condor close did not fully confirm — a partial leaves the
-        unit UNHEDGED (possible naked short), so it must be surfaced, never silently marked CLOSED."""
+    def _alert_condor_close_failed(row, leg_results, atomic=False, reject_reason=None):
+        """External alert when a condor close did not fully confirm. The two cases are NOT the same risk:
+        ATOMIC (all-or-none) → a reject closes NOTHING, so the full defined-risk condor is INTACT, NOT
+        unhedged → WARNING, retries on its own. LEGACY leg-by-leg → a partial CAN leave a naked short →
+        CRITICAL, check the position now."""
         try:
             from app.services.external_alert_engine import ExternalAlertEngine
             eng = ExternalAlertEngine()
-            if eng.has_external_channel():
-                sym = row.get("symbol")
+            if not eng.has_external_channel():
+                return
+            sym = row.get("symbol")
+            if atomic:
+                eng.dispatch(
+                    title="GreyLine condor close rejected — condor INTACT",
+                    message=(f"{sym} atomic condor close was rejected ({reject_reason or 'no reason given'}). "
+                             "All-or-none, so NOTHING closed — the FULL condor is still open, defined-risk, "
+                             "NOT unhedged. The manager retries each cycle."),
+                    severity="WARNING", fingerprint=f"CONDOR_CLOSE_REJECTED:{sym}")
+            else:
                 failed = [lr["symbol"] for lr in leg_results if not lr["ok"]]
                 eng.dispatch(
                     title="GreyLine condor close UNCONFIRMED — possible unhedged leg",
@@ -816,6 +827,11 @@ class ConditionalVRPShortPremiumEngine:
             return {"status": "NO_VRP_LEDGER", "managed": 0}
         from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
         q = TradeStationQuoteLiveEngine()
+        # A condor CLOSE can only route during the regular session — after hours the broker rejects every
+        # order "all routes are closed", which used to fire a scary CRITICAL each cycle for nothing. We
+        # still EVALUATE exits after hours (so the operator sees what's due) but only PLACE them at the open.
+        from app.services.market_hours_engine import MarketHoursEngine
+        market_open = MarketHoursEngine().status().get("is_regular_session") is True
 
         # Pre-fetch current greeks once per (underlying, expiry) so the gamma defense can read each
         # short leg's LIVE delta without a chain call per position.
@@ -879,7 +895,13 @@ class ConditionalVRPShortPremiumEngine:
                 continue
 
             committed = False
-            if self.enabled() and not dry_run:
+            if self.enabled() and not dry_run and not market_open:
+                # A close was decided but the MARKET IS CLOSED — placing now just rejects ("all routes are
+                # closed") and pages the operator for nothing. Defer to the open; the manager re-fires each
+                # cycle and will place it during the regular session. No order, no alert.
+                r["manager_status"] = "VRP_CONDOR_CLOSE_DEFERRED"
+                r["manager_status_reason"] = f"{reason} — market closed, will place at the open"
+            elif self.enabled() and not dry_run:
                 b = self._booking()
                 if self._atomic_orders_enabled():
                     # ATOMIC CLOSE: one multi-leg order — all legs close together or none. A partial/naked
@@ -896,7 +918,8 @@ class ConditionalVRPShortPremiumEngine:
                                            limit_price=self._tick_round(abs(mk_debit)), tif="DAY")
                     all_ok = bool(res.get("ok"))
                     leg_results = [{"symbol": l["symbol"], "action": l["action"], "ok": all_ok,
-                                    "order_id": res.get("order_id"), "atomic": True, "status": res.get("status")}
+                                    "order_id": res.get("order_id"), "atomic": True, "status": res.get("status"),
+                                    "reject_reason": res.get("reject_reason")}
                                    for l in close_legs]
                 else:
                     # LEGACY leg-by-leg: close SHORTS first (BUYTOCLOSE), then wings (SELLTOCLOSE). If a short
@@ -929,14 +952,23 @@ class ConditionalVRPShortPremiumEngine:
                     r["close_reason"] = reason; r["realized_pnl"] = round(pnl_total, 2)
                     r.pop("manager_status", None); r.pop("manager_status_reason", None)
                     committed = True
+                elif any(lr.get("atomic") for lr in leg_results):
+                    # ATOMIC close (all-or-none) rejected → NOTHING closed → the FULL condor is intact and
+                    # defined-risk, NOT unhedged. Surface it (the defensive exit didn't execute) but don't
+                    # cry "unhedged"; the manager retries next cycle.
+                    rr = next((lr.get("reject_reason") for lr in leg_results if lr.get("reject_reason")), None)
+                    r["manager_status"] = "VRP_CONDOR_CLOSE_REJECTED_INTACT"
+                    r["manager_status_reason"] = (f"atomic close rejected ({rr or 'no reason'}) — full condor "
+                                                  "intact (defined-risk), NOT unhedged; retrying next cycle")
+                    self._alert_condor_close_failed(r, leg_results, atomic=True, reject_reason=rr)
                 else:
-                    # A partially-closed condor is UNHEDGED (e.g. wing sold, short buyback rejected).
+                    # LEGACY leg-by-leg partial: some legs may have closed, some not → possibly UNHEDGED.
                     # Never mark CLOSED on a partial. Leave OPEN, flag it, alert — this must be surfaced.
                     closed_n = sum(1 for lr in leg_results if lr["ok"])
                     r["manager_status"] = "VRP_CONDOR_CLOSE_UNCONFIRMED"
                     r["manager_status_reason"] = (f"{closed_n}/{len(leg_results)} legs confirmed — "
                                                   "position may be unhedged")
-                    self._alert_condor_close_failed(r, leg_results)
+                    self._alert_condor_close_failed(r, leg_results, atomic=False)
             decisions.append({"symbol": r["symbol"], "action": "CLOSE", "reason": reason,
                               "committed": committed, "pnl": round(pnl_total, 2), "dte": dte})
 

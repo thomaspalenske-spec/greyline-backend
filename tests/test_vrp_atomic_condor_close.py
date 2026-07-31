@@ -56,9 +56,15 @@ def _setup(tmp_path, monkeypatch, atomic):
     monkeypatch.setattr("app.services.tradestation_quote_live_engine.TradeStationQuoteLiveEngine",
                         lambda: _FakeQuote())
     monkeypatch.setattr(E, "_short_leg_greeks_map", lambda self, rows: {})   # no gamma-defense trigger
+    _set_market(monkeypatch, True)                                           # default: regular session
     fake = _FakeBooking()
     monkeypatch.setattr(E, "_booking", lambda self: fake)
     return led, fake
+
+
+def _set_market(monkeypatch, is_open):
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
+                        lambda: type("M", (), {"status": lambda self: {"is_regular_session": is_open}})())
 
 
 def test_atomic_close_places_one_multileg_order(tmp_path, monkeypatch):
@@ -84,3 +90,35 @@ def test_legacy_close_legs_out_when_flag_off(tmp_path, monkeypatch):
     E().manage_positions(dry_run=False)
     # flag off → 4 separate close orders, no multi-leg
     assert fake.multileg == [] and len(fake.single) == 4
+
+
+class _RejectBooking:
+    def place_multileg(self, legs, order_type="Limit", limit_price=None, tif="DAY"):
+        return {"ok": False, "order_id": None, "reject_reason": "insufficient BP (test)"}
+
+    def place_order(self, *a, **k):
+        raise AssertionError("atomic reject must NOT fall back to legging out")
+
+
+def test_close_deferred_when_market_closed(tmp_path, monkeypatch):
+    led, fake = _setup(tmp_path, monkeypatch, atomic=True)
+    _set_market(monkeypatch, False)                                  # market CLOSED (after hours)
+    E().manage_positions(dry_run=False)
+    # a close was decided but the market is shut → NOTHING placed (no "all routes are closed" reject)
+    assert fake.multileg == [] and fake.single == []
+    row = json.loads(led.read_text().splitlines()[0])
+    assert row["status"] == "OPEN" and row["manager_status"] == "VRP_CONDOR_CLOSE_DEFERRED"
+
+
+def test_atomic_close_reject_leaves_full_condor_intact(tmp_path, monkeypatch):
+    led, _ = _setup(tmp_path, monkeypatch, atomic=True)
+    monkeypatch.setattr(E, "_booking", lambda self: _RejectBooking())
+    E().manage_positions(dry_run=False)
+
+    row = json.loads(led.read_text().splitlines()[0])
+    assert row["status"] == "OPEN"                                    # all-or-none → NOT marked CLOSED
+    assert row["manager_status"] == "VRP_CONDOR_CLOSE_REJECTED_INTACT"
+    assert "NOT unhedged" in row["manager_status_reason"]             # accurate: full condor intact
+    # the reject reason is captured on the attempt for diagnosis
+    attempt = row["close_attempts"][-1]
+    assert any(l.get("reject_reason") == "insufficient BP (test)" for l in attempt["legs"])
