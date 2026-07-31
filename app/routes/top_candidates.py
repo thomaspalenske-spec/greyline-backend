@@ -23,6 +23,12 @@ router = APIRouter()
 
 CACHE = Path("app/data/momentum_reversal/top_candidates_cache.json")
 TTL_SECONDS = 900  # 15 min
+# We STORE a deeper bench than the panel displays. The panel shows the top `top_n` tradeable slots,
+# but the Opportunity Board and Execute/Watch read this same cache to show the "next up" bench —
+# and once the held names are hidden, a 5-deep cache leaves almost nothing on the bench. Storing 15
+# is display-only: the actual momentum buys come from MomentumReversalRebalanceEngine's own fresh
+# universe scan, NOT this cache, so a deeper bench never changes what gets bought.
+BENCH_N = 15
 
 
 def _compute(top_n):
@@ -39,7 +45,7 @@ def _compute(top_n):
     clean_confirmed, trash_discarded = TrashPickFilterEngine.partition(confirmed)
 
     candidates = []
-    for i, t in enumerate(clean_confirmed[:top_n], start=1):
+    for i, t in enumerate(clean_confirmed[:max(int(top_n or 0), BENCH_N)], start=1):
         candidates.append({
             "rank": i,
             "symbol": t.get("symbol"),
@@ -144,7 +150,8 @@ def top_candidates(force: bool = False, top_n: int = 5):
                 # count (don't clobber it) so a clean cache still reports what compute-time threw out.
                 from app.services.trash_pick_filter_engine import TrashPickFilterEngine
                 clean, discarded = TrashPickFilterEngine.partition(cached.get("candidates") or [])
-                cached["candidates"] = clean
+                cached["bench_size"] = len(clean)                 # full bench the board/Execute-Watch see
+                cached["candidates"] = clean[:top_n]              # panel shows only the top-N tradeable slots
                 cached["trash_discarded"] = int(cached.get("trash_discarded") or 0) + len(discarded)
                 return _attach_exec_status(cached)
         except Exception:
@@ -153,9 +160,11 @@ def top_candidates(force: bool = False, top_n: int = 5):
     result = _compute(top_n)
     try:
         CACHE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE.write_text(json.dumps(result))
+        CACHE.write_text(json.dumps(result))                 # store the FULL bench for the board/Execute-Watch
     except Exception:
         pass
+    result["bench_size"] = len(result.get("candidates") or [])
+    result["candidates"] = (result.get("candidates") or [])[:top_n]   # panel shows only the top-N slots
     result["cache"] = "MISS_COMPUTED"
     result["momentum_enabled"] = _momentum_enabled()
     return _attach_exec_status(result)
