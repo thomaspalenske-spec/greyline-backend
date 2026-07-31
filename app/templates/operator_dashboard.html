@@ -1052,10 +1052,6 @@ async function refreshAll() {
     getJSON("/account-summary")
   ]);
 
-  if (arguments[0]) {}
-
-  const alertsResult = arguments;
-
   if (scheduler.status === "fulfilled") {
     const s = scheduler.value;
     const ledgerData = ledger.status === "fulfilled" ? ledger.value : {};
@@ -1080,6 +1076,11 @@ async function refreshAll() {
     setStatusValue("ready_scheduler", schedulerRunning ? "RUNNING" : "CHECK", schedulerRunning ? "green" : "yellow");
     setStatusValue("ready_token", tokenReady.includes("READY") || tokenReady.includes("VALID") ? "READY" : tokenReady, tokenReady.includes("READY") || tokenReady.includes("VALID") ? "green" : "yellow");
     setText("ready_refresh", new Date().toLocaleTimeString());
+  } else {
+    // The scheduler-status read FAILED this cycle — flag it rather than leaving the readiness tiles
+    // showing stale green (a failed read is not a confirmation of readiness).
+    setStatusValue("ready_scheduler", "UNAVAILABLE", "yellow");
+    setText("ready_refresh", new Date().toLocaleTimeString() + " (status read failed)");
   }
 
   // Retired-signal battlefield panel removed 2026-07-22 — the legacy options signal is a
