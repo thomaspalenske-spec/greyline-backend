@@ -29,7 +29,7 @@ class EarningsVolHarvestEngine:
     PANEL = Path("app/data/research/earnings_vol_panel.jsonl")
 
     IV_RANK_FLOOR = 0.60        # only sell into genuinely RICH pre-earnings IV (normalized 0-1)
-    REPORT_WITHIN_DAYS = 2      # reporting in the next 1-2 sessions — sell near peak pre-earnings IV
+    REPORT_WITHIN_SESSIONS = 2  # reporting in the next 1-2 TRADING SESSIONS — sell near peak pre-earnings IV
     MAX_CONCURRENT = 3          # small sleeve
     LIMIT_PER_DAY = 2
     # Per-condor max-loss cap is CENTRAL now (SleeveCapitalBudgetEngine.per_condor_max_loss =
@@ -94,8 +94,22 @@ class EarningsVolHarvestEngine:
 
     # ---- candidate selection -------------------------------------------------------------------
 
+    @staticmethod
+    def _sessions_to(today, report_date):
+        """Trading sessions (Mon-Fri) strictly after `today` up to and including `report_date`. Weekend-
+        aware, so from a Friday a Monday report is 1 session away — closing the calendar-day gap that let
+        Monday/post-weekend reporters slip past the window. Exchange holidays are rare and not modelled
+        (a holiday would at worst open one session early)."""
+        from datetime import timedelta
+        d, n = today, 0
+        while d < report_date:
+            d += timedelta(days=1)
+            if d.weekday() < 5:
+                n += 1
+        return n
+
     def _candidates(self, today=None):
-        """Rich-IV names reporting within REPORT_WITHIN_DAYS, from the earnings panel's implied
+        """Rich-IV names reporting within REPORT_WITHIN_SESSIONS trading sessions, from the earnings panel's implied
         records — deduped against what's already open."""
         today = today or datetime.now(timezone.utc).date()
         try:
@@ -117,12 +131,16 @@ class EarningsVolHarvestEngine:
             # construction (build_condor on the UW chain + the round-trip execution-cost gate), the same
             # floor both sleeves share. Gating here would throw away exactly where the crush edge is biggest.
             try:
-                dte = (date.fromisoformat(rd) - today).days
+                rdate = date.fromisoformat(rd)
             except ValueError:
                 continue
-            # dte >= 1: only FUTURE earnings — never sell into a report that may already have printed
-            # today (IV already crushed). dte 0 is ambiguous (before/after close), so it's excluded.
-            if not (1 <= dte <= self.REPORT_WITHIN_DAYS):
+            dte = (rdate - today).days
+            # Gate on TRADING SESSIONS to the report, not calendar days. A Monday reporter's last
+            # pre-report session is FRIDAY — 3 calendar days out — so a calendar-day window silently
+            # missed EVERY Monday / post-weekend reporter. Sessions >= 1 still excludes the report day
+            # itself (dte 0, ambiguous before/after close).
+            sessions = self._sessions_to(today, rdate)
+            if not (1 <= sessions <= self.REPORT_WITHIN_SESSIONS):
                 continue
             ivr = self._f(r.get("iv_rank")) or 0.0
             ivr = ivr / 100.0 if ivr > 1.5 else ivr          # UW iv_rank is 0-100; normalize to 0-1
@@ -130,9 +148,10 @@ class EarningsVolHarvestEngine:
                 continue
             seen.add(t)
             out.append({"ticker": t, "report_date": rd, "days_to_report": dte,
+                        "sessions_to_report": sessions,
                         "iv_rank": round(ivr, 3),            # store normalized so downstream buckets match
                         "implied_move_pct": self._f(r.get("implied_move_pct"))})
-        out.sort(key=lambda c: (c["days_to_report"], -(c["iv_rank"] or 0)))
+        out.sort(key=lambda c: (c["sessions_to_report"], -(c["iv_rank"] or 0)))
         return out
 
     def _expiry_after(self, symbol, report_date):
