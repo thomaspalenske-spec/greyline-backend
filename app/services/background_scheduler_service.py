@@ -573,6 +573,16 @@ class BackgroundSchedulerService:
         except Exception as exc:
             optionable_universe = {"error": repr(exc), "status": "OPTIONABLE_UNIVERSE_DEGRADED"}
 
+        # SECTOR MAP: keep the concentration-cap's sector buckets current with the drifting traded
+        # universe — same once-per-day post-close gate as the optionable universe. Stocks are data-derived
+        # from UW; ETFs stay in the exposure engine's deliberate literal map. Unmapped traded names are
+        # recorded (loud, not silent).
+        try:
+            from app.services.sector_map_engine import SectorMapEngine
+            sector_map_refresh = SectorMapEngine().recompute_if_due(market_hours)
+        except Exception as exc:
+            sector_map_refresh = {"error": repr(exc), "status": "SECTOR_MAP_DEGRADED"}
+
         # BEST-CONDORS list for the dashboard: recompute the ranked buildable condors (off UW) at most
         # once/10min and cache to a file, so the /best-condors route (dashboard card) is always instant.
         try:

@@ -82,17 +82,27 @@ class OptionableUniverseEngine:
                 "Accept": "application/json"}
 
     # ---- live fetch (isolated so tests can monkeypatch it) -----------------------------------------
+    _fetch_cache = {}          # {order: (epoch, rows)} — shared so co-scheduled consumers reuse one call
+    _FETCH_TTL_S = 900         # a cycle's worth: the SectorMapEngine piggybacks on this same fetch
+
     def _fetch(self, order="total_open_interest"):
-        """Top PAGE names by `order`, richest first. Returns the raw screener rows (or [])."""
+        """Top PAGE names by `order`, richest first. Returns the raw screener rows (or []).
+
+        Cached briefly so a second consumer in the same scheduler cycle (the sector map, which reads
+        `sector` off these SAME rows) does NOT spend another UW call — one screener hit feeds both."""
+        hit = OptionableUniverseEngine._fetch_cache.get(order)
+        if hit and (time.time() - hit[0]) < self._FETCH_TTL_S:
+            return hit[1]
         try:
             r = requests.get(SCREENER,
                              params={"limit": self.PAGE, "order": order, "order_direction": "desc"},
                              headers=self._headers(), timeout=60)
-            if r.status_code != 200:
-                return []
-            return (r.json() or {}).get("data") or []
+            rows = ((r.json() or {}).get("data") or []) if r.status_code == 200 else []
         except Exception:
-            return []
+            rows = []
+        if rows:
+            OptionableUniverseEngine._fetch_cache[order] = (time.time(), rows)
+        return rows
 
     # ---- the screen --------------------------------------------------------------------------------
     def screen(self):

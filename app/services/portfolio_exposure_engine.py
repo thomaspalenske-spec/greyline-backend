@@ -98,6 +98,11 @@ class PortfolioExposureEngine:
             "GS": "FINANCIALS", "JPM": "FINANCIALS", "KRE": "FINANCIALS",
             "MA": "FINANCIALS", "MS": "FINANCIALS", "V": "FINANCIALS",
             "WFC": "FINANCIALS",
+            # Stragglers pinned deliberately (the API-frugal daily refresh reuses the OI top-500 + one
+            # marketcap top-500, and these S&P mid-caps sit below both slices — large ETFs fill the
+            # marketcap top). MMC (Marsh, insurance); SQ (Block, retired ticker); BIIB (Biogen); DG
+            # (Dollar General, discount staples). The fail-loud sector test catches any future drift.
+            "MMC": "FINANCIALS", "SQ": "FINANCIALS", "BIIB": "HEALTHCARE", "DG": "CONSUMER_STAPLES",
 
             "ABBV": "HEALTHCARE", "ABT": "HEALTHCARE", "DHR": "HEALTHCARE",
             "IBB": "HEALTHCARE", "JNJ": "HEALTHCARE", "LLY": "HEALTHCARE",
@@ -144,6 +149,32 @@ class PortfolioExposureEngine:
             "CPER": "COMMODITIES",
             "EFA": "INTL_EQUITY", "EEM": "INTL_EQUITY", "VWO": "INTL_EQUITY",
             "FXI": "INTL_EQUITY", "EWJ": "INTL_EQUITY", "EWZ": "INTL_EQUITY",
+
+            # Traded-universe ETFs beyond the original scan list (the derived optionable universe + the
+            # ETF sleeves). UW does NOT sector-classify funds, so they are bucketed HERE by the exposure
+            # that actually moves them — otherwise each pools into UNKNOWN and reads as diversified.
+            "QQQM": "TECH_GROWTH", "TQQQ": "TECH_GROWTH", "SQQQ": "TECH_GROWTH",   # Nasdaq-100 (± leverage)
+            "NVDL": "TECHNOLOGY", "SOXX": "TECHNOLOGY", "SOXL": "TECHNOLOGY",      # single-name/semis
+            "IGV": "TECHNOLOGY",                                                  # software
+            "TSLL": "CONSUMER_DISCRETIONARY",                                     # 2x Tesla
+            "ARKK": "TECH_GROWTH", "ARKG": "TECH_GROWTH",                         # innovation/growth
+            "RSP": "BROAD_MARKET",                                               # S&P 500 equal weight
+            # VIX-futures products — long OR short, they are ONE factor (the VIX curve). Grouped so the
+            # cap sees them as a single bet, not several comfortable-looking ones.
+            "SVXY": "VOLATILITY", "VXX": "VOLATILITY", "VXZ": "VOLATILITY", "UVXY": "VOLATILITY",
+            "UVIX": "VOLATILITY", "SVIX": "VOLATILITY", "VIXY": "VOLATILITY", "VIXM": "VOLATILITY",
+            "BITW": "CRYPTO",                                                    # crypto index fund
+            "XBI": "HEALTHCARE", "MSOS": "HEALTHCARE",                           # biotech / cannabis
+            "XOP": "ENERGY", "BNO": "ENERGY", "URA": "ENERGY",                   # oil E&P / Brent / uranium
+            "GDX": "PRECIOUS_METALS", "SILJ": "PRECIOUS_METALS",                 # gold / silver miners
+            "GLDM": "PRECIOUS_METALS",                                           # gold (sleeve)
+            "COPX": "MATERIALS",                                                 # copper miners
+            "CORN": "COMMODITIES",                                              # grain futures
+            "ETHA": "CRYPTO",                                                    # spot ether
+            "KWEB": "INTL_EQUITY", "ASHR": "INTL_EQUITY", "EWC": "INTL_EQUITY",  # China / Canada
+            "EWY": "INTL_EQUITY", "KORU": "INTL_EQUITY",                         # South Korea (± leverage)
+            "SGOV": "TREASURIES",                                                # 0-3mo T-bills (cash sweep)
+            "DRAM": "TECHNOLOGY", "SNXX": "TECHNOLOGY",                          # memory-chip / 2x-SanDisk ETFs
         }
 
         if symbol in sector_map:
@@ -160,7 +191,11 @@ class PortfolioExposureEngine:
         cached = getattr(cls, "_generated_sector_cache", None)
         if cached is None:
             try:
-                cached = json.loads(Path("app/data/sector_map.json").read_text()).get("sectors") or {}
+                # Resolve the map by MODULE location, not cwd — a cwd-relative path silently read empty
+                # whenever the process ran from elsewhere (e.g. the sandboxed test cwd), dropping every
+                # UW-generated name to UNKNOWN and blinding the concentration cap.
+                path = Path(__file__).resolve().parents[2] / "app" / "data" / "sector_map.json"
+                cached = json.loads(path.read_text()).get("sectors") or {}
             except Exception:
                 cached = {}     # absent or unreadable: degrade to the literal map, never crash
             cls._generated_sector_cache = cached
