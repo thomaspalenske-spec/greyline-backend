@@ -952,9 +952,15 @@ async function refreshRealityGuard() {
       paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
       el.innerHTML = "⚠ Real broker data, with warnings:<br>" +
         failed.map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>");
-    } else {
+    } else if (d.verdict === "REAL_DATA_VERIFIED" && !failed.some(c => c.severity === "critical")) {
       paint("rgba(63,185,80,.10)", "rgba(63,185,80,.4)", "#3fb950");
       el.innerHTML = `✓ Real data verified — reading ${d.account_label || "TradeStation"}. No phantom positions; execution & booking coherent.`;
+    } else {
+      // A safety monitor must NEVER default an unknown state to green. An unexpected/missing verdict — or
+      // a "verified" verdict that disagrees with a live critical check — is unverifiable, not all-clear.
+      paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
+      el.innerHTML = `⚠ Reality Guard returned an unexpected verdict (<b>${d.verdict || "(none)"}</b>) — cannot confirm data is real.` +
+        (failed.length ? "<br>" + failed.map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>") : "");
     }
   } catch (e) {
     paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
