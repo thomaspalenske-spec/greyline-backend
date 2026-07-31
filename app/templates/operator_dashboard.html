@@ -1142,10 +1142,18 @@ async function refreshAll() {
     }
 
     setStatusValue("ready_quotes", label, color);
+  } else {
+    // Cockpit read FAILED — quote-heartbeat health is UNKNOWN, not fresh. Flag it rather than leaving
+    // ready_quotes showing a stale green.
+    setStatusValue("ready_quotes", "UNAVAILABLE", "yellow");
   }
 
-  if (ledger.status === "fulfilled") {
-    const l = ledger.value;
+  {
+    // Run even if the ledger (/options-account-dashboard) read failed: the money tiles come from
+    // /account-summary (acct), positions from /open-positions (book), and the equity curve from
+    // /portfolio-equity-timeline — all INDEPENDENT routes. Gating them on the ledger route froze all
+    // three on a ledger hiccup. `l` (used only for the option trade COUNTS) falls back to {}.
+    const l = (ledger.status === "fulfilled" ? ledger.value : {}) || {};
     const trades = l.open_positions || [];
     const open = l.open_positions || [];
     const unrealized = Number(l.unrealized_pnl || 0);
