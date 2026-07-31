@@ -212,6 +212,42 @@ class PortfolioExposureEngine:
         multiplier = 100 if trade.get("asset_type") == "OPTION" else 1
         return round(abs(qty * price * multiplier), 2)
 
+    def _broker_positions(self):
+        """Live broker holdings, aggregated by underlying — the ACTUAL exposure. The ETF sleeves
+        (vol-carry / trend / managed-futures / T-bill) book STRAIGHT to the broker, not the paper
+        ledgers, so without this the concentration cap is blind to them. Same source Open Positions uses;
+        market_value isn't populated in the snapshot, so notional is computed from qty x mark."""
+        agg = {}
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            view = BrokerAccountViewEngine().snapshot()
+            if not view.get("reads_ok", True):
+                return []
+            try:
+                from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+                cash_sweep = TbillCashSweepEngine.symbol()      # SGOV = parked CASH, not a treasury bet
+            except Exception:
+                cash_sweep = "SGOV"
+            for p in (view.get("positions") or []):
+                raw = str(p.get("symbol") or "")
+                under = (raw.split() or [""])[0].upper()      # OSI option symbols carry spaces
+                if not under or under == str(cash_sweep).upper():
+                    continue                                  # cash-equivalent: not a sector-risk concentration
+                qty = float(p.get("quantity") or 0)
+                price = float(p.get("current_price") or 0)
+                is_opt = (p.get("asset_type") == "OPTION") or (" " in raw)
+                notional = abs(qty * price * (100 if is_opt else 1))
+                e = agg.setdefault(under, {"symbol": under,
+                                           "asset_type": "OPTION" if is_opt else "EQUITY", "notional": 0.0})
+                e["notional"] += notional
+                if is_opt:
+                    e["asset_type"] = "OPTION"
+        except Exception:
+            return []
+        for e in agg.values():
+            e["notional"] = round(e["notional"], 2)
+        return list(agg.values())
+
     def evaluate(self):
         equity_rows = self._read_jsonl(self.equity_ledger)
         option_rows = self._read_jsonl(self.option_ledger)
@@ -240,6 +276,18 @@ class PortfolioExposureEngine:
                     "notional": self._notional(row),
                     "directional_bias": row.get("directional_bias"),
                     "status": row.get("status"),
+                })
+
+        # ADD live broker holdings the paper ledgers don't carry (the ETF sleeves), deduped by symbol so
+        # a name already in a ledger is never counted twice. This makes the concentration cap reflect
+        # ACTUAL broker exposure — the same holdings the Open Positions card shows — not just the paper book.
+        ledger_syms = {p["symbol"] for p in open_positions if p["symbol"]}
+        for bp in self._broker_positions():
+            if bp["symbol"] and bp["symbol"] not in ledger_syms:
+                open_positions.append({
+                    "symbol": bp["symbol"], "asset_type": bp["asset_type"],
+                    "sector": self._sector(bp["symbol"]), "notional": bp["notional"],
+                    "directional_bias": None, "status": "OPEN", "source": "BROKER",
                 })
 
         total_notional = round(sum(p["notional"] for p in open_positions), 2)
