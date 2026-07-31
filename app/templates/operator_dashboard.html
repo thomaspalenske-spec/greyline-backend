@@ -886,23 +886,13 @@ async function refreshCommanderSummary() {
 
 async function refreshCockpitBanner() {
   try {
-    let payload = await getJSON("/operator-commander-summary");
-    let summary = payload.operator_summary || {};
+    const payload = await getJSON("/operator-commander-summary");
+    const summary = payload.operator_summary || {};
 
-    if (!summary.status) {
-      const cockpit = await getJSON("/operator-cockpit-status");
-      summary = {
-        status: cockpit.overall_reliability === "GREEN" ? "GREEN" : cockpit.overall_reliability === "RED" ? "RED" : "YELLOW",
-        headline: cockpit.mission_readiness?.status === "GO" ? "GreyLine cockpit ready." : "Cockpit action required.",
-        top_symbol: "--",
-        top_option_type: "",
-        top_score: "",
-        operating_mode: cockpit.operating_mode,
-        reliability_score: cockpit.reliability_score,
-        unread_notifications: cockpit.unread_notifications,
-      };
-    }
-
+    // The commander-summary ENGINE owns the GREEN/RED/YELLOW verdict and headline (engines decide,
+    // displays render). We do NOT re-derive them in JS from a second source (cockpit) — a second
+    // derivation could silently disagree with the engine's. If status is somehow absent, default to
+    // YELLOW (never green), and the fields fall back to "--" below.
     const status = summary.status || "YELLOW";
     const color = status === "GREEN" ? "green" : status === "RED" ? "red" : "yellow";
 
