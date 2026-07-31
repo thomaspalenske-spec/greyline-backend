@@ -873,9 +873,10 @@ async function refreshCommanderSummary() {
       status.className = "commander-status " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
     }
 
-    const paperMode = summary.operating_mode === "PAPER_OPERATIONAL" || summary.paper_execution_allowed === true;
-    const liveMode = summary.live_execution_allowed === true;
-    setText("side_mode", paperMode && !liveMode ? "PAPER AUTO" : (liveMode ? "LIVE AUTO" : "OBSERVE"));
+    // side_mode is NOT derived here: it's the sidebar execution-mode indicator that refreshAll owns
+    // (from the authoritative scheduler/ledger execution flags) and sets AFTER this runs. Deriving it a
+    // second time here — off different fields — only risked a flicker/disagreement before refreshAll
+    // overwrote it. Engines/one owner decide, displays render.
   } catch (e) {
     setText("commander_headline", "Commander summary unavailable.");
     const headline = document.getElementById("commander_headline");
