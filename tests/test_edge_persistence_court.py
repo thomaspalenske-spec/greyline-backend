@@ -77,10 +77,29 @@ def test_forced_and_admin_closes_excluded(tmp_path, monkeypatch):
     trades, excluded = E()._closed_trades()
     assert excluded == 2                                    # the flatten + the reset
     sleeves = {t["sleeve"] for t in trades}
-    assert sleeves == {"premium", "momentum"}              # only the two real strategy exits
+    assert sleeves == {"premium_vrp", "momentum"}         # VRP condor (untagged) + the equity exit
     # the condor (mid_estimate) is haircut 3% of max-loss: net = 40 - 0.03*300 = 31
-    prem = next(t for t in trades if t["sleeve"] == "premium")
+    prem = next(t for t in trades if t["sleeve"] == "premium_vrp")
     assert prem["net"] == 31.0 and prem["basis"] == "mid_estimate"
     # the equity fill is already net (no extra haircut)
     eqt = next(t for t in trades if t["sleeve"] == "momentum")
     assert eqt["net"] == 25.0 and eqt["basis"] == "fill_net"
+
+
+def test_earnings_and_vrp_condors_get_separate_verdicts(tmp_path, monkeypatch):
+    """Earnings-vol (event IV-crush) and VRP (unconditional variance premium) share the ledger but are
+    DISTINCT edges — the court must verdict them separately so one can't mask the other."""
+    vrp = tmp_path / "vrp.jsonl"
+    vrp.write_text("\n".join(json.dumps(r) for r in [
+        {"status": "CLOSED", "close_reason": "PROFIT_TAKE_50PCT", "realized_pnl": 40.0,
+         "max_loss_total": 300.0, "realized_pnl_basis": "fills"},                       # VRP (untagged)
+        {"status": "CLOSED", "close_reason": "EARNINGS_CRUSH_CAPTURED", "realized_pnl": 55.0,
+         "max_loss_total": 300.0, "realized_pnl_basis": "fills", "strategy": "earnings_vol"},
+    ]) + "\n")
+    monkeypatch.setattr(E, "VRP_LEDGER", vrp)
+    monkeypatch.setattr(E, "EQ_LEDGER", tmp_path / "none.jsonl")
+    monkeypatch.setattr(E, "OPT_LEDGER", tmp_path / "none2.jsonl")
+    out = E().realized_edge()
+    assert set(out["sleeves"]) == {"premium_vrp", "premium_earnings"}   # two distinct verdicts
+    assert out["sleeves"]["premium_vrp"]["total_net_pnl"] == 40.0
+    assert out["sleeves"]["premium_earnings"]["total_net_pnl"] == 55.0

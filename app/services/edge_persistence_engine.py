@@ -103,7 +103,11 @@ class EdgePersistenceEngine:
                 net, tag = self._f(rp), basis
             else:
                 net, tag = self._f(rp) - self.CONDOR_CLOSE_HAIRCUT_FRAC * risk, "mid_estimate"
-            trades.append({"sleeve": "premium", "gross": self._f(rp), "net": net,
+            # earnings-vol (event-driven IV crush) and VRP (unconditional variance premium) are DISTINCT
+            # edges sharing this ledger — verdict them separately so one can't mask the other.
+            strat = str(r.get("strategy") or "vrp").lower()
+            sleeve = "premium_earnings" if strat == "earnings_vol" else "premium_vrp"
+            trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": net,
                            "risk": risk, "closed_at": r.get("closed_at"), "basis": tag})
 
         # equity + option contracts booked to the SIM: realized_pnl reflects REAL fills (spread already

@@ -66,7 +66,7 @@ def test_doctrine_close_records_realized_and_feeds_the_court(tmp_path, monkeypat
     monkeypatch.setattr(E, "OPT_LEDGER", tmp_path / "none_opt.jsonl")
     court = E().realized_edge()
     assert court["excluded_forced_closes"] == 0
-    prem = court["sleeves"]["premium"]
+    prem = court["sleeves"]["premium_vrp"]                 # untagged condor -> VRP sleeve
     assert prem["trades"] == 1
     # 62 net on 400 max-loss = 15.5% return on risk — exact, no haircut
     assert prem["mean_return_on_risk_pct"] == 15.5
