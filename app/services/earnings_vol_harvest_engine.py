@@ -175,6 +175,26 @@ class EarningsVolHarvestEngine:
 
     # ---- open ----------------------------------------------------------------------------------
 
+    def _concurrency_ceiling(self):
+        """MAX_CONCURRENT is a SAFETY ceiling, NOT a capital limit — the dollar risk cap is the real
+        limit. Left as a flat 3, the count could bind before the budget when condors run small
+        (~$250 each), stranding deployable risk-budget the way the momentum slot-count did. A single
+        contract condor sizes to between half and all of the per-position cap, so the SMALLEST a
+        condor can be is ~cap/2; allow at least as many condors as the risk cap could fund at that
+        floor, so the DOLLAR gate (budget_left) always binds first and the count never idles budget."""
+        import math
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            per_condor_cap = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
+        except Exception:
+            per_condor_cap = 500.0
+        floor = max(1.0, per_condor_cap / 2.0)
+        try:
+            budget_ceiling = math.ceil(self.PORTFOLIO_RISK_CAP_USD / floor)
+        except Exception:
+            budget_ceiling = self.MAX_CONCURRENT
+        return max(self.MAX_CONCURRENT, budget_ceiling)
+
     def open_positions(self, dry_run=True, limit=None):
         if not self.enabled():
             return {"status": "EARNINGS_VOL_DISABLED", "opened": 0}
@@ -185,7 +205,10 @@ class EarningsVolHarvestEngine:
         from app.services.uw_option_chain_engine import UWOptionChainEngine
         _uw = UWOptionChainEngine()
 
-        slots = max(0, self.MAX_CONCURRENT - len(self._open_symbols()))
+        # Count is a budget-derived SAFETY ceiling (never binds before the dollar risk cap); the real
+        # limit is budget_left below. LIMIT_PER_DAY still PACES opens per call (intentional — don't
+        # dump all risk in one session); budget fills over subsequent cycles, never left permanently idle.
+        slots = max(0, self._concurrency_ceiling() - len(self._open_symbols()))
         budget_left = self.PORTFOLIO_RISK_CAP_USD - self._open_risk()
         want = min(limit if limit is not None else self.LIMIT_PER_DAY, slots)
         opened, skipped, planned = [], [], []

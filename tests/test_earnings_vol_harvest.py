@@ -125,3 +125,24 @@ def test_dryrun_respects_risk_cap(monkeypatch):
     r = eng.open_positions(dry_run=True)
     assert r["planned_count"] == 0                      # a $200 condor doesn't fit $100 headroom
     assert r["planned"] == []
+
+
+def test_concurrency_ceiling_never_binds_before_dollar_cap(monkeypatch):
+    """Hardening (2026-07-31): MAX_CONCURRENT is a budget-derived SAFETY ceiling, never a capital
+    limit — it must not strand deployable risk-budget the way the momentum slot-count did. A single
+    contract condor sizes to ~cap/2 at minimum, so the ceiling must admit at least as many condors
+    as the dollar risk cap could fund at that floor."""
+    import math
+    import app.services.sleeve_capital_budget_engine as sce
+    monkeypatch.setattr(sce.SleeveCapitalBudgetEngine, "per_condor_max_loss",
+                        staticmethod(lambda: 500.0))
+    eng = ENG()
+
+    # A cap where a flat MAX_CONCURRENT (3) WOULD bind before the budget: $1,500 funds up to
+    # floor(1500 / (500/2)) = 6 minimum-size condors, but the old flat 3 would strand ~$750.
+    eng.PORTFOLIO_RISK_CAP_USD = 1500.0
+    max_affordable = math.floor(1500.0 / (500.0 / 2.0))    # 6
+    ceiling = eng._concurrency_ceiling()
+    assert ceiling >= max_affordable, f"count ceiling {ceiling} can still bind before dollars ({max_affordable})"
+    assert ceiling >= eng.MAX_CONCURRENT                    # never DROPS below the floor ceiling
+    assert eng.MAX_CONCURRENT < max_affordable             # the old flat cap really would have stranded budget
