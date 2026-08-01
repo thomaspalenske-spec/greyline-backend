@@ -473,6 +473,20 @@ class ConditionalVRPShortPremiumEngine:
             max_loss_total = round(max_w * 100 * qty - credit_total, 2)
             if (abs(credit_total - old_c) >= 0.01 or abs(max_loss_total - old_ml) >= 0.01
                     or not r.get("fill_reconciled")):
+                # OPEN-side execution slippage → ExecutionLog, ONCE, BEFORE we overwrite the plan credit:
+                # the plan (decision-mid) credit vs the ACTUAL fill credit. Selling the condor to collect
+                # premium → action SELL; collecting LESS than the mid is a cost. With the close-side log
+                # this gives the premium sleeves a FULL round-trip measured execution cost.
+                if not dry_run and not r.get("open_slippage_logged"):
+                    decision_credit = self._f(r.get("credit_per_condor"))   # still the plan here
+                    try:
+                        from app.services.execution_log_engine import ExecutionLogEngine
+                        _sleeve = "premium_earnings" if str(r.get("strategy")) == "earnings_vol" else "premium_vrp"
+                        ExecutionLogEngine().record_fill(_sleeve, r.get("symbol"), "SELL",
+                                                         int(qty) * 100, mid=decision_credit, fill=net)
+                        r["open_slippage_logged"] = True
+                    except Exception:
+                        pass
                 changed.append({"symbol": r.get("symbol"),
                                 "credit_total": {"was": old_c, "now": credit_total},
                                 "max_loss_total": {"was": old_ml, "now": max_loss_total},
