@@ -155,3 +155,60 @@ def test_live_trade_readiness_go():
     # Something must be armed to open, or nothing fires regardless of the rest.
     assert checks["strategy_flags_pre_open"]["status"] == "PASS", (
         "no sleeves armed — nothing will open: " + checks["strategy_flags_pre_open"]["detail"])
+
+
+def test_discipline_loop_chain_runs():
+    """OBSERVABILITY: the measure->retire->reallocate->notify discipline loop must actually RUN end-to-end
+    on LIVE state, not just pass in mocked units. Every scheduler best-effort block is invoked read-only
+    (alerts dispatch=False; conftest also neutralizes channels) and must return a WELL-FORMED result — so a
+    silent exception in any link surfaces here instead of being swallowed at runtime. Deterministic: the
+    chain returns well-formed dicts regardless of market state (0 trades -> ACCUMULATING, etc.)."""
+    board = {}
+
+    # 1. MEASURE — the edge court
+    from app.services.edge_persistence_engine import EdgePersistenceEngine
+    epe = EdgePersistenceEngine()
+    re = epe.realized_edge()
+    assert isinstance(re.get("sleeves"), dict) and isinstance(re.get("execution_cost"), dict) \
+        and re.get("min_trades_gate"), f"realized_edge malformed: {list(re)}"
+    board["measure (edge court)"] = f"{len(re['sleeves'])} verdicted, gate {re['min_trades_gate']}"
+
+    # 2. RETIRE — decay alert (read-only)
+    da = epe.decay_alert(dispatch=False)
+    assert da.get("status") in ("EDGE_DECAY_NONE", "EDGE_DECAY_FLAGGED", "EDGE_DECAY_DEGRADED"), da
+    board["retire (decay alert)"] = da["status"]
+
+    # 3. REALLOCATE — capital allocator
+    from app.services.capital_allocator_engine import CapitalAllocatorEngine
+    ca = CapitalAllocatorEngine()
+    rec = ca.recommend()
+    assert isinstance(rec.get("sleeves"), dict) and rec.get("status") == "CAPITAL_ALLOCATOR_RECOMMENDATION", rec.get("status")
+    board["reallocate (allocator)"] = f"basis {rec.get('basis')}"
+
+    # 4. NOTIFY — allocation drift alert (read-only)
+    dr = ca.drift_alert(dispatch=False)
+    assert dr.get("status") in ("ALLOC_DRIFT_NONE", "ALLOC_DRIFT_FLAGGED", "ALLOC_DRIFT_DEGRADED"), dr
+    board["notify (drift alert)"] = dr["status"]
+
+    # 5. ENFORCE — the two discipline invariants must be emitted + well-formed by the live guard
+    from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine
+    guard = GreyLineRealityGuardEngine().check()
+    inv = {i["id"]: i for i in (guard.get("checks") or [])}
+    for gid in ("EDGE_NOT_DECAYED", "MOMENTUM_STOPS_CONSISTENT"):
+        assert gid in inv and isinstance(inv[gid].get("ok"), bool), f"guard missing/malformed: {gid}"
+    board["enforce (edge guard)"] = f"EDGE_NOT_DECAYED ok={inv['EDGE_NOT_DECAYED']['ok']}"
+    board["enforce (stop guard)"] = f"MOMENTUM_STOPS_CONSISTENT ok={inv['MOMENTUM_STOPS_CONSISTENT']['ok']}"
+
+    # 6. FEED — earnings fire-readiness (the fastest sleeve to feed the court)
+    from app.services.earnings_vol_harvest_engine import EarningsVolHarvestEngine
+    fr = EarningsVolHarvestEngine().fire_readiness()
+    assert isinstance(fr.get("will_fire"), bool) and isinstance(fr.get("checks"), list), fr.get("status")
+    board["feed (earnings ready)"] = f"will_fire={fr['will_fire']}"
+
+    line = "=" * 92
+    print("\n" + line)
+    print(" GREYLINE DISCIPLINE LOOP — measure -> retire -> reallocate -> notify -> enforce (LIVE, read-only)")
+    print(line)
+    for k, v in board.items():
+        print(f"  [PASS] {k:24} {v}")
+    print(line + "\n")
