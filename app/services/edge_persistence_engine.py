@@ -37,7 +37,19 @@ class EdgePersistenceEngine:
     TBILL = {"SGOV"}
     MIN_DAYS = 10                       # open-drift context needs this much history to even show
     MIN_TRADES = 20                     # below this, NO realized verdict — too few samples to judge
-    Z95 = 1.96                          # normal approx for the 95% CI (small-N caveat surfaced)
+    Z95 = 1.96                          # 2-sided 95% normal quantile (base for the small-sample t bump)
+    MIN_EDGE_ROR = 0.005                # PROVEN also needs a mean edge >= 0.5% return-on-risk/trade — a
+                                        # statistically-significant-but-trivial edge must not fire capital moves
+
+    @classmethod
+    def _t_crit(cls, n):
+        """Two-sided 95% critical value, SMALL-SAMPLE AWARE. The flat 1.96 normal is anti-conservative at
+        N~20 (Student-t needs ~2.09), so a thin-but-lucky sample could clear a 1.96 CI and trip the whole
+        act-on-it machinery. Cornish-Fisher expansion of z=1.96 → t (df=n-1): converges to 1.96 for large
+        N, appropriately wider for small N (df=19 → ~2.09, matching the t-table)."""
+        df = max(1, int(n) - 1)
+        z = cls.Z95
+        return z + (z ** 3 + z) / (4.0 * df)
     CONDOR_CLOSE_HAIRCUT_FRAC = 0.03    # condor closes are marked at MID; haircut this frac of max-loss
                                         # as a conservative round-trip close-spread proxy (see cost_note)
     # forced/administrative closes are NOT strategy outcomes — exclude from the edge stats
@@ -183,16 +195,20 @@ class EdgePersistenceEngine:
                 sd = math.sqrt(var)
                 se = sd / math.sqrt(n)
                 t_stat = mean / se if se > 0 else 0.0
-                lo, hi = mean - self.Z95 * se, mean + self.Z95 * se
+                tc = self._t_crit(n)                     # small-sample-aware, not the flat 1.96
+                lo, hi = mean - tc * se, mean + tc * se
                 stat.update({"std_return_on_risk_pct": round(sd * 100, 2), "t_stat": round(t_stat, 2),
-                             "ci95_return_on_risk_pct": [round(lo * 100, 2), round(hi * 100, 2)]})
+                             "t_crit": round(tc, 3), "ci95_return_on_risk_pct": [round(lo * 100, 2), round(hi * 100, 2)]})
 
             if n < self.MIN_TRADES:
                 verdict = f"ACCUMULATING ({n}/{self.MIN_TRADES} trades — too few to judge)"
-            elif lo is not None and lo > 0:
-                verdict = "PROVEN — cost-net edge > 0 at 95% confidence"
+            elif lo is not None and lo > 0 and mean >= self.MIN_EDGE_ROR:
+                verdict = "PROVEN — cost-net edge > 0 at 95% (small-sample t) and above the action floor"
             elif hi is not None and hi < 0:
-                verdict = "DECAYED — cost-net edge < 0 at 95% confidence; retire"
+                verdict = "DECAYED — cost-net edge < 0 at 95% (small-sample t); retire"
+            elif lo is not None and lo > 0:              # significant but too small to act on
+                verdict = (f"UNPROVEN — statistically positive but mean {round(mean * 100, 2)}% "
+                           f"< {round(self.MIN_EDGE_ROR * 100, 2)}% action floor")
             else:
                 verdict = "UNPROVEN — edge indistinguishable from zero net of cost"
             stat["verdict"] = verdict
@@ -220,9 +236,13 @@ class EdgePersistenceEngine:
                           "actual close fills or the marketable close-order debit (basis fills/close_order) — "
                           f"already honest, no haircut. Only LEGACY mid-marked condor rows are haircut "
                           f"{self.CONDOR_CLOSE_HAIRCUT_FRAC*100:.0f}% of max-loss as a conservative proxy."),
-            "method": ("per-trade return on risk; verdict from the 95% CI vs 0 with a minimum-sample gate. "
-                       "Realized CLOSED trades only, forced flattens excluded. Daily open-marks are "
-                       "autocorrelated and are NEVER used for the verdict."),
+            "method": ("per-trade return on risk; PROVEN needs the SMALL-SAMPLE-t 95% CI above 0 AND a mean "
+                       f">= {self.MIN_EDGE_ROR * 100:.1f}% action floor (a significant-but-trivial edge won't "
+                       "fire capital moves); DECAYED needs the CI below 0. Realized CLOSED trades only, forced "
+                       "flattens excluded. Daily open-marks are autocorrelated and are NEVER used."),
+            "multiple_comparison_note": (f"{len(sleeves)} sleeve(s) verdicted; each uses a per-sleeve test on "
+                                         "PRE-SPECIFIED strategies (not a search), so no Bonferroni — but treat a "
+                                         "lone borderline PROVEN with caution and prefer more trades."),
         }
 
     def decay_alert(self, dispatch=True):

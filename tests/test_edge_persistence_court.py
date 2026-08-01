@@ -125,3 +125,35 @@ def test_execution_cost_is_a_diagnostic_not_double_subtracted(monkeypatch):
     monkeypatch.setattr(E, "_closed_trades", lambda self: (_trades(1, 10.0, sleeve="trend"), 0))
     out2 = E().realized_edge()
     assert out2["sleeves"]["trend"]["total_net_pnl"] == 10.0                    # NOT 10 - slippage
+
+
+def test_t_crit_is_small_sample_aware():
+    # flat normal is 1.96; the small-sample t critical value is wider for small N, ~1.96 for large N
+    assert round(E._t_crit(20), 2) >= 2.05          # df=19 -> ~2.09
+    assert E._t_crit(20) > E._t_crit(200)           # monotone: fewer trades -> wider
+    assert abs(E._t_crit(2000) - 1.96) < 0.02       # converges to the normal for large N
+
+
+def test_thin_lucky_sample_not_proven_under_small_sample_t(monkeypatch):
+    """A 20-trade sample with t_stat ~1.98 clears the FLAT 1.96 CI but NOT the small-sample-t CI (df=19
+    ~2.09) — so the harder gate correctly withholds PROVEN where the naive normal would have granted it."""
+    # net=[6.4,-2.4]*10 on risk 100 -> mean ROR 2% (above the floor), t_stat ~1.98
+    trades = [{"sleeve": "premium_vrp", "gross": v, "net": v, "risk": 100.0, "closed_at": "x",
+               "basis": "fills"} for v in ([6.4, -2.4] * 10)]
+    monkeypatch.setattr(E, "_closed_trades", lambda self: (trades, 0))
+    stat = E().realized_edge()["sleeves"]["premium_vrp"]
+    assert 1.96 < stat["t_stat"] < E._t_crit(20)     # in the band the flat-z would have called significant
+    assert stat["ci95_return_on_risk_pct"][0] < 0    # t-CI lower bound dips below 0
+    assert "UNPROVEN" in stat["verdict"]             # NOT proven — the hardening did its job
+
+
+def test_significant_but_trivial_edge_is_not_proven(monkeypatch):
+    """A tight, clearly-significant edge that is below the action floor must not fire PROVEN (which would
+    move capital) — it's flagged UNPROVEN 'below the action floor' instead."""
+    # net alternating 0.25/0.35 on risk 100 -> mean ROR 0.3% (< 0.5% floor), tiny variance -> lo > 0
+    trades = [{"sleeve": "premium_vrp", "gross": v, "net": v, "risk": 100.0, "closed_at": "x",
+               "basis": "fills"} for v in ([0.25, 0.35] * 12)]
+    monkeypatch.setattr(E, "_closed_trades", lambda self: (trades, 0))
+    stat = E().realized_edge()["sleeves"]["premium_vrp"]
+    assert stat["ci95_return_on_risk_pct"][0] > 0    # statistically positive
+    assert "UNPROVEN" in stat["verdict"] and "action floor" in stat["verdict"]
