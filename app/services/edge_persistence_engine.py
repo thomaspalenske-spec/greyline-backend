@@ -151,7 +151,12 @@ class EdgePersistenceEngine:
             if is_opt:
                 risk, risk_kind = notional, "premium_at_risk"
             else:
-                risk, risk_kind = self.EQUITY_STOP_PCT * notional, f"stop_proxy_{int(self.EQUITY_STOP_PCT*100)}pct"
+                entry, stop = self._f(r.get("entry_price")), r.get("entry_stop")
+                per_share = abs(entry - self._f(stop)) if (stop is not None and entry > 0) else 0.0
+                if per_share > 0:                     # EXACT: the doctrine's recorded initial stop distance
+                    risk, risk_kind = per_share * abs(qty), "stop_atr_doctrine"
+                else:                                 # fallback: vol proxy when no stop was recorded
+                    risk, risk_kind = self.EQUITY_STOP_PCT * notional, f"stop_proxy_{int(self.EQUITY_STOP_PCT*100)}pct"
             trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
                            "risk": risk, "closed_at": r.get("closed_at"), "basis": "fill_net",
                            "risk_kind": risk_kind})
@@ -259,8 +264,9 @@ class EdgePersistenceEngine:
                                          "PRE-SPECIFIED strategies (not a search), so no Bonferroni — but treat a "
                                          "lone borderline PROVEN with caution and prefer more trades."),
             "risk_basis_note": (f"return-on-risk divides by INSTRUMENT-AWARE intended max loss: condor = defined "
-                                f"max_loss; long option = premium paid; equity = a {int(self.EQUITY_STOP_PCT*100)}% "
-                                "stop-loss PROXY (no stop stored — ~2.5-ATR). So momentum's ROR and the "
+                                f"max_loss; long option = premium paid; equity = the doctrine's recorded initial "
+                                f"stop distance ('stop_atr_doctrine', EXACT) when stamped at entry, else a "
+                                f"{int(self.EQUITY_STOP_PCT*100)}% ~2.5-ATR PROXY. So momentum's ROR and the "
                                 "closest-to-proven ranking are comparable with the condors', not vs raw notional."),
         }
 

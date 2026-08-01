@@ -255,10 +255,25 @@ class MomentumReversalRebalanceEngine:
             if qty <= 0:
                 skipped_unaffordable += 1
                 continue
+            # ENTRY RISK: stamp the ATR + the doctrine's initial stop (the SAME ones the exit manager
+            # will manage to) so the edge court measures return on the ACTUAL intended risk, not a 12%
+            # proxy. Best-effort — a missing ATR just leaves them None and the court falls back.
+            entry_atr = entry_stop = None
+            try:
+                from app.services.momentum_exit_manager_engine import atr_for
+                from app.services.trade_doctrine_engine import TradeDoctrineEngine
+                _atr = atr_for(t["symbol"])
+                if _atr:
+                    _dir = "LONG" if t["side"] == "BUY" else "SHORT"
+                    _plan = TradeDoctrineEngine().exit_plan(px, _dir, _atr)
+                    entry_atr = round(float(_atr), 6)
+                    entry_stop = (_plan or {}).get("initial_stop")
+            except Exception:
+                entry_atr = entry_stop = None
             self.ledger.open_trade(
                 symbol=t["symbol"], side=t["side"], quantity=qty, entry_price=px,
                 directional_bias=t["directional_bias"], trade_intent=self.TRADE_INTENT,
-                direction_confidence=t["conviction"],
+                direction_confidence=t["conviction"], entry_atr=entry_atr, entry_stop=entry_stop,
             )
             opened.append({"symbol": t["symbol"], "side": t["side"], "quantity": qty, "entry_price": px})
             sector_count[sector] += 1

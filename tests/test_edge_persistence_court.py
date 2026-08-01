@@ -182,3 +182,34 @@ def test_instrument_aware_risk_basis(tmp_path, monkeypatch):
     out = E().realized_edge()
     assert out["sleeves"]["momentum"]["risk_basis"] == "stop_proxy_12pct"
     assert out["sleeves"]["premium_vrp"]["risk_basis"] == "defined_max_loss"
+
+
+def test_recorded_entry_stop_gives_exact_equity_risk(tmp_path, monkeypatch):
+    """When the momentum open stamped entry_stop, the court measures return on the ACTUAL doctrine stop
+    distance ('stop_atr_doctrine'), not the 12% proxy; a row without it falls back to the proxy."""
+    eq = tmp_path / "eq.jsonl"
+    eq.write_text("\n".join(json.dumps(r) for r in [
+        # entry 100, doctrine initial_stop 90 -> risk/share 10 * 8 shares = 80 (EXACT)
+        {"status": "CLOSED", "close_reason": "TP1 hit", "realized_pnl": 24.0, "asset_type": "EQUITY",
+         "entry_price": 100.0, "quantity": 8, "entry_stop": 90.0, "symbol": "GLW"},
+        # no entry_stop -> 12% proxy of notional (50*4=200 -> 24)
+        {"status": "CLOSED", "close_reason": "TP1 hit", "realized_pnl": 5.0, "asset_type": "EQUITY",
+         "entry_price": 50.0, "quantity": 4, "symbol": "ALTO"}]) + "\n")
+    monkeypatch.setattr(E, "VRP_LEDGER", tmp_path / "novrp.jsonl")
+    monkeypatch.setattr(E, "EQ_LEDGER", eq)
+    monkeypatch.setattr(E, "OPT_LEDGER", tmp_path / "noopt.jsonl")
+    trades, _ = E()._closed_trades()
+    exact = next(t for t in trades if t["risk_kind"] == "stop_atr_doctrine")
+    assert exact["risk"] == 80.0                       # |100-90| * 8
+    proxy = next(t for t in trades if t["risk_kind"].startswith("stop_proxy"))
+    assert proxy["risk"] == 24.0                       # 0.12 * (50*4)
+
+
+def test_open_trade_stores_entry_atr_and_stop(tmp_path, monkeypatch):
+    from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+    led = PaperTradeLedgerEngine()
+    led.ledger_file = tmp_path / "led.jsonl"
+    led.open_trade(symbol="GLW", side="BUY", quantity=5, entry_price=100.0,
+                   trade_intent="MOMENTUM_REVERSAL", entry_atr=4.0, entry_stop=90.0)
+    row = json.loads((tmp_path / "led.jsonl").read_text().splitlines()[0])
+    assert row["entry_atr"] == 4.0 and row["entry_stop"] == 90.0

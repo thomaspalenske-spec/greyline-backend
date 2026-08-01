@@ -52,6 +52,8 @@ class PaperTradeLedgerEngine:
         bearish_score=None,
         opposing_score=None,
         direction_confidence=None,
+        entry_atr=None,
+        entry_stop=None,
     ):
         entry_thesis = self._entry_thesis_snapshot(symbol)
 
@@ -71,6 +73,10 @@ class PaperTradeLedgerEngine:
             "direction_confidence": direction_confidence,
             "quantity": quantity,
             "entry_price": float(entry_price),
+            # entry-time risk (recorded by the momentum sleeve): the ATR + the doctrine's initial stop, so
+            # the edge court can measure return on the ACTUAL intended risk, not a notional proxy.
+            "entry_atr": entry_atr,
+            "entry_stop": entry_stop,
             "exit_price": None,
             "realized_pnl": 0.0,
             "status": "OPEN",
