@@ -11,3 +11,10 @@ router = APIRouter()
 def earnings_vol():
     """Armed state, open earnings-vol condors, deployed risk, and tonight's rich-IV earnings candidates."""
     return EarningsVolHarvestEngine().status()
+
+
+@router.get("/earnings-vol/fire-readiness")
+def earnings_vol_fire_readiness():
+    """READ-ONLY: will the earnings sleeve open condors at the next in-session cycle? Every gate between
+    armed and a booked condor, with the reason if not. Dry-run — places nothing."""
+    return EarningsVolHarvestEngine().fire_readiness()

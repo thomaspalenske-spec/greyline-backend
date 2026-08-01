@@ -193,3 +193,51 @@ def test_earnings_open_uses_the_atomic_multileg_path(tmp_path, monkeypatch):
     assert len(fake.multileg[0]) == 4
     row = json.loads((tmp_path / "vrp.jsonl").read_text().splitlines()[0])
     assert row["strategy"] == "earnings_vol" and all(l.get("atomic") for l in row["legs"])
+
+
+def test_fire_readiness_ready_when_gates_pass_market_closed(monkeypatch):
+    """Deterministic gates pass + market closed → READY (build check deferred to the open, not a failure)."""
+    monkeypatch.setenv("GREYLINE_EARNINGS_VOL_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_PAPER_EXECUTION_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_SIM_BOOKING_ENABLED", "true")
+    eng = ENG()
+    eng.PORTFOLIO_RISK_CAP_USD = 1200
+    monkeypatch.setattr(eng, "_open_symbols", lambda: set())
+    monkeypatch.setattr(eng, "_open_risk", lambda: 0.0)
+    monkeypatch.setattr(eng, "status", lambda: {"armed": True, "candidates_now": [
+        {"ticker": "STRL", "report_date": "2026-08-03"}, {"ticker": "AXON", "report_date": "2026-08-03"}]})
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
+                        lambda: type("M", (), {"status": lambda self: {"is_regular_session": False}})())
+    r = eng.fire_readiness()
+    assert r["will_fire"] is True and r["market_open"] is False
+    assert r["would_open"] is None                       # build deferred (no in-session quotes)
+    assert r["report_dates"] == ["2026-08-03"]
+    assert all(c["ok"] for c in r["checks"] if c["blocking"])
+
+
+def test_fire_readiness_not_ready_when_disarmed(monkeypatch):
+    monkeypatch.setenv("GREYLINE_EARNINGS_VOL_ENABLED", "false")
+    eng = ENG()
+    monkeypatch.setattr(eng, "_open_symbols", lambda: set())
+    monkeypatch.setattr(eng, "_open_risk", lambda: 0.0)
+    monkeypatch.setattr(eng, "status", lambda: {"armed": False, "candidates_now": []})
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
+                        lambda: type("M", (), {"status": lambda self: {"is_regular_session": False}})())
+    r = eng.fire_readiness()
+    assert r["will_fire"] is False and "armed" in r["verdict"]
+
+
+def test_fire_readiness_market_open_requires_buildable_condor(monkeypatch):
+    monkeypatch.setenv("GREYLINE_EARNINGS_VOL_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_PAPER_EXECUTION_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_SIM_BOOKING_ENABLED", "true")
+    eng = ENG()
+    eng.PORTFOLIO_RISK_CAP_USD = 1200
+    monkeypatch.setattr(eng, "_open_symbols", lambda: set())
+    monkeypatch.setattr(eng, "_open_risk", lambda: 0.0)
+    monkeypatch.setattr(eng, "status", lambda: {"armed": True, "candidates_now": [{"ticker": "STRL", "report_date": "2026-08-03"}]})
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
+                        lambda: type("M", (), {"status": lambda self: {"is_regular_session": True}})())
+    monkeypatch.setattr(eng, "open_positions", lambda dry_run=True: {"planned_count": 0, "skipped": [{"ticker": "STRL", "skip": "no expiry"}]})
+    r = eng.fire_readiness()
+    assert r["will_fire"] is False and r["would_open"] == 0 and "no buildable condor" in r["verdict"]

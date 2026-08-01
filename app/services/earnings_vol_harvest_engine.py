@@ -278,6 +278,84 @@ class EarningsVolHarvestEngine:
         return {"timestamp": datetime.utcnow().isoformat(), "opened": opened,
                 "skipped": skipped[:8], "status": "EARNINGS_VOL_OPENED"}
 
+    def fire_readiness(self):
+        """READ-ONLY: WILL the earnings sleeve open condors at the next in-session cycle? Checks every
+        gate between 'armed' and a booked condor. The quote-dependent BUILD check (dry-run plan, which
+        places NOTHING) only runs in-session where option quotes stream; when the market is closed it's
+        deferred and the deterministic gates still report. Surfaces exactly WHY if it won't fire."""
+        from os import getenv
+        checks = []
+
+        def add(name, passed, detail, blocking=True):
+            checks.append({"check": name, "ok": bool(passed), "blocking": blocking, "detail": detail})
+
+        st = self.status()
+        armed = self.enabled()
+        add("armed", armed, "GREYLINE_EARNINGS_VOL_ENABLED " + ("on" if armed else "OFF — set true to fire"))
+        paper = (getenv("GREYLINE_PAPER_EXECUTION_ENABLED", "") or "").strip().lower() == "true"
+        simbook = (getenv("GREYLINE_SIM_BOOKING_ENABLED", "") or "").strip().lower() == "true"
+        add("execution_authority", paper and simbook,
+            f"paper_exec={paper}, sim_booking={simbook} (both required to actually book)")
+        atomic = (getenv("GREYLINE_CONDOR_ATOMIC_ORDER", "") or "").strip().lower() == "true"
+        add("atomic_open_path", atomic,
+            "atomic all-or-none open (no naked-leg window)" if atomic else "legacy legging (reconciler backstops)",
+            blocking=False)
+        ncand = len(st.get("candidates_now") or [])
+        add("candidates_forming", ncand > 0, f"{ncand} rich-IV name(s) reporting within the window")
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            per_condor = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
+        except Exception:
+            per_condor = 500.0
+        budget_left = self.PORTFOLIO_RISK_CAP_USD - self._open_risk()
+        # A condor can be as small as ~half the per-position cap, and the in-session plan gates on the
+        # ACTUAL budget_left per candidate — so the pre-session gate should pass if even the SMALLEST
+        # condor fits (using the cap here caused a false NOT-READY at $469 headroom). Note the tightness.
+        min_condor = per_condor / 2.0
+        tight = "" if budget_left >= per_condor else f" — tight, fits a ~${min_condor:.0f} condor but not a full ${per_condor:.0f}"
+        add("budget_headroom", budget_left >= min_condor,
+            f"${budget_left:.0f} risk headroom{tight}")
+        slots = max(0, self._concurrency_ceiling() - len(self._open_symbols()))
+        add("concurrency_slots", slots > 0,
+            f"{slots} slot(s) free (ceiling {self._concurrency_ceiling()}, {len(self._open_symbols())} open)")
+
+        try:
+            from app.services.market_hours_engine import MarketHoursEngine
+            market_open = MarketHoursEngine().status().get("is_regular_session") is True
+        except Exception:
+            market_open = False
+        would_open, skipped = None, []
+        if market_open and armed:
+            plan = self.open_positions(dry_run=True)          # places NOTHING; runs the real build+gate pipeline
+            would_open = int(plan.get("planned_count") or 0)
+            skipped = plan.get("skipped") or []
+            add("plan_builds_condors", would_open > 0,
+                f"dry-run would open {would_open} condor(s)" + (f"; {len(skipped)} skipped" if skipped else ""),
+                blocking=False)   # drives will_fire via would_open; kept non-blocking for a clearer verdict
+        else:
+            add("plan_builds_condors", True,
+                "deferred — option quotes stream only in-session; candidates are queued for the open",
+                blocking=False)
+
+        blocked = [c["check"] for c in checks if c["blocking"] and not c["ok"]]
+        will_fire = not blocked and (would_open is None or would_open > 0)
+        if blocked:
+            verdict = "NOT READY — " + ", ".join(blocked)
+        elif would_open == 0:
+            verdict = "NOT READY — gates pass but no buildable condor right now (see skipped)"
+        elif market_open:
+            verdict = f"READY — would open {would_open} condor(s) at the next cycle"
+        else:
+            verdict = "READY — gates pass; build/fire confirmed live at the open"
+        return {
+            "sleeve": "earnings_vol", "will_fire": will_fire, "verdict": verdict, "checks": checks,
+            "would_open": would_open, "skipped": skipped[:8], "market_open": market_open,
+            "report_dates": sorted({str(c.get("report_date")) for c in (st.get("candidates_now") or [])}),
+            "note": ("READ-ONLY — the dry-run plan places nothing; this is what WOULD open. The build check "
+                     "runs only in-session (option quotes); deterministic gates report any time."),
+            "status": "EARNINGS_FIRE_READINESS",
+        }
+
     def status(self):
         return {"timestamp": datetime.utcnow().isoformat(), "armed": self.enabled(),
                 "open_positions": len(self._open_symbols()),
