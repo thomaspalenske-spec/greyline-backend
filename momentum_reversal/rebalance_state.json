@@ -1,1 +1,1 @@
-{"last_rebalance_at": "2026-07-24T13:39:51.461167", "as_of": "2026-07-24", "data_source": "TRADESTATION_LIVE_CACHED", "held_before": 0, "free_slots": 10, "opened": 4, "sim_placed": 4, "sim_status": "SIM_BOOKED"}
+{"last_rebalance_at": "2026-07-31T13:48:40.289431", "as_of": "2026-07-31", "data_source": "TRADESTATION_LIVE", "held_before": 0, "free_slots": 10, "opened": 10, "sim_placed": 10, "sim_status": "SIM_BOOKED", "sim_voided_rejects": 0}
