@@ -700,7 +700,10 @@ class BackgroundSchedulerService:
         # evidence. Overwrites today's row each cycle, so it ends the day on the latest marks.
         try:
             from app.services.edge_persistence_engine import EdgePersistenceEngine
-            edge_persistence = EdgePersistenceEngine().snapshot()
+            _epe = EdgePersistenceEngine()
+            edge_persistence = _epe.snapshot()
+            # RETIRE half of the discipline: page (deduped) if the court judged any sleeve DECAYED.
+            edge_persistence["decay_alert"] = _epe.decay_alert()
         except Exception as exc:
             edge_persistence = {"error": repr(exc), "status": "EDGE_PERSISTENCE_DEGRADED"}
 

@@ -846,6 +846,24 @@ class GreyLineRealityGuardEngine:
                            "blank required field" if not problems else
                            f"{len(problems)} surface issue(s): " + "; ".join(problems[:4]))}
 
+    def _check_sleeve_edge_not_decayed(self):
+        """The edge court is the RETIRE signal — surface any sleeve it judged DECAYED (cost-net edge < 0
+        at 95% confidence, >= the trade gate) so a statistically-losing edge is visible, not silently
+        bleeding. Warning severity: a slow, defined-risk bleed the operator should act on, not an emergency."""
+        try:
+            from app.services.edge_persistence_engine import EdgePersistenceEngine
+            sleeves = EdgePersistenceEngine().realized_edge().get("sleeves") or {}
+        except Exception as e:
+            return {"id": "EDGE_NOT_DECAYED", "severity": "warning", "ok": True,
+                    "detail": f"edge court check skipped: {str(e)[:80]}"}
+        decayed = sorted(s for s, v in sleeves.items() if str(v.get("verdict", "")).startswith("DECAYED"))
+        if not decayed:
+            return {"id": "EDGE_NOT_DECAYED", "severity": "warning", "ok": True,
+                    "detail": "no sleeve judged DECAYED by the edge court"}
+        return {"id": "EDGE_NOT_DECAYED", "severity": "warning", "ok": False,
+                "detail": f"DECAYED sleeve(s), cost-net edge < 0 at 95% (court): {', '.join(decayed)} — "
+                          "candidate to retire / cut capital (see /edge-persistence)"}
+
     def check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
@@ -878,6 +896,7 @@ class GreyLineRealityGuardEngine:
             self._check_backup_current(),
             self._check_broker_side_protection(),
             self._check_external_alerting(),
+            self._check_sleeve_edge_not_decayed(),
         ]
         critical_failures = [c for c in checks if c["severity"] == "critical" and not c["ok"]]
         warnings = [c for c in checks if c["severity"] == "warning" and not c["ok"]]

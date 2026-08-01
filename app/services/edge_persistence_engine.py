@@ -225,6 +225,36 @@ class EdgePersistenceEngine:
                        "autocorrelated and are NEVER used for the verdict."),
         }
 
+    def decay_alert(self, dispatch=True):
+        """Fire on any sleeve the court has judged DECAYED (cost-net edge < 0 at 95%, ≥ MIN_TRADES).
+        This is the RETIRE half of the measure→retire discipline: a losing edge must not silently bleed.
+        Deduped by the stable sorted set of decayed sleeves, so it pages ONCE per new decay, not every
+        cycle. Read-only + best-effort — never trades, never raises."""
+        try:
+            sleeves = self.realized_edge().get("sleeves") or {}
+        except Exception as e:
+            return {"status": "EDGE_DECAY_DEGRADED", "error": repr(e)[:100]}
+        decayed = sorted(s for s, v in sleeves.items() if str(v.get("verdict", "")).startswith("DECAYED"))
+        if not decayed:
+            return {"status": "EDGE_DECAY_NONE", "decayed": []}
+        detail = "; ".join(
+            f"{s}: n={sleeves[s].get('trades')}, mean {sleeves[s].get('mean_return_on_risk_pct')}% on risk "
+            f"(95% CI {sleeves[s].get('ci95_return_on_risk_pct')})" for s in decayed)
+        if dispatch:
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                eng = ExternalAlertEngine()
+                if eng.has_external_channel():
+                    eng.dispatch(
+                        title="GreyLine sleeve DECAYED — candidate to retire",
+                        message=(f"The edge court judged {len(decayed)} sleeve(s) DECAYED (cost-net edge < 0 "
+                                 f"at 95% confidence, ≥{self.MIN_TRADES} trades): {detail}. Consider retiring "
+                                 "or cutting its capital. See the Edge Court card / /edge-persistence."),
+                        severity="WARNING", fingerprint=f"EDGE_DECAYED:{','.join(decayed)}")
+            except Exception:
+                pass
+        return {"status": "EDGE_DECAY_FLAGGED", "decayed": decayed, "detail": detail}
+
     # ---------------------------------------------------------------- open-position drift (CONTEXT)
 
     def _rows(self):
