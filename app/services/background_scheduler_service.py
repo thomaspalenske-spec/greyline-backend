@@ -704,6 +704,10 @@ class BackgroundSchedulerService:
             edge_persistence = _epe.snapshot()
             # RETIRE half of the discipline: page (deduped) if the court judged any sleeve DECAYED.
             edge_persistence["decay_alert"] = _epe.decay_alert()
+            # REALLOCATE half: page (deduped) when a measured verdict drifts the evidence-based
+            # allocation materially from the live budget — i.e. it's time to approve a re-alloc.
+            from app.services.capital_allocator_engine import CapitalAllocatorEngine
+            edge_persistence["alloc_drift_alert"] = CapitalAllocatorEngine().drift_alert()
         except Exception as exc:
             edge_persistence = {"error": repr(exc), "status": "EDGE_PERSISTENCE_DEGRADED"}
 

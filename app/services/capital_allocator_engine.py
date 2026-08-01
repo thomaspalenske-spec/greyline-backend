@@ -26,6 +26,8 @@ class CapitalAllocatorEngine:
     MIN_SLEEVE_USD = 500.0      # below this a sleeve isn't worth a separate line -> 0 (or a probe)
     MAX_SLEEVE_PCT = 0.35       # no single sleeve dominates the book
     MIN_LIVE_DAYS = 15          # live history needed before trusting measured over priors
+    DRIFT_USD = 400.0           # material divergence: recommended vs live budget for a sleeve
+    DRIFT_PCT = 0.04            # ...or this fraction of equity, whichever is larger
 
     # honest priors from THIS session's work (evidence: 2 backtested / 1 real-small / 0 unproven / -1 no-edge)
     PRIORS = {
@@ -88,6 +90,51 @@ class CapitalAllocatorEngine:
                 "momentum": self._f(getenv("GREYLINE_MOMENTUM_CAPITAL_USD"), 10000),
                 "vrp": 1200.0, "earnings": 900.0,        # risk caps
             }
+
+    def drift_alert(self, dispatch=True):
+        """Page (deduped) when a MEASURED court verdict has drifted the evidence-based recommendation
+        materially from the LIVE budget — i.e. it's time to approve a re-allocation. Scoped to
+        measured-basis sleeves only (a gated PROVEN/DECAYED/UNPROVEN verdict), NOT the standing
+        prior-vs-live divergence (e.g. momentum), which the operator has already decided on and which
+        would otherwise be repeat noise. Deduped by the set of drifting sleeves + basis, so it fires
+        once per NEW evidence state. Read-only, recommendation-only — never trades. Best-effort."""
+        try:
+            r = self.recommend()
+        except Exception as e:
+            return {"status": "ALLOC_DRIFT_DEGRADED", "error": repr(e)[:100]}
+        equity = self._f(r.get("equity"), 10000.0)
+        thresh = max(self.DRIFT_USD, self.DRIFT_PCT * equity)
+        drifts = []
+        for s, v in (r.get("sleeves") or {}).items():
+            if not str(v.get("basis") or "").startswith("measured"):     # evidence-driven only
+                continue
+            delta = self._f(v.get("delta_usd"))
+            if abs(delta) >= thresh:
+                drifts.append({"sleeve": s, "recommended_usd": v.get("recommended_usd"),
+                               "current_usd": v.get("current_usd"), "delta_usd": delta,
+                               "basis": str(v.get("basis"))})
+        if not drifts:
+            return {"status": "ALLOC_DRIFT_NONE", "drifts": [], "threshold_usd": round(thresh)}
+        drifts.sort(key=lambda d: d["sleeve"])
+        fingerprint = "ALLOC_DRIFT:" + ",".join(f"{d['sleeve']}:{d['basis']}" for d in drifts)
+        decayed = any(d["basis"] == "measured_decayed" for d in drifts)
+        if dispatch:
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                eng = ExternalAlertEngine()
+                if eng.has_external_channel():
+                    detail = "; ".join(
+                        f"{d['sleeve']} ${self._f(d['current_usd']):.0f}->${self._f(d['recommended_usd']):.0f} "
+                        f"({d['delta_usd']:+.0f}, {d['basis'].replace('measured_', '')})" for d in drifts)
+                    eng.dispatch(
+                        title="GreyLine capital re-alloc recommended",
+                        message=(f"A measured court verdict drifted the evidence-based allocation from the live "
+                                 f"book on {len(drifts)} sleeve(s) (≥ ${round(thresh)}): {detail}. Review "
+                                 "/capital-allocator + the Edge Court; applying is an after-hours operator step."),
+                        severity=("WARNING" if decayed else "INFO"), fingerprint=fingerprint)
+            except Exception:
+                pass
+        return {"status": "ALLOC_DRIFT_FLAGGED", "drifts": drifts, "threshold_usd": round(thresh)}
 
     def recommend(self):
         equity = self._equity()
