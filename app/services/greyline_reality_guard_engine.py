@@ -846,6 +846,60 @@ class GreyLineRealityGuardEngine:
                            "blank required field" if not problems else
                            f"{len(problems)} surface issue(s): " + "; ".join(problems[:4]))}
 
+    @staticmethod
+    def _momentum_open_rows():
+        import json
+        from pathlib import Path
+        try:
+            rows = [json.loads(l) for l in
+                    Path("app/data/paper_trading/paper_trade_ledger.jsonl").read_text().splitlines() if l.strip()]
+        except Exception:
+            return []
+        return [r for r in rows if r.get("status") == "OPEN" and r.get("trade_intent") == "MOMENTUM_REVERSAL"]
+
+    def _check_momentum_stops_consistent(self):
+        """Every OPEN momentum position must be MANAGED to the stop it RECORDED at entry — else the risk
+        the edge court measures on isn't the risk actually being ENFORCED. Flags a position past the grace
+        window with a recorded entry_stop but no live doctrine plan (UNMANAGED), or a managed stop that has
+        drifted materially from the recorded entry_stop (>2% of price). Warning: a risk-hygiene gap, not
+        fantasy. Fresh opens (attach the doctrine next cycle) and pre-feature rows (no recorded stop) pass."""
+        from datetime import datetime
+        GRACE_H, TOL = 2.0, 0.02
+        try:
+            rows = self._momentum_open_rows()
+        except Exception as e:
+            return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": True,
+                    "detail": f"check skipped: {str(e)[:70]}"}
+        problems, now = [], datetime.utcnow()
+        for r in rows:
+            try:
+                entry = float(r.get("entry_price") or 0)
+            except (TypeError, ValueError):
+                entry = 0.0
+            rec = r.get("entry_stop")
+            if rec is None or entry <= 0:              # pre-feature row / no recorded stop -> can't check
+                continue
+            managed = (r.get("exit_doctrine") or {}).get("initial_stop")
+            sym = r.get("symbol")
+            if managed is None:
+                try:
+                    age_h = (now - datetime.fromisoformat(str(r.get("timestamp")))).total_seconds() / 3600.0
+                except Exception:
+                    age_h = GRACE_H + 1
+                if age_h >= GRACE_H:                   # fresh opens attach the plan next cycle -> grace
+                    problems.append(f"{sym} recorded stop {rec} but UNMANAGED (no doctrine plan, {round(age_h)}h old)")
+            else:
+                try:
+                    if abs(float(managed) - float(rec)) > TOL * entry:
+                        problems.append(f"{sym} managed stop {round(float(managed), 2)} != recorded {round(float(rec), 2)}")
+                except (TypeError, ValueError):
+                    pass
+        if not problems:
+            return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": True,
+                    "detail": "open momentum positions are managed to their recorded entry stops"}
+        return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": False,
+                "detail": "; ".join(problems[:6])}
+
     def _check_sleeve_edge_not_decayed(self):
         """The edge court is the RETIRE signal — surface any sleeve it judged DECAYED (cost-net edge < 0
         at 95% confidence, >= the trade gate) so a statistically-losing edge is visible, not silently
@@ -897,6 +951,7 @@ class GreyLineRealityGuardEngine:
             self._check_broker_side_protection(),
             self._check_external_alerting(),
             self._check_sleeve_edge_not_decayed(),
+            self._check_momentum_stops_consistent(),
         ]
         critical_failures = [c for c in checks if c["severity"] == "critical" and not c["ok"]]
         warnings = [c for c in checks if c["severity"] == "warning" and not c["ok"]]
