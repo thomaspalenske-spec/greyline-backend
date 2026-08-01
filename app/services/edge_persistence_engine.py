@@ -131,6 +131,35 @@ class EdgePersistenceEngine:
                            "risk": risk, "closed_at": r.get("closed_at"), "basis": "fill_net"})
         return trades, excluded
 
+    # court sleeve -> ExecutionLog strategy key (only the direct-to-broker equity sleeves are instrumented)
+    _EXEC_STRATEGY = {"carry": "carry", "trend": "trend", "tbill": "tbill", "managed_futures": "managed_futures"}
+    _COURT_SLEEVES = ("momentum", "carry", "trend", "tbill", "managed_futures", "premium_vrp", "premium_earnings")
+
+    def _execution_cost_by_sleeve(self):
+        """Per-sleeve MEASURED execution slippage (decision-mid vs fill) from ExecutionLog. A DIAGNOSTIC
+        shown BESIDE each edge — deliberately NOT subtracted from realized_pnl, which is already computed
+        from actual fills (the execution cost is already IN the number; subtracting again double-counts).
+        Pair rule: a sleeve whose measured slippage exceeds its edge is a retire candidate. The condor
+        sleeves aren't instrumented in ExecutionLog yet — their realized_pnl is fill-based regardless."""
+        try:
+            from app.services.execution_log_engine import ExecutionLogEngine
+            by = ExecutionLogEngine().realized().get("by_strategy") or {}
+        except Exception:
+            by = {}
+        out = {}
+        for sleeve in self._COURT_SLEEVES:
+            strat = self._EXEC_STRATEGY.get(sleeve)
+            src = by.get(strat) if strat else None
+            if src:
+                out[sleeve] = {"avg_slippage_bps": src.get("avg_slippage_bps"),
+                               "fill_rate_pct": src.get("fill_rate_pct"),
+                               "realized_slippage_usd": src.get("realized_slippage_usd"), "source": "measured"}
+            elif strat:
+                out[sleeve] = {"source": "instrumented — no orders logged yet"}
+            else:
+                out[sleeve] = {"source": "not instrumented (realized P&L is already fill-net)"}
+        return out
+
     def realized_edge(self):
         trades, excluded = self._closed_trades()
         by = {}
@@ -180,6 +209,10 @@ class EdgePersistenceEngine:
         return {
             "sleeves": sleeves,
             "closest_to_proven": closest,
+            "execution_cost": self._execution_cost_by_sleeve(),
+            "execution_cost_note": ("MEASURED slippage (ExecutionLog decision-mid vs fill), shown beside "
+                                    "each edge — NOT re-subtracted (realized_pnl is already fill-net). A "
+                                    "sleeve whose measured cost exceeds its edge is a retire candidate."),
             "excluded_forced_closes": excluded,
             "min_trades_gate": self.MIN_TRADES,
             "cost_note": ("cost-net: equity/option closes use real SIM fills; condor closes are priced from "

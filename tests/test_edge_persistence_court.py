@@ -103,3 +103,25 @@ def test_earnings_and_vrp_condors_get_separate_verdicts(tmp_path, monkeypatch):
     assert set(out["sleeves"]) == {"premium_vrp", "premium_earnings"}   # two distinct verdicts
     assert out["sleeves"]["premium_vrp"]["total_net_pnl"] == 40.0
     assert out["sleeves"]["premium_earnings"]["total_net_pnl"] == 55.0
+
+
+def test_execution_cost_is_a_diagnostic_not_double_subtracted(monkeypatch):
+    """Measured slippage (ExecutionLog) is surfaced BESIDE the edge, mapped to court sleeves — but the
+    realized P&L is already fill-net, so it must NOT be subtracted again. Instrumented-but-empty,
+    measured, and not-instrumented sleeves each get an honest label."""
+    import app.services.execution_log_engine as el_mod
+    monkeypatch.setattr(el_mod, "ExecutionLogEngine",
+                        lambda: type("L", (), {"realized": lambda self: {"by_strategy": {
+                            "trend": {"avg_slippage_bps": 0.8, "fill_rate_pct": 100.0, "realized_slippage_usd": 0.3}}}})())
+    # no closed trades -> sleeves empty, but execution_cost still reports for every court sleeve
+    monkeypatch.setattr(E, "_closed_trades", lambda self: ([], 0))
+    out = E().realized_edge()
+    ec = out["execution_cost"]
+    assert ec["trend"]["source"] == "measured" and ec["trend"]["avg_slippage_bps"] == 0.8
+    assert ec["carry"]["source"] == "instrumented — no orders logged yet"      # instrumented, no data
+    assert ec["premium_vrp"]["source"].startswith("not instrumented")          # condors: fill-net already
+    assert ec["momentum"]["source"].startswith("not instrumented")
+    # realized_pnl is untouched: a winning trade's net is not reduced by slippage here
+    monkeypatch.setattr(E, "_closed_trades", lambda self: (_trades(1, 10.0, sleeve="trend"), 0))
+    out2 = E().realized_edge()
+    assert out2["sleeves"]["trend"]["total_net_pnl"] == 10.0                    # NOT 10 - slippage
