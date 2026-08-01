@@ -59,7 +59,9 @@ class CapitalAllocatorEngine:
     def _basis(self):
         try:
             from app.services.edge_persistence_engine import EdgePersistenceEngine
-            rows = EdgePersistenceEngine().report().get("sleeves", {})
+            # days-tracked now lives under open_drift (the daily-mark history); the realized-edge court
+            # is the authoritative verdict but gates on CLOSED trades, not calendar days.
+            rows = EdgePersistenceEngine().report().get("open_drift", {})
             days = max((v.get("days_tracked", 0) for v in rows.values()), default=0)
             if days >= self.MIN_LIVE_DAYS:
                 return "live", days

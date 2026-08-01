@@ -1,21 +1,25 @@
-"""Live per-sleeve edge scorecard — the discipline GreyLine lacked: measure whether each strategy is
-ACTUALLY earning, so decayed ones can be retired on evidence instead of narrative.
+"""Live per-sleeve edge court — the discipline GreyLine lacked: measure whether each strategy is
+ACTUALLY earning, cost-net and with statistical honesty, so decayed sleeves are retired on evidence
+and a real edge can be PROVEN instead of asserted.
 
-Medallion's core discipline isn't a magic signal — it's relentlessly retiring signals as they decay.
-That requires knowing, per strategy, whether it's still working. GreyLine measured its edges ONCE
-(backtest / forward panel) and then flew blind on the live book. This records a daily per-sleeve mark
-so, over time, each sleeve gets an honest live track record — the foundation for evidence-based
-capital (retire the dead, keep the living) and the thing that would have cut momentum long before -41%.
+Medallion's core discipline isn't a magic signal — it's relentlessly retiring signals as they decay,
+which requires knowing, per strategy, whether it still works. This engine is that court.
 
-Attribution is by instrument, which is clean because the sleeves trade distinct things:
-  carry -> SVXY | trend -> the ETF basket | tbill -> SGOV | premium (VRP+earnings) -> options |
-  momentum -> any other equity.
+TWO layers, and only ONE is evidence:
+  * realized_edge()  — AUTHORITATIVE. Per-trade return on risk from CLOSED trades (forced flattens
+    excluded), cost-net, with N / win-rate / t-stat / 95% CI and a minimum-sample gate. Verdict:
+    PROVEN / DECAYED / UNPROVEN / ACCUMULATING. This is the number that moves the Edge grade.
+  * open_drift  — CONTEXT ONLY. Daily marks of OPEN-position unrealized P&L. These are autocorrelated
+    (100 daily marks of one held trade ≈ 1 sample, not 100), so "positive most days" is NOT evidence
+    of edge — the exact false-confidence trap this system has been bitten by. Never used for a verdict.
 
-v1 tracks OPEN-POSITION P&L per sleeve (directly attributable). Full realized attribution across
-closed trades is the documented v2 — noted, not faked. Read-only; it never trades.
+Attribution is by instrument (the sleeves trade distinct things):
+  carry -> SVXY | trend -> ETF basket | tbill -> SGOV | premium -> options (VRP + earnings) |
+  momentum -> any other equity. Read-only; it never trades.
 """
 
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 
@@ -24,11 +28,21 @@ class EdgePersistenceEngine:
 
     DIR = Path("app/data/edge_persistence")
     LEDGER = DIR / "daily_marks.jsonl"
+    VRP_LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
+    OPT_LEDGER = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
+    EQ_LEDGER = Path("app/data/paper_trading/paper_trade_ledger.jsonl")
 
     CARRY = {"SVXY"}
     TREND = {"QQQM", "IWM", "TLT", "GLDM", "EFA", "DBC"}
     TBILL = {"SGOV"}
-    MIN_DAYS = 10           # below this, a sleeve has too little history to judge
+    MIN_DAYS = 10                       # open-drift context needs this much history to even show
+    MIN_TRADES = 20                     # below this, NO realized verdict — too few samples to judge
+    Z95 = 1.96                          # normal approx for the 95% CI (small-N caveat surfaced)
+    CONDOR_CLOSE_HAIRCUT_FRAC = 0.03    # condor closes are marked at MID; haircut this frac of max-loss
+                                        # as a conservative round-trip close-spread proxy (see cost_note)
+    # forced/administrative closes are NOT strategy outcomes — exclude from the edge stats
+    FORCED_MARKERS = ("clean_slate", "flatten", "rebaseline", "reset", "mechanics test",
+                      "liquidat", "manual")
 
     @staticmethod
     def _f(v):
@@ -41,7 +55,7 @@ class EdgePersistenceEngine:
     def _sleeve_of(cls, symbol, asset_type):
         sym = str(symbol or "").upper()
         if str(asset_type or "").upper() in ("STOCKOPTION", "OPTION"):
-            return "premium"                      # VRP + earnings condors
+            return "premium"
         base = sym.split()[0] if sym else sym
         if base in cls.CARRY:
             return "carry"
@@ -49,16 +63,131 @@ class EdgePersistenceEngine:
             return "trend"
         if base in cls.TBILL:
             return "tbill"
-        return "momentum"                         # any other equity
+        return "momentum"
 
-    def _rows(self):
+    @classmethod
+    def _forced(cls, reason):
+        r = str(reason or "").lower()
+        return any(m in r for m in cls.FORCED_MARKERS)
+
+    @staticmethod
+    def _read(path):
         try:
-            return [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
+            return [json.loads(l) for l in Path(path).read_text().splitlines() if l.strip()]
         except Exception:
             return []
 
+    # ---------------------------------------------------------------- realized edge (AUTHORITATIVE)
+
+    def _closed_trades(self):
+        """Realized CLOSED trades per sleeve, forced flattens excluded. Returns (trades, excluded_count).
+        Each trade: {sleeve, gross, net, risk, closed_at, basis}. `net` is cost-net; `risk` is the
+        capital-at-risk basis the return is measured against (condor max-loss; equity/option notional)."""
+        trades, excluded = [], 0
+
+        # VRP + earnings condors: defined-risk (basis = max_loss_total); realized_pnl is a MID estimate
+        # at the close decision, so haircut a conservative round-trip close spread to avoid over-claiming.
+        for r in self._read(self.VRP_LEDGER):
+            if str(r.get("status")).upper() != "CLOSED":
+                continue
+            if self._forced(r.get("close_reason")):
+                excluded += 1
+                continue
+            rp, risk = r.get("realized_pnl"), self._f(r.get("max_loss_total"))
+            if rp is None or risk <= 0:
+                continue
+            haircut = self.CONDOR_CLOSE_HAIRCUT_FRAC * risk
+            trades.append({"sleeve": "premium", "gross": self._f(rp), "net": self._f(rp) - haircut,
+                           "risk": risk, "closed_at": r.get("closed_at"), "basis": "mid_estimate"})
+
+        # equity + option contracts booked to the SIM: realized_pnl reflects REAL fills (spread already
+        # paid) and the SIM charges no commission, so it is already cost-net (basis = entry notional).
+        for r in self._read(self.EQ_LEDGER) + self._read(self.OPT_LEDGER):
+            if str(r.get("status")).upper() != "CLOSED":
+                continue
+            if self._forced(r.get("close_reason")):
+                excluded += 1
+                continue
+            rp = r.get("realized_pnl")
+            if rp is None:
+                continue
+            sleeve = self._sleeve_of(r.get("symbol"), r.get("asset_type"))
+            mult = 100 if str(r.get("asset_type") or "").upper() in ("STOCKOPTION", "OPTION") else 1
+            qty = self._f(r.get("original_quantity")) or self._f(r.get("quantity"))
+            risk = abs(self._f(r.get("entry_price")) * mult * qty)
+            if risk <= 0:
+                continue
+            trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
+                           "risk": risk, "closed_at": r.get("closed_at"), "basis": "fill_net"})
+        return trades, excluded
+
+    def realized_edge(self):
+        trades, excluded = self._closed_trades()
+        by = {}
+        for t in trades:
+            by.setdefault(t["sleeve"], []).append(t)
+
+        sleeves = {}
+        for sleeve, ts in by.items():
+            rets = [t["net"] / t["risk"] for t in ts if t["risk"] > 0]
+            n = len(rets)
+            mean = sum(rets) / n if n else 0.0
+            wins = sum(1 for t in ts if t["net"] > 0)
+            lo = hi = None
+            t_stat = 0.0
+            stat = {"trades": n, "wins": wins, "win_rate": round(wins / n, 2) if n else None,
+                    "mean_return_on_risk_pct": round(mean * 100, 2) if n else None,
+                    "total_net_pnl": round(sum(t["net"] for t in ts), 2)}
+            if n >= 2:
+                var = sum((r - mean) ** 2 for r in rets) / (n - 1)
+                sd = math.sqrt(var)
+                se = sd / math.sqrt(n)
+                t_stat = mean / se if se > 0 else 0.0
+                lo, hi = mean - self.Z95 * se, mean + self.Z95 * se
+                stat.update({"std_return_on_risk_pct": round(sd * 100, 2), "t_stat": round(t_stat, 2),
+                             "ci95_return_on_risk_pct": [round(lo * 100, 2), round(hi * 100, 2)]})
+
+            if n < self.MIN_TRADES:
+                verdict = f"ACCUMULATING ({n}/{self.MIN_TRADES} trades — too few to judge)"
+            elif lo is not None and lo > 0:
+                verdict = "PROVEN — cost-net edge > 0 at 95% confidence"
+            elif hi is not None and hi < 0:
+                verdict = "DECAYED — cost-net edge < 0 at 95% confidence; retire"
+            else:
+                verdict = "UNPROVEN — edge indistinguishable from zero net of cost"
+            stat["verdict"] = verdict
+            stat["_t"] = t_stat
+            sleeves[sleeve] = stat
+
+        # closest-to-proven: the sleeve to push resources at first (highest t-stat among the unproven)
+        ranked = sorted(sleeves.items(), key=lambda kv: kv[1].get("_t", 0.0), reverse=True)
+        closest = [{"sleeve": k, "trades": v["trades"], "t_stat": v.get("t_stat"),
+                    "mean_return_on_risk_pct": v["mean_return_on_risk_pct"], "verdict": v["verdict"]}
+                   for k, v in ranked]
+        for v in sleeves.values():
+            v.pop("_t", None)
+
+        return {
+            "sleeves": sleeves,
+            "closest_to_proven": closest,
+            "excluded_forced_closes": excluded,
+            "min_trades_gate": self.MIN_TRADES,
+            "cost_note": ("cost-net: equity/option closes use real SIM fills (spread paid, no commissions); "
+                          f"condor closes are marked at mid and haircut {self.CONDOR_CLOSE_HAIRCUT_FRAC*100:.0f}% "
+                          "of max-loss as a conservative round-trip proxy. Refine by joining "
+                          "execution-realized slippage per trade (documented v3)."),
+            "method": ("per-trade return on risk; verdict from the 95% CI vs 0 with a minimum-sample gate. "
+                       "Realized CLOSED trades only, forced flattens excluded. Daily open-marks are "
+                       "autocorrelated and are NEVER used for the verdict."),
+        }
+
+    # ---------------------------------------------------------------- open-position drift (CONTEXT)
+
+    def _rows(self):
+        return self._read(self.LEDGER)
+
     def snapshot(self):
-        """Record today's per-sleeve open-position marks (one set of rows per UTC day; last wins)."""
+        """Record today's per-sleeve OPEN-position marks (one set per UTC day; last wins). Context only."""
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
             positions = BrokerAccountViewEngine().snapshot().get("positions", []) or []
@@ -75,7 +204,6 @@ class EdgePersistenceEngine:
             a["market_value"] += self._f(p.get("current_price")) * self._f(p.get("quantity"))
             a["positions"] += 1
 
-        # keep only the LATEST snapshot per (date, sleeve): drop today's prior rows, then append fresh
         rows = [r for r in self._rows() if r.get("date") != today]
         for sleeve, a in agg.items():
             rows.append({"date": today, "sleeve": sleeve,
@@ -92,30 +220,26 @@ class EdgePersistenceEngine:
         return {"status": "EDGE_PERSISTENCE_RECORDED", "date": today,
                 "sleeves": {s: round(a["unrealized"], 2) for s, a in agg.items()}}
 
-    def report(self):
-        rows = self._rows()
+    def _open_drift(self):
         by = {}
-        for r in rows:
+        for r in self._rows():
             by.setdefault(r.get("sleeve"), []).append(r)
         out = {}
         for sleeve, recs in by.items():
             recs.sort(key=lambda x: x.get("date", ""))
             days = len(recs)
-            latest = recs[-1]
-            neg_days = sum(1 for r in recs if self._f(r.get("unrealized")) < 0)
-            # verdict: honest about insufficient history; else flag persistent bleeders
-            if days < self.MIN_DAYS:
-                verdict = f"ACCUMULATING ({days}/{self.MIN_DAYS}d — too little to judge)"
-            elif neg_days >= 0.7 * days:
-                verdict = "DECAYED? — open P&L negative most days; candidate to retire"
-            elif neg_days <= 0.3 * days:
-                verdict = "WORKING — open P&L positive most days"
-            else:
-                verdict = "MIXED — watch"
-            out[sleeve] = {"days_tracked": days, "current_unrealized": self._f(latest.get("unrealized")),
-                           "current_deployed": self._f(latest.get("deployed")),
-                           "negative_day_fraction": round(neg_days / max(1, days), 2), "verdict": verdict}
-        return {"timestamp": datetime.utcnow().isoformat(), "sleeves": out,
-                "note": ("v1 tracks OPEN-position P&L per sleeve; realized attribution across closed "
-                         "trades is the v2 needed for a full decay verdict."),
-                "status": "EDGE_PERSISTENCE_REPORT"}
+            neg = sum(1 for r in recs if self._f(r.get("unrealized")) < 0)
+            out[sleeve] = {"days_tracked": days,
+                           "current_unrealized": self._f(recs[-1].get("unrealized")),
+                           "negative_day_fraction": round(neg / max(1, days), 2)}
+        return out
+
+    def report(self):
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "realized_edge": self.realized_edge(),
+            "open_drift": self._open_drift(),
+            "note": ("AUTHORITATIVE verdict = realized_edge (closed trades, cost-net, CI-gated). open_drift "
+                     "is unrealized daily marks for context only — autocorrelated, NOT evidence of edge."),
+            "status": "EDGE_PERSISTENCE_REPORT",
+        }

@@ -27,6 +27,10 @@ class FakeView:
 def _patch(monkeypatch, tmp_path):
     monkeypatch.setattr(E, "DIR", tmp_path)
     monkeypatch.setattr(E, "LEDGER", tmp_path / "marks.jsonl")
+    # keep the realized court hermetic — point it at empty ledgers so it reads no real closed trades
+    monkeypatch.setattr(E, "VRP_LEDGER", tmp_path / "vrp.jsonl")
+    monkeypatch.setattr(E, "EQ_LEDGER", tmp_path / "eq.jsonl")
+    monkeypatch.setattr(E, "OPT_LEDGER", tmp_path / "opt.jsonl")
     monkeypatch.setattr("app.services.broker_account_view_engine.BrokerAccountViewEngine",
                         lambda: FakeView())
 
@@ -38,20 +42,29 @@ def test_snapshot_records_per_sleeve(monkeypatch, tmp_path):
     assert r["sleeves"]["carry"] == 20.0 and r["sleeves"]["trend"] == -1.0
 
 
-def test_report_is_honest_with_thin_history(monkeypatch, tmp_path):
+def test_open_drift_is_context_never_a_verdict(monkeypatch, tmp_path):
     _patch(monkeypatch, tmp_path)
     E().snapshot()
     rep = E().report()
-    assert "ACCUMULATING" in rep["sleeves"]["carry"]["verdict"]      # 1 day -> not enough to judge
+    # daily OPEN marks live under open_drift as context — they must NOT carry a verdict
+    assert "carry" in rep["open_drift"] and "days_tracked" in rep["open_drift"]["carry"]
+    assert "verdict" not in rep["open_drift"]["carry"]
+    # the authoritative verdict lives under realized_edge (closed trades only)
+    assert "realized_edge" in rep and "method" in rep["realized_edge"]
 
 
-def test_decay_flag_after_enough_negative_days(monkeypatch, tmp_path):
+def test_negative_daily_marks_do_not_fake_a_decay_verdict(monkeypatch, tmp_path):
+    """The v1 bug: 12 negative daily open-marks were called 'DECAYED'. But daily marks of the SAME
+    held position are autocorrelated (≈1 sample, not 12), so that was false confidence. Now negative
+    marks are only context; a decay verdict requires realized CLOSED trades."""
     _patch(monkeypatch, tmp_path)
-    # hand-write 12 days of a persistently-negative sleeve
     led = tmp_path / "marks.jsonl"
     with open(led, "w") as f:
         for i in range(12):
             f.write(json.dumps({"date": f"2026-06-{i+1:02d}", "sleeve": "carry",
                                 "unrealized": -5.0, "deployed": 1000.0}) + "\n")
-    v = E().report()["sleeves"]["carry"]
-    assert v["days_tracked"] == 12 and "DECAYED" in v["verdict"]
+    rep = E().report()
+    drift = rep["open_drift"]["carry"]
+    assert drift["days_tracked"] == 12 and drift["negative_day_fraction"] == 1.0
+    assert "verdict" not in drift                              # no verdict from autocorrelated marks
+    assert rep["realized_edge"]["sleeves"] == {}               # court stays silent with 0 closed trades
