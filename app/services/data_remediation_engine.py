@@ -42,6 +42,7 @@ class DataRemediationEngine:
     DEFAULT_UNIVERSE_LIMIT = 250      # stalest-first slice of the broad universe per run (cycles over days)
     EVENT_MIN_INTERVAL_MIN = 15       # hard floor between alert-driven runs — protects the TS API
     EVENT_UNIVERSE_LIMIT = 40         # small refresh slice on an alert-run (decision syms always + this)
+    BACKUP_STALE_HOURS = 26           # off-machine git backup older than this = flagged (matches the guard)
 
     @staticmethod
     def enabled():
@@ -252,6 +253,12 @@ class DataRemediationEngine:
         except Exception as e:
             actions["lineage"] = {"error": str(e)[:120]}
 
+        # 5) OFF-MACHINE BACKUP — re-push the git backup if it went stale (see _remediate_backup).
+        b_action, b_alert = self._remediate_backup(apply)
+        actions["backup"] = b_action
+        if b_alert:
+            alerts.append(b_alert)
+
         result = {"status": "REMEDIATED" if apply else "REMEDIATE_DRYRUN", "acted": apply,
                   "started": started, "finished": datetime.utcnow().isoformat(),
                   "actions": actions, "alerts": alerts}
@@ -287,6 +294,31 @@ class DataRemediationEngine:
         res["ran"] = True
         return res
 
+    def _remediate_backup(self, apply):
+        """Re-push the off-machine git backup when it has gone STALE (the guard's BACKUP_CURRENT flag).
+        Git is the ONLY off-machine channel the always-on service can run (iCloud + external volumes are
+        TCC-blocked). A transient push failure self-heals on retry; a persistent one dedups via the alert
+        fingerprint + rate floor. Never forces a push when the backup is already current. Returns
+        (action_dict, alert_or_None)."""
+        try:
+            from app.services.git_data_backup_engine import GitDataBackupEngine
+            gb = GitDataBackupEngine()
+            gh = gb.hours_since()
+            if not (gh is None or gh > self.BACKUP_STALE_HOURS):
+                return {"hours_since": gh, "ran": False, "status": "BACKUP_CURRENT"}, None
+            if not apply:
+                return {"was_hours": gh, "ran": False, "would": "force off-machine git backup"}, None
+            br = gb.backup(push=True)
+            action = {"was_hours": gh, "ran": True, "status": br.get("status"), "ok": br.get("ok"),
+                      "pushed": br.get("pushed"), "files": br.get("files"), "expected": br.get("expected")}
+            alert = None
+            if not br.get("ok"):
+                alert = (f"off-machine git backup FAILED to refresh (was {gh}h stale): "
+                         f"{br.get('status')} — {str(br.get('detail'))[:80]}")
+            return action, alert
+        except Exception as e:
+            return {"error": str(e)[:120]}, None
+
     def _alert_signature(self):
         """Cheap, LOCAL read (no API) of the freshest validator reports → (has_alert, fingerprint, detail).
         The fingerprint is the exact fault set, so a persistent unfixable fault dedups to one attempt."""
@@ -305,9 +337,19 @@ class DataRemediationEngine:
             changed = int((PriceBarLineageEngine().last_report() or {}).get("changed_count") or 0)
         except Exception:
             pass
-        has_alert = crit > 0 or changed > 0
-        fingerprint = f"crit:{','.join(crit_syms)}|changed:{changed}"
-        return has_alert, fingerprint, {"critical_bars": crit, "lineage_changed": changed}
+        # off-machine backup staleness (local git-log read, no network) — a flagged backup is a fault
+        # the remediation can fix (re-push), so it should trigger an alert-run too.
+        backup_stale = False
+        try:
+            from app.services.git_data_backup_engine import GitDataBackupEngine
+            gh = GitDataBackupEngine().hours_since()
+            backup_stale = gh is None or gh > self.BACKUP_STALE_HOURS
+        except Exception:
+            pass
+        has_alert = crit > 0 or changed > 0 or backup_stale
+        fingerprint = f"crit:{','.join(crit_syms)}|changed:{changed}|backup_stale:{int(backup_stale)}"
+        return has_alert, fingerprint, {"critical_bars": crit, "lineage_changed": changed,
+                                        "backup_stale": backup_stale}
 
     def run_on_alert(self):
         """Event-driven remediation: fix data faults the MOMENT a validator flags them, instead of

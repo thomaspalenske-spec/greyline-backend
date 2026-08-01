@@ -58,3 +58,66 @@ def test_disabled_never_runs(tmp_path, monkeypatch):
     monkeypatch.setenv("GREYLINE_DATA_AUTOREMEDIATE", "false")
     r = eng.run_on_alert()
     assert r["ran"] is False and r["status"] == "REMEDIATE_DISABLED" and calls == []
+
+
+# ---- off-machine backup remediation (fold the backup failsafe into DataRemediation) -------------
+
+class _FakeGit:
+    """Minimal GitDataBackupEngine stand-in."""
+    def __init__(self, hours, backup_ok=True):
+        self._h = hours
+        self._ok = backup_ok
+        self.pushed = 0
+    def hours_since(self):
+        return self._h
+    def backup(self, push=True):
+        self.pushed += 1
+        return {"status": "GIT_BACKUP_PUSHED" if self._ok else "GIT_BACKUP_PUSH_FAILED",
+                "ok": self._ok, "pushed": self._ok, "files": 19, "expected": 19, "detail": "x"}
+
+
+def _patch_git(monkeypatch, fake):
+    import app.services.git_data_backup_engine as gmod
+    monkeypatch.setattr(gmod, "GitDataBackupEngine", lambda: fake)
+
+
+def test_backup_current_is_left_alone(tmp_path, monkeypatch):
+    fake = _FakeGit(hours=1.5)
+    _patch_git(monkeypatch, fake)
+    action, alert = D()._remediate_backup(apply=True)
+    assert action["status"] == "BACKUP_CURRENT" and action["ran"] is False
+    assert fake.pushed == 0 and alert is None       # never re-pushes a fresh backup
+
+
+def test_stale_backup_is_re_pushed(tmp_path, monkeypatch):
+    fake = _FakeGit(hours=48.0)                       # > BACKUP_STALE_HOURS (26)
+    _patch_git(monkeypatch, fake)
+    action, alert = D()._remediate_backup(apply=True)
+    assert action["ran"] is True and action["ok"] is True and fake.pushed == 1
+    assert alert is None
+
+
+def test_backup_never_pushed_yet_is_a_fault(tmp_path, monkeypatch):
+    fake = _FakeGit(hours=None)                       # never backed up
+    _patch_git(monkeypatch, fake)
+    action, alert = D()._remediate_backup(apply=True)
+    assert action["ran"] is True and fake.pushed == 1
+
+
+def test_failed_re_push_raises_an_alert(tmp_path, monkeypatch):
+    fake = _FakeGit(hours=48.0, backup_ok=False)
+    _patch_git(monkeypatch, fake)
+    action, alert = D()._remediate_backup(apply=True)
+    assert action["ok"] is False and alert is not None and "FAILED" in alert
+
+
+def test_stale_backup_shows_in_alert_signature(tmp_path, monkeypatch):
+    _patch_git(monkeypatch, _FakeGit(hours=48.0))
+    eng = D()
+    # no bar/lineage faults, but a stale backup alone must raise an alert + appear in the fingerprint
+    monkeypatch.setattr("app.services.price_bar_integrity_engine.PriceBarIntegrityEngine",
+                        lambda: type("I", (), {"last_scan": lambda self: {}, "CRITICAL_TYPES": ()})())
+    monkeypatch.setattr("app.services.price_bar_lineage_engine.PriceBarLineageEngine",
+                        lambda: type("L", (), {"last_report": lambda self: {}})())
+    has_alert, fp, detail = eng._alert_signature()
+    assert has_alert is True and detail["backup_stale"] is True and "backup_stale:1" in fp
