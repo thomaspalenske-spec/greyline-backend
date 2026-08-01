@@ -256,22 +256,11 @@ class EarningsVolHarvestEngine:
         b = vrp._booking()
         for con in planned:
             qty = con["quantity"]
-            order = [("wing_call", "BUYTOOPEN"), ("wing_put", "BUYTOOPEN"),
-                     ("short_call", "SELLTOOPEN"), ("short_put", "SELLTOOPEN")]
-            placed, leg_err = [], False
-            for name, action in order:
-                leg = con["legs"][name]
-                px = leg["ask"] if action == "BUYTOOPEN" else leg["bid"]
-                r = b.place_order(leg["symbol"], qty, action=action, order_type="Limit",
-                                  limit_price=vrp._tick_round(px), tif="DAY")
-                if r.get("ok"):
-                    placed.append({"symbol": leg["symbol"], "action": action,
-                                   "order_id": r.get("order_id"), "limit": vrp._tick_round(px)})
-                else:
-                    leg_err = True
-                    break
-            if leg_err:
-                skipped.append({"ticker": con["symbol"], "skip": "leg order failed"})
+            # Same condor-open path VRP uses: ATOMIC all-or-none when GREYLINE_CONDOR_ATOMIC_ORDER is on
+            # (no naked-leg window on open), else legacy wings-first legging. Shared helper — can't drift.
+            placed, err = vrp._place_condor_open(con, b)
+            if err is not None:
+                skipped.append({"ticker": con["symbol"], "skip": "leg order failed", "detail": err})
                 continue
             rec = {
                 "symbol": con["symbol"], "quantity": qty, "expiration": con["expiration"],

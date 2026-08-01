@@ -146,3 +146,50 @@ def test_concurrency_ceiling_never_binds_before_dollar_cap(monkeypatch):
     assert ceiling >= max_affordable, f"count ceiling {ceiling} can still bind before dollars ({max_affordable})"
     assert ceiling >= eng.MAX_CONCURRENT                    # never DROPS below the floor ceiling
     assert eng.MAX_CONCURRENT < max_affordable             # the old flat cap really would have stranded budget
+
+
+def test_earnings_open_uses_the_atomic_multileg_path(tmp_path, monkeypatch):
+    """With GREYLINE_CONDOR_ATOMIC_ORDER on, an earnings condor opens as ONE all-or-none multi-leg
+    order (no naked-leg window) — the same shared path VRP uses, not 4 legged-in orders."""
+    monkeypatch.setenv("GREYLINE_EARNINGS_VOL_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_CONDOR_ATOMIC_ORDER", "true")
+    eng = ENG()
+    eng.LEDGER = tmp_path / "vrp.jsonl"
+    eng.PORTFOLIO_RISK_CAP_USD = 900
+    monkeypatch.setattr(eng, "_candidates", lambda today=None: [
+        {"ticker": "STRL", "report_date": _iso(1), "days_to_report": 1, "iv_rank": 0.9, "implied_move_pct": 15}])
+    monkeypatch.setattr(eng, "_open_symbols", lambda: set())
+    monkeypatch.setattr(eng, "_open_risk", lambda: 0.0)
+    monkeypatch.setattr(eng, "_expiry_after", lambda s, rd: _iso(9))
+
+    class FakeChain:
+        def get_chain_snapshot(self, **k):
+            return {"contracts": [{"x": 1}]}
+    monkeypatch.setattr(chain_mod, "TradeStationOptionChainLiveEngine", FakeChain)
+    monkeypatch.setattr("app.services.uw_option_chain_engine.UWOptionChainEngine",
+                        lambda: type("U", (), {"enabled": lambda self: False})())
+
+    def _con(self, sym, contracts, **k):
+        return {"symbol": sym, "quantity": 1, "credit_per_condor": 0.5, "credit_total": 50.0,
+                "max_loss_total": 300.0, "return_on_risk": 0.16,
+                "legs": {"wing_call": {"symbol": f"{sym} C2", "ask": 0.2, "bid": 0.1},
+                         "wing_put": {"symbol": f"{sym} P2", "ask": 0.2, "bid": 0.1},
+                         "short_call": {"symbol": f"{sym} C1", "ask": 0.6, "bid": 0.5},
+                         "short_put": {"symbol": f"{sym} P1", "ask": 0.6, "bid": 0.5}}}
+    monkeypatch.setattr(vrp_mod.ConditionalVRPShortPremiumEngine, "build_condor", _con)
+
+    class FakeBook:
+        def __init__(self):
+            self.multileg, self.single = [], []
+        def place_multileg(self, legs, order_type="Limit", limit_price=None, tif="DAY"):
+            self.multileg.append(legs); return {"ok": True, "order_id": "ML-E1", "status": "OK"}
+        def place_order(self, *a, **k):
+            self.single.append((a, k)); return {"ok": True, "order_id": "S"}
+    fake = FakeBook()
+    monkeypatch.setattr(vrp_mod.ConditionalVRPShortPremiumEngine, "_booking", lambda self: fake)
+
+    eng.open_positions(dry_run=False)
+    assert len(fake.multileg) == 1 and fake.single == []      # ONE multi-leg order, no legging
+    assert len(fake.multileg[0]) == 4
+    row = json.loads((tmp_path / "vrp.jsonl").read_text().splitlines()[0])
+    assert row["strategy"] == "earnings_vol" and all(l.get("atomic") for l in row["legs"])

@@ -759,6 +759,38 @@ class ConditionalVRPShortPremiumEngine:
             return round(debit, 4), "fills"
         return fallback_debit, fallback_basis
 
+    def _place_condor_open(self, con, b):
+        """Place ONE condor's four opening legs. ATOMIC multi-leg (all-or-none, no naked-leg window)
+        when GREYLINE_CONDOR_ATOMIC_ORDER is on; else LEGACY wings-first legging (reconciler backstops).
+        Returns (placed_legs, error) — error is None on success, or a dict for the caller's error list.
+        Shared by BOTH the VRP and earnings-vol opens so they can't drift apart."""
+        qty = con["quantity"]
+        legs_spec = [("wing_call", "BUYTOOPEN"), ("wing_put", "BUYTOOPEN"),
+                     ("short_call", "SELLTOOPEN"), ("short_put", "SELLTOOPEN")]
+        if self._atomic_orders_enabled():
+            ml_legs = [{"symbol": con["legs"][n]["symbol"], "quantity": qty, "action": a}
+                       for n, a in legs_spec]
+            net = self._tick_round(abs(self._f(con.get("credit_per_condor"))))
+            r = b.place_multileg(ml_legs, order_type="Limit", limit_price=net, tif="DAY")
+            if r.get("ok"):
+                return ([{"symbol": l["symbol"], "action": l["action"],
+                          "order_id": r.get("order_id"), "atomic": True} for l in ml_legs], None)
+            return (None, {"symbol": con["symbol"], "atomic": True,
+                           "reject": r.get("reject_reason"), "http": r.get("http_status")})
+        # LEGACY: wings FIRST so the tail cap exists before the shorts go live.
+        placed = []
+        for name, action in legs_spec:
+            leg = con["legs"][name]
+            px = leg["ask"] if action == "BUYTOOPEN" else leg["bid"]   # marketable limit
+            r = b.place_order(leg["symbol"], qty, action=action, order_type="Limit",
+                              limit_price=self._tick_round(px), tif="DAY")
+            if r.get("ok"):
+                placed.append({"symbol": leg["symbol"], "action": action,
+                               "order_id": r.get("order_id"), "limit": self._tick_round(px)})
+            else:
+                return (None, {"symbol": leg["symbol"], "http": r.get("http_status")})
+        return (placed, None)
+
     @staticmethod
     def _tick_round(price, is_option=True):
         return round(round(price / 0.05) * 0.05, 2) if is_option else round(price, 2)
@@ -777,40 +809,9 @@ class ConditionalVRPShortPremiumEngine:
         opened, errors = [], []
         for con in pl["planned"]:
             qty = con["quantity"]
-            placed_legs, leg_err = [], False
-            legs_spec = [("wing_call", "BUYTOOPEN"), ("wing_put", "BUYTOOPEN"),
-                         ("short_call", "SELLTOOPEN"), ("short_put", "SELLTOOPEN")]
-            if self._atomic_orders_enabled():
-                # ATOMIC: submit the condor as ONE multi-leg order — all four legs fill together or none,
-                # so a wing can never rest unfilled while the short fills (the naked-leg window is gone).
-                # LimitPrice = net credit across the legs.
-                ml_legs = [{"symbol": con["legs"][n]["symbol"], "quantity": qty, "action": a}
-                           for n, a in legs_spec]
-                net = self._tick_round(abs(self._f(con.get("credit_per_condor"))))
-                r = b.place_multileg(ml_legs, order_type="Limit", limit_price=net, tif="DAY")
-                if r.get("ok"):
-                    placed_legs = [{"symbol": l["symbol"], "action": l["action"],
-                                    "order_id": r.get("order_id"), "atomic": True} for l in ml_legs]
-                else:
-                    leg_err = True
-                    errors.append({"symbol": con["symbol"], "atomic": True,
-                                   "reject": r.get("reject_reason"), "http": r.get("http_status")})
-            else:
-                # LEGACY: 4 separate orders, wings FIRST so the tail cap exists before the shorts go live.
-                # (The reconciler's naked auto-remediation backstops any leg-in that still slips through.)
-                for name, action in legs_spec:
-                    leg = con["legs"][name]
-                    px = leg["ask"] if action == "BUYTOOPEN" else leg["bid"]   # marketable limit
-                    r = b.place_order(leg["symbol"], qty, action=action, order_type="Limit",
-                                      limit_price=self._tick_round(px), tif="DAY")
-                    if r.get("ok"):
-                        placed_legs.append({"symbol": leg["symbol"], "action": action,
-                                            "order_id": r.get("order_id"), "limit": self._tick_round(px)})
-                    else:
-                        leg_err = True
-                        errors.append({"symbol": leg["symbol"], "http": r.get("http_status")})
-                        break
-            if leg_err:
+            placed_legs, err = self._place_condor_open(con, b)   # atomic-or-legacy (shared with earnings)
+            if err is not None:
+                errors.append(err)
                 continue
             # PROVENANCE for later PROOF: an edge can only be validated if the conditions it was
             # sold under are recorded at entry. entry_iv_rank is the richness that IS the edge
