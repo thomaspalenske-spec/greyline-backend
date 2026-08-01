@@ -829,7 +829,14 @@ class BackgroundSchedulerService:
         # validators so it acts on their freshest reports. Gated by GREYLINE_DATA_AUTOREMEDIATE.
         try:
             from app.services.data_remediation_engine import DataRemediationEngine
-            data_remediation = DataRemediationEngine().run_if_due()
+            _dre = DataRemediationEngine()
+            data_remediation = _dre.run_if_due()
+            # EVENT-DRIVEN: this cycle just ran verify/scan above; if they flagged a NEW data fault,
+            # remediate NOW rather than waiting for tomorrow's daily pass (the daily run can fire before
+            # the day's scan identifies the fault). Throttled + fingerprint-deduped inside run_on_alert
+            # so it can never hammer the TS API on a persistent fault. Skip if the daily run already ran.
+            if not data_remediation.get("ran"):
+                data_remediation["on_alert"] = _dre.run_on_alert()
         except Exception as exc:
             data_remediation = {"status": "DATA_REMEDIATION_DEGRADED", "error": repr(exc)}
 

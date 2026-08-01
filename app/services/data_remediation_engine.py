@@ -32,6 +32,7 @@ BARS_DIR = Path("app/data/historical")
 STATE = Path("app/data/data_quality")
 LOG = STATE / "remediation_log.jsonl"
 MARKER = STATE / "remediation_last_run.txt"
+EVENT_MARKER = STATE / "remediation_last_event.json"   # event-driven run: {ts, fingerprint}
 FIELDNAMES = ["date", "open", "high", "low", "close", "volume"]
 BARS_BACK = 40
 
@@ -39,6 +40,8 @@ BARS_BACK = 40
 class DataRemediationEngine:
 
     DEFAULT_UNIVERSE_LIMIT = 250      # stalest-first slice of the broad universe per run (cycles over days)
+    EVENT_MIN_INTERVAL_MIN = 15       # hard floor between alert-driven runs — protects the TS API
+    EVENT_UNIVERSE_LIMIT = 40         # small refresh slice on an alert-run (decision syms always + this)
 
     @staticmethod
     def enabled():
@@ -282,6 +285,67 @@ class DataRemediationEngine:
         except Exception:
             pass
         res["ran"] = True
+        return res
+
+    def _alert_signature(self):
+        """Cheap, LOCAL read (no API) of the freshest validator reports → (has_alert, fingerprint, detail).
+        The fingerprint is the exact fault set, so a persistent unfixable fault dedups to one attempt."""
+        crit, crit_syms, changed = 0, [], 0
+        try:
+            from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine
+            eng = PriceBarIntegrityEngine()
+            integ = eng.last_scan() or {}
+            crit = int(integ.get("critical_count") or 0)
+            crit_syms = sorted({str(i.get("symbol")).upper() for i in (integ.get("issues") or [])
+                                if str(i.get("type")) in getattr(eng, "CRITICAL_TYPES", ())})
+        except Exception:
+            pass
+        try:
+            from app.services.price_bar_lineage_engine import PriceBarLineageEngine
+            changed = int((PriceBarLineageEngine().last_report() or {}).get("changed_count") or 0)
+        except Exception:
+            pass
+        has_alert = crit > 0 or changed > 0
+        fingerprint = f"crit:{','.join(crit_syms)}|changed:{changed}"
+        return has_alert, fingerprint, {"critical_bars": crit, "lineage_changed": changed}
+
+    def run_on_alert(self):
+        """Event-driven remediation: fix data faults the MOMENT a validator flags them, instead of
+        waiting for the daily pass (the daily run at 04:09 ran BEFORE today's scan found the faults).
+        Guarded so it can never hammer the TS API: (1) skips an IDENTICAL fault already attempted
+        (fingerprint dedup — re-fetching won't fix what refresh/repair already couldn't), and (2) a hard
+        rate floor between any two alert-runs. Uses a SMALL refresh slice. Gated by GREYLINE_DATA_AUTOREMEDIATE."""
+        if not self.enabled():
+            return {"status": "REMEDIATE_DISABLED", "ran": False}
+        has_alert, fingerprint, detail = self._alert_signature()
+        if not has_alert:
+            return {"status": "REMEDIATE_NO_ALERT", "ran": False, **detail}
+        try:
+            last = json.loads(EVENT_MARKER.read_text())
+        except Exception:
+            last = {}
+        # (1) same fault we already handled → don't re-run (avoids hammering a persistent unfixable fault)
+        if last.get("fingerprint") == fingerprint:
+            return {"status": "REMEDIATE_ALERT_ALREADY_HANDLED", "ran": False,
+                    "fingerprint": fingerprint, **detail}
+        # (2) hard rate floor between alert-runs
+        now = datetime.utcnow()
+        try:
+            elapsed = (now - datetime.fromisoformat(last.get("ts"))).total_seconds()
+            if elapsed < self.EVENT_MIN_INTERVAL_MIN * 60:
+                return {"status": "REMEDIATE_EVENT_THROTTLED", "ran": False,
+                        "retry_after_s": int(self.EVENT_MIN_INTERVAL_MIN * 60 - elapsed), **detail}
+        except Exception:
+            pass
+        res = self.remediate(apply=True, universe_limit=self.EVENT_UNIVERSE_LIMIT)
+        res["trigger"] = "alert"
+        res["alert"] = detail
+        res["ran"] = True
+        try:
+            STATE.mkdir(parents=True, exist_ok=True)
+            EVENT_MARKER.write_text(json.dumps({"ts": now.isoformat(), "fingerprint": fingerprint}))
+        except Exception:
+            pass
         return res
 
     def _log(self, result):
