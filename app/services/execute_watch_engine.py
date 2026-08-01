@@ -115,6 +115,22 @@ class ExecuteWatchEngine:
         mom_held = len(held - self.SLEEVE_INSTRUMENTS)
         free_slots = max(0, self.MOMENTUM_TOP_N - mom_held)
 
+        # BUDGET sizing (default on): the executor no longer caps on a fixed slot count — it deploys
+        # the sleeve's UNSPENT dollars (budget − committed cost basis of the held momentum book) into
+        # the top-ranked affordable names. Mirror that here so the panel's QUEUED/WATCH matches what
+        # the rebalance will actually do (else a name the engine WILL buy shows as "below the cutoff").
+        budget_sizing = (getenv("GREYLINE_MOMENTUM_BUDGET_SIZING", "true") or "true").strip().lower() == "true"
+        remaining_budget = 0.0
+        if budget_sizing:
+            try:
+                from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+                committed = sum(float(t.get("entry_price") or 0) * abs(float(t.get("quantity") or 0))
+                                for t in PaperTradeLedgerEngine()._read_all()
+                                if t.get("status") == "OPEN" and t.get("trade_intent") == "MOMENTUM_REVERSAL")
+                remaining_budget = max(0.0, mom_cap - committed)
+            except Exception:
+                budget_sizing = False   # can't read the book → fall back to the slot-count view
+
         watch = []
         for i, c in enumerate(cands):                         # cache is already ranked by conviction
             sym = str(c.get("symbol") or "").upper()
@@ -143,6 +159,19 @@ class ExecuteWatchEngine:
                                              f"(cap ${round(mom_cap)} / {self.MOMENTUM_TOP_N} slots)")
             elif free_cash < share_px:
                 status, reason = "BLOCKED", f"no free cash (need ~${round(share_px)}, have ${round(free_cash)})"
+            elif budget_sizing:
+                # deploy the sleeve's unspent dollars into the top-ranked affordable names, each
+                # capped at the per-name target — the same rule the rebalance executes.
+                alloc = min(per_name, remaining_budget)
+                ws = int(alloc // share_px) if share_px > 0 else 0
+                if ws >= 1:
+                    status, reason = "QUEUED", (f"fits the sleeve's ${round(remaining_budget)} unspent budget → "
+                                                f"{ws} share(s) @ ${round(share_px)} — buys at the next rebalance "
+                                                "(7-day cadence), not intraday")
+                    remaining_budget -= ws * share_px
+                else:
+                    status, reason = "WATCH", (f"sleeve budget spent (${round(remaining_budget)} left < 1 share "
+                                               f"@ ${round(share_px)}) — frees up when a holding exits")
             elif i < free_slots:
                 status, reason = "QUEUED", (f"meets signal + affords {whole_shares} share(s) @ ${round(per_name)}/name — "
                                             "will buy at the next momentum rebalance (7-day cadence), not intraday")

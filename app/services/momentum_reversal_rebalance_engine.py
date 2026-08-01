@@ -182,11 +182,30 @@ class MomentumReversalRebalanceEngine:
         # empty slots (top_n minus what's still open) with the strongest fresh signals not
         # already held. Positions leave the book when H2 stops or fully scales them out.
         trades = self.ledger._read_all()
-        held = {t.get("symbol") for t in trades
-                if t.get("status") == "OPEN" and t.get("trade_intent") == self.TRADE_INTENT}
-        free_slots = max(0, self.strategy.top_n - len(held))
+        held_trades = [t for t in trades
+                       if t.get("status") == "OPEN" and t.get("trade_intent") == self.TRADE_INTENT]
+        held = {t.get("symbol") for t in held_trades}
 
-        per_name = (self.strategy.capital_base * self.GROSS_TARGET) / max(1, self.strategy.top_n)
+        sleeve_budget = self.strategy.capital_base * self.GROSS_TARGET
+        per_name = sleeve_budget / max(1, self.strategy.top_n)      # per-name TARGET/cap (unchanged)
+        free_slots = max(0, self.strategy.top_n - len(held))        # legacy count gate (still reported)
+
+        # SIZING MODE. Legacy ("count"): a FIXED number of equal slots, top_n − held. At a small
+        # book, whole-share rounding leaves each held name BELOW its per-name target, so real
+        # sleeve budget sits IDLE while the count still caps at top_n — a cheap, high-conviction
+        # name (e.g. BRUN) can't be secured even though the % allocation isn't spent.
+        # BUDGET mode floats the name-count under the %-of-equity budget: it deploys the UNSPENT
+        # sleeve dollars (budget − committed cost basis of the held book) into the top-ranked
+        # affordable names, each still capped at the per-name target, until the headroom is used
+        # or a name ceiling is hit. The real limit becomes the % allocation, not a slot count.
+        budget_sizing = (getenv("GREYLINE_MOMENTUM_BUDGET_SIZING", "true") or "true").strip().lower() == "true"
+        committed = sum(float(t.get("entry_price") or 0) * abs(float(t.get("quantity") or 0))
+                        for t in held_trades)
+        deploy_budget = max(0.0, sleeve_budget - committed)
+        deploy_budget_start = deploy_budget
+        # Safety ceiling so a broad, all-cheap regime can't fragment the book into dust positions.
+        max_total_names = int(self.strategy.top_n * float(getenv("GREYLINE_MOMENTUM_MAX_NAMES_MULT", "1.5") or 1.5))
+
         opened, skipped_risk, skipped_unaffordable = [], 0, 0
 
         # SECTOR-AWARE, SKIP-AND-CONTINUE. Momentum clusters by sector — today's top picks are
@@ -200,12 +219,20 @@ class MomentumReversalRebalanceEngine:
         from app.services.portfolio_exposure_engine import PortfolioExposureEngine
         _sectorer = PortfolioExposureEngine()
         max_sector_pct = float(_getenv("GREYLINE_MAX_SECTOR_EXPOSURE_PCT", "50"))
-        # equal-weight book: each name is 1/top_n of capital, so the cap is a count of names
+        # cap is a count of names per sector, anchored to top_n (unchanged — a tighter fraction
+        # when the book floats above top_n, which only helps concentration control)
         max_per_sector = max(1, int(max_sector_pct / 100.0 * self.strategy.top_n))
         sector_count = Counter(_sectorer._sector(s) for s in held)
 
         for t in targets:
-            if len(opened) >= free_slots:
+            # STOP conditions differ by sizing mode: budget mode runs until the sleeve headroom
+            # is spent (or the name ceiling is hit); legacy mode until the fixed slots are full.
+            if budget_sizing:
+                if deploy_budget < 1.0:
+                    break
+                if (len(held) + len(opened)) >= max_total_names:
+                    break
+            elif len(opened) >= free_slots:
                 break
             if t["symbol"] in held:
                 continue
@@ -220,9 +247,11 @@ class MomentumReversalRebalanceEngine:
             # WHOLE-SHARE sizing — this is exactly what books at TradeStation. Fractional
             # shares cannot be booked there, so recording a fraction here would create a
             # ledger position the broker never holds (a phantom the Reality Guard rightly
-            # flags as fantasy). A name whose share price exceeds the per-name budget is
-            # simply not affordable at this account size and is skipped honestly.
-            qty = int(per_name / px) if px > 0 else 0
+            # flags as fantasy). In BUDGET mode a name is sized at the per-name target but never
+            # more than the remaining headroom; in legacy mode at the flat per-name budget.
+            # Either way a name that can't afford ONE whole share is skipped honestly.
+            alloc = min(per_name, deploy_budget) if budget_sizing else per_name
+            qty = int(alloc / px) if px > 0 else 0
             if qty <= 0:
                 skipped_unaffordable += 1
                 continue
@@ -233,6 +262,8 @@ class MomentumReversalRebalanceEngine:
             )
             opened.append({"symbol": t["symbol"], "side": t["side"], "quantity": qty, "entry_price": px})
             sector_count[sector] += 1
+            if budget_sizing:
+                deploy_budget -= qty * px   # decrement the sleeve headroom by what we actually spent
 
         # Mirror the decided opens into the TradeStation SIM account as real paper orders,
         # sized whole-share to the $10k book. No-op unless GREYLINE_SIM_BOOKING_ENABLED=true.
@@ -268,11 +299,18 @@ class MomentumReversalRebalanceEngine:
         self._save_state({
             "last_rebalance_at": now.isoformat(), "as_of": asof, "data_source": source,
             "held_before": len(held), "free_slots": free_slots, "opened": len(opened),
+            "sizing_mode": "budget" if budget_sizing else "count",
+            "sleeve_budget_usd": round(sleeve_budget, 2), "committed_usd": round(committed, 2),
+            "deploy_budget_usd": round(deploy_budget_start, 2),
             "sim_placed": sim_booking.get("placed", 0), "sim_status": sim_booking.get("status"),
             "sim_voided_rejects": len(voided),
         })
         return self._result("REBALANCE_COMPLETE", rebalanced=True, as_of=asof, data_source=source,
                             held_before=len(held), free_slots=free_slots, opened=opened,
+                            sizing_mode="budget" if budget_sizing else "count",
+                            sleeve_budget_usd=round(sleeve_budget, 2),
+                            committed_usd=round(committed, 2),
+                            deploy_budget_usd=round(deploy_budget_start, 2),
                             skipped_for_risk=skipped_risk,
                             skipped_unaffordable_whole_share=skipped_unaffordable,
                             regime=regime, regime_blocked=len(regime_dropped), long_only=True,

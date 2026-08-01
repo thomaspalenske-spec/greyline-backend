@@ -159,8 +159,11 @@ class GreyLineSimExecutionEngine:
         return self.book_exit(symbol, qty, bool(long_), reason=reason)
 
     def book_opens(self, opens, per_name_notional):
-        """opens: list of {symbol, side, entry_price}. Places one SIM market order per
-        name, sized to per_name_notional in whole shares. No-op unless enabled."""
+        """opens: list of {symbol, side, entry_price, quantity?}. Places one SIM market order
+        per name. Books the caller's RECORDED whole-share `quantity` when present, so the SIM
+        books EXACTLY what the ledger recorded — no dual-path divergence when the caller sizes
+        names unequally (e.g. budget-float sizing). Falls back to sizing at per_name_notional
+        only when no quantity is supplied. No-op unless enabled."""
         if not self.enabled():
             return {"timestamp": datetime.utcnow().isoformat(),
                     "status": "SIM_BOOKING_DISABLED", "placed": 0, "booked": []}
@@ -168,7 +171,11 @@ class GreyLineSimExecutionEngine:
         booked = []
         for o in opens:
             symbol = o.get("symbol")
-            shares = self.size_shares(per_name_notional, o.get("entry_price"))
+            try:
+                rec_qty = int(o.get("quantity")) if o.get("quantity") is not None else 0
+            except (TypeError, ValueError):
+                rec_qty = 0
+            shares = rec_qty if rec_qty > 0 else self.size_shares(per_name_notional, o.get("entry_price"))
             if shares <= 0:
                 booked.append({"symbol": symbol, "status": "SKIPPED_SUB_SHARE_NOTIONAL",
                                "shares": 0})
