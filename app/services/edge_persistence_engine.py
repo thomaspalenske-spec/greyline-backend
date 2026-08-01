@@ -40,6 +40,11 @@ class EdgePersistenceEngine:
     Z95 = 1.96                          # 2-sided 95% normal quantile (base for the small-sample t bump)
     MIN_EDGE_ROR = 0.005                # PROVEN also needs a mean edge >= 0.5% return-on-risk/trade — a
                                         # statistically-significant-but-trivial edge must not fire capital moves
+    # INSTRUMENT-AWARE RISK BASIS — return-on-risk must divide by comparable "intended max loss" per sleeve:
+    #   condor -> defined max_loss (exact) | long option -> premium paid (= max loss) | equity -> stop-loss.
+    # Equity stops aren't recorded in the ledger, so use a volatility proxy: the momentum doctrine stop is
+    # ~2.5 ATR, typically ~8-20% of price -> 12% central. Makes momentum's ROR comparable to a condor's.
+    EQUITY_STOP_PCT = 0.12
 
     @classmethod
     def _t_crit(cls, n):
@@ -120,7 +125,8 @@ class EdgePersistenceEngine:
             strat = str(r.get("strategy") or "vrp").lower()
             sleeve = "premium_earnings" if strat == "earnings_vol" else "premium_vrp"
             trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": net,
-                           "risk": risk, "closed_at": r.get("closed_at"), "basis": tag})
+                           "risk": risk, "closed_at": r.get("closed_at"), "basis": tag,
+                           "risk_kind": "defined_max_loss"})
 
         # equity + option contracts booked to the SIM: realized_pnl reflects REAL fills (spread already
         # paid) and the SIM charges no commission, so it is already cost-net (basis = entry notional).
@@ -134,13 +140,21 @@ class EdgePersistenceEngine:
             if rp is None:
                 continue
             sleeve = self._sleeve_of(r.get("symbol"), r.get("asset_type"))
-            mult = 100 if str(r.get("asset_type") or "").upper() in ("STOCKOPTION", "OPTION") else 1
+            is_opt = str(r.get("asset_type") or "").upper() in ("STOCKOPTION", "OPTION")
+            mult = 100 if is_opt else 1
             qty = self._f(r.get("original_quantity")) or self._f(r.get("quantity"))
-            risk = abs(self._f(r.get("entry_price")) * mult * qty)
-            if risk <= 0:
+            notional = abs(self._f(r.get("entry_price")) * mult * qty)
+            if notional <= 0:
                 continue
+            # INSTRUMENT-AWARE risk: a long option's premium IS its max loss; an equity's is the intended
+            # stop-loss (no stop stored -> vol proxy), so its return-on-risk is comparable to a condor's.
+            if is_opt:
+                risk, risk_kind = notional, "premium_at_risk"
+            else:
+                risk, risk_kind = self.EQUITY_STOP_PCT * notional, f"stop_proxy_{int(self.EQUITY_STOP_PCT*100)}pct"
             trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
-                           "risk": risk, "closed_at": r.get("closed_at"), "basis": "fill_net"})
+                           "risk": risk, "closed_at": r.get("closed_at"), "basis": "fill_net",
+                           "risk_kind": risk_kind})
         return trades, excluded
 
     # court sleeve -> ExecutionLog strategy key (only the direct-to-broker equity sleeves are instrumented)
@@ -189,7 +203,8 @@ class EdgePersistenceEngine:
             t_stat = 0.0
             stat = {"trades": n, "wins": wins, "win_rate": round(wins / n, 2) if n else None,
                     "mean_return_on_risk_pct": round(mean * 100, 2) if n else None,
-                    "total_net_pnl": round(sum(t["net"] for t in ts), 2)}
+                    "total_net_pnl": round(sum(t["net"] for t in ts), 2),
+                    "risk_basis": (ts[0].get("risk_kind") if ts else None)}   # instrument-aware denominator
             if n >= 2:
                 var = sum((r - mean) ** 2 for r in rets) / (n - 1)
                 sd = math.sqrt(var)
@@ -243,6 +258,10 @@ class EdgePersistenceEngine:
             "multiple_comparison_note": (f"{len(sleeves)} sleeve(s) verdicted; each uses a per-sleeve test on "
                                          "PRE-SPECIFIED strategies (not a search), so no Bonferroni — but treat a "
                                          "lone borderline PROVEN with caution and prefer more trades."),
+            "risk_basis_note": (f"return-on-risk divides by INSTRUMENT-AWARE intended max loss: condor = defined "
+                                f"max_loss; long option = premium paid; equity = a {int(self.EQUITY_STOP_PCT*100)}% "
+                                "stop-loss PROXY (no stop stored — ~2.5-ATR). So momentum's ROR and the "
+                                "closest-to-proven ranking are comparable with the condors', not vs raw notional."),
         }
 
     def decay_alert(self, dispatch=True):

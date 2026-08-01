@@ -157,3 +157,28 @@ def test_significant_but_trivial_edge_is_not_proven(monkeypatch):
     stat = E().realized_edge()["sleeves"]["premium_vrp"]
     assert stat["ci95_return_on_risk_pct"][0] > 0    # statistically positive
     assert "UNPROVEN" in stat["verdict"] and "action floor" in stat["verdict"]
+
+
+def test_instrument_aware_risk_basis(tmp_path, monkeypatch):
+    """Return-on-risk divides by comparable INTENDED MAX LOSS per instrument: condor = defined max_loss,
+    equity = a stop-loss proxy (% of notional), NOT raw notional — so momentum's ROR is comparable."""
+    vrp = tmp_path / "vrp.jsonl"
+    eq = tmp_path / "eq.jsonl"
+    vrp.write_text(json.dumps({"status": "CLOSED", "close_reason": "PROFIT_TAKE_50PCT", "realized_pnl": 40.0,
+                               "max_loss_total": 300.0, "realized_pnl_basis": "fills"}) + "\n")
+    eq.write_text(json.dumps({"status": "CLOSED", "close_reason": "TP1 hit", "realized_pnl": 60.0,
+                              "asset_type": "EQUITY", "entry_price": 100.0, "quantity": 10, "symbol": "GLW"}) + "\n")
+    monkeypatch.setattr(E, "VRP_LEDGER", vrp)
+    monkeypatch.setattr(E, "EQ_LEDGER", eq)
+    monkeypatch.setattr(E, "OPT_LEDGER", tmp_path / "none.jsonl")
+    trades, _ = E()._closed_trades()
+
+    con = next(t for t in trades if t["sleeve"] == "premium_vrp")
+    assert con["risk"] == 300.0 and con["risk_kind"] == "defined_max_loss"
+    eqt = next(t for t in trades if t["sleeve"] == "momentum")
+    # equity notional = 100*10 = 1000; risk = 12% stop proxy = 120 (NOT the raw 1000 notional)
+    assert eqt["risk"] == 120.0 and eqt["risk_kind"] == "stop_proxy_12pct"
+    # so momentum ROR = 60/120 = 50% (comparable to a condor's P&L/max-loss), not 60/1000 = 6% on notional
+    out = E().realized_edge()
+    assert out["sleeves"]["momentum"]["risk_basis"] == "stop_proxy_12pct"
+    assert out["sleeves"]["premium_vrp"]["risk_basis"] == "defined_max_loss"
