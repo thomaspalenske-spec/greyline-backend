@@ -710,6 +710,38 @@ class ConditionalVRPShortPremiumEngine:
         except Exception:
             pass
 
+    def _close_fill_debit(self, leg_results, fallback_debit, fallback_basis):
+        """Net per-share debit ACTUALLY paid to close, from broker fills. Returns (debit, basis).
+
+        Upgrades the LEGACY leg-by-leg close (distinct order per leg) to REAL fills when every leg's
+        fill price is readable → basis 'fills'. Otherwise returns the marketable close-order debit the
+        caller already computed (conservative, real transacted price — never mid unless the caller had
+        no quote). The ATOMIC path shares ONE order id across legs and its per-leg execution shape isn't
+        verified, so it records the (conservative) order debit; per-leg atomic fills are a documented
+        refinement. Best-effort — never raises, never blocks a confirmed close."""
+        oids = [str(lr.get("order_id")) for lr in leg_results if lr.get("order_id")]
+        if len(set(oids)) <= 1:                       # atomic (shared order) or none → conservative order debit
+            return fallback_debit, fallback_basis
+        try:
+            filled = {str(o.get("OrderID")): o for o in
+                      ((self._booking().orders().get("response_json") or {}).get("Orders") or [])
+                      if str(o.get("StatusDescription")) in ("Filled", "FLL")}
+        except Exception:
+            return fallback_debit, fallback_basis
+        debit, found = 0.0, 0
+        for lr in leg_results:
+            o = filled.get(str(lr.get("order_id")))
+            if not o:
+                continue
+            fp = self._f(o.get("FilledPrice")) or self._f(((o.get("Legs") or [{}])[0]).get("ExecutionPrice"))
+            if fp <= 0:
+                continue
+            debit += fp if lr.get("action") == "BUYTOCLOSE" else -fp   # pay to buy back, receive to sell wing
+            found += 1
+        if found == len(leg_results) and found > 0:
+            return round(debit, 4), "fills"
+        return fallback_debit, fallback_basis
+
     @staticmethod
     def _tick_round(price, is_option=True):
         return round(round(price / 0.05) * 0.05, 2) if is_option else round(price, 2)
@@ -921,6 +953,9 @@ class ConditionalVRPShortPremiumEngine:
                                     "order_id": res.get("order_id"), "atomic": True, "status": res.get("status"),
                                     "reject_reason": res.get("reject_reason")}
                                    for l in close_legs]
+                    # realized is priced at the MARKETABLE close debit we transacted at (not mid) — a real,
+                    # conservative number (the fill is at-or-better). No mid optimism, no haircut fudge.
+                    close_debit, close_basis = mk_debit, "close_order"
                 else:
                     # LEGACY leg-by-leg: close SHORTS first (BUYTOCLOSE), then wings (SELLTOCLOSE). If a short
                     # buyback fails we have NOT yet sold its protective wing, so an out-of-order partial can't
@@ -929,27 +964,39 @@ class ConditionalVRPShortPremiumEngine:
                     # leave the unit unhedged; the atomic path above closes that gap. Reconciler backstops it.)
                     legs_ordered = sorted(r["legs"], key=lambda lg: 0 if lg["action"] == "SELLTOOPEN" else 1)
                     leg_results, all_ok = [], True
+                    close_debit, _od_ok = 0.0, True   # marketable close debit; falls back to mid if a leg markets
                     for leg in legs_ordered:
                         close_action = "BUYTOCLOSE" if leg["action"] == "SELLTOOPEN" else "SELLTOCLOSE"
                         bid, ask = leg_quotes.get(leg["symbol"], (0.0, 0.0))
                         if bid > 0 and ask > 0:
                             px = ask if close_action == "BUYTOCLOSE" else bid
+                            close_debit += px if close_action == "BUYTOCLOSE" else -px
                             res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
                                                 order_type="Limit", limit_price=self._tick_round(px), tif="DAY")
                         else:
+                            _od_ok = False                                       # no quote -> can't price this leg
                             res = b.place_order(leg["symbol"], r["quantity"], action=close_action,
                                                 order_type="Market", tif="DAY")   # no usable quote: fallback
                         ok_leg = bool(res.get("ok"))
                         all_ok = all_ok and ok_leg
                         leg_results.append({"symbol": leg["symbol"], "action": close_action, "ok": ok_leg,
                                             "status": res.get("status"), "order_id": res.get("order_id")})
+                    close_basis = "close_order" if _od_ok else "mid"
+                    if not _od_ok:
+                        close_debit = cost_to_close                              # a leg had no quote -> mid mark
                 r.setdefault("close_attempts", []).append(
                     {"at": datetime.utcnow().isoformat(), "reason": reason, "legs": leg_results, "all_ok": all_ok})
                 if all_ok:
                     # Every leg confirmed at the broker — only NOW is the unit truly flat. Marking CLOSED
                     # or banking realized before this would be fantasy P&L on a still-live position.
+                    # Realized P&L is priced from the ACTUAL close fills when readable (legacy per-leg), else
+                    # the marketable close-order debit — NOT mid. So the edge court gets an honest number
+                    # with no haircut fudge. See _close_fill_debit + EdgePersistenceEngine basis handling.
+                    debit, basis = self._close_fill_debit(leg_results, close_debit, close_basis)
                     r["status"] = "CLOSED"; r["closed_at"] = datetime.utcnow().isoformat()
-                    r["close_reason"] = reason; r["realized_pnl"] = round(pnl_total, 2)
+                    r["close_reason"] = reason
+                    r["realized_pnl"] = round((credit - debit) * 100 * r["quantity"], 2)
+                    r["realized_pnl_basis"] = basis
                     r.pop("manager_status", None); r.pop("manager_status_reason", None)
                     committed = True
                 elif any(lr.get("atomic") for lr in leg_results):

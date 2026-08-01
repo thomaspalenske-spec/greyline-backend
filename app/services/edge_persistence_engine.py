@@ -96,9 +96,15 @@ class EdgePersistenceEngine:
             rp, risk = r.get("realized_pnl"), self._f(r.get("max_loss_total"))
             if rp is None or risk <= 0:
                 continue
-            haircut = self.CONDOR_CLOSE_HAIRCUT_FRAC * risk
-            trades.append({"sleeve": "premium", "gross": self._f(rp), "net": self._f(rp) - haircut,
-                           "risk": risk, "closed_at": r.get("closed_at"), "basis": "mid_estimate"})
+            # Closes priced from actual fills or the marketable close-order debit are already honest —
+            # no haircut. Only legacy rows marked at MID (basis 'mid'/absent) get the conservative haircut.
+            basis = str(r.get("realized_pnl_basis") or "mid").lower()
+            if basis in ("fills", "close_order"):
+                net, tag = self._f(rp), basis
+            else:
+                net, tag = self._f(rp) - self.CONDOR_CLOSE_HAIRCUT_FRAC * risk, "mid_estimate"
+            trades.append({"sleeve": "premium", "gross": self._f(rp), "net": net,
+                           "risk": risk, "closed_at": r.get("closed_at"), "basis": tag})
 
         # equity + option contracts booked to the SIM: realized_pnl reflects REAL fills (spread already
         # paid) and the SIM charges no commission, so it is already cost-net (basis = entry notional).
@@ -172,10 +178,10 @@ class EdgePersistenceEngine:
             "closest_to_proven": closest,
             "excluded_forced_closes": excluded,
             "min_trades_gate": self.MIN_TRADES,
-            "cost_note": ("cost-net: equity/option closes use real SIM fills (spread paid, no commissions); "
-                          f"condor closes are marked at mid and haircut {self.CONDOR_CLOSE_HAIRCUT_FRAC*100:.0f}% "
-                          "of max-loss as a conservative round-trip proxy. Refine by joining "
-                          "execution-realized slippage per trade (documented v3)."),
+            "cost_note": ("cost-net: equity/option closes use real SIM fills; condor closes are priced from "
+                          "actual close fills or the marketable close-order debit (basis fills/close_order) — "
+                          f"already honest, no haircut. Only LEGACY mid-marked condor rows are haircut "
+                          f"{self.CONDOR_CLOSE_HAIRCUT_FRAC*100:.0f}% of max-loss as a conservative proxy."),
             "method": ("per-trade return on risk; verdict from the 95% CI vs 0 with a minimum-sample gate. "
                        "Realized CLOSED trades only, forced flattens excluded. Daily open-marks are "
                        "autocorrelated and are NEVER used for the verdict."),
