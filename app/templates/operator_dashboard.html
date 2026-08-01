@@ -745,6 +745,19 @@ th {
         </div>
       </div>
 
+      <div class="card" id="edge_court_card" style="min-width:0;">
+        <div class="section-title">Edge Court — live per-sleeve verdict <span id="ec_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20-trade minimum. Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Sleeve</th><th>Verdict</th><th>Trades</th><th>Edge (return on risk · 95% CI)</th><th>Execution (slippage · fill)</th></tr>
+            </thead>
+            <tbody id="edge_court_body"><tr><td colspan="5"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
         <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
         <table>
@@ -1125,6 +1138,50 @@ async function refreshCondorExits() {
   }
 }
 
+async function refreshEdgeCourt() {
+  const body = document.getElementById("edge_court_body");
+  const summary = document.getElementById("ec_summary");
+  if (!body) return;
+  try {
+    const d = await getJSON("/edge-persistence");
+    const re = d.realized_edge || {};
+    const sleeves = re.sleeves || {};
+    const ec = re.execution_cost || {};
+    const gate = re.min_trades_gate || 20;
+    const closest = (re.closest_to_proven || [])[0];
+    if (summary) summary.textContent = `gate ${gate} trades · ${re.excluded_forced_closes || 0} admin close(s) excluded`
+      + (closest && closest.trades ? ` · closest: ${closest.sleeve} (t=${closest.t_stat ?? "—"}, n=${closest.trades})` : "");
+    // union of instrumented + traded sleeves, condors first
+    const order = ["premium_vrp", "premium_earnings", "momentum", "carry", "trend", "tbill", "managed_futures"];
+    const names = order.filter(s => (s in ec) || (s in sleeves));
+    body.innerHTML = names.map(s => {
+      const v = sleeves[s];
+      const trades = v ? v.trades : 0;
+      const verdict = v ? v.verdict : `ACCUMULATING (0/${gate} trades)`;
+      const vcls = verdict.startsWith("PROVEN") ? "green" : verdict.startsWith("DECAYED") ? "red"
+        : verdict.startsWith("UNPROVEN") ? "yellow" : "";
+      const edge = (v && v.mean_return_on_risk_pct != null)
+        ? `${v.mean_return_on_risk_pct > 0 ? "+" : ""}${v.mean_return_on_risk_pct}%`
+          + (v.ci95_return_on_risk_pct ? ` <span class="sub">[${v.ci95_return_on_risk_pct[0]}, ${v.ci95_return_on_risk_pct[1]}]</span>` : "")
+        : `<span class="sub">—</span>`;
+      const e = ec[s] || {};
+      const exec = e.source === "measured"
+        ? `${e.avg_slippage_bps} bps <span class="sub">· ${e.fill_rate_pct}% fill</span>`
+        : `<span class="sub">${e.source === "instrumented — no orders logged yet" ? "instrumented · awaiting fills"
+             : (e.source || "—").replace(" (realized P&L is already fill-net)", " · fill-net")}</span>`;
+      return `<tr>
+        <td><strong>${s}</strong></td>
+        <td class="${vcls}">${verdict}</td>
+        <td>${trades}</td>
+        <td>${edge}</td>
+        <td>${exec}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="5"><span class="sub">No sleeves.</span></td></tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5"><span class="red">Edge court unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshAll() {
   // "Fetched", NOT "Last Update": this is the browser clock at refresh time, not the age of any cache.
   // Each card carries its own as_of/cache age; this only says when the page last pulled.
@@ -1136,6 +1193,7 @@ async function refreshAll() {
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshBestCondors();     // fire-and-forget: cached (~10min), built off UW, never stalls the loop
   refreshCondorExits();     // static exit levels off the ledger (no live quotes) — never stalls the loop
+  refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
 
   const [ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/options-account-dashboard"),
