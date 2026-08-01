@@ -719,6 +719,19 @@ th {
         </table>
       </div>
 
+      <div class="card" id="open_equity_positions_card" style="min-width:0;">
+        <div class="section-title">Open Equity Positions <span id="oeq_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Every whole-share equity &amp; ETF holding across the sleeves — momentum-reversal names plus the trend / vol-carry / managed-futures / T-bill ETFs. Cost = what we paid (shares × entry); Market Value = shares × current price; P/L is live unrealized (P/L % = return on cost). Stop is the sleeve's dynamic exit (cash-equivalent ETFs have none).</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>Shares</th><th>Entry</th><th>Current</th><th>Cost</th><th>Market Value</th><th>P/L</th><th>P/L %</th><th>Stop</th></tr>
+            </thead>
+            <tbody id="open_equity_positions_body"><tr><td colspan="9"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="condor_exits_card" style="min-width:0;">
         <div class="section-title">Open Condor Exits</div>
         <div class="sub" style="margin-bottom:10px;">Where each OPEN condor exits — the net BUYBACK cost to close. Profit-take at 50% of credit; hard-stop at 80% of the defined max loss; VRP liquidates at DTE ≤ 21, earnings condors exit on the IV crush. P/L is the live unrealized (P/L % = return on the defined max loss).</div>
@@ -1294,6 +1307,46 @@ async function refreshAll() {
     // rejected or the broker read was not ok, we do NOT know the positions — say exactly
     // that, in red, instead of the identical-looking "No open positions".
     const bookReadFailed = (book.status !== "fulfilled") || (bk.reads_ok === false);
+
+    // Open Equity Positions — a dedicated breakout of the held equity book (same source as the full
+    // Open Positions table below, just filtered to non-options). Reuses `rowsAll` so there's ONE book
+    // read, one source of truth — never a second fetch that could disagree.
+    (function renderEquityPositions() {
+      const body = document.getElementById("open_equity_positions_body");
+      const sum = document.getElementById("oeq_summary");
+      if (!body) return;
+      if (bookReadFailed) {
+        body.innerHTML = `<tr><td colspan="9"><span class="red">Broker position read failed — holdings unknown (not necessarily flat).</span></td></tr>`;
+        if (sum) sum.textContent = "";
+        return;
+      }
+      const eq = rowsAll.filter(p => (p.asset_type || "").toUpperCase() !== "OPTION");
+      if (!eq.length) { body.innerHTML = `<tr><td colspan="9"><span class="sub">No open equity positions.</span></td></tr>`; if (sum) sum.textContent = ""; return; }
+      const dash = `<span class="sub">—</span>`;
+      const totPnl = eq.reduce((a, p) => a + Number(p.pending ? 0 : (p.unrealized_pnl || 0)), 0);
+      if (sum) sum.textContent = `${eq.length} name(s) · P/L ${fmtMoney(totPnl)}`;
+      body.innerHTML = eq.map(p => {
+        const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
+        const shares = (p.shares != null ? p.shares : p.quantity);
+        const mktVal = (p.current_price != null && shares != null) ? Number(p.current_price) * Number(shares) : null;
+        const stopCell = (p.stop_loss != null)
+          ? `${fmtMoney(p.stop_loss)}${(p.current_price ? `<br><span class="sub red">${((p.stop_loss/p.current_price-1)*100).toFixed(1)}%</span>` : "")}`
+          : dash;
+        return `
+        <tr${p.pending ? ' style="opacity:.75;"' : ''}>
+          <td><strong>${p.symbol || "—"}</strong>${p.pending ? ' <span class="badge pending">PENDING</span>' : ''}</td>
+          <td>${shares != null ? shares : "—"}</td>
+          <td>${p.entry_price != null ? fmtMoney(p.entry_price) : dash}</td>
+          <td>${p.current_price != null ? fmtMoney(p.current_price) : dash}</td>
+          <td>${p.initial_cost != null ? fmtMoney(p.initial_cost) : dash}</td>
+          <td>${mktVal != null ? fmtMoney(mktVal) : dash}</td>
+          <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
+          <td class="${sign}">${p.pending ? dash : (p.unrealized_pnl_pct > 0 ? "+" : "") + p.unrealized_pnl_pct + "%"}</td>
+          <td>${stopCell}</td>
+        </tr>`;
+      }).join("");
+    })();
+
     document.getElementById("positions").innerHTML = rowsAll.map(p => {
       const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
       const sideCls = p.side === "SHORT" ? "red" : "green";
