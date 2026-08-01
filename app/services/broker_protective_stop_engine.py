@@ -192,13 +192,22 @@ class BrokerProtectiveStopEngine:
         longs = [str(p.get("Symbol") or "").upper() for p in pos
                  if int(float(p.get("Quantity") or 0)) > 0
                  and str(p.get("LongShort") or "").lower() != "short"]
-        unprotected = [s for s in longs if s not in protected and s not in closing]
+        # A defined-risk condor's own legs must NEVER carry a per-leg stop (the wings ARE the risk cap;
+        # stopping a wing strands the short leg naked). ensure_stops() already refuses to stop them, so
+        # they are NOT "unprotected" — they are protected BY STRUCTURE. Counting them as unprotected is a
+        # false alarm; exclude them here (surfaced separately as defined_risk_legs, never hidden).
+        vrp_legs = self._vrp_leg_symbols()
+        defined_risk_legs = sorted(s for s in longs if s in vrp_legs)
+        unprotected = [s for s in longs if s not in protected and s not in closing and s not in vrp_legs]
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "enabled": self.enabled(),
             "long_positions": len(longs),
             "protected_at_broker": len([s for s in longs if s in protected]),
             "unprotected": unprotected,
+            "defined_risk_legs": defined_risk_legs,
+            "defined_risk_note": ("condor legs — defined-risk by structure, correctly carry no per-leg "
+                                  "stop (a stop on a wing would strand the short leg naked)"),
             "closing_not_stopped": sorted(closing & set(longs)),
             "exposure_note": ("unprotected positions have NO stop if GreyLine stops running — "
                               "every doctrine exit requires the scheduler to be alive"),

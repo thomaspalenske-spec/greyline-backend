@@ -57,3 +57,19 @@ def test_short_leg_never_stopped_regardless(monkeypatch):
     monkeypatch.setattr(BPS, "_vrp_leg_symbols", staticmethod(lambda: {short.upper()}))
     r = eng.ensure_stops(dry_run=True)
     assert r["placed"] == 0                                              # shorts are never stopped
+
+
+def test_status_excludes_condor_legs_from_unprotected(monkeypatch):
+    """The BROKER_SIDE_PROTECTION guard reads status().unprotected. A condor leg must NOT be counted
+    as unprotected (it is defined-risk by structure and correctly carries no per-leg stop) — else the
+    guard cries wolf on legs it is right to leave un-stopped. Ordinary longs with no stop still flag."""
+    monkeypatch.setenv("GREYLINE_BROKER_PROTECTIVE_STOPS", "true")
+    wing = "XLE 260918C65"
+    ordinary = "GLW"
+    eng = BPS()
+    monkeypatch.setattr(eng, "_booking", lambda: FakeBook([_pos(wing, 1, 1.2), _pos(ordinary, 5, 40.0)]))
+    monkeypatch.setattr(BPS, "_vrp_leg_symbols", staticmethod(lambda: {wing.upper()}))
+    s = eng.status()
+    assert wing.upper() in s["defined_risk_legs"]          # surfaced, not hidden
+    assert wing.upper() not in s["unprotected"]            # NOT counted as unprotected
+    assert ordinary.upper() in s["unprotected"]            # a real naked long still flags
