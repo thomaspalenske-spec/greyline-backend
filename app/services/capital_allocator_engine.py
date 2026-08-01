@@ -94,16 +94,47 @@ class CapitalAllocatorEngine:
         basis, days = self._basis()
         risk_on = self.RISK_ON_PCT * equity
 
+        # MEASURED OVERRIDE: once a sleeve has a GATED court verdict (>= the min-trades gate), capital
+        # follows the MEASURED edge, not the prior — PROVEN funds it (evidence-2-equivalent), DECAYED
+        # zeroes it (retire), UNPROVEN-after-the-gate drops it to a probe (it had its chance). Below the
+        # gate, or no verdict, the backtest prior stands. This is what makes capital flow to what the
+        # court proves and away from what it retires. Maps allocator sleeves -> court sleeve keys.
+        court, gate = {}, 20
+        try:
+            from app.services.edge_persistence_engine import EdgePersistenceEngine
+            _re = EdgePersistenceEngine().realized_edge()
+            gate = int(_re.get("min_trades_gate") or 20)
+            _MAP = {"vrp": "premium_vrp", "earnings": "premium_earnings",
+                    "momentum": "momentum", "carry": "carry", "trend": "trend"}
+            _cs = _re.get("sleeves") or {}
+            for a, c in _MAP.items():
+                v = _cs.get(c)
+                if v and int(v.get("trades") or 0) >= gate:
+                    court[a] = v
+        except Exception:
+            court = {}
+
         # raw score per sleeve: evidence tier x risk-parity (target/vol) x correlation penalty
-        raw = {}
+        raw, basis_of = {}, {}
         for s, p in self.PRIORS.items():
-            ev = p["evidence"]
-            if ev < 0:                                # no-edge -> zero
-                w = 0.0
-            elif ev == 0:                             # unproven -> small probe
-                w = self.PROBE_WEIGHT * (self.TARGET_VOL / p["vol"]) * p["corr_pen"]
+            cv = court.get(s)
+            if cv:
+                verdict = str(cv.get("verdict", ""))
+                if verdict.startswith("PROVEN"):
+                    w, basis_of[s] = 2.0 * (self.TARGET_VOL / p["vol"]) * p["corr_pen"], "measured_proven"
+                elif verdict.startswith("DECAYED"):
+                    w, basis_of[s] = 0.0, "measured_decayed"
+                else:                                 # UNPROVEN after the gate -> probe only
+                    w, basis_of[s] = self.PROBE_WEIGHT * (self.TARGET_VOL / p["vol"]) * p["corr_pen"], "measured_unproven"
             else:
-                w = ev * (self.TARGET_VOL / p["vol"]) * p["corr_pen"]
+                ev = p["evidence"]
+                if ev < 0:                            # no-edge -> zero
+                    w = 0.0
+                elif ev == 0:                         # unproven -> small probe
+                    w = self.PROBE_WEIGHT * (self.TARGET_VOL / p["vol"]) * p["corr_pen"]
+                else:
+                    w = ev * (self.TARGET_VOL / p["vol"]) * p["corr_pen"]
+                basis_of[s] = "prior"
             raw[s] = max(0.0, w)
 
         total = sum(raw.values()) or 1.0
@@ -118,19 +149,26 @@ class CapitalAllocatorEngine:
 
         sleeves = {}
         for s, p in self.PRIORS.items():
+            cv = court.get(s)
             sleeves[s] = {"recommended_usd": rec[s], "recommended_pct": round(100 * rec[s] / equity, 1),
                           "current_usd": round(current.get(s, 0), 0),
                           "delta_usd": round(rec[s] - current.get(s, 0), 0),
-                          "evidence": p["evidence"], "why": p["note"]}
+                          "evidence": p["evidence"], "basis": basis_of[s],
+                          "why": (f"court {cv.get('verdict')}" if cv else p["note"])}
+        measured = sorted(court)
         return {
             "timestamp": datetime.utcnow().isoformat(), "equity": equity,
-            "basis": basis, "live_days_available": days, "min_live_days_needed": self.MIN_LIVE_DAYS,
+            "basis": ("measured (court) where gated, else backtest priors" if measured else basis),
+            "measured_sleeves": measured, "trade_gate": gate,
+            "live_days_available": days, "min_live_days_needed": self.MIN_LIVE_DAYS,
             "risk_on_target_pct": round(100 * self.RISK_ON_PCT), "sleeves": sleeves,
             "tbill_cash_residual_usd": tbill_cash,
             "headline": ("On the evidence, momentum -> ~$%.0f (no edge), the book concentrates in "
-                         "trend+carry, VRP modest, earnings a small probe." % rec["momentum"]),
+                         "trend+carry, VRP modest, earnings a small probe." % rec["momentum"]
+                         + (f" MEASURED override active for: {', '.join(measured)}." if measured else "")),
             "note": ("RECOMMENDATION ONLY — does not change allocations or trade. Applying it is an "
-                     "after-hours, operator-approved step. Basis is backtest priors until "
-                     "/edge-persistence has >= %d live days, then it switches to measured." % self.MIN_LIVE_DAYS),
+                     "after-hours, operator-approved step. A sleeve with a GATED court verdict (>= "
+                     f"{gate} trades) follows the MEASURED edge (PROVEN funds / DECAYED zeroes / UNPROVEN "
+                     "probes); the rest use the backtest priors until they cross the gate."),
             "status": "CAPITAL_ALLOCATOR_RECOMMENDATION",
         }
