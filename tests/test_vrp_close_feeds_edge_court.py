@@ -141,3 +141,27 @@ def test_atomic_close_prices_realized_from_per_leg_fills(tmp_path, monkeypatch):
     # per-leg fills: (.50+.50) buy-back - (.35+.35) wing-sell = 0.30 debit -> realized (1.0-0.30)*100 = 70
     assert row["status"] == "CLOSED" and row["realized_pnl_basis"] == "fills"
     assert row["realized_pnl"] == 70.0
+
+
+def test_condor_close_logs_slippage_to_execution_log(tmp_path, monkeypatch):
+    """A confirmed condor close records its net close-side slippage (mid vs actual debit) to ExecutionLog
+    as a direct premium_vrp entry — so the premium sleeve gets a measured execution cost."""
+    led = tmp_path / "vrp.jsonl"
+    led.write_text(json.dumps(_open_condor()) + "\n")
+    monkeypatch.setattr(V, "LEDGER", led)
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_CONDOR_ATOMIC_ORDER", "true")
+    monkeypatch.setattr("app.services.tradestation_quote_live_engine.TradeStationQuoteLiveEngine", lambda: _Quote())
+    monkeypatch.setattr(V, "_short_leg_greeks_map", lambda self, rows: {})
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
+                        lambda: type("M", (), {"status": lambda self: {"is_regular_session": True}})())
+    monkeypatch.setattr(V, "_booking", lambda self: _Booking())
+    import app.services.execution_log_engine as el_mod
+    monkeypatch.setattr(el_mod.ExecutionLogEngine, "LEDGER", tmp_path / "exec.jsonl")
+    monkeypatch.setattr(el_mod.ExecutionLogEngine, "DIR", tmp_path)
+
+    V().manage_positions(dry_run=False)
+    recs = [json.loads(l) for l in (tmp_path / "exec.jsonl").read_text().splitlines() if l.strip()]
+    pv = [x for x in recs if x.get("strategy") == "premium_vrp" and x.get("direct")]
+    assert pv and pv[0]["action"] == "BUY"                       # close-side (buy back) slippage logged
+    assert pv[0]["mid"] is not None and pv[0]["fill_price"] is not None

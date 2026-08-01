@@ -1015,6 +1015,17 @@ class ConditionalVRPShortPremiumEngine:
                     r["close_reason"] = reason
                     r["realized_pnl"] = round((credit - debit) * 100 * r["quantity"], 2)
                     r["realized_pnl_basis"] = basis
+                    # measured CLOSE-side execution slippage (net debit paid vs the net mid) → ExecutionLog,
+                    # so the premium sleeves get a measured execution cost like the equity sleeves. The
+                    # single multi-leg order id can't join to one fill, so record the completed slippage
+                    # directly. Best-effort, off the order path.
+                    try:
+                        from app.services.execution_log_engine import ExecutionLogEngine
+                        _sleeve = "premium_earnings" if str(r.get("strategy")) == "earnings_vol" else "premium_vrp"
+                        ExecutionLogEngine().record_fill(_sleeve, r["symbol"], "BUY",
+                                                         int(r["quantity"]) * 100, mid=cost_to_close, fill=debit)
+                    except Exception:
+                        pass
                     r.pop("manager_status", None); r.pop("manager_status_reason", None)
                     committed = True
                 elif any(lr.get("atomic") for lr in leg_results):

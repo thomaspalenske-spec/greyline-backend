@@ -44,6 +44,23 @@ class ExecutionLogEngine:
         except Exception:
             pass
 
+    def record_fill(self, strategy, symbol, action, qty, mid, fill, order_id=None):
+        """Log a COMPLETED slippage directly, when BOTH the decision mid AND the actual fill are known
+        at once — e.g. a multi-leg condor close, whose single order_id doesn't join cleanly to one fill
+        price. `qty` is share-equivalent (options: contracts × 100) so realized $ and notional come out
+        right; bps is qty-independent. Append-only, best-effort — never affects an order."""
+        try:
+            m, fp = self._f(mid), self._f(fill)
+            self.DIR.mkdir(parents=True, exist_ok=True)
+            with open(self.LEDGER, "a") as f:
+                f.write(json.dumps({
+                    "ts": datetime.utcnow().isoformat(), "strategy": strategy, "symbol": str(symbol),
+                    "action": str(action), "qty": int(abs(qty)), "mid": m, "fill_price": fp,
+                    "direct": True, "order_id": order_id,
+                }) + "\n")
+        except Exception:
+            pass
+
     def _intents(self):
         try:
             return [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
@@ -75,8 +92,9 @@ class ExecutionLogEngine:
             a = agg.setdefault(s, {"orders": 0, "filled": 0, "slip_bps_sum": 0.0,
                                    "slip_usd": 0.0, "notional": 0.0})
             a["orders"] += 1
-            oid, mid = it.get("order_id"), self._f(it.get("mid"))
-            fill = fills.get(oid)
+            mid = self._f(it.get("mid"))
+            # direct (record_fill) entries carry their own fill; intent entries join to a broker fill by id
+            fill = self._f(it.get("fill_price")) if it.get("direct") else fills.get(it.get("order_id"))
             if not fill or not mid or mid <= 0:
                 continue
             a["filled"] += 1

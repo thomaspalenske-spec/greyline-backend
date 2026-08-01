@@ -132,7 +132,8 @@ class EdgePersistenceEngine:
         return trades, excluded
 
     # court sleeve -> ExecutionLog strategy key (only the direct-to-broker equity sleeves are instrumented)
-    _EXEC_STRATEGY = {"carry": "carry", "trend": "trend", "tbill": "tbill", "managed_futures": "managed_futures"}
+    _EXEC_STRATEGY = {"carry": "carry", "trend": "trend", "tbill": "tbill", "managed_futures": "managed_futures",
+                      "premium_vrp": "premium_vrp", "premium_earnings": "premium_earnings"}
     _COURT_SLEEVES = ("momentum", "carry", "trend", "tbill", "managed_futures", "premium_vrp", "premium_earnings")
 
     def _execution_cost_by_sleeve(self):

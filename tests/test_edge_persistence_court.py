@@ -119,8 +119,8 @@ def test_execution_cost_is_a_diagnostic_not_double_subtracted(monkeypatch):
     ec = out["execution_cost"]
     assert ec["trend"]["source"] == "measured" and ec["trend"]["avg_slippage_bps"] == 0.8
     assert ec["carry"]["source"] == "instrumented — no orders logged yet"      # instrumented, no data
-    assert ec["premium_vrp"]["source"].startswith("not instrumented")          # condors: fill-net already
-    assert ec["momentum"]["source"].startswith("not instrumented")
+    assert ec["premium_vrp"]["source"] == "instrumented — no orders logged yet"  # condors now instrumented
+    assert ec["momentum"]["source"].startswith("not instrumented")             # momentum still isn't
     # realized_pnl is untouched: a winning trade's net is not reduced by slippage here
     monkeypatch.setattr(E, "_closed_trades", lambda self: (_trades(1, 10.0, sleeve="trend"), 0))
     out2 = E().realized_edge()
