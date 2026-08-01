@@ -67,6 +67,35 @@ class ScheduledOperatorReportsEngine:
 
     # ---- the two reports ----------------------------------------------------------------------
 
+    @staticmethod
+    def _earnings_readiness_line():
+        """One-line earnings fire-readiness for the pre-open pager (READ-ONLY). The earnings sleeve is
+        the fastest to feed the edge court, so surface whether it will actually fire today."""
+        try:
+            from app.services.earnings_vol_harvest_engine import EarningsVolHarvestEngine
+            fr = EarningsVolHarvestEngine().fire_readiness()
+            rd = ", ".join(fr.get("report_dates") or []) or "—"
+            if fr.get("will_fire"):
+                return f" Earnings: WILL FIRE (reporters {rd})."
+            return f" Earnings: will NOT fire — {str(fr.get('verdict') or '')[:70]}."
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _earnings_activity_line():
+        """One-line earnings activity for the post-close report (READ-ONLY): did it round-trip into the
+        edge court today? Reports open condors + the premium_earnings realized-trade count."""
+        try:
+            from app.services.earnings_vol_harvest_engine import EarningsVolHarvestEngine
+            from app.services.edge_persistence_engine import EdgePersistenceEngine
+            opn = EarningsVolHarvestEngine().status().get("open_positions", 0)
+            pe = (EdgePersistenceEngine().realized_edge().get("sleeves") or {}).get("premium_earnings") or {}
+            trades = pe.get("trades", 0)
+            return (f" Earnings: {opn} open condor(s); edge court has {trades} premium_earnings "
+                    f"trade(s) toward the 20-trade gate.")
+        except Exception:
+            return ""
+
     @classmethod
     def _pre_open_pager(cls, today):
         try:
@@ -81,14 +110,16 @@ class ScheduledOperatorReportsEngine:
             return cls._dispatch(
                 "GreyLine READY for the open",
                 f"Pre-open audit PASSED ({audit.get('fail_count', 0)} fails / "
-                f"{audit.get('warn_count', 0)} warns). Armed and green for the {today} open.",
+                f"{audit.get('warn_count', 0)} warns). Armed and green for the {today} open."
+                + cls._earnings_readiness_line(),
                 "INFO", f"PREOPEN_READY:{today}")
         fails = [c for c in (audit.get("checks") or []) if c.get("status") == "FAIL"]
         detail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:60]}" for c in fails[:6]) or "see /pre-open-readiness"
         return cls._dispatch(
             "GreyLine NOT READY for the open",
             f"Pre-open audit = {overall}, {audit.get('fail_count')} FAIL. The open may not fire "
-            f"cleanly. FAILING: {detail}. Fix NOW.", "CRITICAL", f"PREOPEN_NOTREADY:{today}")
+            f"cleanly. FAILING: {detail}. Fix NOW." + cls._earnings_readiness_line(),
+            "CRITICAL", f"PREOPEN_NOTREADY:{today}")
 
     @classmethod
     def _post_close_report(cls, today):
@@ -125,8 +156,9 @@ class ScheduledOperatorReportsEngine:
                 "WARNING", f"POSTCLOSE:{today}")
 
         msg = (f"Close {today}: equity ${eq}, daily P&L {daily_pct}%. At-risk deployed "
-               f"${dep} ({dep_pct}%), cash ${cash}, {open_positions} open position(s). "
-               "Sleeves ran their normal cycle; see /background-scheduler/status for detail.")
+               f"${dep} ({dep_pct}%), cash ${cash}, {open_positions} open position(s)."
+               + cls._earnings_activity_line() +
+               " Sleeves ran their normal cycle; see /background-scheduler/status for detail.")
         return cls._dispatch("GreyLine daily close report", msg, "INFO", f"POSTCLOSE:{today}")
 
     # ---- entry point (called each scheduler cycle) --------------------------------------------
@@ -166,5 +198,7 @@ class ScheduledOperatorReportsEngine:
                 "pre_open_readiness": {"overall": audit.get("overall"),
                                        "fail_count": audit.get("fail_count"),
                                        "warn_count": audit.get("warn_count")},
+                "earnings_pager_line": cls._earnings_readiness_line().strip(),
+                "earnings_postclose_line": cls._earnings_activity_line().strip(),
                 "windows_et": {"pre_open": "09:20-09:31", "post_close": "16:00-16:20"},
                 "status": "SCHEDULED_REPORTS_PREVIEW"}
