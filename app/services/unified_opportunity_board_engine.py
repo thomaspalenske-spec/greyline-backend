@@ -67,6 +67,7 @@ class UnifiedOpportunityBoardEngine:
             rows.append({
                 "symbol": sym,
                 "instrument": "EQUITY",
+                "price": self._f(c.get("last_close")),   # latest daily close (same value shown in detail)
                 "side": c.get("side"),
                 "score": round(self._f(c.get("conviction")), 3),
                 "score_label": "conviction",

@@ -702,9 +702,9 @@ th {
         <div class="sub" style="margin-bottom:10px;">Every live candidate across the harvesting sleeves, grouped by edge and sorted by each edge's <em>native</em> score. Deliberately NOT cross-ranked — a directional-equity conviction and a defined-risk condor's IV rank are different units; one blended "expected profit" number on unproven edges would be false precision. A true cross-instrument ranking waits on <a href="/edge-persistence" style="color:inherit;">measured live edge</a>.</div>
         <table>
           <thead>
-            <tr><th>Symbol</th><th>Instrument</th><th>Score</th><th>Status</th><th>Reason</th><th>Detail</th></tr>
+            <tr><th>Symbol</th><th>Instrument</th><th>Price</th><th>Score</th><th>Status</th><th>Reason</th><th>Detail</th></tr>
           </thead>
-          <tbody id="opportunity_board_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
+          <tbody id="opportunity_board_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
         </table>
       </div>
 
@@ -1037,13 +1037,13 @@ async function refreshOpportunityBoard() {
     let html = "";
     for (const g of groups) {
       const cands = g.candidates || [];
-      html += `<tr><td colspan="6" style="padding-top:14px;">
+      html += `<tr><td colspan="7" style="padding-top:14px;">
         <strong>${g.strategy || ""}</strong> <span class="sub">· ${g.instrument || ""}</span><br>
         <span class="sub">${g.edge || ""}</span><br>
         <span class="sub" style="opacity:.85;">${g.action || ""}${g.error ? " — <span class='red'>"+g.error+"</span>" : ""}</span>${g.held_note ? `<br><span class="sub" style="opacity:.7;font-style:italic;">${g.held_note}</span>` : ""}
       </td></tr>`;
       if (!cands.length) {
-        html += `<tr><td colspan="6"><span class="sub">${g.note || "no candidates right now"}</span></td></tr>`;
+        html += `<tr><td colspan="7"><span class="sub">${g.note || "no candidates right now"}</span></td></tr>`;
         continue;
       }
       html += cands.map(c => {
@@ -1051,6 +1051,7 @@ async function refreshOpportunityBoard() {
         return `<tr>
         <td><strong>${c.symbol}</strong></td>
         <td><span class="sub">${c.instrument || ""}</span></td>
+        <td>${c.price != null ? fmtMoney(c.price) : "—"}</td>
         <td>${c.score != null ? c.score : "—"} <span class="sub">${c.score_label || ""}</span></td>
         <td>${c.status && c.status !== "—" ? `<span class="badge ${badge}">${c.status}</span>` : "—"}</td>
         <td><span class="sub">${c.reason || "—"}</span></td>
@@ -1058,9 +1059,9 @@ async function refreshOpportunityBoard() {
       </tr>`;
       }).join("");
     }
-    body.innerHTML = html || `<tr><td colspan="6"><span class="sub">No candidates right now.</span></td></tr>`;
+    body.innerHTML = html || `<tr><td colspan="7"><span class="sub">No candidates right now.</span></td></tr>`;
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="6"><span class="red">Opportunity board unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+    body.innerHTML = `<tr><td colspan="7"><span class="red">Opportunity board unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
   }
 }
 
