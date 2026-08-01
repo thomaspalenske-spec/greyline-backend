@@ -151,11 +151,14 @@ class EdgePersistenceEngine:
             if is_opt:
                 risk, risk_kind = notional, "premium_at_risk"
             else:
-                entry, stop = self._f(r.get("entry_price")), r.get("entry_stop")
-                per_share = abs(entry - self._f(stop)) if (stop is not None and entry > 0) else 0.0
-                if per_share > 0:                     # EXACT: the doctrine's recorded initial stop distance
+                entry, stop_v = self._f(r.get("entry_price")), self._f(r.get("entry_stop"))
+                # EXACT only when the stamped stop is a SANE protective distance: positive, on the correct
+                # side (below entry for the long dip-buys this sleeve trades), and not a garbage value that
+                # would imply >100% risk. Anything else falls back to the vol proxy rather than mislabeling.
+                per_share = (entry - stop_v) if (r.get("entry_stop") is not None and entry > 0) else 0.0
+                if 0 < per_share < entry:             # EXACT: the doctrine's recorded initial stop distance
                     risk, risk_kind = per_share * abs(qty), "stop_atr_doctrine"
-                else:                                 # fallback: vol proxy when no stop was recorded
+                else:                                 # fallback: vol proxy when no/garbage stop was recorded
                     risk, risk_kind = self.EQUITY_STOP_PCT * notional, f"stop_proxy_{int(self.EQUITY_STOP_PCT*100)}pct"
             trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
                            "risk": risk, "closed_at": r.get("closed_at"), "basis": "fill_net",
@@ -183,14 +186,30 @@ class EdgePersistenceEngine:
             strat = self._EXEC_STRATEGY.get(sleeve)
             src = by.get(strat) if strat else None
             if src:
+                # "measured" only if a fill was actually reconciled; an instrumented-but-empty strategy row
+                # (orders placed, no fills yet) has no slippage to report — don't dress it up as measured.
+                reconciled = src.get("avg_slippage_bps") is not None or bool(src.get("fill_rate_pct"))
                 out[sleeve] = {"avg_slippage_bps": src.get("avg_slippage_bps"),
                                "fill_rate_pct": src.get("fill_rate_pct"),
-                               "realized_slippage_usd": src.get("realized_slippage_usd"), "source": "measured"}
+                               "realized_slippage_usd": src.get("realized_slippage_usd"),
+                               "source": "measured" if reconciled else "instrumented — no fills reconciled yet"}
             elif strat:
                 out[sleeve] = {"source": "instrumented — no orders logged yet"}
             else:
                 out[sleeve] = {"source": "not instrumented (realized P&L is already fill-net)"}
         return out
+
+    @staticmethod
+    def _risk_basis_label(ts):
+        """Report the risk denominator honestly: one kind if the sleeve's closed trades are homogeneous,
+        else 'mixed (...)' so a blended equity sleeve (some exact stops, some vol proxies) isn't presented
+        as if every trade used the same basis."""
+        kinds = sorted({t.get("risk_kind") for t in ts if t.get("risk_kind")})
+        if not kinds:
+            return None
+        if len(kinds) == 1:
+            return kinds[0]
+        return "mixed (" + ", ".join(kinds) + ")"
 
     def realized_edge(self):
         trades, excluded = self._closed_trades()
@@ -209,7 +228,7 @@ class EdgePersistenceEngine:
             stat = {"trades": n, "wins": wins, "win_rate": round(wins / n, 2) if n else None,
                     "mean_return_on_risk_pct": round(mean * 100, 2) if n else None,
                     "total_net_pnl": round(sum(t["net"] for t in ts), 2),
-                    "risk_basis": (ts[0].get("risk_kind") if ts else None)}   # instrument-aware denominator
+                    "risk_basis": self._risk_basis_label(ts)}   # instrument-aware denominator (honest if mixed)
             if n >= 2:
                 var = sum((r - mean) ** 2 for r in rets) / (n - 1)
                 sd = math.sqrt(var)

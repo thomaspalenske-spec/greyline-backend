@@ -13,9 +13,17 @@ def _mock_earnings(monkeypatch, fire):
 
 
 def test_pager_line_will_fire(monkeypatch):
-    _mock_earnings(monkeypatch, {"will_fire": True, "report_dates": ["2026-08-03"]})
+    # WILL FIRE only when the dry-run actually confirmed a buildable condor (build_verified True).
+    _mock_earnings(monkeypatch, {"will_fire": True, "build_verified": True, "report_dates": ["2026-08-03"]})
     line = S._earnings_readiness_line()
     assert "WILL FIRE" in line and "2026-08-03" in line
+
+
+def test_pager_line_gates_ready_build_pending_when_unverified(monkeypatch):
+    # Gates pass but the build is deferred (market closed pre-open) — must NOT overstate "WILL FIRE".
+    _mock_earnings(monkeypatch, {"will_fire": True, "build_verified": False, "report_dates": ["2026-08-03"]})
+    line = S._earnings_readiness_line()
+    assert "WILL FIRE" not in line and "build pending" in line and "2026-08-03" in line
 
 
 def test_pager_line_not_ready_gives_reason(monkeypatch):
@@ -36,7 +44,7 @@ def test_pre_open_pager_includes_the_earnings_line(monkeypatch):
     monkeypatch.setattr(pr_mod, "PreOpenReadinessEngine",
                         lambda: type("A", (), {"audit": lambda self: {"overall": "READY", "fail_count": 0,
                                                                       "warn_count": 0, "checks": []}})())
-    _mock_earnings(monkeypatch, {"will_fire": True, "report_dates": ["2026-08-03"]})
+    _mock_earnings(monkeypatch, {"will_fire": True, "build_verified": True, "report_dates": ["2026-08-03"]})
     captured = {}
     monkeypatch.setattr(S, "_dispatch",
                         lambda title, message, severity, fingerprint: captured.update(msg=message) or {"ok": True})

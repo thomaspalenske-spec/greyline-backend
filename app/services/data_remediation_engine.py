@@ -317,12 +317,16 @@ class DataRemediationEngine:
                          f"{br.get('status')} — {str(br.get('detail'))[:80]}")
             return action, alert
         except Exception as e:
-            return {"error": str(e)[:120]}, None
+            # A thrown self-heal is a FAILED backup refresh, not a no-op — surface it so the run isn't
+            # reported as cleanly REMEDIATED while the off-machine backup silently stayed stale.
+            return ({"error": str(e)[:120], "ran": False, "status": "BACKUP_REMEDIATE_ERROR"},
+                    f"off-machine git backup remediation ERRORED: {str(e)[:100]}")
 
     def _alert_signature(self):
         """Cheap, LOCAL read (no API) of the freshest validator reports → (has_alert, fingerprint, detail).
         The fingerprint is the exact fault set, so a persistent unfixable fault dedups to one attempt."""
-        crit, crit_syms, changed = 0, [], 0
+        crit, crit_syms, changed, changed_syms = 0, [], 0, []
+        reads_ok = True                       # a validator that THROWS is unknown, not a clean "no fault"
         try:
             from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine
             eng = PriceBarIntegrityEngine()
@@ -331,12 +335,17 @@ class DataRemediationEngine:
             crit_syms = sorted({str(i.get("symbol")).upper() for i in (integ.get("issues") or [])
                                 if str(i.get("type")) in getattr(eng, "CRITICAL_TYPES", ())})
         except Exception:
-            pass
+            reads_ok = False
         try:
             from app.services.price_bar_lineage_engine import PriceBarLineageEngine
-            changed = int((PriceBarLineageEngine().last_report() or {}).get("changed_count") or 0)
+            lin = PriceBarLineageEngine().last_report() or {}
+            changed = int(lin.get("changed_count") or 0)
+            # fingerprint on the actual symbol SET, not just the count — otherwise a different set of
+            # changed bars with the same count dedups as "already handled" and a new fault is skipped.
+            changed_syms = sorted({str(c.get("symbol")).upper() for c in (lin.get("changed") or [])
+                                   if c.get("symbol")})
         except Exception:
-            pass
+            reads_ok = False
         # off-machine backup staleness (local git-log read, no network) — a flagged backup is a fault
         # the remediation can fix (re-push), so it should trigger an alert-run too.
         backup_stale = False
@@ -347,9 +356,10 @@ class DataRemediationEngine:
         except Exception:
             pass
         has_alert = crit > 0 or changed > 0 or backup_stale
-        fingerprint = f"crit:{','.join(crit_syms)}|changed:{changed}|backup_stale:{int(backup_stale)}"
+        fingerprint = (f"crit:{','.join(crit_syms)}|changed:{changed}"
+                       f"|changed_syms:{','.join(changed_syms)}|backup_stale:{int(backup_stale)}")
         return has_alert, fingerprint, {"critical_bars": crit, "lineage_changed": changed,
-                                        "backup_stale": backup_stale}
+                                        "backup_stale": backup_stale, "validator_reads_ok": reads_ok}
 
     def run_on_alert(self):
         """Event-driven remediation: fix data faults the MOMENT a validator flags them, instead of

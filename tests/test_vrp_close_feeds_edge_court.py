@@ -118,9 +118,12 @@ class _AtomicFillBooking:
         return {"ok": True, "order_id": "ATOM-1", "status": "OK"}
 
     def orders(self):
+        # A FULLY-filled atomic order: each leg reports ExecQuantity == QuantityOrdered so the court's
+        # fill-verification accepts basis "fills" (a partial fill would report exq < ordq -> fallback).
         return {"response_json": {"Orders": [{
             "OrderID": "ATOM-1", "StatusDescription": "Filled", "FilledPrice": "0.30",
-            "Legs": [{"Symbol": s, "BuyOrSell": bs, "OpenOrClose": "Close", "ExecutionPrice": px}
+            "Legs": [{"Symbol": s, "BuyOrSell": bs, "OpenOrClose": "Close", "ExecutionPrice": px,
+                      "ExecQuantity": "1", "QuantityOrdered": "1"}
                      for s, (bs, px) in self.FILLS.items()]}]}}
 
 
@@ -143,9 +146,18 @@ def test_atomic_close_prices_realized_from_per_leg_fills(tmp_path, monkeypatch):
     assert row["realized_pnl"] == 70.0
 
 
-def test_condor_close_logs_slippage_to_execution_log(tmp_path, monkeypatch):
-    """A confirmed condor close records its net close-side slippage (mid vs actual debit) to ExecutionLog
-    as a direct premium_vrp entry — so the premium sleeve gets a measured execution cost."""
+class _PartialAtomicBooking(_AtomicFillBooking):
+    """An atomic order marked Filled but whose legs are UNDER-filled (ExecQuantity < QuantityOrdered).
+    The court must NOT trust its per-leg prices as real fills — a partial fill is not a fill."""
+    def orders(self):
+        return {"response_json": {"Orders": [{
+            "OrderID": "ATOM-1", "StatusDescription": "Filled", "FilledPrice": "0.30",
+            "Legs": [{"Symbol": s, "BuyOrSell": bs, "OpenOrClose": "Close", "ExecutionPrice": px,
+                      "ExecQuantity": "0", "QuantityOrdered": "1"}     # under-filled -> partial
+                     for s, (bs, px) in self.FILLS.items()]}]}}
+
+
+def test_partial_atomic_fill_is_not_labeled_fills(tmp_path, monkeypatch):
     led = tmp_path / "vrp.jsonl"
     led.write_text(json.dumps(_open_condor()) + "\n")
     monkeypatch.setattr(V, "LEDGER", led)
@@ -155,7 +167,28 @@ def test_condor_close_logs_slippage_to_execution_log(tmp_path, monkeypatch):
     monkeypatch.setattr(V, "_short_leg_greeks_map", lambda self, rows: {})
     monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
                         lambda: type("M", (), {"status": lambda self: {"is_regular_session": True}})())
-    monkeypatch.setattr(V, "_booking", lambda self: _Booking())
+    monkeypatch.setattr(V, "_booking", lambda self: _PartialAtomicBooking())
+
+    V().manage_positions(dry_run=False)
+    row = json.loads(led.read_text().splitlines()[0])
+    # under-filled legs -> falls back to the marketable close-order estimate, NOT trusted as "fills"
+    assert row["realized_pnl_basis"] != "fills"
+
+
+def test_condor_close_logs_slippage_to_execution_log(tmp_path, monkeypatch):
+    """A confirmed condor close records its net close-side slippage (mid vs actual debit) to ExecutionLog
+    as a direct premium_vrp entry — so the premium sleeve gets a measured execution cost. The slippage log
+    fires ONLY on a genuine fill (basis 'fills'); an estimate-priced close_order close logs nothing."""
+    led = tmp_path / "vrp.jsonl"
+    led.write_text(json.dumps(_open_condor()) + "\n")
+    monkeypatch.setattr(V, "LEDGER", led)
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_CONDOR_ATOMIC_ORDER", "true")
+    monkeypatch.setattr("app.services.tradestation_quote_live_engine.TradeStationQuoteLiveEngine", lambda: _Quote())
+    monkeypatch.setattr(V, "_short_leg_greeks_map", lambda self, rows: {})
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
+                        lambda: type("M", (), {"status": lambda self: {"is_regular_session": True}})())
+    monkeypatch.setattr(V, "_booking", lambda self: _AtomicFillBooking())    # real per-leg fills -> basis 'fills'
     import app.services.execution_log_engine as el_mod
     monkeypatch.setattr(el_mod.ExecutionLogEngine, "LEDGER", tmp_path / "exec.jsonl")
     monkeypatch.setattr(el_mod.ExecutionLogEngine, "DIR", tmp_path)

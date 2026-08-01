@@ -848,14 +848,16 @@ class GreyLineRealityGuardEngine:
 
     @staticmethod
     def _momentum_open_rows():
+        """Returns (rows, read_ok). read_ok=False means the ledger couldn't be read — an empty list then
+        means UNKNOWN, not 'no positions', so the caller must not report it as a verified-clean state."""
         import json
         from pathlib import Path
         try:
             rows = [json.loads(l) for l in
                     Path("app/data/paper_trading/paper_trade_ledger.jsonl").read_text().splitlines() if l.strip()]
         except Exception:
-            return []
-        return [r for r in rows if r.get("status") == "OPEN" and r.get("trade_intent") == "MOMENTUM_REVERSAL"]
+            return [], False
+        return [r for r in rows if r.get("status") == "OPEN" and r.get("trade_intent") == "MOMENTUM_REVERSAL"], True
 
     def _check_momentum_stops_consistent(self):
         """Every OPEN momentum position must be MANAGED to the stop it RECORDED at entry — else the risk
@@ -865,20 +867,21 @@ class GreyLineRealityGuardEngine:
         fantasy. Fresh opens (attach the doctrine next cycle) and pre-feature rows (no recorded stop) pass."""
         from datetime import datetime
         GRACE_H, TOL = 2.0, 0.02
-        try:
-            rows = self._momentum_open_rows()
-        except Exception as e:
+        rows, read_ok = self._momentum_open_rows()
+        if not read_ok:                                # a swallowed read must NOT read as verified-clean
             return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": True,
-                    "detail": f"check skipped: {str(e)[:70]}"}
-        problems, now = [], datetime.utcnow()
+                    "detail": "momentum ledger unreadable — stop consistency UNVERIFIED this cycle"}
+        problems, checked, skipped, now = [], 0, 0, datetime.utcnow()
         for r in rows:
             try:
                 entry = float(r.get("entry_price") or 0)
             except (TypeError, ValueError):
                 entry = 0.0
             rec = r.get("entry_stop")
-            if rec is None or entry <= 0:              # pre-feature row / no recorded stop -> can't check
+            if rec is None or entry <= 0:              # pre-feature row / no recorded stop -> NOT verifiable
+                skipped += 1
                 continue
+            checked += 1
             managed = (r.get("exit_doctrine") or {}).get("initial_stop")
             sym = r.get("symbol")
             if managed is None:
@@ -894,11 +897,19 @@ class GreyLineRealityGuardEngine:
                         problems.append(f"{sym} managed stop {round(float(managed), 2)} != recorded {round(float(rec), 2)}")
                 except (TypeError, ValueError):
                     pass
-        if not problems:
-            return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": True,
-                    "detail": "open momentum positions are managed to their recorded entry stops"}
-        return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": False,
-                "detail": "; ".join(problems[:6])}
+        if problems:
+            return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": False,
+                    "detail": "; ".join(problems[:6])}
+        # HONEST detail: say what was actually VERIFIED vs merely skipped — never claim "managed" for
+        # positions that carry no recorded stop (the vacuous-green trap).
+        if checked == 0:
+            detail = (f"no open momentum position has a recorded entry stop yet ({skipped} pre-feature/"
+                      "ATR-unavailable) — nothing to verify" if skipped else "no open momentum positions")
+        else:
+            detail = f"{checked} open momentum position(s) managed to their recorded entry stop"
+            if skipped:
+                detail += f"; {skipped} not yet verifiable (no recorded stop)"
+        return {"id": "MOMENTUM_STOPS_CONSISTENT", "severity": "warning", "ok": True, "detail": detail}
 
     def _check_sleeve_edge_not_decayed(self):
         """The edge court is the RETIRE signal — surface any sleeve it judged DECAYED (cost-net edge < 0

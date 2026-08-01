@@ -1160,14 +1160,23 @@ async function refreshEdgeCourt() {
       const verdict = v ? v.verdict : `ACCUMULATING (0/${gate} trades)`;
       const vcls = verdict.startsWith("PROVEN") ? "green" : verdict.startsWith("DECAYED") ? "red"
         : verdict.startsWith("UNPROVEN") ? "yellow" : "";
+      // return-on-risk is only comparable across sleeves if you can see its DENOMINATOR — surface the
+      // instrument-aware basis (honest "mixed (...)" when a sleeve blends exact stops + vol proxies).
+      const BASIS = {defined_max_loss: "÷ max loss", premium_at_risk: "÷ premium",
+                     stop_atr_doctrine: "÷ ATR stop", stop_proxy_12pct: "÷ 12% stop proxy"};
+      const rbRaw = v && v.risk_basis ? String(v.risk_basis) : "";
+      const rb = rbRaw.startsWith("mixed") ? "÷ mixed basis" : (BASIS[rbRaw] || (rbRaw ? "÷ " + rbRaw : ""));
       const edge = (v && v.mean_return_on_risk_pct != null)
         ? `${v.mean_return_on_risk_pct > 0 ? "+" : ""}${v.mean_return_on_risk_pct}%`
           + (v.ci95_return_on_risk_pct ? ` <span class="sub">[${v.ci95_return_on_risk_pct[0]}, ${v.ci95_return_on_risk_pct[1]}]</span>` : "")
+          + (rb ? ` <span class="sub" title="return-on-risk denominator">${rb}</span>` : "")
         : `<span class="sub">—</span>`;
       const e = ec[s] || {};
+      // prefix-match "instrumented …" (awaiting orders OR awaiting fills) so the cell stays robust to the
+      // exact wording/punctuation of the engine's honest label — never render the raw em-dash string.
       const exec = e.source === "measured"
         ? `${e.avg_slippage_bps} bps <span class="sub">· ${e.fill_rate_pct}% fill</span>`
-        : `<span class="sub">${e.source === "instrumented — no orders logged yet" ? "instrumented · awaiting fills"
+        : `<span class="sub">${/^instrumented/.test(e.source || "") ? "instrumented · awaiting fills"
              : (e.source || "—").replace(" (realized P&L is already fill-net)", " · fill-net")}</span>`;
       return `<tr>
         <td><strong>${s}</strong></td>

@@ -72,9 +72,22 @@ class EarningsVolHarvestEngine:
 
     # ---- ledger helpers (shared VRP ledger, filtered to this strategy) -------------------------
 
+    def _ledger_readable(self):
+        """True iff the ledger file could be read+parsed. Distinguishes a genuinely-empty book (readable,
+        no open rows) from an unreadable ledger — so a swallowed read isn't mistaken for '$0 open risk'."""
+        try:
+            [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
+            return True
+        except FileNotFoundError:
+            return True    # a not-yet-created ledger is legitimately empty, not a fault
+        except Exception:
+            return False
+
     def _open_rows(self, strategy_only=True):
         try:
             rows = [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
+        except FileNotFoundError:
+            return []
         except Exception:
             return []
         out = []
@@ -307,23 +320,29 @@ class EarningsVolHarvestEngine:
             per_condor = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
         except Exception:
             per_condor = 500.0
-        budget_left = self.PORTFOLIO_RISK_CAP_USD - self._open_risk()
-        # A condor can be as small as ~half the per-position cap, and the in-session plan gates on the
-        # ACTUAL budget_left per candidate — so the pre-session gate should pass if even the SMALLEST
-        # condor fits (using the cap here caused a false NOT-READY at $469 headroom). Note the tightness.
         min_condor = per_condor / 2.0
-        tight = "" if budget_left >= per_condor else f" — tight, fits a ~${min_condor:.0f} condor but not a full ${per_condor:.0f}"
-        add("budget_headroom", budget_left >= min_condor,
-            f"${budget_left:.0f} risk headroom{tight}")
+        if not self._ledger_readable():
+            # Unreadable ledger → open risk is UNKNOWN, not $0. Never assert headroom off a swallowed read.
+            add("budget_headroom", False,
+                "ledger unreadable — open risk UNKNOWN, headroom unverified", blocking=True)
+        else:
+            budget_left = self.PORTFOLIO_RISK_CAP_USD - self._open_risk()
+            # A condor can be as small as ~half the per-position cap, and the in-session plan gates on the
+            # ACTUAL budget_left per candidate — so the pre-session gate should pass if even the SMALLEST
+            # condor fits (using the cap here caused a false NOT-READY at $469 headroom). Note the tightness.
+            tight = "" if budget_left >= per_condor else f" — tight, fits a ~${min_condor:.0f} condor but not a full ${per_condor:.0f}"
+            add("budget_headroom", budget_left >= min_condor,
+                f"${budget_left:.0f} risk headroom{tight}")
         slots = max(0, self._concurrency_ceiling() - len(self._open_symbols()))
         add("concurrency_slots", slots > 0,
             f"{slots} slot(s) free (ceiling {self._concurrency_ceiling()}, {len(self._open_symbols())} open)")
 
+        market_open, market_known = False, True
         try:
             from app.services.market_hours_engine import MarketHoursEngine
             market_open = MarketHoursEngine().status().get("is_regular_session") is True
         except Exception:
-            market_open = False
+            market_known = False                              # a swallowed read is UNKNOWN, not "closed"
         would_open, skipped = None, []
         if market_open and armed:
             plan = self.open_positions(dry_run=True)          # places NOTHING; runs the real build+gate pipeline
@@ -333,23 +352,28 @@ class EarningsVolHarvestEngine:
                 f"dry-run would open {would_open} condor(s)" + (f"; {len(skipped)} skipped" if skipped else ""),
                 blocking=False)   # drives will_fire via would_open; kept non-blocking for a clearer verdict
         else:
+            _why = "market closed" if market_known else "market state UNKNOWN (hours read failed)"
             add("plan_builds_condors", True,
-                "deferred — option quotes stream only in-session; candidates are queued for the open",
+                f"deferred ({_why}) — option quotes stream only in-session; build unverified until the open",
                 blocking=False)
 
+        # build_verified is the HONEST signal: the dry-run actually confirmed a buildable condor. When the
+        # build is deferred (market closed/unknown), the gates may pass but NO condor is confirmed yet.
+        build_verified = bool(market_open and armed and would_open is not None)
         blocked = [c["check"] for c in checks if c["blocking"] and not c["ok"]]
         will_fire = not blocked and (would_open is None or would_open > 0)
         if blocked:
             verdict = "NOT READY — " + ", ".join(blocked)
         elif would_open == 0:
             verdict = "NOT READY — gates pass but no buildable condor right now (see skipped)"
-        elif market_open:
+        elif build_verified:
             verdict = f"READY — would open {would_open} condor(s) at the next cycle"
         else:
-            verdict = "READY — gates pass; build/fire confirmed live at the open"
+            verdict = "READY (pending build) — gates pass; a condor must still build at the open (not yet verified)"
         return {
-            "sleeve": "earnings_vol", "will_fire": will_fire, "verdict": verdict, "checks": checks,
-            "would_open": would_open, "skipped": skipped[:8], "market_open": market_open,
+            "sleeve": "earnings_vol", "will_fire": will_fire, "build_verified": build_verified,
+            "verdict": verdict, "checks": checks,
+            "would_open": would_open, "skipped": skipped[:8], "market_open": market_open, "market_known": market_known,
             "report_dates": sorted({str(c.get("report_date")) for c in (st.get("candidates_now") or [])}),
             "note": ("READ-ONLY — the dry-run plan places nothing; this is what WOULD open. The build check "
                      "runs only in-session (option quotes); deterministic gates report any time."),

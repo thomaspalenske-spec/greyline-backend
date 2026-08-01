@@ -76,7 +76,11 @@ class ScheduledOperatorReportsEngine:
             fr = EarningsVolHarvestEngine().fire_readiness()
             rd = ", ".join(fr.get("report_dates") or []) or "—"
             if fr.get("will_fire"):
-                return f" Earnings: WILL FIRE (reporters {rd})."
+                # Only claim WILL FIRE when the dry-run actually confirmed a buildable condor. Pre-open the
+                # build is deferred (quotes stream only in-session) → gates pass but nothing is verified yet.
+                if fr.get("build_verified"):
+                    return f" Earnings: WILL FIRE (reporters {rd})."
+                return f" Earnings: gates READY, build pending at open (reporters {rd})."
             return f" Earnings: will NOT fire — {str(fr.get('verdict') or '')[:70]}."
         except Exception:
             return ""

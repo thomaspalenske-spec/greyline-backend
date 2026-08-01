@@ -475,9 +475,10 @@ class ConditionalVRPShortPremiumEngine:
                     or not r.get("fill_reconciled")):
                 # OPEN-side execution slippage → ExecutionLog, ONCE, BEFORE we overwrite the plan credit:
                 # the plan (decision-mid) credit vs the ACTUAL fill credit. Selling the condor to collect
-                # premium → action SELL; collecting LESS than the mid is a cost. With the close-side log
-                # this gives the premium sleeves a FULL round-trip measured execution cost.
-                if not dry_run and not r.get("open_slippage_logged"):
+                # premium → action SELL; collecting LESS than the mid is a cost. ONLY when EVERY leg filled
+                # (len(filled)==len(parsed)) — else `net` is a partial-spread credit while decision_credit is
+                # the full condor, which would log a large bogus slippage that's really the missing spread.
+                if not dry_run and not r.get("open_slippage_logged") and len(filled) == len(parsed):
                     decision_credit = self._f(r.get("credit_per_condor"))   # still the plan here
                     try:
                         from app.services.execution_log_engine import ExecutionLogEngine
@@ -744,16 +745,20 @@ class ConditionalVRPShortPremiumEngine:
         except Exception:
             return fallback_debit, fallback_basis
 
-        # ATOMIC — one shared order id; read per-leg ExecutionPrice from its Legs[]
+        # ATOMIC — one shared order id; read per-leg ExecutionPrice from its Legs[]. Require a FULL fill,
+        # not just a positive price: the order must be Filled AND every leg's ExecQuantity must match its
+        # QuantityOrdered — else a PARTIAL fill (positive ExecutionPrice on under-filled legs) would be
+        # mislabeled basis 'fills' and priced on the full quantity. Any shortfall → conservative fallback.
         if len(set(oids)) == 1:
             o = orders.get(oids[0])
             legs = (o or {}).get("Legs") or []
-            if o and len(legs) == len(leg_results):
+            if o and str(o.get("StatusDescription")) in ("Filled", "FLL") and len(legs) == len(leg_results):
                 debit = 0.0
                 for lg in legs:
                     fp = self._f(lg.get("ExecutionPrice"))
-                    if fp <= 0:
-                        return fallback_debit, fallback_basis          # not (fully) filled yet
+                    exq, ordq = self._f(lg.get("ExecQuantity")), self._f(lg.get("QuantityOrdered"))
+                    if fp <= 0 or ordq <= 0 or exq < ordq:            # unfilled or PARTIAL leg
+                        return fallback_debit, fallback_basis
                     debit += fp if str(lg.get("BuyOrSell")).upper() == "BUY" else -fp
                 return round(debit, 4), "fills"
             return fallback_debit, fallback_basis
@@ -1030,16 +1035,17 @@ class ConditionalVRPShortPremiumEngine:
                     r["realized_pnl"] = round((credit - debit) * 100 * r["quantity"], 2)
                     r["realized_pnl_basis"] = basis
                     # measured CLOSE-side execution slippage (net debit paid vs the net mid) → ExecutionLog,
-                    # so the premium sleeves get a measured execution cost like the equity sleeves. The
-                    # single multi-leg order id can't join to one fill, so record the completed slippage
-                    # directly. Best-effort, off the order path.
-                    try:
-                        from app.services.execution_log_engine import ExecutionLogEngine
-                        _sleeve = "premium_earnings" if str(r.get("strategy")) == "earnings_vol" else "premium_vrp"
-                        ExecutionLogEngine().record_fill(_sleeve, r["symbol"], "BUY",
-                                                         int(r["quantity"]) * 100, mid=cost_to_close, fill=debit)
-                    except Exception:
-                        pass
+                    # ONLY on a CONFIRMED fill (basis == 'fills'). On order ACCEPTANCE the debit is the
+                    # marketable-limit ESTIMATE (basis 'close_order') — logging that would feed ExecutionLog a
+                    # fill that never happened, so we skip it (the realized_pnl still records, honestly labeled).
+                    if basis == "fills":
+                        try:
+                            from app.services.execution_log_engine import ExecutionLogEngine
+                            _sleeve = "premium_earnings" if str(r.get("strategy")) == "earnings_vol" else "premium_vrp"
+                            ExecutionLogEngine().record_fill(_sleeve, r["symbol"], "BUY",
+                                                             int(r["quantity"]) * 100, mid=cost_to_close, fill=debit)
+                        except Exception:
+                            pass
                     r.pop("manager_status", None); r.pop("manager_status_reason", None)
                     committed = True
                 elif any(lr.get("atomic") for lr in leg_results):
