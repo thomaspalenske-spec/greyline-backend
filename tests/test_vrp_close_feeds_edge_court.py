@@ -105,3 +105,39 @@ def test_legacy_close_prices_realized_from_actual_fills(tmp_path, monkeypatch):
     assert row["status"] == "CLOSED" and row["realized_pnl_basis"] == "fills"
     # fill debit = (.50+.50) - (.35+.35) = 0.30 -> realized (1.0 - 0.30)*100 = 70 (from FILLS, not the .38 order px)
     assert row["realized_pnl"] == 70.0
+
+
+class _AtomicFillBooking:
+    """Atomic multi-leg close: one shared order id, and orders() returns the order with per-leg
+    ExecutionPrice — the exact SIM shape captured from live order history (Legs[], BuyOrSell)."""
+    FILLS = {"X 261218C110": ("Buy", 0.50), "X 261218P90": ("Buy", 0.50),    # buy back shorts
+             "X 261218C115": ("Sell", 0.35), "X 261218P85": ("Sell", 0.35)}  # sell wings
+
+    def place_multileg(self, legs, order_type="Limit", limit_price=None, tif="DAY"):
+        self._legs = legs
+        return {"ok": True, "order_id": "ATOM-1", "status": "OK"}
+
+    def orders(self):
+        return {"response_json": {"Orders": [{
+            "OrderID": "ATOM-1", "StatusDescription": "Filled", "FilledPrice": "0.30",
+            "Legs": [{"Symbol": s, "BuyOrSell": bs, "OpenOrClose": "Close", "ExecutionPrice": px}
+                     for s, (bs, px) in self.FILLS.items()]}]}}
+
+
+def test_atomic_close_prices_realized_from_per_leg_fills(tmp_path, monkeypatch):
+    led = tmp_path / "vrp.jsonl"
+    led.write_text(json.dumps(_open_condor()) + "\n")
+    monkeypatch.setattr(V, "LEDGER", led)
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_CONDOR_ATOMIC_ORDER", "true")      # atomic path
+    monkeypatch.setattr("app.services.tradestation_quote_live_engine.TradeStationQuoteLiveEngine", lambda: _Quote())
+    monkeypatch.setattr(V, "_short_leg_greeks_map", lambda self, rows: {})
+    monkeypatch.setattr("app.services.market_hours_engine.MarketHoursEngine",
+                        lambda: type("M", (), {"status": lambda self: {"is_regular_session": True}})())
+    monkeypatch.setattr(V, "_booking", lambda self: _AtomicFillBooking())
+
+    V().manage_positions(dry_run=False)
+    row = json.loads(led.read_text().splitlines()[0])
+    # per-leg fills: (.50+.50) buy-back - (.35+.35) wing-sell = 0.30 debit -> realized (1.0-0.30)*100 = 70
+    assert row["status"] == "CLOSED" and row["realized_pnl_basis"] == "fills"
+    assert row["realized_pnl"] == 70.0

@@ -713,25 +713,42 @@ class ConditionalVRPShortPremiumEngine:
     def _close_fill_debit(self, leg_results, fallback_debit, fallback_basis):
         """Net per-share debit ACTUALLY paid to close, from broker fills. Returns (debit, basis).
 
-        Upgrades the LEGACY leg-by-leg close (distinct order per leg) to REAL fills when every leg's
-        fill price is readable → basis 'fills'. Otherwise returns the marketable close-order debit the
-        caller already computed (conservative, real transacted price — never mid unless the caller had
-        no quote). The ATOMIC path shares ONE order id across legs and its per-leg execution shape isn't
-        verified, so it records the (conservative) order debit; per-leg atomic fills are a documented
-        refinement. Best-effort — never raises, never blocks a confirmed close."""
+        Reads REAL fills for BOTH close paths → basis 'fills':
+          * ATOMIC: all legs share one order id; the order carries a Legs[] array with per-leg
+            `ExecutionPrice`, signed by `BuyOrSell` (Buy=pay to buy back a short, Sell=receive to sell a
+            wing). Shape confirmed from live SIM order history (2026-07-31 capture).
+          * LEGACY: one order per leg; sum each leg's FilledPrice signed by the close action.
+        Every leg must have a POSITIVE execution price, else it returns the caller's conservative
+        marketable close-order debit (basis 'close_order'/'mid') — so a not-yet-populated fill can never
+        fabricate a number. Best-effort — never raises, never blocks a confirmed close."""
         oids = [str(lr.get("order_id")) for lr in leg_results if lr.get("order_id")]
-        if len(set(oids)) <= 1:                       # atomic (shared order) or none → conservative order debit
+        if not oids:
             return fallback_debit, fallback_basis
         try:
-            filled = {str(o.get("OrderID")): o for o in
-                      ((self._booking().orders().get("response_json") or {}).get("Orders") or [])
-                      if str(o.get("StatusDescription")) in ("Filled", "FLL")}
+            orders = {str(o.get("OrderID")): o for o in
+                      ((self._booking().orders().get("response_json") or {}).get("Orders") or [])}
         except Exception:
             return fallback_debit, fallback_basis
+
+        # ATOMIC — one shared order id; read per-leg ExecutionPrice from its Legs[]
+        if len(set(oids)) == 1:
+            o = orders.get(oids[0])
+            legs = (o or {}).get("Legs") or []
+            if o and len(legs) == len(leg_results):
+                debit = 0.0
+                for lg in legs:
+                    fp = self._f(lg.get("ExecutionPrice"))
+                    if fp <= 0:
+                        return fallback_debit, fallback_basis          # not (fully) filled yet
+                    debit += fp if str(lg.get("BuyOrSell")).upper() == "BUY" else -fp
+                return round(debit, 4), "fills"
+            return fallback_debit, fallback_basis
+
+        # LEGACY — one order per leg; sum FilledPrice signed by the close action
         debit, found = 0.0, 0
         for lr in leg_results:
-            o = filled.get(str(lr.get("order_id")))
-            if not o:
+            o = orders.get(str(lr.get("order_id")))
+            if not o or str(o.get("StatusDescription")) not in ("Filled", "FLL"):
                 continue
             fp = self._f(o.get("FilledPrice")) or self._f(((o.get("Legs") or [{}])[0]).get("ExecutionPrice"))
             if fp <= 0:
