@@ -99,6 +99,46 @@ class BackgroundSchedulerService:
             pass
 
     @classmethod
+    def _watch_cycle_duration(cls, duration_ms):
+        """Off-box alert when a cycle runs PATHOLOGICALLY long — a long cycle can straddle the market open
+        and misfire. Fires when the cycle wall-clock OR any single phase crosses its threshold, naming the
+        dominant phase from the timing instrument. Thresholds default ABOVE the normal 7-14min band so a
+        healthy cycle never pages (env: GREYLINE_CYCLE_SLOW_SECONDS / GREYLINE_PHASE_SLOW_SECONDS). Deduped
+        by (dominant phase + a 2-min duration bucket) so it pages once per NEW/worsening slow-state, not
+        every cycle. Best-effort; gated on an external channel (a local popup is useless if the box hangs)."""
+        try:
+            if duration_ms is None:
+                return
+            cyc_s = duration_ms / 1000.0
+            try:
+                cyc_thr = float(getenv("GREYLINE_CYCLE_SLOW_SECONDS", "") or 1200)   # 20 min > normal band
+            except (TypeError, ValueError):
+                cyc_thr = 1200.0
+            try:
+                phase_thr = float(getenv("GREYLINE_PHASE_SLOW_SECONDS", "") or 600)  # a single phase >10 min
+            except (TypeError, ValueError):
+                phase_thr = 600.0
+            timings = {k: v for k, v in (cls._last_phase_timings or {}).items() if k != "_total_instrumented"}
+            dominant, dsecs = (max(timings.items(), key=lambda kv: kv[1]) if timings else (None, 0.0))
+            if cyc_s <= cyc_thr and not (dominant is not None and dsecs > phase_thr):
+                return
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if not eng.has_external_channel():
+                return
+            dom_txt = f"{dominant} {dsecs:.0f}s" if dominant else "n/a (no phase timing)"
+            eng.dispatch(
+                title="GreyLine scheduler cycle SLOW",
+                message=(f"cycle {cyc_s:.0f}s (threshold {cyc_thr:.0f}s) — dominant phase {dom_txt}. A long "
+                         "cycle can straddle the open and misfire; see /background-scheduler/status timings."),
+                severity="WARNING",
+                # dedup by dominant phase + a 2-min bucket, so a WORSENING cycle re-pages but a steady one doesn't
+                fingerprint=f"SCHED_CYCLE_SLOW:{dominant or 'cycle'}:{int(cyc_s // 120)}",
+            )
+        except Exception:
+            pass
+
+    @classmethod
     def _alert_cycle_recovered(cls, prev_failures):
         """Tell the operator the cycle is healthy again after a failing streak."""
         try:
@@ -167,6 +207,7 @@ class BackgroundSchedulerService:
             cls._consecutive_failures = 0
             if prev_failures >= cls._ALERT_AFTER_FAILURES:
                 cls._alert_cycle_recovered(prev_failures)      # tell the operator it's back
+            cls._watch_cycle_duration(duration_ms)             # page if the cycle ran pathologically long
         else:
             cls._failure_count += 1
             cls._consecutive_failures += 1
