@@ -521,6 +521,16 @@ class BackgroundSchedulerService:
             if isinstance(options_position_manager, dict):
                 options_position_manager["reconcile_closes"] = {"error": repr(exc), "status": "OPTIONS_CLOSES_RECONCILE_DEGRADED"}
 
+        # GATED AUTO-APPLY of the measured allocation: at most ONCE per trading day, only while the market
+        # is CLOSED (never re-budget mid-session under live sizing). No-op unless GREYLINE_ALLOC_AUTOAPPLY_
+        # ENABLED. Evidence-only, capped per step, reversible. Places no orders.
+        try:
+            from app.services.sleeve_budget_autoapply_engine import SleeveBudgetAutoApplyEngine
+            sleeve_budget_autoapply = SleeveBudgetAutoApplyEngine().run_if_due(
+                market_open=bool(market_hours.get("is_regular_session")))
+        except Exception as exc:
+            sleeve_budget_autoapply = {"status": "AUTOAPPLY_DEGRADED", "error": repr(exc), "ran": False}
+
         # Conditional-VRP short-premium (defined-risk iron condors). GATED OFF by default. When
         # armed: MANAGE open condors every cycle (take-profit / expiry / hard-stop), and OPEN new
         # ones at most once/day, only in a regular session, on a bounded liquid name set (where any

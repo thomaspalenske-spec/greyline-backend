@@ -22,8 +22,10 @@ book-level backstop is the daily-loss governor (warn -4% / halt -7%), which is M
 an auto-flatten. Deploying more concentrates the unproven-edge risk — a deliberate operator choice.
 """
 
+import json
 from datetime import datetime
 from os import getenv
+from pathlib import Path
 from time import time
 
 
@@ -61,18 +63,36 @@ class SleeveCapitalBudgetEngine:
         s = (sleeve or "").strip().lower()
         return cls._ALIAS.get(s, s)
 
+    # Reversible pct overrides written by the evidence-driven auto-apply (SleeveBudgetAutoApplyEngine).
+    # Precedence: an explicit operator env pin ALWAYS wins; else an auto-applied override beats the static
+    # default; else the default. Clearing this file fully reverts the book — the auto-apply never touches
+    # .env, so it can't trip the env-precedence trap.
+    OVERRIDE_FILE = Path("app/data/state/sleeve_pct_overrides.json")
+
+    @classmethod
+    def _overrides(cls):
+        try:
+            d = json.loads(cls.OVERRIDE_FILE.read_text())
+            return {cls._canon(k): float(v) for k, v in (d.get("pct") or {}).items()}
+        except Exception:
+            return {}
+
     @classmethod
     def pct(cls, sleeve):
-        """Target percent-of-equity for a sleeve (env override GREYLINE_<SLEEVE>_ALLOC_PCT)."""
+        """Target percent-of-equity for a sleeve. Precedence: explicit env pin
+        (GREYLINE_<SLEEVE>_ALLOC_PCT) > auto-applied override file > static default."""
         s = cls._canon(sleeve)
         default = cls.DEFAULT_PCT.get(s, 0.0)
         raw = getenv("GREYLINE_%s_ALLOC_PCT" % s.upper(), "")
-        try:
-            v = float(raw) if str(raw).strip() else default
-        except (TypeError, ValueError):
-            v = default
-        # sanity: a percent, not a fraction; clamp to [0, 100]
-        return max(0.0, min(100.0, v))
+        if str(raw).strip():                       # explicit operator env pins the sleeve (highest priority)
+            try:
+                return max(0.0, min(100.0, float(raw)))
+            except (TypeError, ValueError):
+                pass
+        ov = cls._overrides().get(s)               # evidence-driven auto-applied override beats the default
+        if ov is not None:
+            return max(0.0, min(100.0, ov))
+        return max(0.0, min(100.0, default))
 
     @classmethod
     def pct_table(cls):

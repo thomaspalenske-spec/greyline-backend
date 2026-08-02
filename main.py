@@ -244,6 +244,8 @@ from app.routes import account_summary
 app.include_router(account_summary.router)
 from app.routes import sleeve_budgets
 app.include_router(sleeve_budgets.router)
+from app.routes import sleeve_budget_autoapply
+app.include_router(sleeve_budget_autoapply.router)
 from app.routes import managed_futures
 app.include_router(managed_futures.router)
 from app.routes import data_remediation
