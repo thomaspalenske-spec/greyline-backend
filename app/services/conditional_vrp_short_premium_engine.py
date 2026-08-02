@@ -1154,8 +1154,11 @@ class ConditionalVRPShortPremiumEngine:
     # ------------------------------------------------------------ exit doctrine
 
     def _short_leg_greeks_map(self, open_rows):
-        """{option_symbol: |delta|} for every leg across open condors — live from the chain, one
-        fetch per (underlying, expiry). Used by the gamma defense to see tested short strikes."""
+        """{option_symbol: |delta|} for every leg across open condors — LIVE, one snapshot per
+        (underlying, expiry). Uses the UW chain (clean per-strike greeks, fast + already cached: the SAME
+        source VRP builds condors from) instead of PortfolioGreeksEngine._chain_greeks, which hits the SLOW
+        TS SIM chain (~30s/underlying, ~2min total — a dominant scheduler-cycle cost). Falls back to the TS
+        path per group when UW is off/empty. Used by the gamma defense to see tested short strikes."""
         try:
             from app.services.portfolio_greeks_engine import PortfolioGreeksEngine
             pg = PortfolioGreeksEngine()
@@ -1164,12 +1167,30 @@ class ConditionalVRPShortPremiumEngine:
         groups, out = set(), {}
         for r in open_rows:
             for leg in r.get("legs", []):
-                und, exp = pg._parse(leg.get("symbol"))
+                und, exp = pg._parse(leg.get("symbol"))     # exp is already 'YYYY-MM-DD' (UW's format)
                 if und and exp:
                     groups.add((und, exp))
+        try:
+            from app.services.uw_option_chain_engine import UWOptionChainEngine
+            uw = UWOptionChainEngine()
+            uw_on = uw.enabled()
+        except Exception:
+            uw, uw_on = None, False
         for und, exp in groups:
-            for sym, g in (pg._chain_greeks(und, exp) or {}).items():
-                out[sym] = abs(g.get("delta") or 0.0)
+            filled = False
+            if uw_on:
+                try:
+                    snap = uw.get_chain_snapshot(symbol=und, expiration=exp)
+                    for c in (snap.get("contracts") or []):
+                        sym = ((c.get("Legs") or [{}])[0]).get("Symbol")
+                        if sym:
+                            out[str(sym).upper()] = abs(self._f(c.get("Delta")))
+                    filled = bool(snap.get("contracts"))
+                except Exception:
+                    filled = False
+            if not filled:                                  # UW off/empty -> original TS path for this group
+                for sym, g in (pg._chain_greeks(und, exp) or {}).items():
+                    out[sym] = abs(g.get("delta") or 0.0)
         return out
 
     def _dte(self, expiration):
@@ -1178,6 +1199,41 @@ class ConditionalVRPShortPremiumEngine:
             return (e - datetime.utcnow().date()).days
         except Exception:
             return 999
+
+    @staticmethod
+    def _quote_bid_ask(q, sym):
+        """(bid, ask) for one option leg — never raises (a failed quote is (0,0), which the caller
+        already treats as a stale/unpriceable leg -> HOLD)."""
+        try:
+            qd = (q.get_quote(sym).get("response_json") or {})
+            row = (qd.get("Quotes") or [qd])[0] if isinstance(qd, dict) else {}
+            return (float(row.get("Bid") or 0), float(row.get("Ask") or 0))
+        except (TypeError, ValueError, AttributeError):
+            return (0.0, 0.0)
+
+    def _prefetch_leg_quotes(self, q, symbols):
+        """{symbol:(bid,ask)} for every open leg in ONE BATCH TradeStation request (get_quotes) instead of
+        N SERIAL, throttled leg-quote round-trips — the dominant scheduler-cycle cost (the SIM tape ~11s/leg
+        + a per-call token check = ~3min for 4 condors; parallelising didn't help because the calls are
+        throttle-serialised, so we cut the CALL COUNT 16->1). Behavior-PRESERVING: a missing/failed leg is
+        (0,0) -> HOLD, exactly as before. Falls back to serial get_quote if the engine lacks get_quotes."""
+        uniq = list(dict.fromkeys(str(s) for s in symbols if s))
+        if not uniq:
+            return {}
+        out = {}
+        try:
+            batch = q.get_quotes(uniq)                            # single request for all legs
+            for s in uniq:
+                qd = (batch.get(str(s).upper()) or {}).get("response_json") or {}
+                row = (qd.get("Quotes") or [qd])[0] if isinstance(qd, dict) else {}
+                out[s] = (self._f(row.get("Bid")), self._f(row.get("Ask")))
+        except AttributeError:
+            for s in uniq:                                        # engine (or a test mock) has no get_quotes
+                out[s] = self._quote_bid_ask(q, s)
+        except Exception:
+            for s in uniq:
+                out[s] = self._quote_bid_ask(q, s)
+        return out
 
     def manage_positions(self, dry_run=True):
         """Exit doctrine for open condors: take profit at PROFIT_TAKE_FRAC of credit, liquidate at
@@ -1197,7 +1253,12 @@ class ConditionalVRPShortPremiumEngine:
 
         # Pre-fetch current greeks once per (underlying, expiry) so the gamma defense can read each
         # short leg's LIVE delta without a chain call per position.
-        greeks = self._short_leg_greeks_map([r for r in rows if r.get("status") == "OPEN"])
+        open_rows = [r for r in rows if r.get("status") == "OPEN"]
+        greeks = self._short_leg_greeks_map(open_rows)
+        # PARALLEL PREFETCH every open leg's quote concurrently, so the loop below reads a warm map instead
+        # of a serial TS round-trip per leg (the dominant scheduler-cycle cost: ~11s/leg on the SIM tape).
+        quote_map = self._prefetch_leg_quotes(q, [leg.get("symbol") for r in open_rows
+                                                  for leg in (r.get("legs") or [])])
 
         decisions = []
         for r in rows:
@@ -1208,9 +1269,7 @@ class ConditionalVRPShortPremiumEngine:
             priced = True
             leg_quotes = {}
             for leg in r["legs"]:
-                qd = (q.get_quote(leg["symbol"]).get("response_json") or {})
-                row = (qd.get("Quotes") or [qd])[0] if isinstance(qd, dict) else {}
-                bid, ask = self._f(row.get("Bid")), self._f(row.get("Ask"))
+                bid, ask = quote_map.get(leg["symbol"], (0.0, 0.0))   # warm from the concurrent prefetch
                 if bid <= 0 or ask <= 0:
                     priced = False
                     break
