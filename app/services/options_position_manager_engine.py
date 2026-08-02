@@ -108,6 +108,14 @@ class OptionsPositionManagerEngine:
 
         updated, checked, closed, scaled, blocked = [], 0, 0, 0, 0
 
+        # BATCH-warm the shared quote cache for every open position's UNDERLYING in ONE request, so the
+        # per-position _underlying_quote below hits cache instead of a serial throttle-bound TS round-trip.
+        try:
+            TradeStationQuoteLiveEngine().get_quotes(
+                [t.get("underlying") for t in trades if t.get("status") == "OPEN" and t.get("underlying")])
+        except Exception:
+            pass
+
         for trade in trades:
             if trade.get("status") != "OPEN":
                 updated.append(trade)

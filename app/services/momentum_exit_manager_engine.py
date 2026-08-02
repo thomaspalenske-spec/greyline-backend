@@ -240,6 +240,15 @@ class MomentumExitManagerEngine:
             except (TypeError, ValueError):
                 return 0.0
 
+        # BATCH-warm the shared quote cache for every open momentum symbol in ONE request, so the per-
+        # position last() below hits cache instead of a serial, throttle-bound TS round-trip per name (the
+        # shared scheduler-cycle bottleneck). get_quote reads the same class-level cache get_quotes fills.
+        try:
+            quote.get_quotes([t.get("symbol") for t in trades
+                              if t.get("status") == "OPEN" and t.get("trade_intent") == self.TRADE_INTENT])
+        except Exception:
+            pass
+
         changed = False
         for t in trades:
             if t.get("status") != "OPEN" or t.get("trade_intent") != self.TRADE_INTENT:
