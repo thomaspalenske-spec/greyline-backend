@@ -758,6 +758,19 @@ th {
         </div>
       </div>
 
+      <div class="card" id="capital_alloc_card" style="min-width:0;">
+        <div class="section-title">Capital Allocation — evidence → capital <span id="ca_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">How measured edge moves money. Each sleeve's LIVE %-of-equity budget vs the allocator's RECOMMENDED %, tagged by basis: <b>measured</b> (a gated court verdict funds/retires it), <b>prior+tilt</b> (a capped, sample-shrunk lean on below-gate court evidence), or <b>prior</b> (static backtest, no live evidence yet). Auto-apply steps the live budget toward the recommendation — evidence-only, capped, reversible, GATED OFF by default. An active override shows its applied %; an explicit env pin always wins.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Sleeve</th><th>Live %</th><th>Recommended %</th><th>Basis</th><th>Override</th></tr>
+            </thead>
+            <tbody id="capital_alloc_body"><tr><td colspan="5"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
         <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
         <table>
@@ -1191,6 +1204,55 @@ async function refreshEdgeCourt() {
   }
 }
 
+async function refreshCapitalAllocation() {
+  const body = document.getElementById("capital_alloc_body");
+  const summary = document.getElementById("ca_summary");
+  if (!body) return;
+  try {
+    // two reads: the allocator recommendation (per-sleeve recommended % + basis) and the auto-apply
+    // state (enabled flag + active overrides). Both are read-only; the card renders, never decides.
+    const [allocRes, aaRes] = await Promise.allSettled([
+      getJSON("/capital-allocator"), getJSON("/sleeve-budget-autoapply")
+    ]);
+    if (allocRes.status !== "fulfilled") throw new Error("allocator unavailable");
+    const alloc = allocRes.value, aa = aaRes.status === "fulfilled" ? aaRes.value : {};
+    const equity = Number(alloc.equity) || 0;
+    const sleeves = alloc.sleeves || {};
+    const overrides = aa.active_overrides || {};
+    const tiltOn = !!alloc.court_tilt_enabled, aaOn = !!aa.enabled;
+    const nOv = Object.keys(overrides).length;
+    if (summary) summary.textContent =
+      `auto-apply ${aaOn ? "ON" : "OFF"} · tilt ${tiltOn ? "ON" : "OFF"} · ${nOv} override${nOv === 1 ? "" : "s"}`;
+    // allocator sleeve -> budget/override key (carry is vol_carry in the budget engine)
+    const OVKEY = {trend: "trend", carry: "vol_carry", vrp: "vrp", earnings: "earnings", momentum: "momentum"};
+    const order = ["momentum", "trend", "carry", "vrp", "earnings"];
+    body.innerHTML = order.filter(s => sleeves[s]).map(s => {
+      const v = sleeves[s];
+      const curPct = equity > 0 ? (Number(v.current_usd) || 0) / equity * 100 : null;
+      const recPct = v.recommended_pct;
+      const basis = String(v.basis || "prior");
+      const bcls = basis.startsWith("measured_proven") ? "green"
+        : basis.startsWith("measured_decayed") ? "red"
+        : basis === "prior+tilt" ? "yellow" : "";
+      const blabel = basis === "prior+tilt" ? "prior + tilt"
+        : basis.startsWith("measured_") ? "measured (" + basis.replace("measured_", "") + ")" : basis;
+      const ovVal = overrides[OVKEY[s]];
+      const ov = (ovVal === undefined || ovVal === null) ? `<span class="sub">—</span>` : `${Number(ovVal).toFixed(1)}%`;
+      const cur = curPct === null ? `<span class="sub">—</span>` : `${curPct.toFixed(1)}%`;
+      const rec = (recPct === undefined || recPct === null) ? `<span class="sub">—</span>` : `${Number(recPct).toFixed(1)}%`;
+      return `<tr>
+        <td><strong>${s}</strong></td>
+        <td>${cur}</td>
+        <td>${rec}</td>
+        <td class="${bcls}">${blabel}</td>
+        <td>${ov}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="5"><span class="sub">No sleeves.</span></td></tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5"><span class="red">Capital allocation unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshAll() {
   // "Fetched", NOT "Last Update": this is the browser clock at refresh time, not the age of any cache.
   // Each card carries its own as_of/cache age; this only says when the page last pulled.
@@ -1203,6 +1265,7 @@ async function refreshAll() {
   refreshBestCondors();     // fire-and-forget: cached (~10min), built off UW, never stalls the loop
   refreshCondorExits();     // static exit levels off the ledger (no live quotes) — never stalls the loop
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
+  refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 
   const [ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/options-account-dashboard"),
