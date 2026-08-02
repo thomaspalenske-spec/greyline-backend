@@ -1,11 +1,44 @@
+import json
 from datetime import datetime
 from os import getenv
+from pathlib import Path
 
 from fastapi import APIRouter
 
 from app.services.broker_account_view_engine import BrokerAccountViewEngine
 
 router = APIRouter()
+
+# LAST-KNOWN-GOOD cache: so a transient broker-read failure serves the last confirmed money figures
+# (clearly labelled STALE + aged) instead of blanking every dashboard tile. This is not fantasy — it is
+# the standard last-known-good pattern: live = unknown/degraded, alongside the last real reading and how
+# old it is. The operator sees real (stale) numbers with an age badge, never a silent "—".
+_LAST_GOOD = Path("app/data/state/account_summary_last_good.json")
+_MONEY_KEYS = ("starting_capital", "deployed_capital", "deployed_pct_of_equity", "open_market_value",
+               "tbill_sweep_value", "cash_on_hand", "buying_power", "unrealized_pnl", "realized_pnl",
+               "total_equity", "total_return_pct", "open_position_count")
+
+
+def _save_last_good(resp):
+    try:
+        _LAST_GOOD.parent.mkdir(parents=True, exist_ok=True)
+        _LAST_GOOD.write_text(json.dumps({"as_of": resp.get("timestamp"),
+                                          **{k: resp.get(k) for k in _MONEY_KEYS}}))
+    except Exception:
+        pass
+
+
+def _load_last_good():
+    try:
+        d = json.loads(_LAST_GOOD.read_text())
+        try:
+            d["age_seconds"] = round((datetime.utcnow()
+                                      - datetime.fromisoformat(str(d.get("as_of")))).total_seconds())
+        except Exception:
+            d["age_seconds"] = None
+        return d
+    except Exception:
+        return None
 
 
 def _capital_base():
@@ -52,6 +85,8 @@ def account_summary():
             "tbill_sweep_value": None, "cash_on_hand": None, "buying_power": None,
             "unrealized_pnl": None, "total_equity": None, "total_return_pct": None,
             "open_position_count": None,
+            # last confirmed reading (clearly aged) so the dashboard shows real stale numbers, not blank "—"
+            "last_good": _load_last_good(),
             "status": "ACCOUNT_SUMMARY_BROKER_READ_DEGRADED",
         }
 
@@ -86,7 +121,7 @@ def account_summary():
     # cash-funded with no margin, so buying power = cash on hand.
     cash_on_hand = round(mission_equity - at_risk_market_value, 2)
 
-    return {
+    resp = {
         "timestamp": datetime.utcnow().isoformat(),
         "account_mode": view.get("account_mode"),
         "account_label": view.get("account_label"),
@@ -119,3 +154,6 @@ def account_summary():
         },
         "status": "ACCOUNT_SUMMARY_READY" if view.get("reads_ok") else "ACCOUNT_SUMMARY_BROKER_READ_DEGRADED",
     }
+    if view.get("reads_ok"):
+        _save_last_good(resp)        # remember this good reading for the next degraded window
+    return resp

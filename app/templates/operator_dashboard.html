@@ -1449,18 +1449,26 @@ async function refreshAll() {
     // (acct null) — NEVER fall back to the pre-account-summary options-ledger values (sleeve-scoped,
     // $0-deployed: the exact fantasy this card was built to stop) and never a computed 0 / NaN.
     const deg = !!(acct && acct.degraded);
-    const unavailable = deg || !acct;
-    setText("equity", unavailable ? "—" : fmtMoney(acct.total_equity));
-    setText("cash", unavailable ? "—" : fmtMoney(acct.cash_on_hand));
-    setText("buying_power", unavailable ? "—" : fmtMoney(acct.buying_power));
-    setText("deployed", unavailable ? "—" : fmtMoney(acct.deployed_capital));
+    // On a DEGRADED broker read, fall back to the LAST CONFIRMED reading (clearly aged) instead of a blank
+    // "—". This is honest: the stale value carries a "· stale Nm" suffix so it can never be mistaken for
+    // live, and we still NEVER invent numbers — last_good is a real prior broker reading, or absent.
+    const lg = (deg && acct && acct.last_good) ? acct.last_good : null;
+    const src = lg || acct;
+    const unavailable = (!acct) || (deg && !lg);     // blank ONLY when there is no data at all
+    const ageM = (lg && lg.age_seconds != null) ? Math.max(1, Math.round(lg.age_seconds / 60)) : null;
+    const st = lg ? ` · stale ${ageM}m` : "";        // staleness marker — a stale tile must not look live
+    const M = (v) => unavailable ? "—" : (fmtMoney(v) + st);
+    setText("equity", M(src.total_equity));
+    setText("cash", M(src.cash_on_hand));
+    setText("buying_power", M(src.buying_power));
+    setText("deployed", M(src.deployed_capital));
     setText("deployed_pct", unavailable ? "—" :
-      `${fmtPct((Number(acct.deployed_capital || 0) / Math.max(Number(acct.total_equity || 0), 1)) * 100)} of Equity`);
-    setText("unrealized", unavailable ? "—" : fmtMoney(acct.unrealized_pnl));
-    setText("total_return", unavailable ? "—" : fmtPct(acct.total_return_pct));
-    setText("realized_pnl", unavailable ? "—" : fmtMoney(acct.realized_pnl));
-    setText("open_trades", unavailable ? "—" : acct.open_position_count);
-    setText("open_trade_count", unavailable ? "—" : acct.open_position_count);
+      `${fmtPct((Number(src.deployed_capital || 0) / Math.max(Number(src.total_equity || 0), 1)) * 100)} of Equity${st}`);
+    setText("unrealized", M(src.unrealized_pnl));
+    setText("total_return", unavailable ? "—" : (fmtPct(src.total_return_pct) + st));
+    setText("realized_pnl", M(src.realized_pnl));
+    setText("open_trades", unavailable ? "—" : (src.open_position_count + st));
+    setText("open_trade_count", unavailable ? "—" : (src.open_position_count + st));
     // Trade COUNTS: /account-summary carries no account-wide counts, so these stay the options-ledger
     // counts (labelled as such) — not money, so a sleeve-scoped count is acceptable. (Previously read
     // acct.total_trade_count / acct.closed_trade_count, which the route never provides, so they rendered
