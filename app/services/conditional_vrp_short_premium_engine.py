@@ -327,6 +327,29 @@ class ConditionalVRPShortPremiumEngine:
 
     # ------------------------------------------------------------ planning
 
+    def _safe_prefetch(self, ticker):
+        try:
+            self._chain(ticker)          # populates the UW/TS chain cache; result discarded
+        except Exception:
+            pass
+
+    def _prefetch_chains(self, tickers, workers=6):
+        """Warm the chain cache for many candidates CONCURRENTLY so the plan() build loop hits cache
+        instead of fetching each chain serially — the dominant VRP cycle cost (each _chain is 2 UW calls
+        at up to 20s). Behavior-PRESERVING: identical data + identical _chain() path, only the network
+        fetches overlap; the loop still SELECTS deterministically off the warmed cache. Each _fetch builds
+        its own provider/session, so parallel requests are thread-safe. Best-effort — a failed prefetch
+        just means that name fetches serially in the loop as before."""
+        uniq = list(dict.fromkeys(str(t).upper() for t in tickers if t))
+        if len(uniq) <= 1:
+            return
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(workers, len(uniq))) as ex:
+                list(ex.map(self._safe_prefetch, uniq))
+        except Exception:
+            pass
+
     def _chain(self, symbol):
         # PRIMARY: Unusual Whales. The TradeStation SIM sandbox streams only a narrow, garbage-quoted
         # strike band (a $1-fair wing quoted at $4), so a defined-risk condor could never form on it.
@@ -718,6 +741,11 @@ class ConditionalVRPShortPremiumEngine:
         # most-overpriced opportunities at the SAME defined-risk size — more premium per unit of the
         # same bounded tail. Deliberately NOT sizing up on skew: the study's tail-safety at steep
         # skew is a crash-free-sample mirage, so skew picks WHAT to sell, never how much risk to bear.
+        # PARALLEL PREFETCH: warm the chain cache for the candidate pool concurrently so the build loop
+        # below hits cache instead of a serial UW round-trip per name — the dominant VRP cycle cost. The
+        # loop still selects deterministically off the warmed cache; only the network fetches overlap.
+        self._prefetch_chains([c["ticker"] for c in cands if c.get("ticker") not in open_syms][:pool + 4])
+
         candidates, skipped = [], []
         for c in cands:
             if len(candidates) >= pool:

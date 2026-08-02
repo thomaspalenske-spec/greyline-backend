@@ -55,6 +55,29 @@ class ConditionalVRPForwardPanelEngine:
         except Exception:
             return []
 
+    def _prefetch_series(self, names, workers=8):
+        """Warm the realized-vol series cache for the WHOLE universe CONCURRENTLY so rich_iv_candidates'
+        loop hits cache instead of a serial UW call per name — the dominant VRP-cycle cost (~57s for the
+        ~200-name universe serially, measured 2026-08-01). Behavior-PRESERVING: identical _fresh_series
+        path, only the network fetches overlap; the loop still screens deterministically off the warmed
+        provider cache. Each _get builds its own provider/session and the provider cache is lock-guarded,
+        so parallel fetches are thread-safe. Best-effort — a failed prefetch just fetches serially below."""
+        uniq = list(dict.fromkeys(str(t) for t in (names or []) if t))
+        if len(uniq) <= 1:
+            return
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(workers, len(uniq))) as ex:
+                list(ex.map(self._safe_series, uniq))
+        except Exception:
+            pass
+
+    def _safe_series(self, ticker):
+        try:
+            self._fresh_series(ticker)     # populates the provider vol-series cache; result discarded
+        except Exception:
+            pass
+
     def _read_panel(self):
         out = []
         try:
@@ -119,6 +142,9 @@ class ConditionalVRPForwardPanelEngine:
         >= threshold) and NO earnings inside the ~30d window. Shared by the short-premium strategy
         so the traded signal is identical to the one being forward-tracked."""
         names = names or self.vrp.DEFAULT_NAMES
+        # PARALLEL PREFETCH the whole universe's vol series so the screen below hits cache instead of a
+        # serial UW round-trip per name (measured ~57s serial). The screen stays deterministic.
+        self._prefetch_series(names)
         out = []
         for t in names:
             rows = self._fresh_series(t)
