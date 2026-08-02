@@ -929,6 +929,61 @@ class GreyLineRealityGuardEngine:
                 "detail": f"DECAYED sleeve(s), cost-net edge < 0 at 95% (court): {', '.join(decayed)} — "
                           "candidate to retire / cut capital (see /edge-persistence)"}
 
+    def _check_alloc_override_coherent(self):
+        """The gated budget auto-apply writes REVERSIBLE sleeve %-overrides. Assert they can't drift into
+        an incoherent state that silently moves capital: every override pct in [0,100], the resulting book
+        deploys <= 100% of equity, and EVERY override traces to a real recorded apply (no manual/orphan
+        injection presented as auto-applied). Warning severity — a budget-coherence gap to fix, not a
+        position lie. No file (the common case: never applied / reverted) is clean."""
+        from os import getenv as _getenv
+        import json as _json
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine as _B
+            from app.services.sleeve_budget_autoapply_engine import SleeveBudgetAutoApplyEngine as _A
+            ov_file, hist = _B.OVERRIDE_FILE, _A.HISTORY        # single source of truth (no path dup)
+        except Exception as e:
+            return {"id": "ALLOC_OVERRIDE_COHERENT", "severity": "warning", "ok": True,
+                    "detail": f"auto-apply engines unavailable: {str(e)[:60]}"}
+        if not ov_file.exists():
+            return {"id": "ALLOC_OVERRIDE_COHERENT", "severity": "warning", "ok": True,
+                    "detail": "no auto-apply sleeve overrides active (env/default budgets)"}
+        try:
+            overrides = {str(k).lower(): float(v)
+                         for k, v in (_json.loads(ov_file.read_text()).get("pct") or {}).items()}
+        except Exception as e:
+            return {"id": "ALLOC_OVERRIDE_COHERENT", "severity": "warning", "ok": False,
+                    "detail": f"override file present but unreadable ({str(e)[:60]}) — budget state UNVERIFIED"}
+        problems, total = [], None
+        for s, v in overrides.items():                       # (1) each override a sane percent
+            if not (0.0 <= v <= 100.0):
+                problems.append(f"{s}={v} out of [0,100]")
+        try:                                                 # (2) resulting book deploys <= 100% of equity
+            total = round(sum(_B.pct(s) for s in _B.DEFAULT_PCT), 2)   # pct honors env > override > default
+            if total > 100.0 + 1e-6:
+                problems.append(f"book deploys {total}% > 100% of equity")
+        except Exception as e:
+            problems.append(f"could not compute book total ({str(e)[:50]})")
+        try:                                                 # (3) every override traces to a recorded apply
+            if hist.exists():
+                moved = {str(m.get("sleeve")).lower()
+                         for line in hist.read_text().splitlines() if line.strip()
+                         for m in (_json.loads(line).get("moves") or [])}
+                orphans = sorted(s for s in overrides if s not in moved)
+                if orphans:
+                    problems.append(f"override(s) with NO recorded apply (orphan/manual): {', '.join(orphans)}")
+            else:
+                problems.append("auto-apply history log missing — override provenance UNVERIFIED")
+        except Exception as e:
+            problems.append(f"history unreadable ({str(e)[:50]}) — provenance UNVERIFIED")
+        if problems:
+            return {"id": "ALLOC_OVERRIDE_COHERENT", "severity": "warning", "ok": False,
+                    "detail": "; ".join(problems[:6]) + " (see /sleeve-budget-autoapply)"}
+        shadowed = sorted(s for s in overrides
+                          if str(_getenv("GREYLINE_%s_ALLOC_PCT" % s.upper(), "")).strip())
+        note = f"; {len(shadowed)} shadowed by an env pin (env wins, override stale)" if shadowed else ""
+        return {"id": "ALLOC_OVERRIDE_COHERENT", "severity": "warning", "ok": True,
+                "detail": f"{len(overrides)} sleeve override(s) coherent (book {total}% <= 100%){note}"}
+
     def check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
@@ -963,6 +1018,7 @@ class GreyLineRealityGuardEngine:
             self._check_external_alerting(),
             self._check_sleeve_edge_not_decayed(),
             self._check_momentum_stops_consistent(),
+            self._check_alloc_override_coherent(),
         ]
         critical_failures = [c for c in checks if c["severity"] == "critical" and not c["ok"]]
         warnings = [c for c in checks if c["severity"] == "warning" and not c["ok"]]
