@@ -208,6 +208,27 @@ class EarningsVolHarvestEngine:
             budget_ceiling = self.MAX_CONCURRENT
         return max(self.MAX_CONCURRENT, budget_ceiling)
 
+    def _chain_snapshot(self, ticker, exp, uw=None, ts_chain=None):
+        """One option-chain snapshot for a name/expiry: UW first (clean greeks + NBBO), TradeStation
+        sandbox fallback. Shared by the live open path and the read-only diagnostics so they can't drift."""
+        if uw is None:
+            from app.services.uw_option_chain_engine import UWOptionChainEngine
+            uw = UWOptionChainEngine()
+        if ts_chain is None:
+            from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
+            ts_chain = TradeStationOptionChainLiveEngine()
+        snap = None
+        if uw.enabled():
+            try:
+                s = uw.get_chain_snapshot(symbol=ticker, expiration=exp)
+                snap = s if s.get("contracts") else None
+            except Exception:
+                snap = None
+        if snap is None:
+            snap = ts_chain.get_chain_snapshot(symbol=ticker, expiration=exp,
+                                               option_type="All", max_contracts=160, strike_proximity=40)
+        return snap or {"contracts": []}
+
     def open_positions(self, dry_run=True, limit=None, ignore_arm=False):
         # ignore_arm lets a DRY-RUN plan build against live UW chains even while the sleeve is disarmed
         # (the pre-fire dress rehearsal) — it can NEVER book: the booking branch below is dry_run=False,
@@ -237,16 +258,7 @@ class EarningsVolHarvestEngine:
                 continue
             # UW chain first (clean greeks + NBBO); TradeStation sandbox fallback. Same report-driven
             # expiry (nearest after the report — captures the IV crush), just a better data source.
-            snap = None
-            if _uw.enabled():
-                try:
-                    s = _uw.get_chain_snapshot(symbol=c["ticker"], expiration=exp)
-                    snap = s if s.get("contracts") else None
-                except Exception:
-                    snap = None
-            if snap is None:
-                snap = chain.get_chain_snapshot(symbol=c["ticker"], expiration=exp,
-                                                option_type="All", max_contracts=160, strike_proximity=40)
+            snap = self._chain_snapshot(c["ticker"], exp, _uw, chain)
             con = vrp.build_condor(c["ticker"], snap.get("contracts", []) or [])
             if con.get("skip"):
                 skipped.append({"ticker": c["ticker"], "skip": con["skip"]})
@@ -483,6 +495,79 @@ class EarningsVolHarvestEngine:
                      "(max win = credit, max loss = defined risk), not booked P&L. Proves the first real "
                      "fires will build, fill, reconcile, and be COUNTED in the edge court."),
             "status": "EARNINGS_DRESS_REHEARSAL",
+        }
+
+    def cap_sensitivity(self, caps=None, max_names=14):
+        """DECISION TOOL for the per-condor max-loss cap. The cap (max(5% equity, $500)) is a REAL
+        single-position concentration limit, NOT a bug — it's why higher-priced/wide-grid earnings names
+        skip at a $10k book. This shows the exact RISK vs BREADTH tradeoff: for each candidate it builds
+        the TIGHTEST defined-risk condor it can form off live UW chains (unbounded cap), then counts how
+        many become tradeable at each candidate cap level, with the % of equity each cap represents — so
+        loosening GREYLINE_CONDOR_MAX_LOSS_PCT is an INFORMED operator choice, never a silent risk grab.
+        READ-ONLY; builds nothing. Structurally-untradeable names (skip even at an unbounded cap — thin
+        credit / grid) are reported SEPARATELY: raising the cap does NOT unlock them."""
+        from app.services.env_reload import reload_env
+        try:
+            reload_env()
+        except Exception:
+            pass
+        from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
+        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+        vrp = ConditionalVRPShortPremiumEngine()
+        try:
+            equity, _ = SleeveCapitalBudgetEngine._live()
+            equity = float(equity) if equity else SleeveCapitalBudgetEngine.DEFAULT_BASE_USD
+        except Exception:
+            equity = SleeveCapitalBudgetEngine.DEFAULT_BASE_USD
+        current_cap = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
+        if not caps:
+            caps = sorted({round(current_cap * m, 0) for m in (1.0, 1.5, 2.0, 3.0)})
+
+        BIG = 1e9
+        names, untradeable = [], []
+        for c in self._candidates()[:max_names]:
+            exp = self._expiry_after(c["ticker"], c["report_date"])
+            if not exp:
+                untradeable.append({"ticker": c["ticker"], "reason": "no expiry after report"})
+                continue
+            try:
+                snap = self._chain_snapshot(c["ticker"], exp)
+                con = vrp.build_condor(c["ticker"], snap.get("contracts", []) or [], max_loss_cap=BIG)
+            except Exception as e:
+                untradeable.append({"ticker": c["ticker"], "reason": f"build error: {str(e)[:60]}"})
+                continue
+            if con.get("skip"):
+                # skips even at an unbounded cap -> NOT a cap problem (thin credit / structure)
+                untradeable.append({"ticker": c["ticker"], "reason": con["skip"]})
+                continue
+            mlp = self._f(con.get("max_loss_per_condor"))
+            names.append({"ticker": c["ticker"], "min_max_loss_per_condor": round(mlp, 2),
+                          "credit_per_condor": self._f(con.get("credit_per_condor")),
+                          "return_on_risk": self._f(con.get("return_on_risk")),
+                          "pct_of_equity": round(100 * mlp / equity, 2) if equity else None,
+                          "tradeable_at_current_cap": mlp <= current_cap + 1e-6})
+        sweep = []
+        for cap in caps:
+            fits = sorted(n["ticker"] for n in names if n["min_max_loss_per_condor"] <= cap + 1e-6)
+            sweep.append({"cap_usd": round(cap, 0), "cap_pct_of_equity": round(100 * cap / equity, 2) if equity else None,
+                          "tradeable_count": len(fits), "tradeable": fits})
+        tradeable_now = sorted(n["ticker"] for n in names if n["tradeable_at_current_cap"])
+        return {
+            "timestamp": datetime.utcnow().isoformat(), "sleeve": "earnings_vol",
+            "equity": round(equity, 2), "current_cap_usd": round(current_cap, 2),
+            "current_cap_pct_of_equity": round(100 * current_cap / equity, 2) if equity else None,
+            "tradeable_now": tradeable_now, "tradeable_now_count": len(tradeable_now),
+            "names": names, "cap_sweep": sweep,
+            "structurally_untradeable": untradeable[:12],
+            "verdict": ("At the current ${:.0f} cap ({:.1f}% of equity) {} of {} buildable candidate(s) are "
+                        "tradeable. Raising the cap admits more ONLY by taking that % single-position risk "
+                        "on an UNPROVEN edge — a deliberate call (env GREYLINE_CONDOR_MAX_LOSS_PCT), never "
+                        "silent.").format(current_cap, 100 * current_cap / equity if equity else 0,
+                                          len(tradeable_now), len(names)),
+            "note": ("READ-ONLY — builds nothing. min_max_loss_per_condor is each name's TIGHTEST possible "
+                     "defined-risk condor; names in structurally_untradeable skip even at an unbounded cap "
+                     "(raising the cap won't help them). Uses live UW chains — SLOW; on-demand."),
+            "status": "EARNINGS_CAP_SENSITIVITY",
         }
 
     def status(self):
