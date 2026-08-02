@@ -747,7 +747,7 @@ th {
 
       <div class="card" id="edge_court_card" style="min-width:0;">
         <div class="section-title">Edge Court — live per-sleeve verdict <span id="ec_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20-trade minimum. Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
+        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20-trade minimum. Realized P&amp;L is fill-reconciled on every sleeve — condor closes, momentum equity exits, AND long-option exits: a close priced from an estimate/quote is upgraded to the actual broker fill (never fabricated when unconfirmed), and a CLOSED position the broker still holds is reverted to OPEN (never counted as a realized win). Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
         <div style="overflow-x:auto;">
           <table>
             <thead>

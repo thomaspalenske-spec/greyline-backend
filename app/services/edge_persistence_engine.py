@@ -160,8 +160,12 @@ class EdgePersistenceEngine:
                     risk, risk_kind = per_share * abs(qty), "stop_atr_doctrine"
                 else:                                 # fallback: vol proxy when no/garbage stop was recorded
                     risk, risk_kind = self.EQUITY_STOP_PCT * notional, f"stop_proxy_{int(self.EQUITY_STOP_PCT*100)}pct"
+            # HONEST basis: read what the close reconciler stamped — 'fills' (upgraded to the actual exit
+            # fills) or 'quote_estimate' (booked at the decision quote, not yet fill-confirmed). Options
+            # book real SIM fills and carry no tag → 'fill_net'. Never hardcode fill-truth we don't have.
+            tag = str(r.get("realized_pnl_basis") or "fill_net")
             trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
-                           "risk": risk, "closed_at": r.get("closed_at"), "basis": "fill_net",
+                           "risk": risk, "closed_at": r.get("closed_at"), "basis": tag,
                            "risk_kind": risk_kind})
         return trades, excluded
 

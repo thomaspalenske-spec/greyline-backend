@@ -159,7 +159,8 @@ class OptionsPositionManagerEngine:
             if maturity.get("required"):
                 ok, booked, res = self._book_close(option_symbol, remaining, "OPTIONS_MATURITY_1_BUSINESS_DAY")
                 trade.setdefault("exit_events", []).append(
-                    {"at": now.isoformat(), "reason": "MATURITY_1BD", "contracts": booked, "sim": res.get("status")})
+                    {"at": now.isoformat(), "reason": "MATURITY_1BD", "contracts": booked,
+                     "sim": res.get("status"), "order_id": res.get("order_id")})
                 if ok:
                     trade["status"] = "CLOSED"; trade["exit_reason"] = "OPTIONS_MATURITY_1_BUSINESS_DAY"
                     trade["exit_timestamp"] = now.isoformat(); closed += 1
@@ -180,7 +181,8 @@ class OptionsPositionManagerEngine:
             if decision["action"] == "CLOSE":     # stop hit → flatten the remainder
                 ok, booked, res = self._book_close(option_symbol, remaining, "OPTIONS_DOCTRINE_STOP")
                 trade.setdefault("exit_events", []).append(
-                    {"at": now.isoformat(), "reason": "STOP", "contracts": booked, "sim": res.get("status")})
+                    {"at": now.isoformat(), "reason": "STOP", "contracts": booked,
+                     "sim": res.get("status"), "order_id": res.get("order_id")})
                 if ok:
                     trade["status"] = "CLOSED"; trade["exit_reason"] = "OPTIONS_DOCTRINE_STOP"
                     trade["exit_timestamp"] = now.isoformat(); closed += 1
@@ -192,7 +194,7 @@ class OptionsPositionManagerEngine:
                 ok, booked, res = self._book_close(option_symbol, want, f"OPTIONS_TP{decision['targets_reached']}")
                 trade.setdefault("exit_events", []).append(
                     {"at": now.isoformat(), "reason": f"TP{decision['targets_reached']}",
-                     "contracts": booked, "sim": res.get("status")})
+                     "contracts": booked, "sim": res.get("status"), "order_id": res.get("order_id")})
                 if ok and booked > 0:
                     remaining -= booked
                     state["remaining_contracts"] = remaining
@@ -217,3 +219,182 @@ class OptionsPositionManagerEngine:
             "market_open": market_open, "market_state": market.get("state"),
             "status": "OPTIONS_POSITION_MANAGER_COMPLETE",
         }
+
+    # ---- close-side reconciliation (the long-option mirror of VRP/momentum reconcile_closes) ----
+    @staticmethod
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    _FORCED_MARKERS = ("clean_slate", "flatten", "rebaseline", "reset", "mechanics test", "manual")
+
+    @classmethod
+    def _is_forced_close(cls, *reasons):
+        for reason in reasons:
+            r = str(reason or "").lower()
+            if any(m in r for m in cls._FORCED_MARKERS):
+                return True
+        return False
+
+    def _sim_option_positions_map(self):
+        """(option_symbol -> abs contracts, readable_bool) of live SIM option positions. A swallowed read
+        returns readable=False so a positions-API blip is UNKNOWN, never mistaken for a genuine flat — the
+        exact conflation that let `book_option_close` report NO_SIM_OPTION_POSITION as a successful close."""
+        try:
+            rows = (self._sim().booking.positions().get("response_json") or {}).get("Positions") or []
+        except Exception:
+            return {}, False
+        out = {}
+        for p in rows:
+            if str(p.get("AssetType") or "").upper() not in ("STOCKOPTION", "OPTION", ""):
+                continue
+            sym = str(p.get("Symbol") or "").upper()
+            if sym:
+                out[sym] = out.get(sym, 0.0) + abs(self._f(p.get("Quantity")))
+        return out, True
+
+    def _order_fills(self):
+        """{order_id: (fill_price, fill_contracts, filled_bool)} from the SIM broker's order history."""
+        out = {}
+        try:
+            orders = (self._sim().booking.orders().get("response_json") or {}).get("Orders") or []
+        except Exception:
+            return out
+        for o in orders:
+            oid = str(o.get("OrderID") or "")
+            if not oid:
+                continue
+            filled = str(o.get("StatusDescription") or "") in ("Filled", "FLL")
+            leg = (o.get("Legs") or [{}])[0]
+            fp = self._f(o.get("FilledPrice")) or self._f(leg.get("ExecutionPrice"))
+            fq = self._f(leg.get("ExecQuantity")) or self._f(o.get("Quantity"))
+            out[oid] = (fp, fq, filled)
+        return out
+
+    def _alert_close_mismatch(self, reverted, flagged):
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if not eng.has_external_channel():
+                return
+            rv = sorted(str(x.get("option_symbol")) for x in reverted)
+            fl = sorted(str(x.get("option_symbol")) for x in flagged)
+            syms = sorted(set(rv) | set(fl))
+            eng.dispatch(
+                title="GreyLine options close mismatch — broker still holds",
+                message=(f"CLOSED option row(s) the broker still holds: reverted-to-OPEN {rv or '—'}; "
+                         f"partial (manual re-account) {fl or '—'}. A close reported flat but the contract "
+                         "is still held (likely NO_SIM_OPTION_POSITION on a degraded read) — verify."),
+                severity="CRITICAL", fingerprint=f"OPT_CLOSE_MISMATCH:{syms}")
+        except Exception:
+            pass
+
+    def reconcile_closes(self, dry_run=False):
+        """Close-side reconciler for LONG-OPTION exits — the mirror of VRP/momentum reconcile_closes and
+        the last of the class. The options manager marks a row CLOSED whenever `_book_close` reports ok,
+        which INCLUDES `NO_SIM_OPTION_POSITION` — a status a transient positions-API failure ALSO returns
+        (sim_position swallows the error → (0, None) → 'no position'). So a degraded read can mark a live
+        option CLOSED, and the manager books NO realized_pnl at all. Each cycle this resolves every CLOSED
+        option row against ACTUAL broker state:
+
+          * realized_pnl COMPUTED from the actual SELLTOCLOSE fills (Σ close proceeds − entry cost, ×100)
+            when every exit order is Filled and the fills account for the whole original position → basis
+            'fills' + stamps original_quantity so the edge court can finally see the trade. Otherwise basis
+            'unreconciled' and realized_pnl is LEFT UNSET (the court keeps skipping it — never a fabricated
+            number from an unconfirmed close).
+          * contract STILL FULLY HELD at the broker → the 'close' was a degraded-read phantom; REVERT to
+            OPEN (restore contracts + doctrine) so the manager re-attempts. CRITICAL page.
+          * PARTIALLY held → ambiguous → flag CRITICAL, leave for the operator.
+
+        Held-state logic runs ONLY on a readable positions read, never a forced/admin close, and never when
+        a live re-entry explains the held contracts. Places no orders; best-effort; never raises."""
+        if not self.ledger_file.exists():
+            return {"status": "NO_OPTIONS_PAPER_LEDGER", "reconciled": 0, "reverted": 0, "flagged": 0}
+        try:
+            trades = [json.loads(l) for l in self.ledger_file.read_text().splitlines() if l.strip()]
+        except Exception:
+            return {"status": "OPTIONS_CLOSES_RECONCILE_DEGRADED", "reconciled": 0, "reverted": 0, "flagged": 0}
+        pos, positions_ok = self._sim_option_positions_map()
+        fills = self._order_fills()
+        open_syms = {str(t.get("option_symbol") or "").upper()
+                     for t in trades if t.get("status") == "OPEN"}
+        upgraded, reverted, flagged = [], [], []
+        changed = False
+        for t in trades:
+            if t.get("status") != "CLOSED" or t.get("exit_reconciled"):
+                continue
+            sym = str(t.get("option_symbol") or "").upper()
+            # original size: the frozen field, else reconstruct from remaining + everything booked out
+            orig = self._f(t.get("original_contracts"))
+            if orig <= 0:
+                orig = self._f(t.get("contracts")) + sum(self._f(e.get("contracts"))
+                                                         for e in (t.get("exit_events") or []))
+            entry = self._f(t.get("entry_price"))
+            forced = self._is_forced_close(t.get("exit_reason"))
+
+            # (A) held-state — readable read, non-forced, no re-entry collision
+            if positions_ok and not forced and sym and sym not in open_syms:
+                held = pos.get(sym, 0.0)
+                if orig > 0 and held >= orig - 1e-6:            # nothing sold → phantom close
+                    t["status"] = "OPEN"
+                    t["contracts"] = orig
+                    t["doctrine_state_u"] = {"targets_filled": 0,
+                                             "extreme": self._f(t.get("underlying_entry_price")),
+                                             "remaining_contracts": int(orig)}
+                    t["close_reverted_at"] = datetime.utcnow().isoformat()
+                    t["manager_status"] = "OPTION_CLOSE_REVERTED_STILL_HELD"
+                    t["manager_status_reason"] = (f"marked CLOSED but broker still holds {held:g} contract(s) "
+                                                  f"(orig {orig:g}) — close never filled; reverted to OPEN")
+                    for k in ("exit_reason", "exit_timestamp", "realized_pnl", "realized_pnl_basis",
+                              "close_verified_flat"):
+                        t.pop(k, None)
+                    reverted.append({"option_symbol": sym, "held": held})
+                    changed = True
+                    continue
+                if held > 1e-6:                                 # partial → ambiguous
+                    t["close_verified_flat"] = False
+                    t["manager_status"] = "OPTION_CLOSE_PARTIALLY_HELD"
+                    t["manager_status_reason"] = (f"marked CLOSED but broker still holds {held:g}/{orig:g} "
+                                                  "contract(s) — re-account manually")
+                    flagged.append({"option_symbol": sym, "held": held, "orig": orig})
+                    changed = True
+                    continue
+
+            # (B) flat (or positions unreadable) — compute realized from the ACTUAL close fills
+            evs = t.get("exit_events") or []
+            oids = [str(e.get("order_id")) for e in evs if e.get("order_id")]
+            proceeds, acc_qty, all_filled = 0.0, 0.0, bool(oids)
+            for oid in oids:
+                fp, fq, filled = fills.get(oid, (0.0, 0.0, False))
+                if not filled or fp <= 0 or fq <= 0:
+                    all_filled = False
+                    break
+                proceeds += fp * fq * 100.0                     # option point × contracts × 100
+                acc_qty += fq
+            if all_filled and orig > 0 and abs(acc_qty - orig) <= 1e-6:
+                cost = entry * orig * 100.0                      # long option: proceeds − entry cost
+                t["realized_pnl"] = round(proceeds - cost, 2)
+                t["realized_pnl_basis"] = "fills"
+                t["original_quantity"] = orig                    # so the edge court can read the size
+                if positions_ok and not forced:
+                    t["close_verified_flat"] = True
+                upgraded.append({"option_symbol": sym, "realized_pnl": t["realized_pnl"]})
+            else:
+                # can't confirm the close fills → NEVER fabricate realized; tag honestly, court keeps skipping
+                if not t.get("realized_pnl_basis"):
+                    t["realized_pnl_basis"] = "unreconciled"
+                if positions_ok and not forced:
+                    t["close_verified_flat"] = True             # broker flat; just no fill detail to price
+            t["exit_reconciled"] = True
+            changed = True
+
+        if changed and not dry_run:
+            self.ledger_file.write_text("\n".join(json.dumps(t) for t in trades) + ("\n" if trades else ""))
+        if not dry_run and (reverted or flagged):
+            self._alert_close_mismatch(reverted, flagged)
+        return {"timestamp": datetime.utcnow().isoformat(),
+                "reconciled": len(upgraded), "reverted": len(reverted), "flagged": len(flagged),
+                "upgrades": upgraded, "reverts": reverted, "flagged_partial": flagged,
+                "status": "OPTIONS_CLOSES_RECONCILED" if not dry_run else "OPTIONS_CLOSES_RECONCILE_DRYRUN"}

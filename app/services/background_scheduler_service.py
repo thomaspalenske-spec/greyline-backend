@@ -441,6 +441,15 @@ class BackgroundSchedulerService:
                 momentum_exit = {"managed": 0, "status": "MOMENTUM_EXIT_MARKET_CLOSED"}
         except Exception as exc:
             momentum_exit = {"error": repr(exc), "status": "MOMENTUM_EXIT_MANAGER_DEGRADED"}
+        # CLOSE-side reconciliation (equity mirror of VRP reconcile_closes): upgrade quote-priced realized
+        # to the actual exit fills, and REVERT any CLOSED momentum row the broker still fully holds. Runs
+        # every cycle (reads broker state, places no orders) so it also heals closes made in prior cycles.
+        try:
+            if isinstance(momentum_exit, dict):
+                momentum_exit["reconcile_closes"] = MomentumExitManagerEngine().reconcile_closes(dry_run=False)
+        except Exception as exc:
+            if isinstance(momentum_exit, dict):
+                momentum_exit["reconcile_closes"] = {"error": repr(exc), "status": "MOMENTUM_CLOSES_RECONCILE_DEGRADED"}
 
         # LEGACY ORDERLY LIQUIDATION: flatten the pre-clean-test book (legacy calls + equities) at
         # BEST price then GUARANTEED exit — re-priced against LIVE quotes each cycle, not frozen on
@@ -502,6 +511,15 @@ class BackgroundSchedulerService:
             options_position_manager = OptionsPositionManagerEngine().manage_open_positions()
         except Exception as exc:
             options_position_manager = {"status": "OPTIONS_POSITION_MANAGER_DEGRADED", "error": repr(exc)}
+        # CLOSE-side reconciliation (long-option mirror of VRP/momentum reconcile_closes): compute realized
+        # from the actual SELLTOCLOSE fills, and REVERT any CLOSED option the broker still holds (the
+        # NO_SIM_OPTION_POSITION-on-a-degraded-read phantom). Every cycle; reads broker state, no orders.
+        try:
+            if isinstance(options_position_manager, dict):
+                options_position_manager["reconcile_closes"] = OptionsPositionManagerEngine().reconcile_closes(dry_run=False)
+        except Exception as exc:
+            if isinstance(options_position_manager, dict):
+                options_position_manager["reconcile_closes"] = {"error": repr(exc), "status": "OPTIONS_CLOSES_RECONCILE_DEGRADED"}
 
         # Conditional-VRP short-premium (defined-risk iron condors). GATED OFF by default. When
         # armed: MANAGE open condors every cycle (take-profit / expiry / hard-stop), and OPEN new
@@ -519,7 +537,10 @@ class BackgroundSchedulerService:
                 # (take-profit / stop / P&L) acts on reality, not the planned limit prices or
                 # not-yet-filled legs. Also flags a naked short (filled short, no filled wing).
                 vrp_short_premium = {"reconcile": _sp.reconcile_fills(dry_run=False),
-                                     "manage": _sp.manage_positions(dry_run=False)}
+                                     "manage": _sp.manage_positions(dry_run=False),
+                                     # CLOSE-side mirror: upgrade estimate-priced closes to actual-fill P&L,
+                                     # and REVERT any CLOSED row the broker still holds (close never filled).
+                                     "reconcile_closes": _sp.reconcile_closes(dry_run=False)}
                 _mk = _P("app/data/options_paper_trading/.vrp_short_last_open")
                 _today = datetime.utcnow().date().isoformat()
                 _due = True

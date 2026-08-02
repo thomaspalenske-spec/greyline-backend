@@ -452,6 +452,9 @@ class OptionsPaperTradeLedgerEngine:
             "option_symbol": leg.get("Symbol"),
             "side": "BUY_TO_OPEN",
             "contracts": sizing.get("recommended_contracts", 1),
+            # ORIGINAL size, frozen — `contracts` is decremented on each scale-out, so the close
+            # reconciler needs this to compute realized (entry cost) and to detect a still-held close.
+            "original_contracts": sizing.get("recommended_contracts", 1),
             "entry_price": entry_price,
             "entry_mid": float(candidate.get("Mid") or 0),
             "bid": float(candidate.get("Bid") or 0),

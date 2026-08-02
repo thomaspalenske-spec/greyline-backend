@@ -44,6 +44,51 @@ class CapitalAllocatorEngine:
     }
     PROBE_WEIGHT = 0.30          # weight for an unproven (evidence 0) sleeve: a small funded probe
 
+    # COURT-INFORMED PRE-PROVEN TILT — GATED OFF by default (GREYLINE_COURT_ALLOC_TILT_ENABLED).
+    # Below the 20-trade verdict gate the court's accumulating evidence is otherwise ignored ENTIRELY.
+    # This leans a sleeve's PRIOR weight toward that evidence by a TINY, sample-shrunk, hard-capped amount
+    # — never pretending a thin sample is a verdict (that is the documented false-confidence trap). It is
+    # symmetric (negative evidence tilts DOWN), auto-disabled the instant a sleeve reaches the gate (the
+    # measured override takes over), stateless/fully reversible, and shows its would-be value even when off.
+    TILT_MIN_TRADES = 8          # never tilt below this — a smaller sample is indistinguishable from noise
+    TILT_MAX_FRAC = 0.15         # HARD cap: the tilt moves a sleeve's prior weight at most +/-15%
+    TILT_T_REF = 2.0             # t-stat mapping to full (pre-shrink) signal — ~the 95% significance mark
+
+    @classmethod
+    def _tilt_enabled(cls):
+        return (getenv("GREYLINE_COURT_ALLOC_TILT_ENABLED", "") or "").strip().lower() == "true"
+
+    def _court_tilt(self, stats, gate):
+        """Bounded, sample-shrunk lean toward a BELOW-gate sleeve's accumulating court evidence.
+        Returns (applied_frac, detail). The signal is sign(mean return-on-risk) x t-stat confidence
+        (capped at 1 via TILT_T_REF) x a shrink factor n/gate (→0 as the sample thins), then clamped to
+        +/- TILT_MAX_FRAC. applied is 0 unless the tilt is ENABLED and the sleeve is eligible (n in
+        [TILT_MIN_TRADES, gate), non-flat); `would_be` is always shown for transparency."""
+        n = int((stats or {}).get("trades") or 0)
+        mean = self._f((stats or {}).get("mean_return_on_risk_pct"))
+        t = abs(self._f((stats or {}).get("t_stat")))
+        eligible = n >= self.TILT_MIN_TRADES and n < gate and mean != 0.0
+        would = 0.0
+        if eligible:
+            direction = 1.0 if mean > 0 else -1.0
+            confidence = min(1.0, t / self.TILT_T_REF)        # 0..1 by significance (pre-shrink)
+            shrink = min(1.0, n / float(gate))                # 0..1 by closeness to a real verdict
+            would = round(max(-self.TILT_MAX_FRAC,
+                              min(self.TILT_MAX_FRAC, direction * confidence * shrink * self.TILT_MAX_FRAC)), 4)
+        enabled = self._tilt_enabled()
+        applied = would if (enabled and eligible) else 0.0
+        if not eligible:
+            reason = (f"n {n} < {self.TILT_MIN_TRADES}-trade floor — too thin to lean on"
+                      if n < self.TILT_MIN_TRADES else
+                      "at/above the verdict gate — measured override takes over" if n >= gate
+                      else "evidence flat (mean 0)")
+        elif not enabled:
+            reason = "would tilt but DISABLED (GREYLINE_COURT_ALLOC_TILT_ENABLED=false)"
+        else:
+            reason = f"pre-proven lean: {n}/{gate} trades, sample-shrunk & capped at {int(self.TILT_MAX_FRAC*100)}%"
+        return applied, {"applied": applied, "would_be": would, "n": n,
+                         "mean_ror_pct": mean, "t_stat": round(t, 2), "reason": reason}
+
     @staticmethod
     def _f(v, d=0.0):
         try:
@@ -146,7 +191,7 @@ class CapitalAllocatorEngine:
         # zeroes it (retire), UNPROVEN-after-the-gate drops it to a probe (it had its chance). Below the
         # gate, or no verdict, the backtest prior stands. This is what makes capital flow to what the
         # court proves and away from what it retires. Maps allocator sleeves -> court sleeve keys.
-        court, gate = {}, 20
+        court, court_pre, gate = {}, {}, 20
         try:
             from app.services.edge_persistence_engine import EdgePersistenceEngine
             _re = EdgePersistenceEngine().realized_edge()
@@ -156,13 +201,17 @@ class CapitalAllocatorEngine:
             _cs = _re.get("sleeves") or {}
             for a, c in _MAP.items():
                 v = _cs.get(c)
-                if v and int(v.get("trades") or 0) >= gate:
-                    court[a] = v
+                if not v:
+                    continue
+                if int(v.get("trades") or 0) >= gate:
+                    court[a] = v            # gated verdict -> measured override
+                else:
+                    court_pre[a] = v        # below the gate -> candidate for the pre-proven tilt
         except Exception:
-            court = {}
+            court, court_pre = {}, {}
 
         # raw score per sleeve: evidence tier x risk-parity (target/vol) x correlation penalty
-        raw, basis_of = {}, {}
+        raw, basis_of, tilt_of = {}, {}, {}
         for s, p in self.PRIORS.items():
             cv = court.get(s)
             if cv:
@@ -182,6 +231,14 @@ class CapitalAllocatorEngine:
                 else:
                     w = ev * (self.TARGET_VOL / p["vol"]) * p["corr_pen"]
                 basis_of[s] = "prior"
+                # COURT-INFORMED PRE-PROVEN TILT: a tiny, sample-shrunk, capped lean toward accumulating
+                # evidence (only when enabled + eligible). A zero-weight sleeve (no-edge prior) is left at
+                # zero — the tilt scales an existing weight, it never funds a sleeve the prior zeroed.
+                applied, tdet = self._court_tilt(court_pre.get(s), gate)
+                tilt_of[s] = tdet
+                if applied != 0.0 and w > 0.0:
+                    w = max(0.0, w * (1.0 + applied))
+                    basis_of[s] = "prior+tilt"
             raw[s] = max(0.0, w)
 
         total = sum(raw.values()) or 1.0
@@ -201,12 +258,20 @@ class CapitalAllocatorEngine:
                           "current_usd": round(current.get(s, 0), 0),
                           "delta_usd": round(rec[s] - current.get(s, 0), 0),
                           "evidence": p["evidence"], "basis": basis_of[s],
+                          "court_tilt": tilt_of.get(s),
                           "why": (f"court {cv.get('verdict')}" if cv else p["note"])}
         measured = sorted(court)
+        tilted = sorted(s for s, d in tilt_of.items() if d and d.get("applied"))
         return {
             "timestamp": datetime.utcnow().isoformat(), "equity": equity,
             "basis": ("measured (court) where gated, else backtest priors" if measured else basis),
             "measured_sleeves": measured, "trade_gate": gate,
+            "court_tilt_enabled": self._tilt_enabled(),
+            "court_tilt_applied_sleeves": tilted,
+            "court_tilt_note": (f"pre-proven tilt: a capped +/-{int(self.TILT_MAX_FRAC*100)}%, sample-shrunk "
+                                f"lean toward accumulating court evidence for below-gate sleeves with "
+                                f">= {self.TILT_MIN_TRADES} trades. GATED OFF by default; auto-disabled once "
+                                "a sleeve reaches the verdict gate. Shows would_be even when off."),
             "live_days_available": days, "min_live_days_needed": self.MIN_LIVE_DAYS,
             "risk_on_target_pct": round(100 * self.RISK_ON_PCT), "sleeves": sleeves,
             "tbill_cash_residual_usd": tbill_cash,

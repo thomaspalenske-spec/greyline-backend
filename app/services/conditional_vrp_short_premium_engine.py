@@ -525,6 +525,106 @@ class ConditionalVRPShortPremiumEngine:
                 "changes": changed, "naked": nakeds,
                 "status": "VRP_FILLS_RECONCILED" if not dry_run else "VRP_FILLS_RECONCILE_DRYRUN"}
 
+    def reconcile_closes(self, dry_run=False):
+        """Close-side mirror of reconcile_fills. A condor is marked CLOSED the moment its close order is
+        ACCEPTED — priced from the marketable-limit ESTIMATE (basis 'close_order'/'mid'), before the fill
+        is readable. This pass resolves each such estimate-basis close against the ACTUAL broker state:
+
+          * fill CONFIRMED (every close leg filled) → upgrade realized_pnl to the true fill debit, basis →
+            'fills', and log the close-side execution slippage to ExecutionLog ONCE (the mid was stashed
+            at close time). The edge court's realized P&L becomes fill-truthful on BOTH sides.
+          * position STILL HELD at the broker (the marketable limit never filled) → REVERT the row to OPEN
+            so the manager re-attempts the exit. A CLOSED row the broker still holds is fantasy-flat — the
+            single worst case, because the risk is live while the book says it isn't.
+
+        Reverts ONLY on POSITIVE broker evidence (a leg of THIS condor still held, not explained by another
+        OPEN row) — never on an absent/empty positions read, so a transient positions-API blip can't
+        resurrect a genuinely-closed trade. Best-effort; never raises, never blocks the manager."""
+        try:
+            rows = [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
+        except Exception:
+            return {"status": "NO_VRP_LEDGER", "reconciled": 0, "reverted": 0}
+        held = self._broker_fills()                 # {opt_sym: {...}} currently held at the broker
+        have_positions = bool(held)                 # positive evidence available? (empty may be a read blip)
+        # option symbols explained by a still-OPEN row — so a re-opened condor reusing a strike/expiry
+        # can't be mistaken for a not-yet-closed one (would otherwise false-revert on a symbol collision).
+        open_syms = {str(lg.get("symbol") or "").upper()
+                     for row in rows if row.get("status") == "OPEN"
+                     for lg in (row.get("legs") or [])}
+        upgraded, reverted = [], []
+        for r in rows:
+            if r.get("status") != "CLOSED":
+                continue
+            basis = str(r.get("realized_pnl_basis") or "")
+            if basis == "fills" or r.get("close_reconciled"):
+                continue                            # already fill-truthful — nothing to resolve
+            qty = int(r.get("quantity") or 0)
+            credit = self._f(r.get("credit_per_condor"))
+            attempts = r.get("close_attempts") or []
+            leg_results = (attempts[-1] or {}).get("legs") if attempts else None
+
+            # (A) can we read the ACTUAL close fills now? (uses the same reader as manage_positions)
+            if leg_results and qty > 0:
+                cur_debit = credit - (self._f(r.get("realized_pnl")) / (100.0 * qty))
+                debit, new_basis = self._close_fill_debit(leg_results, cur_debit, basis)
+                if new_basis == "fills":
+                    r["realized_pnl"] = round((credit - debit) * 100 * qty, 2)
+                    r["realized_pnl_basis"] = "fills"
+                    r["close_reconciled"] = True
+                    if not dry_run and not r.get("close_slippage_logged"):
+                        mid = self._f(r.get("close_mid"))
+                        if mid:                     # net close-side slippage: mid vs the debit actually paid
+                            try:
+                                from app.services.execution_log_engine import ExecutionLogEngine
+                                _sleeve = "premium_earnings" if str(r.get("strategy")) == "earnings_vol" else "premium_vrp"
+                                ExecutionLogEngine().record_fill(_sleeve, r.get("symbol"), "BUY",
+                                                                 int(qty) * 100, mid=mid, fill=debit)
+                                r["close_slippage_logged"] = True
+                            except Exception:
+                                pass
+                    upgraded.append({"symbol": r.get("symbol"), "realized_pnl": r["realized_pnl"],
+                                     "basis_was": basis})
+                    continue                        # confirmed flat + fill-truthful; never revert
+
+            # (B) fill NOT confirmed — is a leg of THIS condor still held at the broker? (positive evidence)
+            if have_positions:
+                leg_syms = [str(lg.get("symbol") or "").upper() for lg in (r.get("legs") or [])]
+                still = sorted(s for s in leg_syms if s in held and s not in open_syms)
+                if still:
+                    # CLOSED but the broker still holds it → the close never filled. Revert to OPEN so the
+                    # manager re-attempts; erase the fantasy realized P&L that was booked on acceptance.
+                    r["status"] = "OPEN"
+                    r["close_reverted_at"] = datetime.utcnow().isoformat()
+                    r["manager_status"] = "VRP_CLOSE_REVERTED_STILL_HELD"
+                    r["manager_status_reason"] = (f"marked CLOSED ({basis or 'estimate'}) but broker still "
+                                                  f"holds {still} — close never filled; reverted to OPEN "
+                                                  "for the manager to re-attempt")
+                    for k in ("closed_at", "close_reason", "realized_pnl", "realized_pnl_basis", "close_mid"):
+                        r.pop(k, None)
+                    reverted.append({"symbol": r.get("symbol"), "still_held": still})
+        if not dry_run and (upgraded or reverted):
+            with open(self.LEDGER, "w") as f:
+                for r in rows:
+                    f.write(json.dumps(r) + "\n")
+        if reverted:                                # a CLOSED-that-wasn't is a live-risk error — page it
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                eng = ExternalAlertEngine()
+                if eng.has_external_channel():
+                    syms = sorted(str(x.get("symbol")) for x in reverted)
+                    eng.dispatch(
+                        title="GreyLine close REVERTED — broker still holds the position",
+                        message=(f"condor(s) {syms} were marked CLOSED but the broker still holds legs — the "
+                                 "close order never filled. Reverted to OPEN; the manager will re-attempt. "
+                                 "Verify the exit executes."),
+                        severity="CRITICAL", fingerprint=f"VRP_CLOSE_REVERT:{syms}")
+            except Exception:
+                pass
+        return {"timestamp": datetime.utcnow().isoformat(),
+                "reconciled": len(upgraded), "reverted": len(reverted),
+                "upgrades": upgraded, "reverts": reverted,
+                "status": "VRP_CLOSES_RECONCILED" if not dry_run else "VRP_CLOSES_RECONCILE_DRYRUN"}
+
     # ---- naked-exposure auto-remediation (the safety net) --------------------------------------
     MAX_NAKED_REMEDIATION_ATTEMPTS = 3
 
@@ -1034,6 +1134,9 @@ class ConditionalVRPShortPremiumEngine:
                     r["close_reason"] = reason
                     r["realized_pnl"] = round((credit - debit) * 100 * r["quantity"], 2)
                     r["realized_pnl_basis"] = basis
+                    # stash the close-side mid so reconcile_closes can log the execution slippage later,
+                    # once the fill confirms (basis 'close_order' commits before the fill is readable).
+                    r["close_mid"] = round(cost_to_close, 4)
                     # measured CLOSE-side execution slippage (net debit paid vs the net mid) → ExecutionLog,
                     # ONLY on a CONFIRMED fill (basis == 'fills'). On order ACCEPTANCE the debit is the
                     # marketable-limit ESTIMATE (basis 'close_order') — logging that would feed ExecutionLog a

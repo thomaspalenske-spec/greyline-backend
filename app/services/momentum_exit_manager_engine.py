@@ -301,3 +301,177 @@ class MomentumExitManagerEngine:
         return {"timestamp": now.isoformat(), "engine": "MomentumExitManagerEngine",
                 "managed": managed, "scaled_out": scaled, "closed": closed,
                 "status": "MOMENTUM_EXIT_MANAGER_COMPLETE"}
+
+    # ---- close-side reconciliation (the equity mirror of VRP reconcile_closes) -----------------
+    @staticmethod
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    # forced/administrative closes (clean-slate flatten, manual liquidation) are intentional — a
+    # reconciler must NEVER auto-revert one, or it would resurrect a deliberately-archived position.
+    _FORCED_MARKERS = ("clean_slate", "flatten", "rebaseline", "reset", "mechanics test",
+                       "liquidat", "manual")
+
+    @classmethod
+    def _is_forced_close(cls, *reasons):
+        for reason in reasons:
+            r = str(reason or "").lower()
+            if any(m in r for m in cls._FORCED_MARKERS):
+                return True
+        return False
+
+    def _sim_positions_map(self):
+        """(symbol -> abs held qty, readable_bool) of live SIM positions. A swallowed read returns
+        readable=False so a positions-API blip is treated as UNKNOWN, never mistaken for 'flat'."""
+        try:
+            rows = (self._sim_exec().booking.positions().get("response_json") or {}).get("Positions") or []
+        except Exception:
+            return {}, False
+        out = {}
+        for p in rows:
+            sym = str(p.get("Symbol") or "").upper()
+            if sym:
+                out[sym] = out.get(sym, 0.0) + abs(self._f(p.get("Quantity")))
+        return out, True
+
+    def _order_fills(self):
+        """{order_id: (fill_price, fill_qty, filled_bool)} from the SIM broker's order history — the
+        source of truth for what an exit actually filled at (vs the decision quote)."""
+        out = {}
+        try:
+            orders = (self._sim_exec().booking.orders().get("response_json") or {}).get("Orders") or []
+        except Exception:
+            return out
+        for o in orders:
+            oid = str(o.get("OrderID") or "")
+            if not oid:
+                continue
+            filled = str(o.get("StatusDescription") or "") in ("Filled", "FLL")
+            leg = (o.get("Legs") or [{}])[0]
+            fp = self._f(o.get("FilledPrice")) or self._f(leg.get("ExecutionPrice"))
+            fq = self._f(leg.get("ExecQuantity")) or self._f(o.get("Quantity"))
+            out[oid] = (fp, fq, filled)
+        return out
+
+    def _alert_close_mismatch(self, reverted, flagged):
+        """A CLOSED momentum row the broker still holds is fantasy-flat — risk live while the book says
+        flat. Page it so the operator looks, whether it was auto-reverted or flagged for manual re-account."""
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if not eng.has_external_channel():
+                return
+            syms = sorted({str(x.get("symbol")) for x in (reverted + flagged)})
+            rv = sorted(str(x.get("symbol")) for x in reverted)
+            fl = sorted(str(x.get("symbol")) for x in flagged)
+            eng.dispatch(
+                title="GreyLine momentum close mismatch — broker still holds",
+                message=(f"CLOSED momentum row(s) the broker still holds: reverted-to-OPEN {rv or '—'}; "
+                         f"partial (manual re-account) {fl or '—'}. The close never fully filled — verify."),
+                severity="CRITICAL", fingerprint=f"MOM_CLOSE_MISMATCH:{syms}")
+        except Exception:
+            pass
+
+    def reconcile_closes(self, dry_run=False):
+        """Close-side reconciler for MOMENTUM equity exits — the equity mirror of VRP reconcile_closes.
+        Momentum prices its exits off the decision QUOTE (decide() marks to the live Last) and marks CLOSED
+        on broker ACCEPTANCE. Each cycle this resolves every CLOSED momentum row against ACTUAL broker state:
+
+          * realized upgraded to the ACTUAL exit fills when every exit order is Filled and the fills account
+            for the whole original position → realized_pnl_basis 'fills'. Otherwise tagged 'quote_estimate'
+            (number left as-is — honest label, never a fabricated fill).
+          * position STILL FULLY HELD at the broker (nothing sold) → the entire close was fantasy; REVERT to
+            OPEN (reset realized/quantity/doctrine) so the manager re-attempts. CRITICAL page.
+          * PARTIALLY held → too ambiguous to re-account safely (would risk double-counting a real scale-out);
+            flag CRITICAL and leave for the operator, never silently mutate the number.
+
+        Held-state logic runs ONLY when positions are READABLE (a swallowed read is UNKNOWN, never 'flat')
+        and the symbol isn't explained by a live re-entry (collision guard). FORCED/admin closes are never
+        reverted. Places no orders; best-effort; never raises."""
+        led = PaperTradeLedgerEngine()
+        try:
+            trades = led._read_all()
+        except Exception:
+            return {"status": "NO_MOMENTUM_LEDGER", "reconciled": 0, "reverted": 0, "flagged": 0}
+        pos, positions_ok = self._sim_positions_map()
+        fills = self._order_fills()
+        open_syms = {str(t.get("symbol") or "").upper() for t in trades
+                     if t.get("status") == "OPEN" and t.get("trade_intent") == self.TRADE_INTENT}
+        upgraded, reverted, flagged = [], [], []
+        changed = False
+        for t in trades:
+            if t.get("status") != "CLOSED" or t.get("trade_intent") != self.TRADE_INTENT:
+                continue
+            if t.get("exit_reconciled"):
+                continue
+            sym = str(t.get("symbol") or "").upper()
+            orig = self._f(t.get("original_quantity"))
+            sign = 1 if t.get("side") == "BUY" else -1
+            entry = self._f(t.get("entry_price"))
+            forced = self._is_forced_close(t.get("exit_reason"), t.get("close_reason"))
+
+            # (A) held-state — only on a readable positions read, a non-forced close, no re-entry collision
+            if positions_ok and not forced and sym and sym not in open_syms:
+                held = pos.get(sym, 0.0)
+                if orig > 0 and held >= orig - 1e-6:            # nothing sold → the whole close was fantasy
+                    t["status"] = "OPEN"
+                    t["quantity"] = orig
+                    t["realized_pnl"] = 0.0
+                    t["doctrine_state"] = {}                    # re-derive the exit plan next cycle
+                    t["close_reverted_at"] = datetime.utcnow().isoformat()
+                    t["manager_status"] = "MOMENTUM_CLOSE_REVERTED_STILL_HELD"
+                    t["manager_status_reason"] = (f"marked CLOSED but broker still holds {held:g} shares "
+                                                  f"(orig {orig:g}) — close never filled; reverted to OPEN")
+                    for k in ("exit_price", "exit_timestamp", "exit_reason", "realized_pnl_basis",
+                              "close_verified_flat"):
+                        t.pop(k, None)
+                    reverted.append({"symbol": sym, "held": held})
+                    changed = True
+                    continue
+                if held > 1e-6:                                 # partial: some sold, some not → ambiguous
+                    t["close_verified_flat"] = False
+                    t["manager_status"] = "MOMENTUM_CLOSE_PARTIALLY_HELD"
+                    t["manager_status_reason"] = (f"marked CLOSED but broker still holds {held:g}/{orig:g} "
+                                                  "shares — re-account manually; realized left as booked")
+                    flagged.append({"symbol": sym, "held": held, "orig": orig})
+                    changed = True
+                    continue                                    # keep surfacing; do NOT mark reconciled
+
+            # (B) flat (or positions unreadable) — upgrade realized to the ACTUAL fills when fully readable
+            evs = t.get("sim_exit_events") or []
+            oids = [str(e.get("order_id")) for e in evs if e.get("order_id")]
+            proceeds, acc_qty, all_filled = 0.0, 0.0, bool(oids)
+            for oid in oids:
+                fp, fq, filled = fills.get(oid, (0.0, 0.0, False))
+                if not filled or fp <= 0 or fq <= 0:
+                    all_filled = False
+                    break
+                proceeds += fp * fq
+                acc_qty += fq
+            if all_filled and orig > 0 and abs(acc_qty - orig) <= 1e-6:
+                cost = entry * orig                             # long: proceeds−cost; short: cost−proceeds
+                t["realized_pnl"] = round((proceeds - cost) * sign, 2)
+                t["realized_pnl_basis"] = "fills"
+                if positions_ok and not forced:
+                    t["close_verified_flat"] = True
+                upgraded.append({"symbol": sym, "realized_pnl": t["realized_pnl"]})
+            else:
+                if not t.get("realized_pnl_basis"):             # legacy/partial-data row: tag honestly
+                    t["realized_pnl_basis"] = "quote_estimate"
+                if positions_ok and not forced:
+                    t["close_verified_flat"] = True             # broker flat; just no fill detail to upgrade
+            t["exit_reconciled"] = True
+            changed = True
+
+        if changed and not dry_run:
+            atomic_write_text(self.ledger_file,
+                              "".join(json.dumps(t) + "\n" for t in trades))
+        if not dry_run and (reverted or flagged):
+            self._alert_close_mismatch(reverted, flagged)
+        return {"timestamp": datetime.utcnow().isoformat(),
+                "reconciled": len(upgraded), "reverted": len(reverted), "flagged": len(flagged),
+                "upgrades": upgraded, "reverts": reverted, "flagged_partial": flagged,
+                "status": "MOMENTUM_CLOSES_RECONCILED" if not dry_run else "MOMENTUM_CLOSES_RECONCILE_DRYRUN"}
