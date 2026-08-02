@@ -94,6 +94,17 @@ class GreyLineRealityGuardEngine:
         except Exception:
             pass
 
+        # FAIL-SAFE on a degraded broker read: if the broker positions couldn't be read, the broker-held
+        # set is empty/partial, and comparing the local ledger to it would flag EVERY local position as a
+        # phantom — a FALSE fantasy alarm. You cannot call a position phantom if you couldn't read the
+        # broker. BROKER_READS_OK already flags the real (degraded) problem; don't double-cry a fabricated
+        # phantom list on top of it. (Same fail-safe as the concentration breaker's degraded-read guard.)
+        if not view.get("reads_ok", True):
+            return {"id": "NO_PHANTOM_POSITIONS", "severity": "critical", "ok": True,
+                    "detail": "broker read degraded — phantom check UNVERIFIED this cycle (cannot compare "
+                              "the local ledger to an unread broker; see BROKER_READS_OK)",
+                    "phantoms": [], "unverified": True}
+
         broker_syms = {str(p.get("symbol") or "").upper() for p in (view.get("positions") or [])}
         # A WORKING buy-to-open limit order is a legitimate in-between state: the entry is
         # recorded and submitted, but the broker has not filled it yet. That is pending, not

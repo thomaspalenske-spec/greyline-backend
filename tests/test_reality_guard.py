@@ -116,6 +116,29 @@ def test_guard_no_phantom_when_broker_holds_it():
     assert res["ok"] is True
 
 
+def test_degraded_broker_read_does_not_fabricate_phantoms():
+    """FAIL-SAFE: when the broker read is degraded (reads_ok False), the phantom check must NOT flag local
+    positions as phantom — you cannot call a position phantom if you couldn't read the broker. BROKER_READS_OK
+    already flags the real problem; this must not add a fabricated phantom list on top."""
+    from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine
+    guard = GreyLineRealityGuardEngine()
+    import app.services.paper_trade_ledger_engine as ple
+
+    class _FakeLedger:
+        def _read_all(self):
+            return [{"status": "OPEN", "symbol": "GLW"}, {"status": "OPEN", "symbol": "AMKR"}]
+
+    orig = ple.PaperTradeLedgerEngine
+    ple.PaperTradeLedgerEngine = _FakeLedger
+    try:
+        # degraded read: positions empty AND reads_ok False -> would have flagged GLW+AMKR as phantoms
+        res = guard._check_phantom_positions({"positions": [], "reads_ok": False})
+    finally:
+        ple.PaperTradeLedgerEngine = orig
+    assert res["ok"] is True and res.get("unverified") is True
+    assert res.get("phantoms") == [] and "UNVERIFIED" in res["detail"]
+
+
 def test_guard_check_returns_verdict_and_never_throws():
     from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine
     out = GreyLineRealityGuardEngine().check()
