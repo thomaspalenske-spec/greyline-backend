@@ -46,6 +46,37 @@ class BackgroundSchedulerService:
     _last_duration_ms = None
     _recent_cycles = []
     _RECENT_CAP = 20
+    _phase_marks = []                # [(label, monotonic)] within the CURRENT cycle
+    _last_phase_timings = {}         # {phase: seconds} from the last COMPLETED cycle — for /status
+
+    @classmethod
+    def _phase_reset(cls):
+        cls._phase_marks = [("_start", time.monotonic())]
+
+    @classmethod
+    def _ckpt(cls, label):
+        """Record a phase-boundary timestamp. BULLETPROOF: a timing checkpoint must NEVER be able to
+        break the trading cycle, so every failure is swallowed."""
+        try:
+            cls._phase_marks.append((str(label), time.monotonic()))
+        except Exception:
+            pass
+
+    @classmethod
+    def _phase_finalize(cls):
+        """Turn the checkpoint marks into {phase: seconds} (consecutive deltas) + an instrumented total.
+        The uninstrumented remainder shows up as the gap between _total_instrumented and duration_ms."""
+        try:
+            marks = cls._phase_marks or []
+            timings = {}
+            for i in range(1, len(marks)):
+                timings[marks[i][0]] = round(marks[i][1] - marks[i - 1][1], 2)
+            if len(marks) >= 2:
+                timings["_total_instrumented"] = round(marks[-1][1] - marks[0][1], 2)
+            cls._last_phase_timings = timings
+            return timings
+        except Exception:
+            return {}
     _ALERT_AFTER_FAILURES = 3        # consecutive cycle failures before alerting off-box (~15 min)
 
     @classmethod
@@ -148,7 +179,8 @@ class BackgroundSchedulerService:
             if cls._consecutive_failures >= cls._ALERT_AFTER_FAILURES:
                 cls._alert_cycle_failures(cls._consecutive_failures, error)
 
-        entry = {"status": status, "at": datetime.utcnow().isoformat(), "duration_ms": duration_ms, "error": error}
+        entry = {"status": status, "at": datetime.utcnow().isoformat(), "duration_ms": duration_ms,
+                 "error": error, "phase_timings": cls._last_phase_timings or {}}
         cls._recent_cycles = (cls._recent_cycles + [entry])[-cls._RECENT_CAP:]
 
         # Durable per-cycle heartbeat. recent_cycles is capped in memory/state, so it
@@ -263,6 +295,9 @@ class BackgroundSchedulerService:
             "last_error": cls._last_error,
             "last_error_at": cls._last_error_at,
             "last_duration_ms": cls._last_duration_ms,
+            # per-phase wall-clock of the last cycle (seconds): which phase dominates the cycle time.
+            # The gap between _total_instrumented and last_duration_ms/1000 is uninstrumented remainder.
+            "last_phase_timings": cls._last_phase_timings or {},
             "recent_cycles": cls._recent_cycles[-10:],
             "execution_enabled": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("execution_enabled"),
             "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
@@ -298,6 +333,7 @@ class BackgroundSchedulerService:
     def _run_cycle(cls):
         cls._load_state()
         started = datetime.utcnow().isoformat()
+        cls._phase_reset()               # per-phase timing (bulletproof; see _ckpt/_phase_finalize)
 
         # These three run BEFORE any sleeve opens. An unguarded throw here would unwind the whole
         # cycle so NOTHING opens (the silent-open-failure class). Degrade each instead. market_hours
@@ -427,6 +463,7 @@ class BackgroundSchedulerService:
         # options execution engine runs instead — same directional signal, options vehicle,
         # affordability-gated, Dynamic-TPS exit. The equity book already open keeps being
         # managed by the exit manager below until it closes, so this is a clean handover.
+        cls._ckpt("pre_sleeve")          # market-hours/token/decision/forward/learning/grading
         from os import getenv as _getenv
         # MOMENTUM opening runs LATER (priority 5 — LOWEST, after the four edges) so the higher-
         # probability strategies claim capital first. Its EXIT manager still runs here every cycle,
@@ -450,6 +487,7 @@ class BackgroundSchedulerService:
         except Exception as exc:
             if isinstance(momentum_exit, dict):
                 momentum_exit["reconcile_closes"] = {"error": repr(exc), "status": "MOMENTUM_CLOSES_RECONCILE_DEGRADED"}
+        cls._ckpt("momentum_exit")
 
         # LEGACY ORDERLY LIQUIDATION: flatten the pre-clean-test book (legacy calls + equities) at
         # BEST price then GUARANTEED exit — re-priced against LIVE quotes each cycle, not frozen on
@@ -530,6 +568,7 @@ class BackgroundSchedulerService:
                 market_open=bool(market_hours.get("is_regular_session")))
         except Exception as exc:
             sleeve_budget_autoapply = {"status": "AUTOAPPLY_DEGRADED", "error": repr(exc), "ran": False}
+        cls._ckpt("options_and_autoapply")
 
         # Conditional-VRP short-premium (defined-risk iron condors). GATED OFF by default. When
         # armed: MANAGE open condors every cycle (take-profit / expiry / hard-stop), and OPEN new
@@ -578,6 +617,7 @@ class BackgroundSchedulerService:
                         pass
         except Exception as exc:
             vrp_short_premium = {"status": "VRP_SHORT_PREMIUM_DEGRADED", "error": repr(exc)}
+        cls._ckpt("vrp_short_premium")
 
         # Trend-following equity sleeve (PRIORITY 3, GATED OFF by GREYLINE_TREND_ENABLED). Long/flat
         # 200-DMA on a diversified ETF basket — the long-convexity diversifier. Sizes from LIVE broker.
@@ -645,6 +685,7 @@ class BackgroundSchedulerService:
             managed_futures_shadow = ManagedFuturesShadowEngine().mark()
         except Exception as exc:
             managed_futures_shadow = {"error": repr(exc), "status": "MF_SHADOW_DEGRADED"}
+        cls._ckpt("trend_mf_carry")
 
         # EARNINGS-VOL harvest (forward test, gated): sell a tiny defined-risk condor into a rich-IV
         # name's earnings, once/day, RTH only. Positions land in the VRP ledger with strategy tag, so
@@ -679,6 +720,7 @@ class BackgroundSchedulerService:
                     earnings_vol_harvest = {"status": "EARNINGS_VOL_NOT_DUE_OR_CLOSED"}
         except Exception as exc:
             earnings_vol_harvest = {"status": "EARNINGS_VOL_HARVEST_DEGRADED", "error": repr(exc)}
+        cls._ckpt("earnings_vol")
 
         # MOMENTUM opening (PRIORITY 5 — LOWEST). Directional momentum OPENS positions; deployed here,
         # AFTER the four edges, so the higher-probability strategies claim capital first. It is the
@@ -992,6 +1034,8 @@ class BackgroundSchedulerService:
             scheduled_reports = ScheduledOperatorReportsEngine.run(market_hours)
         except Exception as exc:
             scheduled_reports = {"status": "SCHEDULED_REPORTS_DEGRADED", "error": repr(exc)}
+        cls._ckpt("post_sleeve")         # momentum-open/broker-stops/health/reports/remediation/reconcilers
+        cls._phase_finalize()            # -> cls._last_phase_timings for /background-scheduler/status
 
         cls._cycle_count += 1
         cls._last_run = started
