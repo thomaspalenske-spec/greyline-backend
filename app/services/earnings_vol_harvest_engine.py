@@ -395,41 +395,11 @@ class EarningsVolHarvestEngine:
             "status": "EARNINGS_FIRE_READINESS",
         }
 
-    @staticmethod
-    def _leg_strike(leg):
-        try:
-            return float(leg.get("strike") or leg.get("StrikePrice") or 0)
-        except (TypeError, ValueError):
-            return 0.0
-
     def _validate_condor(self, con):
-        """Independently re-verify a would-be condor is a valid DEFINED-RISK structure (build_condor already
-        gates, but the rehearsal audits it fresh so a build regression can't slip a bad structure to fire).
-        Returns (ok, checks:list, economics:dict)."""
-        legs = con.get("legs") or {}
-        sc, wc = legs.get("short_call") or {}, legs.get("wing_call") or {}
-        sp, wp = legs.get("short_put") or {}, legs.get("wing_put") or {}
-        credit = self._f(con.get("credit_per_condor"))
-        max_loss = self._f(con.get("max_loss_total"))
-        ror = self._f(con.get("return_on_risk"))
-        try:
-            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
-            cap = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
-        except Exception:
-            cap = 500.0
-        checks = [
-            {"check": "four_legs", "ok": all([sc, wc, sp, wp])},
-            {"check": "defined_risk_call", "ok": self._leg_strike(wc) > self._leg_strike(sc) > 0},
-            {"check": "defined_risk_put", "ok": 0 < self._leg_strike(wp) < self._leg_strike(sp)},
-            {"check": "credit_positive", "ok": credit > 0},
-            {"check": "max_loss_bounded", "ok": 0 < max_loss <= cap + 1e-6},
-            {"check": "ror_positive", "ok": ror > 0},
-        ]
-        ok = all(c["ok"] for c in checks)
-        econ = {"credit_per_condor": credit, "credit_total": self._f(con.get("credit_total")),
-                "max_loss_total": max_loss, "return_on_risk": ror, "quantity": con.get("quantity"),
-                "per_condor_cap_usd": round(cap, 2)}
-        return ok, checks, econ
+        """Delegate to the CANONICAL condor structure audit on the VRP engine (build_condor is its output,
+        so the check lives there — one source of truth, no cross-engine drift)."""
+        from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
+        return ConditionalVRPShortPremiumEngine().validate_condor(con)
 
     def dress_rehearsal(self):
         """PRE-FIRE DRESS REHEARSAL (READ-ONLY, places NOTHING). Trace the full earnings-condor lifecycle

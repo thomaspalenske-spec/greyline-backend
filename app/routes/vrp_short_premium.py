@@ -19,6 +19,21 @@ def vrp_short_premium_positions():
     return ConditionalVRPShortPremiumEngine().manage_positions(dry_run=True)
 
 
+@router.get("/vrp-short-premium/dress-rehearsal")
+def vrp_short_premium_dress_rehearsal():
+    """READ-ONLY pre-fire trace: builds VRP condors against LIVE UW chains, validates each is a sound
+    defined-risk structure, and projects the round-trip into the edge court (premium_vrp). VRP is
+    continuous (not event-gated) — the fastest honest path to filling the court's trade gate. Places nothing."""
+    return ConditionalVRPShortPremiumEngine().dress_rehearsal()
+
+
+@router.get("/vrp-short-premium/cap-sensitivity")
+def vrp_short_premium_cap_sensitivity():
+    """READ-ONLY decision tool: how many VRP candidates are tradeable at each per-condor cap level, with
+    the %-equity each represents. Builds nothing. Slow (live UW) — on-demand."""
+    return ConditionalVRPShortPremiumEngine().cap_sensitivity()
+
+
 @router.get("/condor-exits")
 def condor_exits():
     """Exit levels for every OPEN condor: the profit-take + hard-stop net-buyback targets and the time

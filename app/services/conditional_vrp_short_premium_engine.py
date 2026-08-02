@@ -700,8 +700,10 @@ class ConditionalVRPShortPremiumEngine:
                                 "order_id": rr.get("order_id"), "reject": rr.get("reject_reason")})
         return actions
 
-    def plan(self, names=None, limit=None):
-        """Build defined-risk condors for today's rich-IV candidates. Places nothing."""
+    def plan(self, names=None, limit=None, max_scan=None):
+        """Build defined-risk condors for today's rich-IV candidates. Places nothing. `max_scan` bounds
+        how many candidates are BUILT before ranking — the live cycle uses the full SKEW_POOL; a fast
+        read-only caller (dress rehearsal) passes a small value so it doesn't fetch a UW chain per name."""
         from app.services.conditional_vrp_forward_panel_engine import ConditionalVRPForwardPanelEngine
         cands = ConditionalVRPForwardPanelEngine().rich_iv_candidates(names)
         open_syms = self._open_symbols()
@@ -709,6 +711,7 @@ class ConditionalVRPShortPremiumEngine:
         open_risk = self._open_risk()
         budget_left = self.PORTFOLIO_RISK_CAP_USD - open_risk
         want = limit if limit is not None else slots
+        pool = min(self.SKEW_POOL, max_scan) if max_scan else self.SKEW_POOL
 
         # SKEW-CONDITIONED SELECTION: build condors for a bounded candidate POOL, then take the
         # RICHEST-SKEW ones (skew-timing study: steep skew ~= 54% more premium). This harvests the
@@ -717,7 +720,7 @@ class ConditionalVRPShortPremiumEngine:
         # skew is a crash-free-sample mirage, so skew picks WHAT to sell, never how much risk to bear.
         candidates, skipped = [], []
         for c in cands:
-            if len(candidates) >= self.SKEW_POOL:
+            if len(candidates) >= pool:
                 break
             if c["ticker"] in open_syms:
                 continue
@@ -957,6 +960,168 @@ class ConditionalVRPShortPremiumEngine:
                            "credit": con["credit_total"], "max_loss": con["max_loss_total"]})
         return {"timestamp": datetime.utcnow().isoformat(), "opened": opened,
                 "errors": errors, "status": "VRP_SHORT_PREMIUM_OPENED"}
+
+    # ------------------------------------------------------------ pre-fire rehearsal (read-only)
+    @staticmethod
+    def _leg_strike(leg):
+        try:
+            return float(leg.get("strike") or leg.get("StrikePrice") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def validate_condor(self, con):
+        """CANONICAL condor structure audit (build_condor is this engine's, so the check lives here — the
+        earnings sleeve delegates to it, one source of truth). Re-verifies a would-be condor is a sound
+        DEFINED-RISK structure independent of build_condor's own gates, so a build regression can't slip a
+        bad structure to fire. Returns (ok, checks:list, economics:dict)."""
+        legs = con.get("legs") or {}
+        sc, wc = legs.get("short_call") or {}, legs.get("wing_call") or {}
+        sp, wp = legs.get("short_put") or {}, legs.get("wing_put") or {}
+        credit = self._f(con.get("credit_per_condor"))
+        max_loss = self._f(con.get("max_loss_total"))
+        ror = self._f(con.get("return_on_risk"))
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            cap = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
+        except Exception:
+            cap = 500.0
+        checks = [
+            {"check": "four_legs", "ok": all([sc, wc, sp, wp])},
+            {"check": "defined_risk_call", "ok": self._leg_strike(wc) > self._leg_strike(sc) > 0},
+            {"check": "defined_risk_put", "ok": 0 < self._leg_strike(wp) < self._leg_strike(sp)},
+            {"check": "credit_positive", "ok": credit > 0},
+            {"check": "max_loss_bounded", "ok": 0 < max_loss <= cap + 1e-6},
+            {"check": "ror_positive", "ok": ror > 0},
+        ]
+        ok = all(c["ok"] for c in checks)
+        econ = {"credit_per_condor": credit, "credit_total": self._f(con.get("credit_total")),
+                "max_loss_total": max_loss, "return_on_risk": ror, "quantity": con.get("quantity"),
+                "per_condor_cap_usd": round(cap, 2)}
+        return ok, checks, econ
+
+    @staticmethod
+    def condor_court_projection(econ, sleeve):
+        """PROJECTION (not a booked number) of what a filled+closed condor WOULD contribute to the edge
+        court — bounds only: max win = full credit kept, max loss = the defined max loss."""
+        return {"sleeve": sleeve, "risk_basis": "defined_max_loss",
+                "basis_on_close": "fills (via reconcile_closes)", "counted_in_court": True,
+                "max_win_usd": econ["credit_total"], "max_loss_usd": econ["max_loss_total"],
+                "return_on_risk_at_full_credit_pct": round(econ["return_on_risk"] * 100, 2)}
+
+    def dress_rehearsal(self):
+        """PRE-FIRE DRESS REHEARSAL for the VRP short-premium sleeve (READ-ONLY, places NOTHING). Trace the
+        full lifecycle against LIVE UW chains: BUILD (real plan) -> VALIDATE (each condor a sound
+        defined-risk structure) -> PROJECT the round-trip into the court (premium_vrp, defined_max_loss,
+        basis 'fills' after reconcile_closes). Unlike earnings, VRP harvests UNCONDITIONAL variance premium
+        on liquid index/ETF names on a CONTINUOUS cadence — the highest-throughput path to real court data.
+        plan() builds regardless of arm state (places nothing); ARMING is a separate GO/NO-GO line."""
+        from app.services.env_reload import reload_env
+        try:
+            reload_env()
+        except Exception:
+            pass
+        armed = self.enabled()
+        try:
+            # bounded scan: prove the top rich-IV names build sound condors WITHOUT a UW fetch per SKEW_POOL
+            # name (the live cycle scans the full pool; the rehearsal only needs to confirm the sleeve fires).
+            plan = self.plan(max_scan=4)
+        except Exception as e:
+            plan = {"planned": [], "skipped": [], "error": str(e)[:120]}
+        planned = plan.get("planned") or []
+        rehearsed, valid = [], 0
+        for con in planned:
+            ok, checks, econ = self.validate_condor(con)
+            valid += 1 if ok else 0
+            rehearsed.append({"ticker": con.get("symbol"), "expiration": con.get("expiration"),
+                              "iv_rank": con.get("iv_rank"), "structure_ok": ok, "checks": checks,
+                              "economics": econ,
+                              "court_projection": self.condor_court_projection(econ, "premium_vrp")})
+        gate = []
+        if not planned:
+            gate.append("plan built 0 condors (see plan.skipped / UW chain / caps)")
+        if planned and valid == 0:
+            gate.append("built condors FAILED structure validation")
+        if not armed:
+            gate.append("sleeve DISARMED (GREYLINE_VRP_SHORT_PREMIUM_ENABLED) — arm before the fire")
+        build_go = bool(planned and valid > 0)
+        verdict = ("READY TO FIRE — %d sound condor(s) build off live UW chains and round-trip into the "
+                   "court" % valid) if build_go and armed else \
+                  ("BUILD OK, NOT ARMED — %d sound condor(s) would build; arm the sleeve to fire" % valid) \
+                  if build_go else ("NOT READY — " + "; ".join(gate))
+        return {
+            "timestamp": datetime.utcnow().isoformat(), "sleeve": "premium_vrp",
+            "armed": armed, "build_go": build_go, "valid_condors": valid, "planned_count": len(planned),
+            "candidates_scanned": plan.get("candidates"), "free_slots": plan.get("free_slots"),
+            "total_defined_risk_usd": plan.get("total_defined_risk_usd"),
+            "rehearsed": rehearsed, "plan_skipped": (plan.get("skipped") or [])[:8],
+            "gate_blocks": gate, "verdict": verdict,
+            "note": ("READ-ONLY — builds against live UW chains and PLACES NOTHING. Bounded scan (top few "
+                     "rich-IV names, not the full SKEW_POOL) so the route stays fast; the live cycle scans "
+                     "the full pool. Projections are bounds (max win = credit, max loss = defined risk). VRP "
+                     "is continuous (not event-gated) — the fastest honest path to filling the court's gate."),
+            "status": "VRP_DRESS_REHEARSAL",
+        }
+
+    def cap_sensitivity(self, caps=None, max_names=8):
+        """DECISION TOOL for the per-condor cap on the VRP universe — same as the earnings tool: for each
+        rich-IV candidate, build the TIGHTEST defined-risk condor (unbounded cap) off live UW chains, then
+        count how many are tradeable at each cap level with the %-equity each represents. READ-ONLY."""
+        from app.services.env_reload import reload_env
+        try:
+            reload_env()
+        except Exception:
+            pass
+        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+        from app.services.conditional_vrp_forward_panel_engine import ConditionalVRPForwardPanelEngine
+        try:
+            equity, _ = SleeveCapitalBudgetEngine._live()
+            equity = float(equity) if equity else SleeveCapitalBudgetEngine.DEFAULT_BASE_USD
+        except Exception:
+            equity = SleeveCapitalBudgetEngine.DEFAULT_BASE_USD
+        current_cap = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
+        if not caps:
+            caps = sorted({round(current_cap * m, 0) for m in (1.0, 1.5, 2.0, 3.0)})
+        BIG = 1e9
+        open_syms = self._open_symbols()
+        names, untradeable = [], []
+        for c in ConditionalVRPForwardPanelEngine().rich_iv_candidates(None)[:max_names]:
+            if c["ticker"] in open_syms:
+                continue
+            try:
+                exp, contracts = self._chain(c["ticker"])
+                con = self.build_condor(c["ticker"], contracts, max_loss_cap=BIG)
+            except Exception as e:
+                untradeable.append({"ticker": c["ticker"], "reason": f"chain/build error: {str(e)[:60]}"})
+                continue
+            if con.get("skip"):
+                untradeable.append({"ticker": c["ticker"], "reason": con["skip"]})
+                continue
+            mlp = self._f(con.get("max_loss_per_condor"))
+            names.append({"ticker": c["ticker"], "min_max_loss_per_condor": round(mlp, 2),
+                          "credit_per_condor": self._f(con.get("credit_per_condor")),
+                          "return_on_risk": self._f(con.get("return_on_risk")),
+                          "pct_of_equity": round(100 * mlp / equity, 2) if equity else None,
+                          "tradeable_at_current_cap": mlp <= current_cap + 1e-6})
+        sweep = [{"cap_usd": round(cap, 0),
+                  "cap_pct_of_equity": round(100 * cap / equity, 2) if equity else None,
+                  "tradeable_count": sum(1 for n in names if n["min_max_loss_per_condor"] <= cap + 1e-6),
+                  "tradeable": sorted(n["ticker"] for n in names if n["min_max_loss_per_condor"] <= cap + 1e-6)}
+                 for cap in caps]
+        tradeable_now = sorted(n["ticker"] for n in names if n["tradeable_at_current_cap"])
+        return {
+            "timestamp": datetime.utcnow().isoformat(), "sleeve": "premium_vrp",
+            "equity": round(equity, 2), "current_cap_usd": round(current_cap, 2),
+            "current_cap_pct_of_equity": round(100 * current_cap / equity, 2) if equity else None,
+            "tradeable_now": tradeable_now, "tradeable_now_count": len(tradeable_now),
+            "names": names, "cap_sweep": sweep, "structurally_untradeable": untradeable[:12],
+            "verdict": ("At the current ${:.0f} cap ({:.1f}% of equity) {} of {} buildable VRP candidate(s) "
+                        "are tradeable. VRP names are liquid index/ETFs — typically cheaper/tighter-grid "
+                        "than earnings, so the cap bites less.").format(
+                            current_cap, 100 * current_cap / equity if equity else 0,
+                            len(tradeable_now), len(names)),
+            "note": "READ-ONLY — builds nothing. Uses live UW chains — SLOW; on-demand.",
+            "status": "VRP_CAP_SENSITIVITY",
+        }
 
     # ------------------------------------------------------------ exit doctrine
 
