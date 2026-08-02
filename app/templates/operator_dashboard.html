@@ -771,6 +771,12 @@ th {
         </div>
       </div>
 
+      <div class="card" id="cycle_cost_card" style="min-width:0;">
+        <div class="section-title">Scheduler Cycle Cost <span id="cc_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Per-phase wall-clock of the LAST scheduler cycle — which phase dominates. The heaviest bar is the one to optimize. <code>post_sleeve</code> bundles momentum-open / broker-stops / health / reports / remediation. The gap between the instrumented total and the full cycle duration is uninstrumented remainder. Populates after the first cycle completes (a cold-cache first cycle after a restart runs long).</div>
+        <div id="cycle_cost_body"><span class="sub">Loading…</span></div>
+      </div>
+
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
         <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
         <table>
@@ -1253,6 +1259,43 @@ async function refreshCapitalAllocation() {
   }
 }
 
+function renderCycleCost(s) {
+  // per-phase wall-clock of the last cycle: horizontal bars, heaviest highlighted, remainder shown.
+  const body = document.getElementById("cycle_cost_body");
+  const summary = document.getElementById("cc_summary");
+  if (!body) return;
+  try {
+    const pt = (s && s.last_phase_timings) || {};
+    const total = pt._total_instrumented;
+    const phases = Object.keys(pt).filter(k => k !== "_total_instrumented").map(k => ({name: k, secs: Number(pt[k]) || 0}));
+    if (!phases.length) {
+      body.innerHTML = `<span class="sub">No cycle timed yet — populates after the first cycle completes (a cold first cycle post-restart runs long).</span>`;
+      if (summary) summary.textContent = "";
+      return;
+    }
+    phases.sort((a, b) => b.secs - a.secs);
+    const max = Math.max(...phases.map(p => p.secs), 0.01);
+    const durS = (s.last_duration_ms != null) ? s.last_duration_ms / 1000 : null;
+    const remainder = (durS != null && total != null) ? Math.max(0, durS - total) : null;
+    if (summary) summary.textContent =
+      (durS != null ? `cycle ${durS.toFixed(1)}s` : "") + (total != null ? ` · instrumented ${total.toFixed(1)}s` : "");
+    body.innerHTML = phases.map((p, i) => {
+      const pct = Math.max(2, Math.round(p.secs / max * 100));
+      const color = i === 0 ? "#f0883e" : "rgba(88,166,255,.55)";   // heaviest = amber, rest = blue
+      return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <div style="width:150px;flex:0 0 150px;font-size:12px;${i === 0 ? "font-weight:600;" : ""}">${p.name}</div>
+        <div style="flex:1;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;">
+          <div style="width:${pct}%;background:${color};height:14px;"></div>
+        </div>
+        <div style="width:56px;flex:0 0 56px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;">${p.secs.toFixed(1)}s</div>
+      </div>`;
+    }).join("") +
+      (remainder != null ? `<div class="sub" style="margin-top:8px;">uninstrumented remainder: ${remainder.toFixed(1)}s (of ${durS.toFixed(1)}s cycle)</div>` : "");
+  } catch (e) {
+    body.innerHTML = `<span class="red">Cycle cost unavailable — ${String(e).slice(0, 80)}</span>`;
+  }
+}
+
 async function refreshAll() {
   // "Fetched", NOT "Last Update": this is the browser clock at refresh time, not the age of any cache.
   // Each card carries its own as_of/cache age; this only says when the page last pulled.
@@ -1278,6 +1321,7 @@ async function refreshAll() {
 
   if (scheduler.status === "fulfilled") {
     const s = scheduler.value;
+    renderCycleCost(s);          // per-phase cycle timing strip — never throws, never stalls the loop
     const ledgerData = ledger.status === "fulfilled" ? ledger.value : {};
     const ex = !!(ledgerData.paper_execution_enabled ?? s.execution_enabled);
     const ord = !!(ledgerData.live_order_placement_allowed ?? s.order_placement_allowed);
