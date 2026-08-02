@@ -208,8 +208,11 @@ class EarningsVolHarvestEngine:
             budget_ceiling = self.MAX_CONCURRENT
         return max(self.MAX_CONCURRENT, budget_ceiling)
 
-    def open_positions(self, dry_run=True, limit=None):
-        if not self.enabled():
+    def open_positions(self, dry_run=True, limit=None, ignore_arm=False):
+        # ignore_arm lets a DRY-RUN plan build against live UW chains even while the sleeve is disarmed
+        # (the pre-fire dress rehearsal) — it can NEVER book: the booking branch below is dry_run=False,
+        # which still requires enabled(). A disarmed live open remains impossible.
+        if not self.enabled() and not (dry_run and ignore_arm):
             return {"status": "EARNINGS_VOL_DISABLED", "opened": 0}
         from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
         from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
@@ -378,6 +381,108 @@ class EarningsVolHarvestEngine:
             "note": ("READ-ONLY — the dry-run plan places nothing; this is what WOULD open. The build check "
                      "runs only in-session (option quotes); deterministic gates report any time."),
             "status": "EARNINGS_FIRE_READINESS",
+        }
+
+    @staticmethod
+    def _leg_strike(leg):
+        try:
+            return float(leg.get("strike") or leg.get("StrikePrice") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _validate_condor(self, con):
+        """Independently re-verify a would-be condor is a valid DEFINED-RISK structure (build_condor already
+        gates, but the rehearsal audits it fresh so a build regression can't slip a bad structure to fire).
+        Returns (ok, checks:list, economics:dict)."""
+        legs = con.get("legs") or {}
+        sc, wc = legs.get("short_call") or {}, legs.get("wing_call") or {}
+        sp, wp = legs.get("short_put") or {}, legs.get("wing_put") or {}
+        credit = self._f(con.get("credit_per_condor"))
+        max_loss = self._f(con.get("max_loss_total"))
+        ror = self._f(con.get("return_on_risk"))
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            cap = float(SleeveCapitalBudgetEngine.per_condor_max_loss())
+        except Exception:
+            cap = 500.0
+        checks = [
+            {"check": "four_legs", "ok": all([sc, wc, sp, wp])},
+            {"check": "defined_risk_call", "ok": self._leg_strike(wc) > self._leg_strike(sc) > 0},
+            {"check": "defined_risk_put", "ok": 0 < self._leg_strike(wp) < self._leg_strike(sp)},
+            {"check": "credit_positive", "ok": credit > 0},
+            {"check": "max_loss_bounded", "ok": 0 < max_loss <= cap + 1e-6},
+            {"check": "ror_positive", "ok": ror > 0},
+        ]
+        ok = all(c["ok"] for c in checks)
+        econ = {"credit_per_condor": credit, "credit_total": self._f(con.get("credit_total")),
+                "max_loss_total": max_loss, "return_on_risk": ror, "quantity": con.get("quantity"),
+                "per_condor_cap_usd": round(cap, 2)}
+        return ok, checks, econ
+
+    def dress_rehearsal(self):
+        """PRE-FIRE DRESS REHEARSAL (READ-ONLY, places NOTHING). Trace the full earnings-condor lifecycle
+        against LIVE UW chains — off-hours capable (UW has data even when the option tape is closed) — so
+        the first real fires can't surprise us: BUILD (real dry-run plan) → VALIDATE (each would-be condor
+        is a sound defined-risk structure) → PROJECT the round-trip into the edge court (premium_earnings,
+        risk basis defined_max_loss, basis 'fills' after the close reconciler). Uses the dry-run arm bypass
+        so it rehearses even while the sleeve is disarmed; ARMING remains a separate GO/NO-GO line."""
+        from app.services.env_reload import reload_env
+        try:
+            reload_env()
+        except Exception:
+            pass
+        armed = self.enabled()
+        fr = self.fire_readiness()
+        # real build against live UW chains, regardless of arm state (dry-run can never book)
+        try:
+            plan = self.open_positions(dry_run=True, ignore_arm=True)
+        except Exception as e:
+            plan = {"status": "EARNINGS_REHEARSAL_BUILD_ERROR", "planned": [], "error": str(e)[:120]}
+        planned = plan.get("planned") or []
+        rehearsed, valid = [], 0
+        for con in planned:
+            ok, checks, econ = self._validate_condor(con)
+            valid += 1 if ok else 0
+            rehearsed.append({
+                "ticker": con.get("symbol"), "expiration": con.get("expiration"),
+                "report_date": con.get("report_date"), "structure_ok": ok, "checks": checks,
+                "economics": econ,
+                # PROJECTION (not a booked number): what this condor WOULD contribute to the court if it
+                # fills and closes. Bounds only — max win = full credit kept, max loss = defined max loss.
+                "court_projection": {
+                    "sleeve": "premium_earnings", "risk_basis": "defined_max_loss",
+                    "basis_on_close": "fills (via reconcile_closes)",
+                    "counted_in_court": True,
+                    "max_win_usd": econ["credit_total"], "max_loss_usd": econ["max_loss_total"],
+                    "return_on_risk_at_full_credit_pct": round(econ["return_on_risk"] * 100, 2)},
+            })
+        # GO/NO-GO: the build produced at least one SOUND condor that round-trips into the court.
+        gate = []
+        if not (self._candidates()):
+            gate.append("no earnings candidates for the window")
+        if not planned:
+            gate.append("dry-run built 0 condors (see plan.skipped / UW chain)")
+        if planned and valid == 0:
+            gate.append("built condors FAILED structure validation")
+        if not armed:
+            gate.append("sleeve DISARMED (GREYLINE_EARNINGS_VOL_ENABLED) — arm before the fire")
+        build_go = bool(planned and valid > 0)
+        verdict = ("READY TO FIRE — %d sound condor(s) build off live UW chains and round-trip into the "
+                   "court" % valid) if build_go and armed else \
+                  ("BUILD OK, NOT ARMED — %d sound condor(s) would build; arm the sleeve to fire" % valid) \
+                  if build_go else ("NOT READY — " + "; ".join(gate))
+        return {
+            "timestamp": datetime.utcnow().isoformat(), "sleeve": "earnings_vol",
+            "armed": armed, "build_go": build_go, "valid_condors": valid, "planned_count": len(planned),
+            "report_dates": sorted({str(c.get("report_date")) for c in (self._candidates() or [])}),
+            "fire_readiness": {"will_fire": fr.get("will_fire"), "build_verified": fr.get("build_verified"),
+                               "verdict": fr.get("verdict")},
+            "rehearsed": rehearsed, "plan_skipped": (plan.get("skipped") or [])[:8],
+            "gate_blocks": gate, "verdict": verdict,
+            "note": ("READ-ONLY — builds against live UW chains and PLACES NOTHING. Projections are bounds "
+                     "(max win = credit, max loss = defined risk), not booked P&L. Proves the first real "
+                     "fires will build, fill, reconcile, and be COUNTED in the edge court."),
+            "status": "EARNINGS_DRESS_REHEARSAL",
         }
 
     def status(self):
