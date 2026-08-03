@@ -322,25 +322,60 @@ class DisasterRecoveryEngine:
         if not stale:
             return {"status": "BACKUP_FRESH", "hours_since_backup": round(age_h, 1) if age_h else None}
 
+        # GIT-CHANNEL AWARENESS: the FILESYSTEM snapshot is only ONE of two off-machine channels, and it
+        # is the one macOS TCC blocks / that a restart-mid-run leaves stale. The unrecoverable data is
+        # ALSO pushed off-machine to a git remote (GitDataBackupEngine) — the channel the service can
+        # actually rely on. If THAT is current, the data is NOT "at risk": screaming CRITICAL then cries
+        # wolf on a benign state (exactly the false-alarm the operator hit). So: CRITICAL only when BOTH
+        # channels are stale; if git is fresh, downgrade to a WARNING that the secondary/local snapshot
+        # lagged (data still protected). Fail-SAFE: if git freshness can't be confirmed, treat it as NOT
+        # fresh and alert as before — better to over-warn than miss a real double gap.
+        git_h = None
+        try:
+            from app.services.git_data_backup_engine import GitDataBackupEngine
+            git_h = GitDataBackupEngine().hours_since()
+        except Exception:
+            git_h = None
+        git_fresh = (git_h is not None and git_h <= self.STALE_MAX_AGE_H)
+
         # throttle: only re-alert every STALE_THROTTLE_H
         try:
             prev = json.loads(self.STALE_MARKER.read_text()).get("alerted_at")
             if prev and (now - datetime.fromisoformat(prev)).total_seconds() < self.STALE_THROTTLE_H * 3600:
                 return {"status": "BACKUP_STALE_THROTTLED",
-                        "hours_since_backup": round(age_h, 1) if age_h else None}
+                        "hours_since_backup": round(age_h, 1) if age_h else None,
+                        "git_hours_since": round(git_h, 1) if git_h is not None else None}
         except Exception:
             pass
         try:
             from app.services.operator_notification_engine import OperatorNotificationEngine
-            OperatorNotificationEngine().record(
-                event_type="BACKUP_STALE",
-                title="Off-machine backup is STALE",
-                message=(f"Last verified backup was {round(age_h, 1) if age_h else 'never'}h ago "
-                         f"(threshold {self.STALE_MAX_AGE_H}h). Forward-only unrecoverable data "
-                         f"(options surface, PIT archive, earnings panel) is at risk until a backup "
-                         f"completes — likely interrupted mid-run by a restart/sleep."),
-                severity="CRITICAL", source="DISASTER_RECOVERY",
-                payload={"hours_since_backup": age_h, "last_backup_at": (last or {}).get("timestamp")})
+            if git_fresh:
+                # data IS protected off-machine via git — this is a redundancy note, not a data-at-risk alarm
+                OperatorNotificationEngine().record(
+                    event_type="BACKUP_FS_STALE_GIT_OK",
+                    title="Local backup snapshot lagging (data still protected off-machine)",
+                    message=(f"The filesystem snapshot is {round(age_h, 1) if age_h else 'never'}h old "
+                             f"(threshold {self.STALE_MAX_AGE_H}h) — usually a restart/sleep interrupting "
+                             f"it mid-run. NOT a data-loss risk: the primary off-machine git backup is "
+                             f"current ({round(git_h, 1)}h ago), so the unrecoverable data IS protected. "
+                             f"Local snapshot redundancy is reduced until the next uninterrupted cycle."),
+                    severity="WARNING", source="DISASTER_RECOVERY",
+                    payload={"hours_since_backup": age_h, "git_hours_since": git_h,
+                             "last_backup_at": (last or {}).get("timestamp")})
+            else:
+                # BOTH channels stale (or git unconfirmable) — the genuine data-at-risk CRITICAL
+                git_txt = (f"the git off-machine backup is ALSO stale ({round(git_h, 1)}h ago)"
+                           if git_h is not None else "the git off-machine backup could not be confirmed")
+                OperatorNotificationEngine().record(
+                    event_type="BACKUP_STALE",
+                    title="Off-machine backup is STALE",
+                    message=(f"Last verified filesystem backup was {round(age_h, 1) if age_h else 'never'}h "
+                             f"ago (threshold {self.STALE_MAX_AGE_H}h) and {git_txt}. Forward-only "
+                             f"unrecoverable data (options surface, PIT archive, earnings panel) is at risk "
+                             f"until a backup completes — likely interrupted mid-run by a restart/sleep."),
+                    severity="CRITICAL", source="DISASTER_RECOVERY",
+                    payload={"hours_since_backup": age_h, "git_hours_since": git_h,
+                             "last_backup_at": (last or {}).get("timestamp")})
         except Exception:
             pass
         try:

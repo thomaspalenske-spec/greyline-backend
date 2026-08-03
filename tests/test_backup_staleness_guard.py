@@ -13,13 +13,17 @@ class FakeNotifier:
         FakeNotifier.calls.append(kw)
 
 
-def _patch(monkeypatch, tmp_path, last_ts):
+def _patch(monkeypatch, tmp_path, last_ts, git_h=999.0):
+    # git_h = the age of the git off-machine channel the alert is now aware of. Default 999h (stale) so the
+    # legacy "filesystem stale => CRITICAL" tests keep exercising the genuine double-gap path deterministically.
     FakeNotifier.calls = []
     monkeypatch.setattr(D, "STALE_MARKER", tmp_path / "stale.json")
     monkeypatch.setattr(D, "last_backup",
                         lambda self: ({"timestamp": last_ts} if last_ts else None))
     monkeypatch.setattr("app.services.operator_notification_engine.OperatorNotificationEngine",
                         lambda: FakeNotifier())
+    import app.services.git_data_backup_engine as g
+    monkeypatch.setattr(g.GitDataBackupEngine, "hours_since", lambda self: git_h)
 
 
 def test_fresh_backup_no_alert(monkeypatch, tmp_path):
@@ -28,23 +32,46 @@ def test_fresh_backup_no_alert(monkeypatch, tmp_path):
     assert FakeNotifier.calls == []
 
 
-def test_stale_backup_screams(monkeypatch, tmp_path):
+def test_both_channels_stale_is_critical(monkeypatch, tmp_path):
     old = (datetime.utcnow() - timedelta(hours=30)).isoformat()
-    _patch(monkeypatch, tmp_path, old)
+    _patch(monkeypatch, tmp_path, old, git_h=40.0)          # git ALSO stale → genuine data-at-risk
     r = D().alert_if_stale()
     assert r["status"] == "BACKUP_STALE_ALERTED"
     assert len(FakeNotifier.calls) == 1
     assert FakeNotifier.calls[0]["severity"] == "CRITICAL"
+    assert FakeNotifier.calls[0]["event_type"] == "BACKUP_STALE"
 
 
-def test_never_backed_up_screams(monkeypatch, tmp_path):
-    _patch(monkeypatch, tmp_path, None)
+def test_fs_stale_but_git_fresh_is_warning_not_critical(monkeypatch, tmp_path):
+    # The exact false-alarm the operator hit: filesystem snapshot stale (interrupted by restarts) but the
+    # PRIMARY off-machine git backup is current → data IS protected → WARNING, never the CRITICAL alarm.
+    old = (datetime.utcnow() - timedelta(hours=106)).isoformat()
+    _patch(monkeypatch, tmp_path, old, git_h=2.0)
+    r = D().alert_if_stale()
+    assert r["status"] == "BACKUP_STALE_ALERTED"
+    assert len(FakeNotifier.calls) == 1
+    assert FakeNotifier.calls[0]["severity"] == "WARNING"          # NOT CRITICAL
+    assert FakeNotifier.calls[0]["event_type"] == "BACKUP_FS_STALE_GIT_OK"
+
+
+def test_never_backed_up_with_stale_git_is_critical(monkeypatch, tmp_path):
+    _patch(monkeypatch, tmp_path, None, git_h=999.0)
+    r = D().alert_if_stale()
+    assert r["status"] == "BACKUP_STALE_ALERTED"
+    assert FakeNotifier.calls[0]["severity"] == "CRITICAL"
+
+
+def test_unconfirmable_git_fails_safe_to_critical(monkeypatch, tmp_path):
+    # If git freshness can't be read (None), do NOT suppress — fail safe to the CRITICAL alarm.
+    old = (datetime.utcnow() - timedelta(hours=30)).isoformat()
+    _patch(monkeypatch, tmp_path, old, git_h=None)
     assert D().alert_if_stale()["status"] == "BACKUP_STALE_ALERTED"
+    assert FakeNotifier.calls[0]["severity"] == "CRITICAL"
 
 
 def test_stale_alert_is_throttled(monkeypatch, tmp_path):
     old = (datetime.utcnow() - timedelta(hours=30)).isoformat()
-    _patch(monkeypatch, tmp_path, old)
+    _patch(monkeypatch, tmp_path, old, git_h=40.0)
     assert D().alert_if_stale()["status"] == "BACKUP_STALE_ALERTED"
     # immediate re-check within the throttle window must NOT re-alert
     assert D().alert_if_stale()["status"] == "BACKUP_STALE_THROTTLED"
