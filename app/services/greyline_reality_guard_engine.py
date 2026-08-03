@@ -59,8 +59,15 @@ class GreyLineRealityGuardEngine:
                     "detail": f"selector error: {str(e)[:120]}"}
 
     def _check_broker_reads(self, view):
+        # degraded_class: a FAILED broker read is UNVERIFIABLE, not FANTASY. Fantasy = fake numbers shown
+        # as real; a degraded read makes the dashboard honestly show "unknown"/last-known-good (the money
+        # tiles already null out + badge age, the phantom/positions checks fail-safe). So this must NOT
+        # trip the red "FANTASY DATA DETECTED" alarm — that cries wolf on a benign, self-healing state
+        # (usually a busy scheduler cycle saturating TradeStation) and erodes trust in the guard. It maps
+        # to the amber BROKER_READ_DEGRADED verdict instead. It stays 'critical' so it can never be
+        # ignored, but degraded_class routes it to the honest verdict.
         return {
-            "id": "BROKER_READS_OK", "severity": "critical",
+            "id": "BROKER_READS_OK", "severity": "critical", "degraded_class": True,
             "ok": bool(view.get("reads_ok")),
             "detail": (f"reading {view.get('account_label')}" if view.get("reads_ok")
                        else f"broker read failed ({view.get('status')})"),
@@ -1034,8 +1041,17 @@ class GreyLineRealityGuardEngine:
         critical_failures = [c for c in checks if c["severity"] == "critical" and not c["ok"]]
         warnings = [c for c in checks if c["severity"] == "warning" and not c["ok"]]
 
-        if critical_failures:
+        # Split the criticals: a TRUE fantasy failure (fake data shown as real) vs a DEGRADED-class one
+        # (an unverifiable/failed broker read — honest "unknown", NOT fabrication). A degraded read must
+        # not raise the red FANTASY alarm, or the guard cries wolf on a benign, self-healing state. True
+        # fantasy always wins if BOTH are present (worst-case honesty).
+        fantasy_failures = [c for c in critical_failures if not c.get("degraded_class")]
+        degraded_failures = [c for c in critical_failures if c.get("degraded_class")]
+
+        if fantasy_failures:
             verdict = "FANTASY_DETECTED"
+        elif degraded_failures:
+            verdict = "BROKER_READ_DEGRADED"       # unverifiable live state — honest amber, not red fantasy
         elif warnings:
             verdict = "REAL_DATA_WITH_WARNINGS"
         else:
@@ -1048,6 +1064,8 @@ class GreyLineRealityGuardEngine:
             "account_label": view.get("account_label"),
             "checks": checks,
             "critical_failures": [c["id"] for c in critical_failures],
+            "fantasy_failures": [c["id"] for c in fantasy_failures],
+            "degraded_failures": [c["id"] for c in degraded_failures],
             "warnings": [c["id"] for c in warnings],
             "status": "REALITY_GUARD_READY",
         }

@@ -77,6 +77,44 @@ class BackgroundSchedulerService:
             return timings
         except Exception:
             return {}
+
+    @classmethod
+    def _heavy_recompute_blocked(cls, market_hours):
+        """The 5 non-critical trend_mf_carry recomputes (best-condors dashboard card, condor/mf shadows,
+        once-day universe/sector refresh) do minutes-long serial UW/TS chain work — NONE of it on the
+        trade-firing path (the sleeves fire in their own fast phases). Measured: this block is ~164 min,
+        96% of the whole cycle. If one runs in the pre-open→session window it saturates TradeStation and
+        STARVES the broker read exactly when the exposure breaker needs it, failing the gate CLOSED and
+        blocking the open. So on trading days block them from a pre-open cutoff (default 05:00 ET — early
+        enough that no single ~170-min heavy phase can still be running at 09:30) through the 16:00 close.
+        They still run overnight and post-close, which matches their natural once-day / settled-bar
+        cadence anyway (only best-condors wanted intraday freshness, and it's just a card).
+
+        Fail-OPEN (allow) if the ET clock can't be resolved, so a transient market-hours glitch never
+        silently freezes the dashboard/forward-tests — the broker-read bounded retry is the open-day
+        backstop in that rare case. Returns (blocked: bool, reason: str)."""
+        try:
+            from datetime import datetime as _dt, time as _time
+            mt = market_hours.get("market_time") if isinstance(market_hours, dict) else None
+            now_et = _dt.fromisoformat(mt) if mt else None
+            if now_et is None or not market_hours.get("is_weekday") or market_hours.get("is_holiday"):
+                return (False, "off-hours/weekend/holiday — heavy recomputes allowed")
+
+            def _hhmm(s, dflt):
+                try:
+                    hh, mm = str(s).split(":")
+                    return _time(int(hh), int(mm))
+                except Exception:
+                    return dflt
+            block_from = _hhmm(getenv("GREYLINE_HEAVY_RECOMPUTE_BLOCK_FROM", "05:00"), _time(5, 0))
+            block_until = _hhmm(getenv("GREYLINE_HEAVY_RECOMPUTE_BLOCK_UNTIL", "16:00"), _time(16, 0))
+            if block_from <= now_et.time() <= block_until:
+                return (True, "open-window guard %s-%s ET (now %s) — deferred so a slow chain scan can't "
+                              "starve the broker read at the open" % (block_from.strftime("%H:%M"),
+                              block_until.strftime("%H:%M"), now_et.time().strftime("%H:%M")))
+            return (False, "outside open-window — heavy recomputes allowed")
+        except Exception as exc:
+            return (False, "guard error (fail-open): %s" % repr(exc)[:80])
     _ALERT_AFTER_FAILURES = 3        # consecutive cycle failures before alerting off-box (~15 min)
 
     @classmethod
@@ -681,12 +719,22 @@ class BackgroundSchedulerService:
         except Exception as exc:
             managed_futures = {"error": repr(exc), "status": "MF_DEGRADED"}
 
+        # OPEN-WINDOW GUARD: the 5 recomputes below are minutes-long serial UW/TS chain scans and NONE is
+        # on the trade-firing path. Measured, this block is ~164 min (96% of the cycle) — long enough to
+        # straddle the 09:30 open and starve the broker read (failing the exposure gate closed). So on
+        # trading days they are DEFERRED from ~05:00 ET through the 16:00 close; they still run overnight
+        # and post-close, which is their natural cadence. Computed once here; each step honours it.
+        _heavy_blocked, _heavy_reason = cls._heavy_recompute_blocked(market_hours)
+
         # CONDOR SHADOW forward-test: record the VRP/earnings condors the sleeves would open (built off
         # UW's clean greeks+NBBO) and mark them to market off UW — the options-premium forward-test the
         # SIM sandbox can't run. NO orders. Self-gated once/day. Gated by GREYLINE_CONDOR_SHADOW.
         try:
-            from app.services.condor_shadow_engine import CondorShadowEngine
-            condor_shadow = CondorShadowEngine().run_if_due()
+            if _heavy_blocked:
+                condor_shadow = {"status": "CONDOR_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.condor_shadow_engine import CondorShadowEngine
+                condor_shadow = CondorShadowEngine().run_if_due()
         except Exception as exc:
             condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
 
@@ -695,8 +743,11 @@ class BackgroundSchedulerService:
         # 16:00 ET close (settled data) so it never goes stale; bootstraps immediately if unset. Fail-safe
         # (a broken screen keeps the last good cache; VRP falls back to the curated list if none exists).
         try:
-            from app.services.optionable_universe_engine import OptionableUniverseEngine
-            optionable_universe = OptionableUniverseEngine().recompute_if_due(market_hours)
+            if _heavy_blocked:
+                optionable_universe = {"status": "OPTIONABLE_UNIVERSE_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.optionable_universe_engine import OptionableUniverseEngine
+                optionable_universe = OptionableUniverseEngine().recompute_if_due(market_hours)
         except Exception as exc:
             optionable_universe = {"error": repr(exc), "status": "OPTIONABLE_UNIVERSE_DEGRADED"}
 
@@ -705,16 +756,25 @@ class BackgroundSchedulerService:
         # from UW; ETFs stay in the exposure engine's deliberate literal map. Unmapped traded names are
         # recorded (loud, not silent).
         try:
-            from app.services.sector_map_engine import SectorMapEngine
-            sector_map_refresh = SectorMapEngine().recompute_if_due(market_hours)
+            if _heavy_blocked:
+                sector_map_refresh = {"status": "SECTOR_MAP_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.sector_map_engine import SectorMapEngine
+                sector_map_refresh = SectorMapEngine().recompute_if_due(market_hours)
         except Exception as exc:
             sector_map_refresh = {"error": repr(exc), "status": "SECTOR_MAP_DEGRADED"}
 
         # BEST-CONDORS list for the dashboard: recompute the ranked buildable condors (off UW) at most
         # once/10min and cache to a file, so the /best-condors route (dashboard card) is always instant.
+        # This is the ONE step whose 10-min TTL makes it recompute EVERY cycle — the dominant open-window
+        # offender — so the guard matters most here; the card serves its last (pre-open) computation with
+        # an age badge meanwhile.
         try:
-            from app.services.best_condors_engine import BestCondorsEngine
-            best_condors = BestCondorsEngine().recompute_if_due()
+            if _heavy_blocked:
+                best_condors = {"status": "BEST_CONDORS_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.best_condors_engine import BestCondorsEngine
+                best_condors = BestCondorsEngine().recompute_if_due()
         except Exception as exc:
             best_condors = {"error": repr(exc), "status": "BEST_CONDORS_DEGRADED"}
 
@@ -722,8 +782,11 @@ class BackgroundSchedulerService:
         # (NO orders). Runs regardless of the live sleeve — it's how the real diversification edge
         # accumulates while the sleeve is parked. Self-gated to once per new settled bar.
         try:
-            from app.services.managed_futures_shadow_engine import ManagedFuturesShadowEngine
-            managed_futures_shadow = ManagedFuturesShadowEngine().mark()
+            if _heavy_blocked:
+                managed_futures_shadow = {"status": "MF_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.managed_futures_shadow_engine import ManagedFuturesShadowEngine
+                managed_futures_shadow = ManagedFuturesShadowEngine().mark()
         except Exception as exc:
             managed_futures_shadow = {"error": repr(exc), "status": "MF_SHADOW_DEGRADED"}
         cls._ckpt("trend_mf_carry")

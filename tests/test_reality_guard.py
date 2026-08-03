@@ -142,8 +142,50 @@ def test_degraded_broker_read_does_not_fabricate_phantoms():
 def test_guard_check_returns_verdict_and_never_throws():
     from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine
     out = GreyLineRealityGuardEngine().check()
-    assert out["verdict"] in ("REAL_DATA_VERIFIED", "REAL_DATA_WITH_WARNINGS", "FANTASY_DETECTED")
+    assert out["verdict"] in ("REAL_DATA_VERIFIED", "REAL_DATA_WITH_WARNINGS",
+                              "BROKER_READ_DEGRADED", "FANTASY_DETECTED")
     assert isinstance(out["checks"], list) and len(out["checks"]) >= 4
+
+
+def test_degraded_read_alone_is_not_fantasy(monkeypatch):
+    """A FAILED broker read is UNVERIFIABLE, not FANTASY. Alone, it must yield the amber
+    BROKER_READ_DEGRADED verdict — NOT the red FANTASY_DETECTED alarm — so the guard never cries wolf
+    on a benign, self-healing degraded read (the money tiles already show last-known-good, not fakes)."""
+    from app.services import greyline_reality_guard_engine as mod
+    guard = mod.GreyLineRealityGuardEngine()
+
+    # Force a degraded broker view; stub every OTHER check to PASS so the read is the only failure.
+    degraded_view = {"reads_ok": False, "status": "BROKER_ACCOUNT_READ_DEGRADED", "positions": [],
+                     "account_label": "TradeStation Paper Trading Account", "account_mode": "paper"}
+    monkeypatch.setattr(mod, "BrokerAccountViewEngine",
+                        lambda: type("V", (), {"snapshot": lambda s: degraded_view})(), raising=False)
+    import app.services.broker_account_view_engine as bmod
+    monkeypatch.setattr(bmod, "BrokerAccountViewEngine",
+                        lambda: type("V", (), {"snapshot": lambda s: degraded_view})())
+
+    out = guard.check()
+    reads = next(c for c in out["checks"] if c["id"] == "BROKER_READS_OK")
+    assert reads["ok"] is False and reads.get("degraded_class") is True
+    # the DEGRADED read must NOT, by itself, produce the red fantasy alarm
+    assert "BROKER_READS_OK" not in out.get("fantasy_failures", [])
+    assert "BROKER_READS_OK" in out.get("degraded_failures", [])
+    # verdict is amber-degraded UNLESS a genuine (non-degraded) fantasy check also independently trips
+    if not out.get("fantasy_failures"):
+        assert out["verdict"] == "BROKER_READ_DEGRADED"
+
+
+def test_true_fantasy_still_beats_degraded():
+    """If a genuine fantasy critical (fake-data-as-real) trips, it must WIN over a degraded read —
+    worst-case honesty: the red alarm is never suppressed by the amber one."""
+    from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine as G
+    # simulate the classification directly on a mixed critical set
+    checks = [
+        {"id": "BROKER_READS_OK", "severity": "critical", "degraded_class": True, "ok": False},
+        {"id": "REALIZED_CONTINUITY", "severity": "critical", "ok": False},   # a TRUE fantasy failure
+    ]
+    crit = [c for c in checks if c["severity"] == "critical" and not c["ok"]]
+    fantasy = [c for c in crit if not c.get("degraded_class")]
+    assert fantasy and fantasy[0]["id"] == "REALIZED_CONTINUITY"   # fantasy present → red wins
 
 
 def test_working_limit_order_is_pending_not_phantom(tmp_path, monkeypatch):

@@ -37,9 +37,23 @@ class BrokerAccountViewEngine:
                     "equity": 0.0, "cash_balance": 0.0, "buying_power": 0.0,
                     "status": "BROKER_ACCOUNT_SOURCE_UNRESOLVED"}
 
-        bal = TradeStationBalanceLiveEngine().get_balance()
-        pos = TradeStationPositionsLiveEngine().get_positions()
-        ords = TradeStationOrdersLiveEngine().get_orders()
+        # BOUNDED RETRY: the account read intermittently gets STARVED (non-200 timeout) when the scheduler
+        # cycle is saturating TradeStation — but it genuinely succeeds within a window. Without a retry a
+        # single starved read fails-closed the whole view, which blocks trading (the exposure breaker) at
+        # the open. This does NOT weaken safety: it still requires a REAL, fully-parsed 200 read (no stale
+        # data, no fabrication) — it just tries a few times to catch a success instead of giving up on one.
+        import time as _t
+        bal = pos = ords = None
+        for _attempt in range(4):
+            bal = TradeStationBalanceLiveEngine().get_balance()
+            pos = TradeStationPositionsLiveEngine().get_positions()
+            ords = TradeStationOrdersLiveEngine().get_orders()
+            _b = ((bal.get("response_json") or {}).get("Balances") or [])
+            if (bal.get("http_status") == 200 and pos.get("http_status") == 200
+                    and ords.get("http_status") == 200 and bal.get("response_json") and _b):
+                break                                     # got a real read — stop retrying
+            if _attempt < 3:
+                _t.sleep(1.5)                             # brief backoff, then try to catch a clear window
 
         balances = ((bal.get("response_json") or {}).get("Balances") or [])
         b = balances[0] if balances else {}

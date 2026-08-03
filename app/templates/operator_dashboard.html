@@ -1038,7 +1038,13 @@ async function refreshRealityGuard() {
     if (d.verdict === "FANTASY_DETECTED") {
       paint("rgba(248,81,73,.16)", "rgba(248,81,73,.75)", "#ff6b6b");
       el.innerHTML = "⛔ FANTASY DATA DETECTED — the dashboard may not reflect real TradeStation state.<br>" +
-        failed.filter(c => c.severity === "critical").map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>");
+        failed.filter(c => c.severity === "critical" && !c.degraded_class).map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>");
+    } else if (d.verdict === "BROKER_READ_DEGRADED") {
+      // NOT fantasy — the live broker read failed, so figures shown are last-known-good / unknown (never
+      // fabricated). Amber, honest, and reassuring that it self-heals; usually a busy scheduler cycle.
+      paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
+      el.innerHTML = "⚠ Broker read degraded — can't confirm LIVE TradeStation state right now; money tiles show last-known-good, not fabricated numbers. Usually a busy scheduler cycle; this self-heals.<br>" +
+        failed.filter(c => c.degraded_class).map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>");
     } else if (d.verdict === "REAL_DATA_WITH_WARNINGS") {
       paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
       el.innerHTML = "⚠ Real broker data, with warnings:<br>" +
