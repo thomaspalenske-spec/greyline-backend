@@ -19,10 +19,25 @@ def _view(*syms):
 def test_fantasy_close_is_flagged_critical(monkeypatch):
     g = G()
     monkeypatch.setattr(g, "_recently_closed_symbols", lambda days: {"AAPL"})
+    monkeypatch.setattr(g, "_recently_closed_realized", lambda days: {"AAPL": 312.50})  # real $ banked
     monkeypatch.setattr(g, "managed_symbols", lambda: set())
-    r = g._check_exits_filled_not_intended(_view("AAPL", "MSFT"))   # AAPL closed but broker still holds
-    assert r["severity"] == "critical" and r["ok"] is False
+    r = g._check_exits_filled_not_intended(_view("AAPL", "MSFT"))   # AAPL closed w/ P&L but broker holds
+    assert r["severity"] == "critical" and r["ok"] is False        # fabricated realized -> red fantasy
     assert r["suspects"] == ["AAPL"]
+
+
+def test_residual_close_with_no_pnl_is_warning_not_fantasy(monkeypatch):
+    """A close the broker still holds but that banked NO realized dollars (e.g. an illiquid wing the
+    flatten marked closed but couldn't sell) is a benign reconciliation lag — amber warning, not red
+    fantasy. Regression guard for the 2026-08-04 NRG residual false-red."""
+    g = G()
+    monkeypatch.setattr(g, "_recently_closed_symbols", lambda days: {"NRG 260807C152.5"})
+    monkeypatch.setattr(g, "_recently_closed_realized", lambda days: {"NRG 260807C152.5": 0.0})  # None->0
+    monkeypatch.setattr(g, "managed_symbols", lambda: set())
+    r = g._check_exits_filled_not_intended(_view("NRG 260807C152.5", "MSFT"))
+    assert r["severity"] == "warning" and r["ok"] is False         # surfaced, but NOT a red fantasy
+    assert r["suspects"] == ["NRG 260807C152.5"]
+    assert "NO P&L" in r["detail"]
 
 
 def test_rebought_symbol_is_not_a_fantasy_close(monkeypatch):

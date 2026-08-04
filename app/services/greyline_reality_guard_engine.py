@@ -732,6 +732,60 @@ class GreyLineRealityGuardEngine:
                 pass
         return syms
 
+    def _recently_closed_realized(self, days):
+        """Like _recently_closed_symbols, but keeps the largest |realized P&L| booked per symbol. Lets the
+        EXITS check tell a REAL fabricated-P&L fantasy (non-zero dollars banked on a still-held position)
+        from a benign reconciliation lag (closed with 0/None realized — an unfilled residual the broker
+        still shows, e.g. an illiquid wing the flatten marked closed but couldn't sell). Returns
+        {SYMBOL: max_abs_realized_float} (None realized -> 0.0)."""
+        import json
+        from pathlib import Path
+
+        def _recent(ts):
+            try:
+                return (datetime.utcnow() - datetime.fromisoformat(str(ts).replace("Z", ""))).days <= days
+            except Exception:
+                return False
+
+        out = {}
+
+        def _add(sym, r):
+            if not sym:
+                return
+            s = str(sym).upper()
+            val = abs(float(r)) if isinstance(r, (int, float)) else 0.0
+            out[s] = max(out.get(s, 0.0), val)
+
+        try:
+            from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+            for t in PaperTradeLedgerEngine()._read_all():
+                if (t.get("status") == "CLOSED" and t.get("realized_pnl") is not None
+                        and _recent(t.get("exit_timestamp")) and t.get("symbol")):
+                    _add(t["symbol"], t.get("realized_pnl"))
+        except Exception:
+            pass
+        for fn, key in ((("app/data/options_paper_trading/options_paper_trade_ledger.jsonl"), "option_symbol"),
+                        (("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl"), None)):
+            try:
+                f = Path(fn)
+                if not f.exists():
+                    continue
+                for line in f.read_text().splitlines():
+                    if not line.strip():
+                        continue
+                    t = json.loads(line)
+                    if t.get("status") != "CLOSED" or not _recent(t.get("exit_timestamp") or t.get("closed_at")):
+                        continue
+                    if key and t.get(key):
+                        _add(t[key], t.get("realized_pnl"))
+                    elif not key:
+                        for lg in t.get("legs", []) or []:
+                            if lg.get("symbol"):
+                                _add(lg["symbol"], t.get("realized_pnl"))
+            except Exception:
+                pass
+        return out
+
     def _check_open_positions_match_broker(self, view):
         """The dashboard's Open Positions MUST equal the TradeStation account EXACTLY. Compare the set the
         dashboard renders (the broker view) to the RAW TradeStation Positions API, symbol + quantity, so
@@ -792,14 +846,30 @@ class GreyLineRealityGuardEngine:
         except Exception as e:
             return {"id": "EXITS_FILLED_NOT_INTENDED", "severity": "critical", "ok": False,
                     "detail": f"could not cross-check closed trades vs broker: {str(e)[:120]}"}
-        return {
-            "id": "EXITS_FILLED_NOT_INTENDED", "severity": "critical", "ok": not suspects,
-            "detail": ("every recently-CLOSED trade is actually flat at the broker" if not suspects
-                       else f"{len(suspects)} trade(s) marked CLOSED with realized P&L banked, but the "
-                            f"broker STILL holds them — fantasy realized P&L / unhedged position: "
-                            + ", ".join(suspects[:8])),
-            "suspects": suspects,
-        }
+        if not suspects:
+            return {"id": "EXITS_FILLED_NOT_INTENDED", "severity": "critical", "ok": True,
+                    "detail": "every recently-CLOSED trade is actually flat at the broker", "suspects": []}
+        # Split by whether the close actually BANKED realized dollars. A NON-ZERO realized on a still-held
+        # position is a real fabricated-P&L fantasy (critical, red). A close with 0/None realized that the
+        # broker still holds is a benign reconciliation lag — an unfilled residual (e.g. an illiquid wing
+        # the flatten marked CLOSED but couldn't sell); it banked NO phantom dollars and self-clears at
+        # fill/expiry, so it is a WARNING (amber), NOT a red FANTASY. Stops crying wolf on self-healing
+        # residuals while a genuinely fabricated exit P&L still trips critical.
+        realized = self._recently_closed_realized(CLOSE_LOOKBACK_DAYS)
+        EPS = 0.005
+        banked = sorted(s for s in suspects if realized.get(s, 0.0) > EPS)
+        residual = sorted(s for s in suspects if s not in banked)
+        if banked:
+            return {"id": "EXITS_FILLED_NOT_INTENDED", "severity": "critical", "ok": False,
+                    "detail": (f"{len(banked)} trade(s) marked CLOSED with NON-ZERO realized P&L banked, "
+                               f"but the broker STILL holds them — fantasy realized P&L / unhedged "
+                               f"position: " + ", ".join(banked[:8])),
+                    "suspects": banked, "residual_no_pnl": residual}
+        return {"id": "EXITS_FILLED_NOT_INTENDED", "severity": "warning", "ok": False,
+                "detail": (f"{len(residual)} recently-CLOSED trade(s) the broker still holds, but NO P&L "
+                           f"was banked (realized 0/None) — an unfilled residual / reconciliation lag, not "
+                           f"fantasy; self-clears at fill or expiry: " + ", ".join(residual[:8])),
+                "suspects": residual}
 
     def _check_decision_caches_fresh(self):
         """The condor and optionable-universe DECISION caches the dashboard renders as live must not be
