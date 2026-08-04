@@ -31,6 +31,9 @@ class EdgePersistenceEngine:
     VRP_LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
     OPT_LEDGER = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
     EQ_LEDGER = Path("app/data/paper_trading/paper_trade_ledger.jsonl")
+    # Direct-to-broker ETF sleeves (trend/carry/MF/low-vol) record their FIFO closes here with an EXPLICIT
+    # sleeve tag — previously invisible to the court. See SleeveTradeLedgerEngine.
+    SLEEVE_LEDGER = Path("app/data/paper_trading/sleeve_trade_ledger.jsonl")
 
     CARRY = {"SVXY"}
     TREND = {"QQQM", "IWM", "TLT", "GLDM", "EFA", "DBC"}
@@ -167,6 +170,29 @@ class EdgePersistenceEngine:
             trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
                            "risk": risk, "closed_at": r.get("closed_at"), "basis": tag,
                            "risk_kind": risk_kind})
+
+        # Direct-to-broker ETF sleeves (trend/carry/MF/low-vol): FIFO closes recorded by
+        # SleeveTradeLedgerEngine, tagged with an EXPLICIT `sleeve` (no _sleeve_of guess). Quantity is
+        # broker-confirmed; realized_pnl is fill-quote net (SIM charges no commission). No protective
+        # stop on these rebalance sleeves, so risk = the same vol proxy the equity path falls back to.
+        for r in self._read(self.SLEEVE_LEDGER):
+            if r.get("kind") != "close" or str(r.get("status")).upper() != "CLOSED":
+                continue
+            if self._forced(r.get("close_reason")):
+                excluded += 1
+                continue
+            rp, sleeve = r.get("realized_pnl"), str(r.get("sleeve") or "").strip()
+            if rp is None or not sleeve:
+                continue
+            qty = self._f(r.get("quantity"))
+            notional = abs(self._f(r.get("entry_price")) * qty)
+            if notional <= 0:
+                continue
+            risk = self.EQUITY_STOP_PCT * notional
+            trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
+                           "risk": risk, "closed_at": r.get("closed_at"),
+                           "basis": str(r.get("realized_pnl_basis") or "quote_estimate"),
+                           "risk_kind": f"stop_proxy_{int(self.EQUITY_STOP_PCT * 100)}pct"})
         return trades, excluded
 
     # court sleeve -> ExecutionLog strategy key (only the direct-to-broker equity sleeves are instrumented)

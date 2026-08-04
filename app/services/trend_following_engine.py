@@ -145,6 +145,13 @@ class TrendFollowingEngine:
         if not is_regular_session:
             return {"status": "TREND_MARKET_CLOSED", "acted": False}
         p = self.plan()
+        # make this sleeve's fills VISIBLE to the edge court (books straight to the broker). Broker-
+        # confirmed FIFO; the empty-read guard makes it safe on a degraded positions read.
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            SleeveTradeLedgerEngine().reconcile_plan("trend", p.get("legs"))
+        except Exception:
+            pass
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         book = TradeStationSimBookingEngine()
         acts = []

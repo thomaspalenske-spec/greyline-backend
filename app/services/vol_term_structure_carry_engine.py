@@ -212,6 +212,14 @@ class VolTermStructureCarryEngine:
         p = self.plan()
         if p["status"] not in ("VOL_CARRY_PLAN",):
             return {**p, "acted": False}
+        # make this single-position sleeve's fills VISIBLE to the edge court (books straight to the
+        # broker). Broker-confirmed FIFO; empty-read guard makes it safe on a degraded positions read.
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            SleeveTradeLedgerEngine().reconcile_plan(
+                "vol_carry", [{"symbol": self.SYMBOL, "held": p.get("held_shares"), "last": p.get("svxy")}])
+        except Exception:
+            pass
         delta = p["delta_shares"]
         # A FULL exit (target 0 — backwardation / stop) always acts. A routine vol-target trim in
         # EITHER direction respects the churn band, so we don't pay the spread on tiny daily wiggles.

@@ -225,6 +225,13 @@ class ManagedFuturesEngine:
         if not due and not dry_run:
             return {"status": "MF_NOT_DUE", "acted": False, "cadence": "monthly", "month": month}
         p = self.plan()
+        # make this sleeve's fills VISIBLE to the edge court (books straight to the broker). Broker-
+        # confirmed FIFO; the empty-read guard makes it safe on a degraded positions read.
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            SleeveTradeLedgerEngine().reconcile_plan("managed_futures", p.get("legs"))
+        except Exception:
+            pass
         if p["budget_usd"] <= 0:
             return {"status": "MF_UNFUNDED", "acted": False, **{"note": p["note"]}}
 

@@ -145,6 +145,13 @@ class LowVolatilityEngine:
         if not is_regular_session:
             return {"status": "LOW_VOL_MARKET_CLOSED", "acted": False}
         p = self.plan()
+        # make this sleeve's fills VISIBLE to the edge court (it books straight to the broker, so it
+        # writes to none of the court's other ledgers). Broker-confirmed FIFO; safe on a degraded read.
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            SleeveTradeLedgerEngine().reconcile_plan("low_vol", p.get("legs"))
+        except Exception:
+            pass
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         book = TradeStationSimBookingEngine()
         acts = []

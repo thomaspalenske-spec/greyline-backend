@@ -335,6 +335,8 @@ from app.routes import edge_proof
 app.include_router(edge_proof.router)
 from app.routes import edge_first_close
 app.include_router(edge_first_close.router)
+from app.routes import sleeve_trade_ledger
+app.include_router(sleeve_trade_ledger.router)
 from app.routes import transactions_rolling
 app.include_router(transactions_rolling.router)
 from app.routes import low_volatility
