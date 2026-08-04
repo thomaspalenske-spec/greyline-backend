@@ -919,6 +919,16 @@ class BackgroundSchedulerService:
         except Exception as exc:
             edge_proof = {"error": repr(exc), "status": "EDGE_PROOF_PROTOCOL_DEGRADED"}
 
+        # FIRST REAL CLOSE watch: page the operator the MOMENT any sleeve books its first NON-FORCED
+        # (strategy-logic) exit — the milestone that starts real edge accumulation. GreyLine has never
+        # closed a trade on its own logic (all forced flattens); this makes that first one unmissable.
+        # Idempotent (permanent per-sleeve marker); reads the court above, never recomputes. /edge-first-close.
+        try:
+            from app.services.edge_first_close_watch_engine import EdgeFirstCloseWatchEngine
+            edge_first_close = EdgeFirstCloseWatchEngine().run_cycle()
+        except Exception as exc:
+            edge_first_close = {"error": repr(exc), "status": "EDGE_FIRST_CLOSE_DEGRADED"}
+
         # BOOK GREEKS: keep the harvest a PURE vol bet, not an accidental directional one. Computes
         # the aggregate delta and, if delta-hedging is armed, trades the underlying to neutralise it.
         # Cheap when flat (returns immediately with no open legs); only fetches chains when positions
