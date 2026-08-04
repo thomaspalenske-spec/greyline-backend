@@ -169,6 +169,14 @@ class TradeStationSimBookingEngine:
         # ok is derived from the BODY (valid OrderID, no Error) — NOT HTTP 200. A body-level reject
         # now reports ok=False / order_id=None so callers can't record it as a filled position.
         ok, order_id, reject_reason = _interpret_order(resp.status_code, payload)
+        if ok:
+            # the book just changed — drop the shared positions cache so any same-cycle reader sees the
+            # new state rather than a ≤TTL-stale snapshot.
+            try:
+                from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+                TradeStationPositionsLiveEngine.invalidate()
+            except Exception:
+                pass
         return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
                 "http_status": resp.status_code, "ok": ok,
                 "order_id": order_id, "reject_reason": reject_reason,
