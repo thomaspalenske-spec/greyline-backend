@@ -26,6 +26,7 @@ class AccountRebaselineEngine:
 
     MARKER = MissionRealizedPnlEngine.DIR / "rebaseline_marker.json"
     VRP_LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
+    EQUITY_LEDGER = Path("app/data/paper_trading/paper_trade_ledger.jsonl")
 
     def _mr(self):
         return MissionRealizedPnlEngine()
@@ -65,12 +66,44 @@ class AccountRebaselineEngine:
                     f.write(json.dumps(r) + "\n")
         return n
 
+    def _close_open_equity_ledger_rows(self):
+        """Mark any lingering OPEN EQUITY (paper-trade) ledger rows CLOSED once the broker book is
+        flat — the exact equity twin of _close_open_vrp_ledger_rows. The clean-slate flatten sells
+        every equity position at the broker, but the per-trade ledger rows stayed OPEN, so the
+        reality guard (correctly) flagged them as phantoms (ledger holds it, broker doesn't). Realized
+        P&L is booked as 0 here: the flatten's actual fills are already reflected in the broker daily
+        realized that the rebaseline snaps the baseline to (below), and the prior realized ledger is
+        archived — re-deriving a P&L from stale entry prices would DOUBLE-count. This only reconciles
+        the ledger's OPEN/CLOSED state to broker reality; it never fabricates a number."""
+        led = self.EQUITY_LEDGER
+        try:
+            if not led.exists():
+                return 0
+            rows = [json.loads(l) for l in led.read_text().splitlines() if l.strip()]
+        except Exception:
+            return 0
+        n = 0
+        for r in rows:
+            if str(r.get("status")).upper() == "OPEN":
+                r["status"] = "CLOSED"
+                r["exit_price"] = r.get("entry_price")   # flat basis -> 0 realized (see docstring)
+                r["realized_pnl"] = 0.0
+                r["closed_timestamp"] = datetime.utcnow().isoformat()
+                r["close_reason"] = "CLEAN_SLATE_FLATTEN"
+                n += 1
+        if n:
+            with open(led, "w") as f:
+                for r in rows:
+                    f.write(json.dumps(r) + "\n")
+        return n
+
     def rebaseline(self, reason="operator clean-slate reset"):
         """Archive the realized ledger, zero it, and reset the daily baseline. Idempotent by marker."""
         mr = self._mr()
         mr.DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
         vrp_closed = self._close_open_vrp_ledger_rows()
+        equity_closed = self._close_open_equity_ledger_rows()
 
         prior = mr.cumulative_realized()
         archived_to = None
@@ -88,7 +121,8 @@ class AccountRebaselineEngine:
 
         marker = {"done_at": datetime.utcnow().isoformat(), "reason": reason,
                   "archived_realized_before": prior, "archived_to": archived_to,
-                  "reset_daily_baseline_to": daily, "vrp_ledger_rows_closed": vrp_closed}
+                  "reset_daily_baseline_to": daily, "vrp_ledger_rows_closed": vrp_closed,
+                  "equity_ledger_rows_closed": equity_closed}
         self.MARKER.write_text(json.dumps(marker))
         # reset the governor's start-of-day equity so daily P&L isn't a rebaseline artifact
         try:

@@ -17,6 +17,7 @@ def _paths(monkeypatch, tmp_path):
     monkeypatch.setattr(MR, "_broker_daily_realized", lambda self: -8.0)
     monkeypatch.setattr(AccountRebaselineEngine, "MARKER", tmp_path / "rebaseline_marker.json")
     monkeypatch.setattr(AccountRebaselineEngine, "VRP_LEDGER", tmp_path / "vrp.jsonl")
+    monkeypatch.setattr(AccountRebaselineEngine, "EQUITY_LEDGER", tmp_path / "equity.jsonl")
 
 
 def test_rebaseline_zeroes_but_archives(monkeypatch, tmp_path):
@@ -63,3 +64,22 @@ def test_open_vrp_rows_marked_closed(monkeypatch, tmp_path):
     rows = [json.loads(l) for l in vrp.read_text().splitlines() if l.strip()]
     assert all(r["status"] == "CLOSED" for r in rows)
     assert any(r.get("close_reason") == "CLEAN_SLATE_FLATTEN" for r in rows)
+
+
+def test_open_equity_rows_marked_closed_at_zero_realized(monkeypatch, tmp_path):
+    """The clean-slate flatten sells every equity position at the broker; the per-trade ledger rows must
+    be reconciled to CLOSED (else the reality guard flags them as phantoms). Realized is booked 0 — the
+    flatten's real fills already moved the broker-daily the baseline snaps to; re-deriving from stale entry
+    prices would double-count. Regression guard for the 2026-08-04 equity-phantom bug."""
+    _paths(monkeypatch, tmp_path)
+    eq = tmp_path / "equity.jsonl"
+    eq.write_text(json.dumps({"symbol": "AMKR", "status": "OPEN", "entry_price": 50.5, "quantity": 4}) + "\n"
+                  + json.dumps({"symbol": "GLW", "status": "OPEN", "entry_price": 142.2, "quantity": 1}) + "\n"
+                  + json.dumps({"symbol": "OLD", "status": "CLOSED", "entry_price": 10.0, "quantity": 1}) + "\n")
+    res = AccountRebaselineEngine().rebaseline()
+    assert res["equity_ledger_rows_closed"] == 2
+    rows = [json.loads(l) for l in eq.read_text().splitlines() if l.strip()]
+    assert all(r["status"] == "CLOSED" for r in rows)
+    reconciled = [r for r in rows if r.get("close_reason") == "CLEAN_SLATE_FLATTEN"]
+    assert len(reconciled) == 2
+    assert all(r["realized_pnl"] == 0.0 for r in reconciled)   # no fabricated P&L
