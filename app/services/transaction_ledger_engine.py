@@ -22,12 +22,32 @@ class TransactionLedgerEngine:
     VRP_LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
     OPT_LEDGER = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
 
+    # Outcome-NEUTRAL exit labels. A close reason must never read like a result (e.g. the old
+    # "EARNINGS_CRUSH_CAPTURED" wore a "captured" badge on a losing trade). The reason names the TRIGGER;
+    # the realized P&L (shown right beside it) names the OUTCOME.
+    _REASON_LABELS = {
+        "EARNINGS_CRUSH_CAPTURED": "post-earnings exit",     # legacy rows keep the old value; humanize both
+        "POST_EARNINGS_EXIT": "post-earnings exit",
+        "MATURITY_LIQUIDATION": "expiry liquidation",
+        "DTE_LIQUIDATION": "near-expiry exit",
+        "ATR_STOP": "ATR stop",
+    }
+
     @staticmethod
     def _f(v):
         try:
             return float(v)
         except (TypeError, ValueError):
             return None
+
+    def _close_detail(self, reason, pnl):
+        """Humanized, outcome-neutral exit trigger + the realized P&L outcome beside it."""
+        r = str(reason or "closed")
+        human = self._REASON_LABELS.get(r.upper(), r.replace("_", " ").lower())
+        if pnl is None:
+            return human
+        tag = "gain" if pnl > 0 else ("loss" if pnl < 0 else "flat")
+        return f"{human} · {'+' if pnl >= 0 else '-'}${abs(pnl):.0f} {tag}"
 
     @staticmethod
     def _read(path):
@@ -51,10 +71,10 @@ class TransactionLedgerEngine:
                            "detail": (f"condor · credit ${cr:+.0f}" if cr is not None else "condor"),
                            "pnl": None})
             if str(r.get("status")).upper() == "CLOSED" and r.get("closed_at"):
+                _pnl = self._f(r.get("realized_pnl"))
                 ev.append({"ts": r["closed_at"], "sleeve": sleeve, "symbol": r.get("symbol"),
                            "action": "CLOSE", "quantity": qty,
-                           "detail": str(r.get("close_reason") or "closed"),
-                           "pnl": self._f(r.get("realized_pnl"))})
+                           "detail": self._close_detail(r.get("close_reason"), _pnl), "pnl": _pnl})
 
         # equity (momentum) + any long-option contracts: open ts is `timestamp` (record creation), close is closed_at
         for r in (self._read(self.EQUITY_LEDGER) + self._read(self.OPT_LEDGER)):
@@ -70,10 +90,10 @@ class TransactionLedgerEngine:
                 ev.append({"ts": open_ts, "sleeve": sleeve, "symbol": r.get("symbol"),
                            "action": "OPEN", "quantity": qty, "detail": detail, "pnl": None})
             if str(r.get("status")).upper() == "CLOSED" and r.get("closed_at"):
+                _pnl = self._f(r.get("realized_pnl"))
                 ev.append({"ts": r["closed_at"], "sleeve": sleeve, "symbol": r.get("symbol"),
                            "action": "CLOSE", "quantity": qty,
-                           "detail": str(r.get("close_reason") or "closed"),
-                           "pnl": self._f(r.get("realized_pnl"))})
+                           "detail": self._close_detail(r.get("close_reason"), _pnl), "pnl": _pnl})
         return ev
 
     def _to_et(self, iso):

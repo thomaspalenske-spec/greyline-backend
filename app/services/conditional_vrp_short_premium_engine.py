@@ -1446,7 +1446,7 @@ class ConditionalVRPShortPremiumEngine:
                 if pnl_per >= self.PROFIT_TAKE_FRAC * credit * 100:
                     reason = "EARNINGS_PROFIT_TAKE"
                 elif _rd and _today > _rd:
-                    reason = "EARNINGS_CRUSH_CAPTURED"
+                    reason = "POST_EARNINGS_EXIT"     # outcome-NEUTRAL: the exit TRIGGER (close the day after
                 elif pnl_total <= -self.HARD_STOP_LOSS_MULT * max_loss_total:
                     reason = "HARD_STOP_NEAR_MAX_LOSS"
             elif pnl_per >= self.PROFIT_TAKE_FRAC * credit * 100:
