@@ -897,6 +897,17 @@ class BackgroundSchedulerService:
         except Exception as exc:
             edge_persistence = {"error": repr(exc), "status": "EDGE_PERSISTENCE_DEGRADED"}
 
+        # PRE-REGISTERED edge-proof protocol: freeze each sleeve's hypothesis + required N + kill-rule
+        # (bootstrap is idempotent — never overwrites a frozen protocol) and render the BINDING verdict
+        # against the court above. Evidence-only; the operator's hope doesn't get a vote. /edge-proof-protocol.
+        try:
+            from app.services.edge_proof_protocol_engine import EdgeProofProtocolEngine
+            _epp = EdgeProofProtocolEngine()
+            _epp.bootstrap()
+            edge_proof = _epp.evaluate()
+        except Exception as exc:
+            edge_proof = {"error": repr(exc), "status": "EDGE_PROOF_PROTOCOL_DEGRADED"}
+
         # BOOK GREEKS: keep the harvest a PURE vol bet, not an accidental directional one. Computes
         # the aggregate delta and, if delta-hedging is armed, trades the underlying to neutralise it.
         # Cheap when flat (returns immediately with no open legs); only fetches chains when positions

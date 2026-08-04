@@ -331,6 +331,8 @@ from app.routes import risk_and_readiness
 app.include_router(risk_and_readiness.router)
 from app.routes import edge_persistence
 app.include_router(edge_persistence.router)
+from app.routes import edge_proof
+app.include_router(edge_proof.router)
 
 from app.routes import index_variance_premium
 app.include_router(index_variance_premium.router)
