@@ -52,6 +52,7 @@ def disaster_restore_drill_status():
 @router.post("/disaster-restore-drill/run")
 def disaster_restore_drill_run():
     """Run the restore drill NOW — fetch the real remote backup branch and verify every TIER1 file is
-    present, non-empty, and parses. Read-only (never touches live data); does not page."""
+    present, non-empty, and parses. Read-only on live data; records the result (updates the reality
+    guard); does not page."""
     from app.services.disaster_restore_drill_engine import DisasterRestoreDrillEngine
-    return DisasterRestoreDrillEngine().drill()
+    return DisasterRestoreDrillEngine().drill_and_record()

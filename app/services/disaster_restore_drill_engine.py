@@ -132,6 +132,14 @@ class DisasterRestoreDrillEngine:
         res["branch"] = self._branch()
         return res
 
+    def drill_and_record(self):
+        """Run the drill NOW (ignoring the weekly gate) and RECORD the marker — the manual-run path. Does
+        not page (that's run_if_due's job on the scheduler); an ad-hoc operator run still updates state so
+        the reality guard reflects it."""
+        res = self.drill()
+        self._mark(res)
+        return res
+
     def _mark(self, res):
         try:
             self.MARKER.parent.mkdir(parents=True, exist_ok=True)
