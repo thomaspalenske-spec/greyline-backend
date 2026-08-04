@@ -549,6 +549,34 @@ class GreyLineRealityGuardEngine:
                 "detail": (f"{got if got is not None else st.get('files_protected')} of "
                            f"{exp} unrecoverable files verified off-machine, {age}h ago")}
 
+    def _check_restore_drill(self):
+        """The off-machine backup must be proven RESTORABLE, not just written. A backup never
+        test-restored is a latent DR failure — it can be missing files or corrupt and you only find out
+        during a real disaster. Reads the last restore-drill marker (no network here — the scheduler
+        runs the actual drill weekly)."""
+        try:
+            from app.services.disaster_restore_drill_engine import DisasterRestoreDrillEngine
+            e = DisasterRestoreDrillEngine()
+            hs = e.hours_since()
+            import json
+            marker = json.loads(e.MARKER.read_text()) if e.MARKER.exists() else {}
+        except Exception as ex:
+            return {"id": "RESTORE_DRILL_CURRENT", "severity": "warning", "ok": True,
+                    "detail": f"restore-drill check skipped: {str(ex)[:90]}"}
+        if not marker or hs is None:
+            return {"id": "RESTORE_DRILL_CURRENT", "severity": "warning", "ok": False,
+                    "detail": "off-machine backup has NEVER been test-restored — restorability UNVERIFIED"}
+        if not marker.get("restorable"):
+            return {"id": "RESTORE_DRILL_CURRENT", "severity": "warning", "ok": False,
+                    "detail": (f"last restore drill FAILED ({marker.get('status')}) — the backup is NOT "
+                               f"restorable: {marker.get('missing')} missing, {marker.get('corrupt')} corrupt")}
+        if hs > 2 * DisasterRestoreDrillEngine.DUE_HOURS:
+            return {"id": "RESTORE_DRILL_CURRENT", "severity": "warning", "ok": False,
+                    "detail": f"last successful restore drill was {hs}h ago — overdue, re-run to re-verify"}
+        return {"id": "RESTORE_DRILL_CURRENT", "severity": "warning", "ok": True,
+                "detail": (f"off-machine backup verified RESTORABLE {hs}h ago "
+                           f"({marker.get('verified')}/{marker.get('expected')} TIER1 files present + parse)")}
+
     def _check_broker_side_protection(self):
         """Open longs should have a failsafe that survives this process dying.
 
@@ -1118,6 +1146,7 @@ class GreyLineRealityGuardEngine:
             self._check_lineage_stable(),
             self._check_options_capture(),
             self._check_backup_current(),
+            self._check_restore_drill(),
             self._check_broker_side_protection(),
             self._check_external_alerting(),
             self._check_sleeve_edge_not_decayed(),

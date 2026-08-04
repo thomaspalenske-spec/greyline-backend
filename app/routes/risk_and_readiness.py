@@ -40,3 +40,18 @@ def git_data_backup_run():
     can actually push (keychain access), and the manual trigger."""
     from app.services.git_data_backup_engine import GitDataBackupEngine
     return GitDataBackupEngine().backup()
+
+
+@router.get("/disaster-restore-drill")
+def disaster_restore_drill_status():
+    """Last restore-drill result — whether the off-machine backup is proven RESTORABLE. Read-only."""
+    from app.services.disaster_restore_drill_engine import DisasterRestoreDrillEngine
+    return DisasterRestoreDrillEngine().status()
+
+
+@router.post("/disaster-restore-drill/run")
+def disaster_restore_drill_run():
+    """Run the restore drill NOW — fetch the real remote backup branch and verify every TIER1 file is
+    present, non-empty, and parses. Read-only (never touches live data); does not page."""
+    from app.services.disaster_restore_drill_engine import DisasterRestoreDrillEngine
+    return DisasterRestoreDrillEngine().drill()

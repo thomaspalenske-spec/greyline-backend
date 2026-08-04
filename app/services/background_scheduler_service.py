@@ -1123,6 +1123,15 @@ class BackgroundSchedulerService:
         except Exception as exc:
             git_backup = {"status": "GIT_DATA_BACKUP_DEGRADED", "error": repr(exc)}
 
+        # RESTORE DRILL: prove the off-machine backup is actually RESTORABLE (present + non-empty +
+        # parses), not just written. Self-gated (~weekly); screams CRITICAL if a restore would fail.
+        # A backup you never test-restore is the classic latent DR failure. /disaster-restore-drill.
+        try:
+            from app.services.disaster_restore_drill_engine import DisasterRestoreDrillEngine
+            restore_drill = DisasterRestoreDrillEngine().run_if_due()
+        except Exception as exc:
+            restore_drill = {"status": "RESTORE_DRILL_DEGRADED", "error": repr(exc)}
+
         # Broker-side disaster stops: the only protection that survives THIS process dying.
         # Every doctrine exit (ATR stop, TP ladder, maturity liquidation) needs the scheduler
         # alive; a resting GTC stop at the broker does not. Default OFF, and each cycle it only
