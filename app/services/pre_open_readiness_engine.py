@@ -301,7 +301,17 @@ class PreOpenReadinessEngine:
                     bad.append(f"account source unresolved ({src.get('error')})")
                 if not reads_ok:
                     bad.append(f"broker reads degraded ({view.get('status')})")
-                add("broker_connectivity", "FAIL", "cannot reach the trading account: " + "; ".join(bad))
+                # A degraded READ with a healthy token+source is a transient broker-side blip (the same
+                # self-healing class the money tiles / reality guard treat as degraded-not-broken, and
+                # snapshot() already bounded-retries before reporting) — WARN like the sibling checks
+                # (mission_accounting, exposure_gate), not the loudest pre-open FAIL. Reserve FAIL for a
+                # token/source failure that genuinely can't reach the account.
+                if tok_ok and src_ok and not reads_ok:
+                    add("broker_connectivity", "WARN",
+                        "broker reads degraded (transient/self-healing): " + "; ".join(bad))
+                else:
+                    add("broker_connectivity", "FAIL",
+                        "cannot reach the trading account: " + "; ".join(bad))
         except Exception as e:
             add("broker_connectivity", "FAIL", f"broker read threw: {repr(e)[:80]}")
 

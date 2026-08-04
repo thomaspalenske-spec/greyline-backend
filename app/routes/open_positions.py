@@ -265,18 +265,35 @@ def open_positions():
             # having no risk management. The stage names the condor + leg + the unit's net P/L.
             l["stage"] = f"{und} condor · leg {i + 1}/{len(legs)} · net P/L ${net}"
 
+    # DEGRADED-READ GUARD (mirror account_summary): on a failed broker read, positions are UNKNOWN, not
+    # zero. Emitting open_count=0 / total_unrealized_pnl=0.0 shipped a real-looking FLAT BOOK to any
+    # consumer (pager, API client) — the same fantasy class the money tiles already guard against. Null the
+    # counts/totals and flag degraded so no consumer can read the zeros as "we hold nothing".
+    reads_ok = view.get("reads_ok")
+    if not reads_ok:
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "account_mode": view.get("account_mode"),
+            "account_label": view.get("account_label"),
+            "reads_ok": False, "degraded": True,
+            "open_positions": [],
+            "open_count": None, "equity_count": None, "option_count": None,
+            "total_unrealized_pnl": None, "total_notional": None,
+            "status": "OPEN_POSITIONS_BROKER_READ_DEGRADED",
+        }
+
     total_pnl = round(sum(r.get("unrealized_pnl") or 0 for r in rows), 2)
     total_notional = round(sum(abs((r.get("current_price") or 0) * (r.get("quantity") or 0)) for r in rows), 2)
     return {
         "timestamp": datetime.utcnow().isoformat(),
         "account_mode": view.get("account_mode"),
         "account_label": view.get("account_label"),
-        "reads_ok": view.get("reads_ok"),
+        "reads_ok": reads_ok,
         "open_positions": rows,
         "open_count": len(rows),
         "equity_count": len([r for r in rows if r.get("asset_type") != "OPTION"]),
         "option_count": len([r for r in rows if r.get("asset_type") == "OPTION"]),
         "total_unrealized_pnl": total_pnl,
         "total_notional": total_notional,
-        "status": "OPEN_POSITIONS_READY" if view.get("reads_ok") else "OPEN_POSITIONS_BROKER_READ_DEGRADED",
+        "status": "OPEN_POSITIONS_READY",
     }

@@ -39,6 +39,18 @@ def operator_commander_summary():
     decision_name = decision.get("decision")
     unread = notifications.get("unread_count") or 0
 
+    # STALENESS: this card renders the LAST RECORDED master decision, which can be hours/a day old if the
+    # scheduler cycle stalled (a documented silent-failure mode). Returning the headline under a fresh
+    # utcnow() timestamp made a stale decision read as live. Surface the decision's OWN timestamp + age so
+    # the dashboard can mark it stale (the sibling battlefield-summary route already carries this).
+    decision_at = decision.get("timestamp")
+    decision_age_seconds = None
+    if decision_at:
+        try:
+            decision_age_seconds = round((datetime.utcnow() - datetime.fromisoformat(str(decision_at))).total_seconds())
+        except Exception:
+            decision_age_seconds = None
+
     status = "GREEN"
     action_required = False
     headline = "GreyLine operational."
@@ -79,6 +91,8 @@ def operator_commander_summary():
             "signal_decision": authority.get("signal_decision"),
             "reliability_score": reliability.get("health_score"),
             "master_decision": decision_name,
+            "master_decision_at": decision_at,                 # the decision's OWN time (not this poll's)
+            "master_decision_age_seconds": decision_age_seconds,
             "top_symbol": top.get("symbol"),
             "top_option_type": top.get("option_type"),
             "top_score": top.get("composite_score"),

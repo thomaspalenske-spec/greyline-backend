@@ -31,6 +31,7 @@ class TradeStationQuoteLiveEngine:
             c = self._quote_cache.get(s)
             if c and (now - c.get("_cache_timestamp", 0)) <= self.CACHE_TTL_SECONDS:
                 hit = dict(c); hit["cache_hit"] = True
+                hit["cache_age_seconds"] = round(now - c.get("_cache_timestamp", 0), 2)  # match single-quote path
                 out[s] = hit
             else:
                 to_fetch.append(s)

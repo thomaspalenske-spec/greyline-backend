@@ -92,5 +92,7 @@ class UWOptionQuoteEngine:
 
     @staticmethod
     def enabled():
-        # honours the same key the rest of the UW stack uses; no key -> no fallback, silently
-        return bool((getenv("UNUSUAL_WHALES_API_KEY", "") or "").strip())
+        # honours the same key the rest of the UW stack uses, resolved via the shared .env/.env.local
+        # resolver so the gate can't disagree with the provider; no key -> no fallback, silently
+        from app.services.env_reload import uw_api_key
+        return bool(uw_api_key())

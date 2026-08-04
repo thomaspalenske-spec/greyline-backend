@@ -207,13 +207,31 @@ class DisasterRecoveryEngine:
         except Exception as e:
             r = {"status": "BACKUP_DEGRADED", "error": repr(e)[:150]}
         if str(r.get("status")) in ("BACKUP_DEGRADED", "BACKUP_INCOMPLETE"):
+            # GIT-CHANNEL AWARENESS (same fix as alert_if_stale, which this sibling path had missed): an
+            # interrupted/incomplete FILESYSTEM backup does NOT mean the data is unprotected — it is also
+            # pushed off-machine to the git remote. If THAT is fresh, this is a WARNING (local snapshot
+            # incomplete), not a CRITICAL "data at risk" that cries wolf on a benign restart-interrupted run.
+            git_fresh, git_h = self._git_channel_fresh()
             try:
                 from app.services.operator_notification_engine import OperatorNotificationEngine
-                OperatorNotificationEngine().record(
-                    event_type="BACKUP_FAILED", title="Off-machine backup FAILED",
-                    message=(f"Unrecoverable-data backup returned {r.get('status')}. Forward-only "
-                             f"data is unprotected until this is fixed. {str(r.get('error') or '')[:150]}"),
-                    severity="CRITICAL", source="DISASTER_RECOVERY", payload=r)
+                if git_fresh:
+                    OperatorNotificationEngine().record(
+                        event_type="BACKUP_FS_INCOMPLETE_GIT_OK",
+                        title="Local backup snapshot incomplete (data still protected off-machine)",
+                        message=(f"Filesystem backup returned {r.get('status')} (usually a restart/sleep "
+                                 f"interrupting it mid-run). NOT a data-loss risk: the primary off-machine "
+                                 f"git backup is current ({round(git_h, 1)}h ago), so the unrecoverable data "
+                                 f"IS protected. {str(r.get('error') or '')[:120]}"),
+                        severity="WARNING", source="DISASTER_RECOVERY", payload={**r, "git_hours_since": git_h})
+                else:
+                    git_txt = (f"the git off-machine backup is ALSO stale ({round(git_h, 1)}h ago)"
+                               if git_h is not None else "the git off-machine backup could not be confirmed")
+                    OperatorNotificationEngine().record(
+                        event_type="BACKUP_FAILED", title="Off-machine backup FAILED",
+                        message=(f"Unrecoverable-data backup returned {r.get('status')} and {git_txt}. "
+                                 f"Forward-only data is unprotected until this is fixed. "
+                                 f"{str(r.get('error') or '')[:120]}"),
+                        severity="CRITICAL", source="DISASTER_RECOVERY", payload={**r, "git_hours_since": git_h})
             except Exception:
                 pass
         return r
@@ -304,6 +322,18 @@ class DisasterRecoveryEngine:
     STALE_THROTTLE_H = 6.0        # don't re-scream more than this often while stale
     STALE_MARKER = ROOT / "data_quality" / "backup_stale_alert.json"
 
+    def _git_channel_fresh(self):
+        """(git_fresh, git_hours) for the OTHER off-machine channel — the git remote push
+        (GitDataBackupEngine), which is the one the service can actually rely on (macOS TCC blocks the
+        filesystem/iCloud snapshot). Fail-SAFE: if git freshness can't be read, returns (False, None) so
+        the caller alerts as if unprotected — better to over-warn than miss a real double gap."""
+        try:
+            from app.services.git_data_backup_engine import GitDataBackupEngine
+            git_h = GitDataBackupEngine().hours_since()
+        except Exception:
+            git_h = None
+        return (git_h is not None and git_h <= self.STALE_MAX_AGE_H), git_h
+
     def alert_if_stale(self, now=None):
         """Scream when the last VERIFIED backup is too old — even if NO backup() call errored.
 
@@ -330,13 +360,7 @@ class DisasterRecoveryEngine:
         # channels are stale; if git is fresh, downgrade to a WARNING that the secondary/local snapshot
         # lagged (data still protected). Fail-SAFE: if git freshness can't be confirmed, treat it as NOT
         # fresh and alert as before — better to over-warn than miss a real double gap.
-        git_h = None
-        try:
-            from app.services.git_data_backup_engine import GitDataBackupEngine
-            git_h = GitDataBackupEngine().hours_since()
-        except Exception:
-            git_h = None
-        git_fresh = (git_h is not None and git_h <= self.STALE_MAX_AGE_H)
+        git_fresh, git_h = self._git_channel_fresh()
 
         # throttle: only re-alert every STALE_THROTTLE_H
         try:

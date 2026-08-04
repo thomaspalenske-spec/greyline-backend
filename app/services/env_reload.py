@@ -37,3 +37,16 @@ def reload_env(path=".env"):
         if value is None or key in _EXPORTED:
             continue
         os.environ[key] = value
+
+
+def uw_api_key():
+    """The Unusual Whales API key resolved the SAME way `UnusualWhalesProvider` resolves it: layer .env
+    then .env.local (local wins), honouring exported-var precedence. Capability gates MUST use this rather
+    than a bare `getenv("UNUSUAL_WHALES_API_KEY")` — the authoritative value lives in .env.local, which the
+    provider self-loads at its (lazy) import but a gate evaluated beforehand never saw. That divergence let
+    `enabled()` read False while the provider actually worked, silently dropping the VRP/earnings condor
+    build to a slow, unusable TradeStation SIM fallback. One resolver = gate and provider can never disagree.
+    """
+    reload_env('.env')
+    reload_env('.env.local')
+    return (os.environ.get("UNUSUAL_WHALES_API_KEY") or "").strip()

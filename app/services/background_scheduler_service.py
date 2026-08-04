@@ -19,6 +19,7 @@ from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngin
 from app.services.momentum_reversal_rebalance_engine import MomentumReversalRebalanceEngine
 from app.services.momentum_exit_manager_engine import MomentumExitManagerEngine
 from app.services.market_hours_engine import MarketHoursEngine
+from app.services.env_reload import uw_api_key
 from app.services.forecast_outcome_grader_engine import ForecastOutcomeGraderEngine
 from app.services.institutional.institutional_signal_snapshot_sweep_engine import (
     InstitutionalSignalSnapshotSweepEngine,
@@ -482,8 +483,10 @@ class BackgroundSchedulerService:
                 .run(
                     limit=10,
                     # Auto-on when a UW key is configured: the mission's real
-                    # institutional-flow collection. No key -> stays off (no wasted budget).
-                    collect_unusual_whales=bool(getenv("UNUSUAL_WHALES_API_KEY")),
+                    # institutional-flow collection. No key -> stays off (no wasted budget). Resolve via
+                    # the shared .env/.env.local resolver so a bare getenv can't read False (key lives in
+                    # .env.local) and silently skip the mission's institutional-flow data collection.
+                    collect_unusual_whales=bool(uw_api_key()),
                     collect_tradestation=False,
                     include_tradestation_option_chain=False,
                     deduplicate=True,
@@ -718,6 +721,7 @@ class BackgroundSchedulerService:
                                if _mf.enabled() else {"status": "MF_DISABLED"})
         except Exception as exc:
             managed_futures = {"error": repr(exc), "status": "MF_DEGRADED"}
+        cls._ckpt("tf_mf_sleeves")     # sub-instrument the heavy block so a real cycle attributes the cost
 
         # OPEN-WINDOW GUARD: the 5 recomputes below are minutes-long serial UW/TS chain scans and NONE is
         # on the trade-firing path. Measured, this block is ~164 min (96% of the cycle) — long enough to
@@ -737,6 +741,7 @@ class BackgroundSchedulerService:
                 condor_shadow = CondorShadowEngine().run_if_due()
         except Exception as exc:
             condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
+        cls._ckpt("condor_shadow")
 
         # OPTIONABLE UNIVERSE: derive the VRP/condor candidate universe from live option open interest
         # (UW /screener/stocks) instead of a hand-typed list. Re-screens ONCE PER TRADING DAY at the
@@ -750,6 +755,7 @@ class BackgroundSchedulerService:
                 optionable_universe = OptionableUniverseEngine().recompute_if_due(market_hours)
         except Exception as exc:
             optionable_universe = {"error": repr(exc), "status": "OPTIONABLE_UNIVERSE_DEGRADED"}
+        cls._ckpt("optionable_universe")
 
         # SECTOR MAP: keep the concentration-cap's sector buckets current with the drifting traded
         # universe — same once-per-day post-close gate as the optionable universe. Stocks are data-derived
@@ -763,6 +769,7 @@ class BackgroundSchedulerService:
                 sector_map_refresh = SectorMapEngine().recompute_if_due(market_hours)
         except Exception as exc:
             sector_map_refresh = {"error": repr(exc), "status": "SECTOR_MAP_DEGRADED"}
+        cls._ckpt("sector_map")
 
         # BEST-CONDORS list for the dashboard: recompute the ranked buildable condors (off UW) at most
         # once/10min and cache to a file, so the /best-condors route (dashboard card) is always instant.
@@ -777,6 +784,7 @@ class BackgroundSchedulerService:
                 best_condors = BestCondorsEngine().recompute_if_due()
         except Exception as exc:
             best_condors = {"error": repr(exc), "status": "BEST_CONDORS_DEGRADED"}
+        cls._ckpt("best_condors")
 
         # MF SHADOW forward-test: mark the FULL long/short strategy's hypothetical P&L on settled bars
         # (NO orders). Runs regardless of the live sleeve — it's how the real diversification edge
@@ -789,7 +797,8 @@ class BackgroundSchedulerService:
                 managed_futures_shadow = ManagedFuturesShadowEngine().mark()
         except Exception as exc:
             managed_futures_shadow = {"error": repr(exc), "status": "MF_SHADOW_DEGRADED"}
-        cls._ckpt("trend_mf_carry")
+        cls._ckpt("mf_shadow")
+        cls._ckpt("trend_mf_carry")    # terminal marker kept (≈0 now) so existing consumers of the label still resolve
 
         # EARNINGS-VOL harvest (forward test, gated): sell a tiny defined-risk condor into a rich-IV
         # name's earnings, once/day, RTH only. Positions land in the VRP ledger with strategy tag, so

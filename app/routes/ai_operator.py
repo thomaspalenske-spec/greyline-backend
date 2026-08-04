@@ -189,8 +189,14 @@ def ai_operator_brief():
             "option_type": queue_top.get("option_type") or top_candidate.get("option_type"),
             "directional_bias": queue_top.get("directional_bias") or top_candidate.get("directional_bias"),
             "historical_accuracy_pct": prediction_accuracy.get("accuracy_pct") or prediction_accuracy.get("overall_accuracy_pct"),
+            # sample size alongside the percentage — a 67% on a handful of correlated snapshots is not the
+            # same as 67% on hundreds of distinct days; surface n so the % can't be read as confident alone.
+            "historical_accuracy_n": (prediction_accuracy.get("evaluated_predictions")
+                                      or prediction_accuracy.get("sample_size")),
             "confidence_level": confidence_calibration.get("confidence_level"),
             "historical_win_rate_pct": confidence_calibration.get("historical_win_rate_pct"),
+            "historical_win_rate_n": (confidence_calibration.get("evaluated_predictions")
+                                      or confidence_calibration.get("sample_size")),
         },
         "greyline_master_decision": {
             "ok": True,

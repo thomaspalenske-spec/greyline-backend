@@ -80,7 +80,8 @@ class FlowSkillValidationEngine:
         return best[1]
 
     def validate(self):
-        key_configured = bool(getenv("UNUSUAL_WHALES_API_KEY"))
+        from app.services.env_reload import uw_api_key
+        key_configured = bool(uw_api_key())      # .env + .env.local, same source the provider uses
         snapshots = []
         for path in sorted(self.memory_dir.glob("*.jsonl")) if self.memory_dir.exists() else []:
             for row in read_jsonl(path):

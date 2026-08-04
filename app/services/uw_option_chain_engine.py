@@ -35,7 +35,10 @@ class UWOptionChainEngine:
 
     @staticmethod
     def enabled():
-        return bool((getenv("UNUSUAL_WHALES_API_KEY", "") or "").strip())
+        # Resolve the key the SAME way the provider does (.env + .env.local) so the gate can't read False
+        # while the provider works — which silently dropped the condor build to the slow TS SIM fallback.
+        from app.services.env_reload import uw_api_key
+        return bool(uw_api_key())
 
     # ---- OCC ("IWM260918C00313000") -> TradeStation-style ("IWM 260918C313") --------------------
     @classmethod

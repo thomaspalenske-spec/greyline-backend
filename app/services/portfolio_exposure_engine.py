@@ -188,17 +188,25 @@ class PortfolioExposureEngine:
 
     @classmethod
     def _generated_sectors(cls):
+        # Resolve the map by MODULE location, not cwd — a cwd-relative path silently read empty
+        # whenever the process ran from elsewhere (e.g. the sandboxed test cwd), dropping every
+        # UW-generated name to UNKNOWN and blinding the concentration cap.
+        try:
+            path = Path(__file__).resolve().parents[2] / "app" / "data" / "sector_map.json"
+            mtime = path.stat().st_mtime
+        except Exception:
+            path, mtime = None, None
+        # RELOAD when the file changes: the map is regenerated once/day, but this in-process cache used to
+        # be held for the whole process lifetime, so a refreshed sector map was never picked up without a
+        # restart — silently classifying concentration off a stale map. Key the cache on the file mtime.
         cached = getattr(cls, "_generated_sector_cache", None)
-        if cached is None:
+        if cached is None or mtime != getattr(cls, "_generated_sector_mtime", None):
             try:
-                # Resolve the map by MODULE location, not cwd — a cwd-relative path silently read empty
-                # whenever the process ran from elsewhere (e.g. the sandboxed test cwd), dropping every
-                # UW-generated name to UNKNOWN and blinding the concentration cap.
-                path = Path(__file__).resolve().parents[2] / "app" / "data" / "sector_map.json"
                 cached = json.loads(path.read_text()).get("sectors") or {}
             except Exception:
                 cached = {}     # absent or unreadable: degrade to the literal map, never crash
             cls._generated_sector_cache = cached
+            cls._generated_sector_mtime = mtime
         return cached
 
     def _notional(self, trade):

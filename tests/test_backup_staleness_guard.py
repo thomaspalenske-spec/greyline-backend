@@ -76,3 +76,38 @@ def test_stale_alert_is_throttled(monkeypatch, tmp_path):
     # immediate re-check within the throttle window must NOT re-alert
     assert D().alert_if_stale()["status"] == "BACKUP_STALE_THROTTLED"
     assert len(FakeNotifier.calls) == 1
+
+
+# --- _run_and_alert (the sibling path the git-aware fix originally MISSED) ------------------------
+
+def _patch_run(monkeypatch, backup_status, git_h):
+    FakeNotifier.calls = []
+    monkeypatch.setattr(D, "backup", lambda self, tier2=False: {"status": backup_status, "error": "x"})
+    monkeypatch.setattr("app.services.operator_notification_engine.OperatorNotificationEngine",
+                        lambda: FakeNotifier())
+    import app.services.git_data_backup_engine as g
+    monkeypatch.setattr(g.GitDataBackupEngine, "hours_since", lambda self: git_h)
+
+
+def test_run_and_alert_incomplete_but_git_fresh_is_warning(monkeypatch):
+    # An interrupted (INCOMPLETE) filesystem backup while the git channel is fresh = data still protected
+    # -> WARNING, never the CRITICAL "data unprotected" that cried wolf before.
+    _patch_run(monkeypatch, "BACKUP_INCOMPLETE", git_h=2.0)
+    D()._run_and_alert()
+    assert len(FakeNotifier.calls) == 1
+    assert FakeNotifier.calls[0]["severity"] == "WARNING"
+    assert FakeNotifier.calls[0]["event_type"] == "BACKUP_FS_INCOMPLETE_GIT_OK"
+
+
+def test_run_and_alert_incomplete_and_git_stale_is_critical(monkeypatch):
+    _patch_run(monkeypatch, "BACKUP_DEGRADED", git_h=99.0)
+    D()._run_and_alert()
+    assert len(FakeNotifier.calls) == 1
+    assert FakeNotifier.calls[0]["severity"] == "CRITICAL"
+    assert FakeNotifier.calls[0]["event_type"] == "BACKUP_FAILED"
+
+
+def test_run_and_alert_success_is_silent(monkeypatch):
+    _patch_run(monkeypatch, "BACKUP_VERIFIED", git_h=2.0)
+    D()._run_and_alert()
+    assert FakeNotifier.calls == []
