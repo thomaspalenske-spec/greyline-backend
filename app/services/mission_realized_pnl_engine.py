@@ -109,6 +109,42 @@ class MissionRealizedPnlEngine:
             state = {}
         booked_today = self._f(state.get("booked_today")) if state.get("date") == today else 0.0
         delta = round(daily - booked_today, 2)
+
+        # SANITY GUARD (defined-risk): the broker's daily realized is the mission's ONLY realized source,
+        # but the SIM sandbox MIS-PRICES atomic multi-leg (condor) closes — it once reported a +$3,116 daily
+        # realized on a close whose real bounded P&L was ~-$225, inflating mission equity to a fake +25.8%.
+        # A single-cycle realized delta far beyond this small book's plausible P&L is a broker/SIM mispricing,
+        # not a real gain: HOLD it (book $0, advance the day-marker so it isn't re-processed) + page, rather
+        # than bank fantasy into the equity line. (Companion to the defined-risk bounds guard on GreyLine's
+        # own condor-close calc — the SIM atomic-close mispricing is the shared root.)
+        from os import getenv as _getenv
+        try:
+            _cap = float(_getenv("GREYLINE_MISSION_REALIZED_MAX_DELTA", "") or 1000.0)
+        except (TypeError, ValueError):
+            _cap = 1000.0
+        if abs(delta) > _cap:
+            self.DIR.mkdir(parents=True, exist_ok=True)
+            self._append({
+                "timestamp": datetime.utcnow().isoformat(), "amount": 0.0,
+                "source": "broker_realized_held_suspect", "held_amount": delta,
+                "note": (f"daily realized delta ${delta} exceeds the ${_cap} sanity cap — a likely SIM "
+                         f"atomic-close mispricing; HELD (not banked) pending review"),
+            })
+            self.STATE.write_text(json.dumps({"date": today, "booked_today": daily}))  # advance: don't re-process
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                eng = ExternalAlertEngine()
+                if eng.has_external_channel():
+                    eng.dispatch(title="GreyLine HELD a suspect mission realized delta",
+                                 message=(f"broker daily realized jumped ${delta} in one cycle — beyond this "
+                                          f"$10k book's plausible P&L (${_cap} cap). Likely a SIM atomic-close "
+                                          f"mispricing; NOT banked into equity. Review + book manually if real."),
+                                 severity="WARNING", fingerprint=f"MISSION_REALIZED_HELD:{round(delta)}")
+            except Exception:
+                pass
+            return {"status": "REALIZED_HELD_SUSPECT", "held": delta, "booked": 0.0,
+                    "cumulative_realized": self.cumulative_realized()}
+
         if abs(delta) >= 0.01:
             self._append({
                 "timestamp": datetime.utcnow().isoformat(), "amount": delta,
