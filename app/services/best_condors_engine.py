@@ -59,7 +59,9 @@ class BestCondorsEngine:
         rows, errors = [], {}
         try:
             from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
-            for con in (ConditionalVRPShortPremiumEngine().plan().get("planned") or []):
+            # plan_cached: reuse the plan the sleeve already built this cycle (this is a read-only dashboard
+            # card — never the booking path), instead of a redundant full rebuild off the same UW chains.
+            for con in (ConditionalVRPShortPremiumEngine().plan_cached().get("planned") or []):
                 rows.append(self._fmt(con, "VRP"))
         except Exception as e:
             errors["VRP"] = repr(e)[:160]

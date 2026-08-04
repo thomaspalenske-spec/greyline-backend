@@ -79,7 +79,9 @@ class CondorShadowEngine:
         condors, errors = [], {}
         try:
             from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
-            for con in (ConditionalVRPShortPremiumEngine().plan().get("planned") or []):
+            # plan_cached: reuse the sleeve's in-cycle plan (forward-test recorder, never books) instead of
+            # a 3rd redundant rebuild off the same UW chains.
+            for con in (ConditionalVRPShortPremiumEngine().plan_cached().get("planned") or []):
                 con["_sleeve"] = "vrp"
                 condors.append(con)
         except Exception as e:

@@ -109,6 +109,25 @@ class ConditionalVRPShortPremiumEngine:
     @staticmethod
     def _vrp_etf_only():
         return (getenv("GREYLINE_VRP_ETF_ONLY", "true") or "").strip().lower() == "true"
+
+    # SHARED PER-CYCLE PLAN CACHE: the VRP plan() is the dominant heavy-block cost, and it was recomputed
+    # 2-3x per cycle — the sleeve's own phase, the best-condors dashboard card, AND the condor shadow each
+    # rebuilt the SAME plan off the SAME UW chains. plan() populates this cache (default-args calls only);
+    # read-only consumers call plan_cached() to reuse it. The BOOKING path always calls plan() fresh, so
+    # what gets TRADED is never a stale plan — only the dashboard/forward-test reuse the in-cycle result.
+    _PLAN_CACHE = {"epoch": 0.0, "result": None}
+    PLAN_CACHE_TTL = 120          # seconds — well under a cycle, so in-cycle callers share one computation
+
+    def plan_cached(self, ttl=None):
+        """Reuse the plan the sleeve already built this cycle instead of recomputing it. Read-only callers
+        (best-condors card, condor shadow) use this; booking uses plan() fresh. Falls back to a fresh
+        plan() when the cache is cold/stale."""
+        import time as _t
+        ttl = self.PLAN_CACHE_TTL if ttl is None else ttl
+        c = type(self)._PLAN_CACHE
+        if c.get("result") is not None and (_t.time() - c.get("epoch", 0.0)) < ttl:
+            return {**c["result"], "cache_reused": True}
+        return self.plan()
     MANAGE_DTE = 21              # exit this many days before expiry — before terminal gamma (the
     #                             "manage at 21 DTE" rule). Sits BELOW the 28-DTE entry-band floor
     #                             (AdaptiveDTESelectionEngine) so entry and exit can never collide.
@@ -789,6 +808,9 @@ class ConditionalVRPShortPremiumEngine:
         """Build defined-risk condors for today's rich-IV candidates. Places nothing. `max_scan` bounds
         how many candidates are BUILT before ranking — the live cycle uses the full SKEW_POOL; a fast
         read-only caller (dress rehearsal) passes a small value so it doesn't fetch a UW chain per name."""
+        # cacheable = the standard default-args call (sleeve / dashboard / shadow all use it); an explicit
+        # research universe or a bounded max_scan is NOT shared into the per-cycle cache.
+        _cacheable = (names is None and limit is None and max_scan is None)
         from app.services.conditional_vrp_forward_panel_engine import ConditionalVRPForwardPanelEngine
         # LIQUID-ETF RESTRICTION (default on): when no explicit universe is passed, the live sleeve screens
         # only the curated liquid ETFs — single-name condors are dead-on-arrival on retail costs (cost
@@ -869,7 +891,7 @@ class ConditionalVRPShortPremiumEngine:
             budget_left -= con["max_loss_total"]
             vega_used += con_vega
             built.append(con)
-        return {
+        result = {
             "timestamp": datetime.utcnow().isoformat(),
             "enabled": self.enabled(),
             "universe_policy": "liquid_etf_only" if etf_only else "full_optionable",
@@ -888,6 +910,10 @@ class ConditionalVRPShortPremiumEngine:
                           "never a fixed constant"),
             "status": "VRP_SHORT_PREMIUM_PLAN",
         }
+        if _cacheable:                        # share this in-cycle computation with the read-only consumers
+            import time as _t
+            type(self)._PLAN_CACHE = {"epoch": _t.time(), "result": result}
+        return result
 
     # ------------------------------------------------------------ booking (GATED)
 
