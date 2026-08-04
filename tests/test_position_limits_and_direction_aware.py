@@ -48,13 +48,15 @@ def test_limits_env_configurable():
     assert r["limits_ok"] is False
 
 
-def test_limits_degrade_gracefully_on_error():
-    with patch(f"{LIM}.PortfolioExposureEngine") as MockExp:
+def test_limits_degrade_gracefully_on_error(tmp_path):
+    # isolate the last-good snapshot to an empty path so the engine can't fall back to a real one
+    with patch.object(PositionExposureLimitEngine, "STATE_FILE", tmp_path / "none.json"), \
+            patch(f"{LIM}.PortfolioExposureEngine") as MockExp:
         MockExp.return_value.evaluate.side_effect = RuntimeError("boom")
         r = PositionExposureLimitEngine().evaluate()
     assert r["compute_ok"] is False
     assert r["breaches"] == []       # no fabricated breach
-    # Fail CLOSED: this is a hard circuit breaker, so an unverifiable book (engine threw) must BLOCK
+    # Fail CLOSED: engine threw AND no fresh last-good snapshot exists → an unverifiable book must BLOCK
     # new concentration-gated risk rather than read as OK. (Was the fail-OPEN bug the audit flagged.)
     assert r["limits_ok"] is False
 

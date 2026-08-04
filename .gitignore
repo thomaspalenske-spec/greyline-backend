@@ -133,3 +133,6 @@ app/data/momentum_reversal/top_candidates_cache.json
 # Nested git repo used for off-machine backup of unrecoverable data (pushes to its own branch)
 app/data/.data_backup/
 app/data/condor_shadow/
+
+# Runtime state snapshots (last-good exposure, etc.) — never commit
+app/data/state/
