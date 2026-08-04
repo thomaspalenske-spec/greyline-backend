@@ -678,8 +678,38 @@ class ConditionalVRPShortPremiumEngine:
             if leg_results and qty > 0:
                 cur_debit = credit - (self._f(r.get("realized_pnl")) / (100.0 * qty))
                 debit, new_basis = self._close_fill_debit(leg_results, cur_debit, basis)
+                _fills_realized = round((credit - debit) * 100 * qty, 2)
+                if new_basis == "fills" and not self._realized_in_defined_risk_bounds(
+                        _fills_realized, r.get("credit_total"), r.get("max_loss_total")):
+                    # GARBAGE FILL READ (outside the condor's defined-risk band) — a SIM atomic-order
+                    # ExecutionPrice quirk. Do NOT bank it. Fall back to the BOUNDED close-mid estimate and
+                    # flag it, so fantasy realized P&L can never enter the ledger / mission P&L / edge court.
+                    mid = self._f(r.get("close_mid"))
+                    r["realized_pnl"] = (round((credit - mid) * 100 * qty, 2) if mid is not None
+                                         else self._f(r.get("realized_pnl")))
+                    r["realized_pnl_basis"] = "close_mid_sanity_fallback"
+                    r["realized_fills_rejected"] = _fills_realized
+                    r["close_reconciled"] = True
+                    upgraded.append({"symbol": r.get("symbol"), "realized_pnl": r["realized_pnl"],
+                                     "basis_was": basis, "fills_rejected": _fills_realized})
+                    if not dry_run:
+                        try:
+                            from app.services.external_alert_engine import ExternalAlertEngine
+                            eng = ExternalAlertEngine()
+                            if eng.has_external_channel():
+                                eng.dispatch(title="GreyLine rejected an out-of-bounds condor realized P&L",
+                                             message=(f"{r.get('symbol')} close fills netted a realized "
+                                                      f"${_fills_realized} outside the defined-risk band "
+                                                      f"[-${self._f(r.get('max_loss_total'))}, "
+                                                      f"+${self._f(r.get('credit_total'))}] — a bad SIM fill "
+                                                      f"read. Fell back to the close-mid estimate "
+                                                      f"${r['realized_pnl']}."),
+                                             severity="WARNING", fingerprint=f"VRP_REALIZED_OOB:{r.get('symbol')}")
+                        except Exception:
+                            pass
+                    continue
                 if new_basis == "fills":
-                    r["realized_pnl"] = round((credit - debit) * 100 * qty, 2)
+                    r["realized_pnl"] = _fills_realized
                     r["realized_pnl_basis"] = "fills"
                     r["close_reconciled"] = True
                     if not dry_run and not r.get("close_slippage_logged"):
@@ -957,6 +987,21 @@ class ConditionalVRPShortPremiumEngine:
                     severity="CRITICAL", fingerprint=f"CONDOR_CLOSE_UNCONFIRMED:{sym}")
         except Exception:
             pass
+
+    def _realized_in_defined_risk_bounds(self, realized, credit_total, max_loss_total):
+        """A defined-risk iron condor's realized P&L is mathematically bounded: you cannot make more than
+        the CREDIT you collected, nor lose more than the DEFINED MAX LOSS. A value outside [−max_loss,
+        +credit] means the close fills were mis-read — the SIM's atomic multi-leg order reported per-leg
+        ExecutionPrice values that don't net to a real condor debit (this manufactured a +$3,185 'fills'
+        realized on a $165-credit / $335-max-loss condor). Reject such a value; never bank it into realized
+        P&L / the mission ledger / the edge court. Returns True if the value is inside the risk band."""
+        if credit_total is None or max_loss_total is None:
+            return True                     # can't validate -> don't block a legitimate close
+        ct, ml = self._f(credit_total), self._f(max_loss_total)
+        if not ct or not ml:                # 0 / unparseable risk basis -> can't validate
+            return True
+        eps = 2.0                            # $2 slack for rounding + fees
+        return (-abs(ml) - eps) <= self._f(realized) <= (abs(ct) + eps)
 
     def _close_fill_debit(self, leg_results, fallback_debit, fallback_basis):
         """Net per-share debit ACTUALLY paid to close, from broker fills. Returns (debit, basis).
@@ -1484,9 +1529,17 @@ class ConditionalVRPShortPremiumEngine:
                     # the marketable close-order debit — NOT mid. So the edge court gets an honest number
                     # with no haircut fudge. See _close_fill_debit + EdgePersistenceEngine basis handling.
                     debit, basis = self._close_fill_debit(leg_results, close_debit, close_basis)
+                    _init_realized = round((credit - debit) * 100 * r["quantity"], 2)
+                    # DEFINED-RISK BOUNDS GUARD (same as reconcile_closes): if the priced debit yields a
+                    # realized outside [−max_loss, +credit], the read is corrupt (SIM atomic-order quirk) —
+                    # fall back to the bounded close-mid estimate rather than bank a fantasy number.
+                    if not self._realized_in_defined_risk_bounds(_init_realized, r.get("credit_total"),
+                                                                 r.get("max_loss_total")):
+                        _init_realized = round((credit - cost_to_close) * 100 * r["quantity"], 2)
+                        basis = "close_mid_sanity_fallback"
                     r["status"] = "CLOSED"; r["closed_at"] = datetime.utcnow().isoformat()
                     r["close_reason"] = reason
-                    r["realized_pnl"] = round((credit - debit) * 100 * r["quantity"], 2)
+                    r["realized_pnl"] = _init_realized
                     r["realized_pnl_basis"] = basis
                     # stash the close-side mid so reconcile_closes can log the execution slippage later,
                     # once the fill confirms (basis 'close_order' commits before the fill is readable).

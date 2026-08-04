@@ -697,6 +697,17 @@ th {
     </section>
 
     <section class="content">
+      <div class="card" id="transactions_card">
+        <div class="section-title">Transactions — Rolling 2 Days <span id="tx_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Yesterday's completed session and today's running tally, from GreyLine's own sleeve ledgers. Rolls automatically at the open — the newest session becomes Today, Today becomes Yesterday, and anything older than the prior session drops off. No nightly shift job; it's a pure function of the ET date and the ledger timestamps.</div>
+        <table>
+          <thead>
+            <tr><th>Time (ET)</th><th>Sleeve</th><th>Symbol</th><th>Action</th><th>Qty</th><th>Detail</th><th>Realized P&amp;L</th></tr>
+          </thead>
+          <tbody id="transactions_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+        </table>
+      </div>
+
       <div class="card" id="opportunity_board_card">
         <div class="section-title">Opportunity Board — Equity + Options <span id="ob_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Every live candidate across the harvesting sleeves, grouped by edge and sorted by each edge's <em>native</em> score. Deliberately NOT cross-ranked — a directional-equity conviction and a defined-risk condor's IV rank are different units; one blended "expected profit" number on unproven edges would be false precision. A true cross-instrument ranking waits on <a href="/edge-persistence" style="color:inherit;">measured live edge</a>.</div>
@@ -1065,6 +1076,42 @@ async function refreshRealityGuard() {
   }
 }
 
+async function refreshTransactions() {
+  const body = document.getElementById("transactions_body");
+  const summary = document.getElementById("tx_summary");
+  if (!body) return;
+  const money = (v) => (v == null ? "" : (v >= 0 ? "+$" : "-$") + Math.abs(Number(v)).toFixed(2));
+  const pnlCell = (v) => (v == null ? '<span class="sub">—</span>'
+                          : `<span class="${Number(v) >= 0 ? 'green' : 'red'}">${money(v)}</span>`);
+  try {
+    const d = await getJSON("/transactions-rolling");
+    const y = d.yesterday || {}, t = d.today || {};
+    if (summary) summary.textContent =
+      `Yesterday ${y.date || "—"}: ${y.count || 0} txn, realized ${money(y.realized_pnl || 0)}`
+      + ` · Today ${t.date || "—"}: ${t.count || 0} txn, running ${money(t.realized_pnl || 0)}`;
+    let html = "";
+    const section = (label, b, running) => {
+      html += `<tr><td colspan="7" style="padding-top:12px;font-weight:700;">${label}`
+            + ` <span class="sub" style="font-weight:600;">${b.date || "—"} · ${b.count || 0} txn `
+            + `(${b.opens || 0} open / ${b.closes || 0} close) · realized ${money(b.realized_pnl || 0)}`
+            + `${running ? " (running)" : ""}</span></td></tr>`;
+      const txns = b.transactions || [];
+      if (!txns.length) { html += `<tr><td colspan="7"><span class="sub">no transactions</span></td></tr>`; return; }
+      for (const x of txns) {
+        html += `<tr><td>${x.et_time || ""}</td><td><span class="sub">${x.sleeve || ""}</span></td>`
+              + `<td><b>${x.symbol || ""}</b></td><td>${x.action || ""}</td>`
+              + `<td>${x.quantity != null ? x.quantity : ""}</td>`
+              + `<td><span class="sub">${x.detail || ""}</span></td><td>${pnlCell(x.pnl)}</td></tr>`;
+      }
+    };
+    section("YESTERDAY", y, false);
+    section("TODAY", t, true);
+    body.innerHTML = html || `<tr><td colspan="7"><span class="sub">no transactions in the last 2 sessions</span></td></tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7"><span class="sub">transactions unavailable</span></td></tr>`;
+  }
+}
+
 async function refreshOpportunityBoard() {
   const body = document.getElementById("opportunity_board_body");
   const summary = document.getElementById("ob_summary");
@@ -1310,6 +1357,7 @@ async function refreshAll() {
   await refreshCockpitBanner();
   await refreshCommanderSummary();
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
+  refreshTransactions();    // fire-and-forget: rolling 2-day transaction ledger
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshBestCondors();     // fire-and-forget: cached (~10min), built off UW, never stalls the loop
   refreshCondorExits();     // static exit levels off the ledger (no live quotes) — never stalls the loop
