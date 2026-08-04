@@ -78,6 +78,15 @@ class EdgeProofProtocolEngine:
             "required_n": 25, "threshold_ror_pct": 1.0, "alpha": 0.05,
             "kill_rule": "at n>=required_n, CI lower bound <= threshold -> RETIRE.",
         },
+        "low_vol": {
+            "hypothesis": ("The low-volatility / betting-against-beta ETF sleeve (inverse-vol-weighted "
+                           "USMV/SPLV/EFAV/XMLV) earns a positive cost-net per-trade return on risk — the "
+                           "replicable long-only version of the BAB anomaly. Built 2026-08-04 to replace the "
+                           "retired earnings-vol condor sleeve; EQUITY/ETF so the SIM can validate it."),
+            "null": "mean cost-net return-on-risk <= threshold",
+            "required_n": 25, "threshold_ror_pct": 1.0, "alpha": 0.05,
+            "kill_rule": "at n>=required_n, CI lower bound <= threshold -> RETIRE.",
+        },
     }
 
     # ---- pre-registration (freeze / audit) -----------------------------------------------------

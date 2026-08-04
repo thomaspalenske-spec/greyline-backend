@@ -721,6 +721,16 @@ class BackgroundSchedulerService:
                                if _mf.enabled() else {"status": "MF_DISABLED"})
         except Exception as exc:
             managed_futures = {"error": repr(exc), "status": "MF_DEGRADED"}
+
+        # LOW-VOLATILITY / BAB sleeve (GATED OFF by GREYLINE_LOW_VOL_ENABLED) — the equity/ETF replacement
+        # for the retired earnings-vol condor sleeve. Inverse-vol-weighted low-vol ETF basket, whole-share.
+        try:
+            from app.services.low_volatility_engine import LowVolatilityEngine
+            _lv = LowVolatilityEngine()
+            low_volatility = (_lv.run_cycle(is_regular_session=(market_hours.get("is_regular_session") is True))
+                              if _lv.enabled() else {"status": "LOW_VOL_DISABLED"})
+        except Exception as exc:
+            low_volatility = {"error": repr(exc), "status": "LOW_VOL_DEGRADED"}
         cls._ckpt("tf_mf_sleeves")     # sub-instrument the heavy block so a real cycle attributes the cost
 
         # OPEN-WINDOW GUARD: the 5 recomputes below are minutes-long serial UW/TS chain scans and NONE is

@@ -39,8 +39,12 @@ class SleeveCapitalBudgetEngine:
         "momentum": 25.0,
         "trend": 28.0,
         "vol_carry": 20.0,
-        "vrp": 15.0,
-        "earnings": 12.0,
+        # VRP + earnings condor sleeves RETIRED (2026-08-04): the SIM can't price atomic condor closes,
+        # so they can't produce trustworthy court data here. 0% until/unless re-armed. Their old 27%
+        # slot went to the low-vol/BAB replacement (12%) plus idle headroom.
+        "vrp": 0.0,
+        "earnings": 0.0,
+        "low_vol": 12.0,
         "managed_futures": 0.0,
     }
     # Aliases so callers can use either name for the carry sleeve.
@@ -50,6 +54,7 @@ class SleeveCapitalBudgetEngine:
     # on a mystery number). These mirror the pre-conversion static caps.
     _FALLBACK_USD = {
         "momentum": 2000.0, "trend": 2217.0, "vol_carry": 1583.0, "vrp": 1200.0, "earnings": 900.0,
+        "low_vol": 2000.0,
     }
     DEFAULT_BASE_USD = 10000.0
     _CACHE_TTL_S = 5.0            # coalesce the equity/cash reads across sleeves within one cycle
