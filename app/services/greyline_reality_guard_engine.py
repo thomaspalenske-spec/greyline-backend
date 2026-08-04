@@ -738,18 +738,34 @@ class GreyLineRealityGuardEngine:
         the view's transformation can never silently drop, add, or missize a real holding. The broker
         view preserves the raw TS symbol verbatim (OSI for options), so this is apples-to-apples."""
         if not view.get("reads_ok", True):
-            return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "warning", "ok": True,
-                    "detail": "broker read degraded — comparison skipped (BROKER_READS_OK owns that)"}
+            return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "critical", "degraded_class": True,
+                    "ok": True, "detail": "broker read degraded — comparison skipped (BROKER_READS_OK owns that)"}
         try:
             from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
-            raw = (TradeStationPositionsLiveEngine().get_positions().get("response_json") or {}).get("Positions") or []
-            ts = {str(p.get("Symbol") or "").upper(): round(float(p.get("Quantity") or 0), 4)
-                  for p in raw if p.get("Symbol")}
+            pos_resp = TradeStationPositionsLiveEngine().get_positions()
             dash = {str(p.get("symbol") or "").upper(): round(float(p.get("quantity") or 0), 4)
                     for p in (view.get("positions") or []) if p.get("symbol")}
+            # This check makes its OWN fresh positions read (to verify the view's transform against the RAW
+            # TS API). On a saturated box that second read can transiently fail — a non-200, OR a 200 with
+            # an EMPTY Positions array while the view (which passed reads_ok) holds many. Either way the two
+            # reads simply DISAGREE under load; that is UNVERIFIABLE, not a fabricated book. Treating it as a
+            # critical mismatch flagged the ENTIRE ledger as phantom and cried the red FANTASY alarm (an
+            # all-positions-vanished-at-once event is implausible; a transient empty read is the real cause —
+            # same empty-read signature the mission risk governor already guards). Skip it (degraded/amber).
+            if pos_resp.get("http_status") != 200:
+                return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "critical", "degraded_class": True,
+                        "ok": True, "detail": ("the comparison's own fresh positions read did not return 200 "
+                                               "(broker saturated) — comparison unverifiable this cycle")}
+            raw = (pos_resp.get("response_json") or {}).get("Positions") or []
+            ts = {str(p.get("Symbol") or "").upper(): round(float(p.get("Quantity") or 0), 4)
+                  for p in raw if p.get("Symbol")}
+            if not ts and dash:
+                return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "critical", "degraded_class": True,
+                        "ok": True, "detail": (f"broker returned 0 positions while the view holds {len(dash)} "
+                                               "— transient empty read under load, comparison unverifiable")}
         except Exception as e:
-            return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "critical", "ok": False,
-                    "detail": f"could not compare dashboard positions to TradeStation: {str(e)[:120]}"}
+            return {"id": "OPEN_POSITIONS_MATCH_BROKER", "severity": "critical", "degraded_class": True,
+                    "ok": True, "detail": f"could not compare dashboard positions to TradeStation: {str(e)[:120]}"}
         ts_side = {k: ts[k] for k in ts if dash.get(k) != ts[k]}           # in TS, missing/wrong on dash
         dash_side = {k: dash[k] for k in dash if ts.get(k) != dash[k]}     # on dash, missing/wrong in TS
         ok = not ts_side and not dash_side

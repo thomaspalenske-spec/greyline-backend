@@ -361,3 +361,32 @@ def test_data_freshness_flags_stale_decision_bars(monkeypatch, tmp_path):
     assert chk["id"] == "DATA_FRESHNESS"
     assert isinstance(chk["ok"], bool)
     assert "SPY" in chk["detail"] or chk["ok"] is True  # stale SPY surfaces, or genuinely fresh
+
+
+def test_open_positions_match_broker_empty_reread_is_not_fantasy(monkeypatch):
+    """The match-check does its OWN 2nd broker read; on a saturated box that read can transiently return
+    an EMPTY Positions array while the view (reads_ok True) holds many. That must be UNVERIFIABLE
+    (degraded/amber, ok=True), NOT a critical 'entire ledger is phantom' that cries the red FANTASY alarm."""
+    from app.services import greyline_reality_guard_engine as mod
+    guard = mod.GreyLineRealityGuardEngine()
+    import app.services.tradestation_positions_live_engine as pmod
+    # fresh re-read returns 200 but EMPTY
+    monkeypatch.setattr(pmod.TradeStationPositionsLiveEngine, "get_positions",
+                        lambda self: {"http_status": 200, "response_json": {"Positions": []}})
+    view = {"reads_ok": True, "positions": [{"symbol": "SGOV", "quantity": 58},
+                                            {"symbol": "IWM", "quantity": 2}]}
+    res = guard._check_open_positions_match_broker(view)
+    assert res["ok"] is True and res.get("degraded_class") is True
+    assert "unverifiable" in res["detail"].lower()
+
+    # non-200 re-read is likewise unverifiable, not fantasy
+    monkeypatch.setattr(pmod.TradeStationPositionsLiveEngine, "get_positions",
+                        lambda self: {"http_status": 503, "response_json": None})
+    res2 = guard._check_open_positions_match_broker(view)
+    assert res2["ok"] is True and res2.get("degraded_class") is True
+
+    # a REAL non-empty divergence still flags (critical, not degraded-skipped)
+    monkeypatch.setattr(pmod.TradeStationPositionsLiveEngine, "get_positions",
+                        lambda self: {"http_status": 200, "response_json": {"Positions": [{"Symbol": "IWM", "Quantity": 999}]}})
+    res3 = guard._check_open_positions_match_broker(view)
+    assert res3["ok"] is False and not res3.get("degraded_class")   # genuine mismatch surfaces

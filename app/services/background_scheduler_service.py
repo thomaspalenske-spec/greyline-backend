@@ -880,6 +880,7 @@ class BackgroundSchedulerService:
             risk_governor = MissionRiskGovernorEngine().check_and_alert()
         except Exception as exc:
             risk_governor = {"error": repr(exc), "status": "MISSION_RISK_GOVERNOR_DEGRADED"}
+        cls._ckpt("ps_momentum")     # sub-instrument post_sleeve (now the cycle's #1)
 
         # EDGE PERSISTENCE (Medallion discipline, additive read-only): record today's per-sleeve marks
         # so each strategy builds a LIVE track record — the foundation for retiring decayed sleeves on
@@ -1025,6 +1026,8 @@ class BackgroundSchedulerService:
         except Exception as exc:
             lineage = {"status": "LINEAGE_VERIFY_DEGRADED", "error": repr(exc)}
 
+        cls._ckpt("ps_edge_greeks_reconcilers")   # edge snapshots + book-greeks + mission-pnl + 3 reconcilers
+
         # DATA AUTO-REMEDIATION (self-gates once/day): the missing piece that used to need a manual
         # script. Appends stale bars from TradeStation (append-only — never the Yahoo full-backfill),
         # repairs OHLC violations (clamp only, backed up), and re-accepts lineage ONLY on a clean
@@ -1158,7 +1161,8 @@ class BackgroundSchedulerService:
             scheduled_reports = ScheduledOperatorReportsEngine.run(market_hours)
         except Exception as exc:
             scheduled_reports = {"status": "SCHEDULED_REPORTS_DEGRADED", "error": repr(exc)}
-        cls._ckpt("post_sleeve")         # momentum-open/broker-stops/health/reports/remediation/reconcilers
+        cls._ckpt("ps_remediation_backup_health")   # data-remediation + backups + broker-stops + health + reports
+        cls._ckpt("post_sleeve")         # terminal marker kept (≈0 now) so existing consumers of the label resolve
         cls._phase_finalize()            # -> cls._last_phase_timings for /background-scheduler/status
 
         cls._cycle_count += 1
