@@ -1,0 +1,63 @@
+name: deadman-heartbeat-check
+
+# OFF-BOX DEADMAN — the one alert that survives the GreyLine Mac dying.
+#
+# The GreyLine service pushes a heartbeat (branch `deadman-heartbeat`, file heartbeat.json) every few
+# minutes (DeadmanHeartbeatEngine). This workflow runs on GitHub's infra — NOT the Mac — and FAILS when
+# the heartbeat goes stale. GitHub emails the repo owner on a failed scheduled run, so a fully-dead Mac
+# (crash / power / network loss) still reaches the operator. Positions are then held by the broker stops.
+#
+# The workflow FAILING *is* the alert. Keep "Actions" email notifications on for this repo.
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"     # every 20 minutes
+  workflow_dispatch: {}         # allow a manual check
+
+permissions:
+  contents: read
+
+env:
+  STALE_MINUTES: "45"           # alert if the heartbeat is older than this (≈9 missed 5-min pushes)
+
+jobs:
+  check-heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch the heartbeat branch
+        id: fetch
+        run: |
+          set +e
+          rm -rf hb
+          git clone --depth 1 --branch deadman-heartbeat \
+            "https://github.com/${GITHUB_REPOSITORY}.git" hb 2>/dev/null
+          if [ ! -f hb/heartbeat.json ]; then
+            echo "no_heartbeat=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "no_heartbeat=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluate freshness
+        if: steps.fetch.outputs.no_heartbeat == '0'
+        run: |
+          python3 - <<'PY'
+          import json, os, time, sys
+          hb = json.load(open("hb/heartbeat.json"))
+          epoch = int(hb.get("epoch") or 0)
+          age_min = (time.time() - epoch) / 60.0 if epoch else 1e9
+          stale = float(os.environ["STALE_MINUTES"])
+          print(f"heartbeat at={hb.get('at')} age={age_min:.1f} min (stale threshold {stale} min)")
+          if age_min > stale:
+              print("::error::GreyLine DEADMAN — heartbeat is STALE. The Mac/service appears DOWN. "
+                    f"Last heartbeat {age_min:.0f} min ago. Positions are held only by broker-side stops. "
+                    "Check the machine.")
+              sys.exit(1)
+          print("GreyLine is alive — heartbeat fresh.")
+          PY
+
+      - name: No heartbeat yet (setup grace, do not alarm)
+        if: steps.fetch.outputs.no_heartbeat == '1'
+        run: |
+          echo "::warning::No deadman-heartbeat branch/file yet — the service has not pushed a first "
+          echo "heartbeat. This is expected right after setup; it will alarm once a heartbeat exists and "
+          echo "then goes stale. (Not failing, to avoid a false alarm before the first push.)"
