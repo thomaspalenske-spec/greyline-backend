@@ -17,6 +17,7 @@ Lightweight by design: one <1KB file, force-pushed to its own branch (history ir
 
 import json
 import subprocess
+import time
 from datetime import datetime
 from os import getenv
 from pathlib import Path
@@ -99,7 +100,10 @@ class DeadmanHeartbeatEngine:
         now = datetime.utcnow()
         payload = {
             "at": now.isoformat(),
-            "epoch": int(now.timestamp()),
+            # TRUE UTC epoch — the GitHub Action compares this to its own time.time(). Do NOT use
+            # datetime.utcnow().timestamp(): utcnow() is naive, so .timestamp() re-applies the local
+            # offset and the age comes out ~offset hours wrong (negative here), delaying the alarm.
+            "epoch": int(time.time()),
             "host": "greyline-service",
             "note": "GreyLine is alive. If this file goes stale, the Mac/service is DOWN — the off-box "
                     "GitHub Action fails and emails the operator. Positions are then held by broker stops.",

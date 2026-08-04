@@ -34,6 +34,17 @@ def test_push_writes_heartbeat_and_marks(monkeypatch, tmp_path):
     assert D().minutes_since() is not None and D().minutes_since() < 1
 
 
+def test_epoch_is_true_utc_not_local_skewed(monkeypatch, tmp_path):
+    """The heartbeat epoch must be TRUE UTC (near time.time()) — the GitHub Action compares it to its own
+    time.time(). Regression for the datetime.utcnow().timestamp() local-offset skew that made age negative
+    and would have delayed the alarm ~5h."""
+    import time as _t
+    _wire(monkeypatch, tmp_path)
+    D().push()
+    hb = json.loads((tmp_path / "repo" / "heartbeat.json").read_text())
+    assert abs(hb["epoch"] - int(_t.time())) < 5      # not skewed by the local timezone offset
+
+
 def test_push_failure_is_recorded_not_swallowed(monkeypatch, tmp_path):
     _wire(monkeypatch, tmp_path, push_rc=1)
     r = D().push()
