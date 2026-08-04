@@ -136,3 +136,6 @@ app/data/condor_shadow/
 
 # Runtime state snapshots (last-good exposure, etc.) — never commit
 app/data/state/
+
+# Local deadman-heartbeat push repo (mirrors to the deadman-heartbeat branch) — never commit
+app/data/.deadman_heartbeat/

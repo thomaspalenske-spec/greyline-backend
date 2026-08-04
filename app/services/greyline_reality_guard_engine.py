@@ -577,6 +577,36 @@ class GreyLineRealityGuardEngine:
                 "detail": (f"off-machine backup verified RESTORABLE {hs}h ago "
                            f"({marker.get('verified')}/{marker.get('expected')} TIER1 files present + parse)")}
 
+    def _check_deadman_heartbeat(self):
+        """The off-box deadman must actually be BEATING. Every other alert sends from this Mac; if the
+        Mac dies only the GitHub-side heartbeat check can reach the operator — but that only works if the
+        service is successfully PUSHING the heartbeat. This on-Mac check catches a silently-broken beacon
+        (push failing / never pushed) while the Mac is still up. Marker-read only (no push here)."""
+        try:
+            from app.services.deadman_heartbeat_engine import DeadmanHeartbeatEngine
+            e = DeadmanHeartbeatEngine()
+            ms = e.minutes_since()
+            import json
+            marker = json.loads(e.MARKER.read_text()) if e.MARKER.exists() else {}
+            interval = e._interval_min()
+        except Exception as ex:
+            return {"id": "DEADMAN_HEARTBEAT", "severity": "warning", "ok": True,
+                    "detail": f"deadman check skipped: {str(ex)[:90]}"}
+        if not marker:
+            return {"id": "DEADMAN_HEARTBEAT", "severity": "warning", "ok": False,
+                    "detail": "off-box deadman heartbeat has NEVER been pushed — a dead Mac would alert no one"}
+        if not marker.get("pushed"):
+            return {"id": "DEADMAN_HEARTBEAT", "severity": "warning", "ok": False,
+                    "detail": f"last deadman heartbeat push FAILED ({str(marker.get('detail'))[:80]}) — "
+                              f"the off-box alert is broken while the Mac is still up"}
+        if ms is not None and ms > 4 * interval:
+            return {"id": "DEADMAN_HEARTBEAT", "severity": "warning", "ok": False,
+                    "detail": f"deadman heartbeat is {ms} min stale (interval {interval} min) — the beacon "
+                              f"is lagging; the GitHub check may false-alarm or the push is degrading"}
+        return {"id": "DEADMAN_HEARTBEAT", "severity": "warning", "ok": True,
+                "detail": f"off-box deadman beating — heartbeat pushed to GitHub {ms} min ago "
+                          f"(GitHub Action alerts if it goes stale)"}
+
     def _check_broker_side_protection(self):
         """Open longs should have a failsafe that survives this process dying.
 
@@ -1147,6 +1177,7 @@ class GreyLineRealityGuardEngine:
             self._check_options_capture(),
             self._check_backup_current(),
             self._check_restore_drill(),
+            self._check_deadman_heartbeat(),
             self._check_broker_side_protection(),
             self._check_external_alerting(),
             self._check_sleeve_edge_not_decayed(),

@@ -42,6 +42,21 @@ def git_data_backup_run():
     return GitDataBackupEngine().backup()
 
 
+@router.get("/deadman-heartbeat")
+def deadman_heartbeat_status():
+    """Off-box deadman: last heartbeat push to GitHub + cadence. The GitHub Action (off this Mac) is the
+    actual alert — it fails + emails the operator if this goes stale. Read-only."""
+    from app.services.deadman_heartbeat_engine import DeadmanHeartbeatEngine
+    return DeadmanHeartbeatEngine().status()
+
+
+@router.post("/deadman-heartbeat/run")
+def deadman_heartbeat_run():
+    """Push a heartbeat NOW (also the test of whether the service can push the beacon branch)."""
+    from app.services.deadman_heartbeat_engine import DeadmanHeartbeatEngine
+    return DeadmanHeartbeatEngine().push()
+
+
 @router.get("/disaster-restore-drill")
 def disaster_restore_drill_status():
     """Last restore-drill result — whether the off-machine backup is proven RESTORABLE. Read-only."""

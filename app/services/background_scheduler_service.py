@@ -1132,6 +1132,15 @@ class BackgroundSchedulerService:
         except Exception as exc:
             restore_drill = {"status": "RESTORE_DRILL_DEGRADED", "error": repr(exc)}
 
+        # OFF-BOX DEADMAN heartbeat: push a tiny liveness beacon to GitHub (~every 5 min). A scheduled
+        # GitHub Action fails + emails the operator if it goes stale — the only alert that survives THIS
+        # Mac dying (every other channel sends FROM this Mac). /deadman-heartbeat.
+        try:
+            from app.services.deadman_heartbeat_engine import DeadmanHeartbeatEngine
+            deadman_heartbeat = DeadmanHeartbeatEngine().push_if_due()
+        except Exception as exc:
+            deadman_heartbeat = {"status": "DEADMAN_HEARTBEAT_DEGRADED", "error": repr(exc)}
+
         # Broker-side disaster stops: the only protection that survives THIS process dying.
         # Every doctrine exit (ATR stop, TP ladder, maturity liquidation) needs the scheduler
         # alive; a resting GTC stop at the broker does not. Default OFF, and each cycle it only
