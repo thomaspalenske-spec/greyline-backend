@@ -403,23 +403,30 @@ class ConditionalVRPShortPremiumEngine:
             pass
 
     def _chain(self, symbol):
-        # PRIMARY: Unusual Whales. The TradeStation SIM sandbox streams only a narrow, garbage-quoted
-        # strike band (a $1-fair wing quoted at $4), so a defined-risk condor could never form on it.
-        # UW gives clean per-strike greeks + NBBO; prefer a liquid MONTHLY expiry near the DTE target
-        # (the adaptive engine sometimes picks a weekly with ~0 two-sided quotes even on SPY).
+        # PRIMARY (and, when configured, ONLY): Unusual Whales. The TradeStation SIM sandbox streams only a
+        # narrow, garbage-quoted strike band (a $1-fair wing quoted at $4), so a defined-risk condor could
+        # never form on it — AND its adaptive-DTE scan streams N tenors x a slow SIM chain PER NAME, which
+        # profiling proved is the entire ~164-min heavy-block cost. So when UW is available we NEVER fall to
+        # it: try UW (with one retry — a parallel-prefetch burst can transiently rate-limit UW to an empty
+        # return), and if UW still can't price the name, SKIP it. A name UW can't price simply is not a
+        # tradeable condor candidate, and the TS chain couldn't build a valid one anyway.
         from app.services.uw_option_chain_engine import UWOptionChainEngine
         uw = UWOptionChainEngine()
         if uw.enabled():
-            try:
-                target = int(getenv("GREYLINE_DTE_TARGET", "") or 42)
-                exp = uw.monthly_expiry(target_dte=target)
-                if exp:
-                    snap = uw.get_chain_snapshot(symbol=symbol, expiration=exp)
-                    if snap.get("contracts"):
-                        return exp, snap["contracts"]
-            except Exception:
-                pass
-        # FALLBACK: TradeStation sandbox chain (adaptive EV-best expiry within the sane band).
+            target = int(getenv("GREYLINE_DTE_TARGET", "") or 42)
+            for _try in range(2):
+                try:
+                    exp = uw.monthly_expiry(target_dte=target)
+                    if exp:
+                        snap = uw.get_chain_snapshot(symbol=symbol, expiration=exp)
+                        if snap.get("contracts"):
+                            return exp, snap["contracts"]
+                except Exception:
+                    pass
+            return None, []          # UW-priceable-only: skip the name, never the slow TS adaptive grind
+
+        # DEGRADED MODE ONLY (no UW key configured): the TS sandbox chain + adaptive-DTE. Slow and
+        # garbage-quoted, but the only source when UW is unavailable — better than no chain at all.
         from app.services.tradestation_option_chain_live_engine import TradeStationOptionChainLiveEngine
         from app.services.adaptive_dte_selection_engine import AdaptiveDTESelectionEngine
         exp = AdaptiveDTESelectionEngine().select(symbol)
