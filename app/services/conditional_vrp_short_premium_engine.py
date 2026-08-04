@@ -87,7 +87,8 @@ class ConditionalVRPShortPremiumEngine:
     MAX_SHORT_VEGA_USD = 300.0
     MAX_CONCURRENT = 5
     SKEW_POOL = 8                 # build this many candidates, then harvest the richest-skew ones
-    MIN_CREDIT = 0.10             # skip structures that barely pay
+    MIN_CREDIT = 0.10             # required net premium (per share) ABOVE round-trip cost — real edge margin
+    COMMISSION_PER_CONTRACT = 0.65  # per-leg-fill commission (8 fills round-trip: 4 legs x in+out)
     PROFIT_TAKE_FRAC = 0.50       # close at 50% of max credit captured
     MANAGE_DTE = 21              # exit this many days before expiry — before terminal gamma (the
     #                             "manage at 21 DTE" rule). Sits BELOW the 28-DTE entry-band floor
@@ -287,8 +288,21 @@ class ConditionalVRPShortPremiumEngine:
         call_width = wing_call["strike"] - short_call["strike"]
         put_width = short_put["strike"] - wing_put["strike"]
         credit = (short_call["bid"] + short_put["bid"]) - (wing_call["ask"] + wing_put["ask"])
-        if credit < self.MIN_CREDIT:
-            return {"skip": f"credit {round(credit, 2)} below floor"}
+        # COST-AWARE CREDIT FLOOR: a fixed $0.10 floor ignored round-trip cost — it passed condors whose
+        # whole credit is eaten by the ~$0.29/share it costs to trade 4 legs in and out (PLTR: $0.33 credit
+        # vs ~$0.29 cost = 88% gone; DEAD on arrival). The entry credit above is already conservative
+        # (shorts@bid, wings@ask = entry spread paid); the EXIT crosses the 4 leg spreads again (~half at a
+        # mid-ish limit exit) plus commissions both ways. The net credit must clear that cost AND leave a
+        # real MIN_CREDIT premium, else there is no harvestable edge. Uses the ACTUAL leg spreads, so wide
+        # single-name condors face a higher floor than tight ETFs — exactly where the VRP is/ isn't viable.
+        _legs = (short_call, short_put, wing_call, wing_put)
+        exit_spread = 0.5 * sum(max(0.0, self._f(l.get("ask")) - self._f(l.get("bid"))) for l in _legs)
+        round_trip_cost = exit_spread + (8 * self.COMMISSION_PER_CONTRACT / 100.0)   # per share
+        cost_floor = round_trip_cost + self.MIN_CREDIT
+        if credit < cost_floor:
+            return {"skip": (f"credit {round(credit, 2)} below COST-AWARE floor {round(cost_floor, 2)}/sh "
+                             f"(round-trip cost {round(round_trip_cost, 3)} + {self.MIN_CREDIT} margin) — "
+                             f"the premium wouldn't survive the 4-leg round trip")}
         max_width = max(call_width, put_width)
         max_loss_per = max_width * 100 - credit * 100
         if max_loss_per <= 0 or max_loss_per > cap:
@@ -441,7 +455,7 @@ class ConditionalVRPShortPremiumEngine:
         except Exception:
             return {"status": "NO_VRP_LEDGER", "reconciled": 0}
         fills = self._broker_fills()
-        changed, nakeds = [], []
+        changed, nakeds, bad_credit = [], [], []
         for r in rows:
             if r.get("status") != "OPEN":
                 continue
@@ -520,7 +534,22 @@ class ConditionalVRPShortPremiumEngine:
                 r["max_loss_total"] = max_loss_total
                 r["filled_leg_count"] = len(filled)
                 r["fill_reconciled"] = True
-        if not dry_run and (changed or nakeds):
+
+        # NEGATIVE-CREDIT ENTRY GUARD: a short-premium condor whose net credit is <= 0 is a guaranteed
+        # loser — you PAID to take on defined risk with NO premium to harvest. The cost-aware entry floor in
+        # build_condor stops this at construction, but a condor whose PLAN credit was positive can still
+        # come back <= 0 after bad fills (the honest reconciled value above). Never let it sit as a "normal"
+        # open condor: flag it + mark for priority exit + page. Catches pre-existing bad rows too (e.g. NRG).
+        for r in rows:
+            if str(r.get("status")).upper() != "OPEN":
+                continue
+            if self._f(r.get("credit_total")) <= 0 and self._f(r.get("max_loss_total")) > 0:
+                r["negative_credit_entry"] = True
+                bad_credit.append({"symbol": r.get("symbol"),
+                                   "credit_total": self._f(r.get("credit_total")),
+                                   "max_loss_total": self._f(r.get("max_loss_total"))})
+
+        if not dry_run and (changed or nakeds or bad_credit):
             with open(self.LEDGER, "w") as f:
                 for r in rows:
                     f.write(json.dumps(r) + "\n")
@@ -544,8 +573,22 @@ class ConditionalVRPShortPremiumEngine:
                         fingerprint=f"VRP_NAKED:{syms}")
             except Exception:
                 pass
+        if bad_credit:
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                eng = ExternalAlertEngine()
+                if eng.has_external_channel():
+                    syms = sorted(str(b.get("symbol")) for b in bad_credit)
+                    eng.dispatch(
+                        title="GreyLine condor entered at NEGATIVE credit",
+                        message=(f"short-premium condor(s) {syms} netted <= $0 credit — you PAID to take on "
+                                 f"defined risk with no premium (a guaranteed loser from bad fills). Marked "
+                                 f"for priority exit; review/close manually."),
+                        severity="CRITICAL", fingerprint=f"VRP_NEG_CREDIT:{syms}")
+            except Exception:
+                pass
         return {"timestamp": datetime.utcnow().isoformat(), "reconciled": len(changed),
-                "changes": changed, "naked": nakeds,
+                "changes": changed, "naked": nakeds, "negative_credit": bad_credit,
                 "status": "VRP_FILLS_RECONCILED" if not dry_run else "VRP_FILLS_RECONCILE_DRYRUN"}
 
     def reconcile_closes(self, dry_run=False):
