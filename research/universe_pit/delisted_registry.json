@@ -4673,5 +4673,2795 @@
     "last_bar_date": "2026-07-23",
     "detected_at": "2026-08-03T02:53:23.505902",
     "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "ACAAW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:43.299081",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AV": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.166671",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AVAZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.173596",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AVBC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.177964",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AVEX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.180517",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AVLN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.182764",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AXIN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.219139",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AXINR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.219416",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AXTU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.231836",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AXTX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.232100",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AZTA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.243750",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AZTR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.244302",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AZUL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.244587",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AZZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.246651",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "B": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.248903",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BABA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.256363",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BACC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.259682",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BAER": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.261029",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BAH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.263857",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BAK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.265516",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BALY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.269252",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BANC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.271564",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BANF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.275173",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BANL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.278512",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BANR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.280669",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BANX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.281974",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BAOS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.282668",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BARK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.285043",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BATL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.285818",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BATRA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.286846",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BATRK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.287944",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.293265",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBAI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.293983",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBAR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.296054",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBBY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.297730",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBCP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.298626",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBCQ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.298975",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.301547",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBDC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.303478",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBDO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.304797",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBGI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.306945",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBHL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.307327",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBHM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.307684",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBLG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.309221",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBNX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.310110",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBOT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.310533",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBSI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.312234",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.314440",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBUC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.315104",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBVA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.317055",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.318957",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BBWI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.321046",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.326278",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCAB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.327079",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCAL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.327781",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCAR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.328128",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCARW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.328729",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCAT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.329482",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCAX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.329908",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCBP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.331779",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.332967",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCDA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.334645",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCEM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.337078",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.337613",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.340448",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCHT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.342061",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCIC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.343817",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCML": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.344994",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.346641",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCPC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.348662",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCPL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.349184",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCRX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.351330",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.353496",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCSF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.354357",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCSM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.354686",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCSS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.354993",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCTX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.355980",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BCYC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.357452",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.359038",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDCIU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.359717",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.362468",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDMD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.363023",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.365099",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDRX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.366098",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDSX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.366800",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BDTX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.367596",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEAM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.374237",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEAT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.374946",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEATW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.375491",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEEM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.377265",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEEP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.377918",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEKE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.378677",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BELFA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.380811",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BELFB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.382959",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.388763",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEPC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.389493",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEPH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.390228",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEPI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.390855",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BEPJ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.391295",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BERZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.391963",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BESS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.393249",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BETA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.393584",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BETR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.394263",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFAM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.396143",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.397276",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.399678",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFLX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.400000",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFRG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.401225",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFRI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.402531",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.405201",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFST": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.406167",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BFXU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.406458",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.411189",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGDE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.412180",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.413883",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGIN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.414256",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.414742",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGLC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.415312",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGLWW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.415763",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.416462",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGMS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.417488",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.419240",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BGSI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.421049",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.423196",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHAV": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.423522",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.426093",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.428253",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.430326",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.431285",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHFAL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.432207",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHFAM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.432843",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHFAN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.433535",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHFAO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.434293",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHFAP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.435131",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.437794",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.439050",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHRB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.440318",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHST": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.441072",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BHVN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.441631",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIAF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.442225",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIDU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.444658",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BILI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.449258",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BILL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.450110",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.451826",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIOA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.452577",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIOX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.485420",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.486923",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIPC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.487695",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIPH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.488372",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIPI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.489590",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIPJ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.490890",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIRD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.491546",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIRK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.492064",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BITW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.492806",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIVI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.493701",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIVIW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.494034",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIXI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.494485",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BIYA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.495452",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BJDX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.497051",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.500653",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.501922",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKFI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.502245",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.503850",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKHA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.504206",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKKT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.505509",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKSY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.512207",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKTI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.514060",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.515597",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BKV": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.548110",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLBD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.550534",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLCO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.551749",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLDP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.554706",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLIN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.561432",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLKB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.567079",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLLN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.567438",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLMN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.568793",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLND": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.569467",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLNE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.570652",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLNK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.572247",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLRK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.572659",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLRKU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.572967",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLRKW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.573231",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLRX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.574638",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLSH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.575005",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLTE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.575634",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.578642",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLZE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.579278",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BLZR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.579587",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.581952",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMBL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.582685",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMEA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.583355",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMEZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.584090",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMGL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.584456",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.586369",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.586977",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMNR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.588121",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMNZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.588449",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.591066",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMRA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.592690",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BMRC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.594301",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNAI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.601722",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNAIW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.602502",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.603732",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNCWZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.604497",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNED": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.605569",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNGO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.606468",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.607025",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNJ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.607570",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNKK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.608268",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.608974",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNRG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.610270",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.612555",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNTC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.613730",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNTX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.614624",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BNZI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.618513",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOBS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.619446",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.620388",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BODI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.621095",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.621586",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.623620",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOKF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.625730",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOLD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.626196",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOLT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.626874",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BON": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.627568",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOOM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.629675",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOOT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.630847",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BORR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.631698",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOSC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.633667",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.633965",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOTJ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.635394",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.635931",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BOX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.637159",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.639390",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BPACR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.639999",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BPRE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.644373",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BPRN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.645372",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BPRO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.645677",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BPYPM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.646298",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BPYPP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.648651",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BQ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.649425",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRAG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.652641",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRAI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.652954",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRBS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.655280",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.657357",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRCB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.657741",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRCC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.658224",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BREW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.658701",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BREZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.658908",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRFH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.660411",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRIA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.661315",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRIB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.661668",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRIE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.663571",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRKHU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.663790",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRKR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.664987",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRKRP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.665333",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRLS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.665891",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRLT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.667048",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.668646",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRNS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.669211",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BROS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.672345",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.672721",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRSL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.674714",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRSP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.675623",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.677676",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRTX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.679026",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRUN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.679622",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRUNW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.679979",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.681242",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.682255",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BRZE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.682777",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSAA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.683041",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSAC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.685292",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSBK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.686036",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSBR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.687224",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSET": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.689159",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSIN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.691215",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.692372",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSRR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.694496",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSTZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.695341",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSVN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.696217",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BSY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.699809",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTAI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.700775",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTBD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.701391",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTBT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.703323",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTCS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.704866",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTCT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.705685",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTCW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.706172",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTDR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.706822",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.708212",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.709827",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTGO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.710149",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.712286",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTMD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.712939",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTOC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.713386",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTOG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.714207",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTQ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.714968",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTSGU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.715892",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTTC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.748955",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.751123",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BTX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.751892",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BUD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.753819",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BUDA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.754787",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BUFE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.755115",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BULL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.755938",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BULLW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.756885",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BULZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.757578",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BUR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.758702",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BURU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.761084",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BUSE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.763274",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BUSEP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.763687",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BUUU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.764058",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BV": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.765542",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BVC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.765923",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BVFL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.766947",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BVN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.769093",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BVS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.769788",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWAY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.773912",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.774867",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWBBP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.775460",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWEN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.777231",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWFG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.778503",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWIN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.779313",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWLP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.780164",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWMN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.780813",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWMX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.781635",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWNB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.782248",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BWOW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.782539",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BXC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.787991",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BXDC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.788289",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BXMT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.789817",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BXSL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.793560",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.794510",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BYAH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.794959",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BYD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.797084",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BYFC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.798627",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BYND": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.799543",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BYRN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.800833",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BYSI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.801850",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.802978",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BZAI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.803540",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BZAIW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.804114",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BZFD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.804760",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BZFDW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.805432",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BZH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.807103",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "BZUN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.808252",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAAP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.812480",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAAS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.814412",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CABA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.815244",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CABO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.816428",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CABR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.816800",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.818391",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CACC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.820258",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CADL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.822697",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.824727",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAES": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.825045",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.827179",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAGE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.827481",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.830868",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAIIW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.831667",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAKE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.833297",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.835346",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CALC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.836083",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CALM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.837697",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CALX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.838989",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CALY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.841674",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAMP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.842202",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAMT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.844185",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.845079",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CANF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.846359",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CANG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.847257",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAPL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.848589",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAPNR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.849240",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAPS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.853221",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAQUU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.853766",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAQUW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.854004",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.855991",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CARD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.856512",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CARE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.857759",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CARG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.858795",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CARL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.859146",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CARS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.860994",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CART": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.861503",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CASH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.863930",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CASS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.865541",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAST": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.865846",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CATG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.872156",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CATO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.873797",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CATX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.875253",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CATY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.876893",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CAVA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.877451",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBAN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.882527",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBAT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.884111",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.884579",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBIO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.887019",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.887349",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.887935",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBLL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.888314",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBNK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.889542",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBOT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.891641",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBRG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.894244",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBRS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.896164",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBSH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.898165",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.900237",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.902320",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBUS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.903370",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CBZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.908394",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.942293",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCAP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.943188",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCAQ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.943580",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.945784",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCBG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.951969",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.985721",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCCC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.986656",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCEC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.988694",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCEL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.991443",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.996049",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCHH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:44.997231",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCID": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.000649",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCII": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.000990",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCIIW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.001591",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCIX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.002216",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCIXW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.002993",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCLD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.011445",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.012908",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCNE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.015181",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCNEP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.015876",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.017268",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCOI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.019415",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.021470",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCSI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.022164",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCTG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.022647",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.024741",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCXI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.025061",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCXIU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.025343",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CCXIW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.025617",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.027687",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDIO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.030407",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDIOW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.030953",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDLR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.031407",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDLX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.032322",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDNA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.033484",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDNG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.033765",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDNL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.034043",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.039300",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDRE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.040028",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDRO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.040705",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDROW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.041293",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.041832",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDTG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.042272",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDXS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.045824",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDZI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.047455",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CDZIP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.048281",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.050464",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CECO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.052523",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CEFD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.053240",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CEGX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.054325",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CELC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.055314",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CELH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.057031",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CELU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.057833",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CELZ": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.058956",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CENN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.060226",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CENT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.061844",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CENTA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.063214",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CENX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.065811",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CEPF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.066302",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CEPL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.066749",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CEPO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.067158",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CEPU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.068423",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CEPV": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.068875",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CERS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.070484",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CETX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.072191",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CETY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.073535",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CFBK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.079906",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CFFI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.081576",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CFFN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.083657",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CFND": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.085427",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CFR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.087549",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGABL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.090129",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGAU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.091318",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGBD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.092320",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.093568",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGEM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.094297",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGEN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.096313",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGNT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.096998",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGON": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.099066",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGTL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.099672",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CGTX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.100330",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.100691",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHAI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.101250",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHCI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.104472",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHCO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.106619",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHCT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.107760",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHDN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.112860",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHE": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.114589",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHEF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.116904",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHGG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.118253",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHH": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.120371",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHMG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.123705",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHMI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.125024",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHNR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.127097",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHNU": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.127407",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHOW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.127756",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHPGR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.129577",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHPT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.163986",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.164960",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHRD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.165758",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHRN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.167081",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHRS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.168879",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHSCL": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.174012",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHSCM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.175416",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHSCN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.176835",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHSCO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.178745",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHSCP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.180947",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHSN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.181537",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.183380",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHWY": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.186382",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CHYM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.186801",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIA": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.191958",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.193999",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CICC": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.194770",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIEG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.195036",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIG": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.200574",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIGI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.202729",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIIT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.203423",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.205141",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIMN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.205633",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIMO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.206057",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIMP": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.206427",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CING": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.210612",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CINGW": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.211200",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CINT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.211891",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CION": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.212547",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CISO": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.213220",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CISS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.213787",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CITR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.214949",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIVB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.217036",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CIX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.219104",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CJMB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.219536",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLAR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.225511",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.226536",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLBT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.228728",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLDI": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.229451",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLDT": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.231076",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLDX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.233221",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLF": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.235412",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLFD": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.238016",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLGN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.239042",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLIK": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.241202",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLIR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.242518",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLLS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.243674",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "CLMB": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:45.245653",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "ING": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:46.095421",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "INGN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:46.096713",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "INGR": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:46.099424",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "INLX": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:46.100517",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "INM": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:46.101942",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "WERN": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:47.387316",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "ZWS": {
+    "last_bar_date": "2026-07-24",
+    "detected_at": "2026-08-04T06:05:47.484049",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
   }
 }
