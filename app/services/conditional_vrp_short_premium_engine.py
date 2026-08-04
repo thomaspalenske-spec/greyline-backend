@@ -90,6 +90,25 @@ class ConditionalVRPShortPremiumEngine:
     MIN_CREDIT = 0.10             # required net premium (per share) ABOVE round-trip cost — real edge margin
     COMMISSION_PER_CONTRACT = 0.65  # per-leg-fill commission (8 fills round-trip: 4 legs x in+out)
     PROFIT_TAKE_FRAC = 0.50       # close at 50% of max credit captured
+
+    # LIQUID-ETF VRP UNIVERSE. The cost screen proved single-name condors are dead-on-arrival / marginal on
+    # retail 4-leg costs, while broad, tight-spread ETFs carry the ~4pp cost drag the thin VRP can plausibly
+    # clear (and they avoid single-name earnings-gap risk the VRP isn't compensated for). So by default the
+    # LIVE VRP sleeve trades LIQUID ETFs ONLY — deliberately curated, always-liquid optionable ETFs.
+    # Reversible via GREYLINE_VRP_ETF_ONLY=false (back to the full optionable universe). Research/backtest
+    # over the full DEFAULT_NAMES universe is UNAFFECTED — this restricts only what the sleeve OPENS.
+    LIQUID_ETFS = [
+        "SPY", "QQQ", "IWM", "DIA",                                    # broad index
+        "XLE", "XLF", "XLK", "XLV", "XLI", "XLP", "XLU", "XLB", "XLY", "XLRE", "XLC",   # sectors
+        "TLT", "HYG", "LQD", "IEF",                                    # rates / credit
+        "GLD", "SLV", "GDX", "USO",                                    # commodities / metals
+        "EEM", "EFA", "FXI", "EWZ",                                    # international
+        "SMH", "SOXX", "KRE", "XOP", "XBI", "IYR", "XRT",              # liquid industry ETFs
+    ]
+
+    @staticmethod
+    def _vrp_etf_only():
+        return (getenv("GREYLINE_VRP_ETF_ONLY", "true") or "").strip().lower() == "true"
     MANAGE_DTE = 21              # exit this many days before expiry — before terminal gamma (the
     #                             "manage at 21 DTE" rule). Sits BELOW the 28-DTE entry-band floor
     #                             (AdaptiveDTESelectionEngine) so entry and exit can never collide.
@@ -771,6 +790,12 @@ class ConditionalVRPShortPremiumEngine:
         how many candidates are BUILT before ranking — the live cycle uses the full SKEW_POOL; a fast
         read-only caller (dress rehearsal) passes a small value so it doesn't fetch a UW chain per name."""
         from app.services.conditional_vrp_forward_panel_engine import ConditionalVRPForwardPanelEngine
+        # LIQUID-ETF RESTRICTION (default on): when no explicit universe is passed, the live sleeve screens
+        # only the curated liquid ETFs — single-name condors are dead-on-arrival on retail costs (cost
+        # screen). An explicit `names` (research/backtest) bypasses this; GREYLINE_VRP_ETF_ONLY=false reverts.
+        etf_only = (names is None and self._vrp_etf_only())
+        if etf_only:
+            names = self.LIQUID_ETFS
         cands = ConditionalVRPForwardPanelEngine().rich_iv_candidates(names)
         open_syms = self._open_symbols()
         slots = max(0, self.MAX_CONCURRENT - len(open_syms))
@@ -847,6 +872,7 @@ class ConditionalVRPShortPremiumEngine:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "enabled": self.enabled(),
+            "universe_policy": "liquid_etf_only" if etf_only else "full_optionable",
             "candidates": len(cands), "open_positions": len(open_syms),
             "free_slots": slots, "planned": built, "skipped": skipped[:20],
             "cap_per_position_usd": self.MAX_LOSS_PER_POSITION_USD,
