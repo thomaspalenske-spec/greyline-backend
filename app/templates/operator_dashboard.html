@@ -1552,36 +1552,58 @@ async function refreshAll() {
       const body = document.getElementById("open_equity_positions_body");
       const sum = document.getElementById("oeq_summary");
       if (!body) return;
+      const dash = `<span class="sub">—</span>`;
+      const fmtAge = (ms) => ms < 90000 ? `${Math.round(ms/1000)}s` : `${Math.round(ms/60000)}m`;
+      // Render a set of equity rows. `stale` marks a last-known-good fallback (muted + age badge) shown
+      // when the live read flapped — honest last-known-good, NEVER presented as a live figure.
+      function renderRows(eq, stale, ageMs) {
+        const totPnl = eq.reduce((a, p) => a + Number(p.pending ? 0 : (p.unrealized_pnl || 0)), 0);
+        if (sum) sum.textContent = stale
+          ? `${eq.length} name(s) · last-known-good, live read unavailable`
+          : `${eq.length} name(s) · P/L ${fmtMoney(totPnl)}`;
+        const banner = stale
+          ? `<tr><td colspan="9"><span class="sub" style="color:#d9a441;">⚠ Live broker read unavailable (transient) — showing last-known holdings as of ${fmtAge(ageMs)} ago, retrying. Not live.</span></td></tr>`
+          : "";
+        body.innerHTML = banner + eq.map(p => {
+          const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
+          const shares = (p.shares != null ? p.shares : p.quantity);
+          const mktVal = (p.current_price != null && shares != null) ? Number(p.current_price) * Number(shares) : null;
+          const stopCell = (p.stop_loss != null)
+            ? `${fmtMoney(p.stop_loss)}${(p.current_price ? `<br><span class="sub red">${((p.stop_loss/p.current_price-1)*100).toFixed(1)}%</span>` : "")}`
+            : dash;
+          return `
+          <tr${(p.pending || stale) ? ' style="opacity:.6;"' : ''}>
+            <td><strong>${p.symbol || "—"}</strong>${p.pending ? ' <span class="badge pending">PENDING</span>' : ''}</td>
+            <td>${shares != null ? shares : "—"}</td>
+            <td>${p.entry_price != null ? fmtMoney(p.entry_price) : dash}</td>
+            <td>${p.current_price != null ? fmtMoney(p.current_price) : dash}</td>
+            <td>${p.initial_cost != null ? fmtMoney(p.initial_cost) : dash}</td>
+            <td>${mktVal != null ? fmtMoney(mktVal) : dash}</td>
+            <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
+            <td class="${sign}">${p.pending ? dash : (p.unrealized_pnl_pct > 0 ? "+" : "") + p.unrealized_pnl_pct + "%"}</td>
+            <td>${stopCell}</td>
+          </tr>`;
+        }).join("");
+      }
       if (bookReadFailed) {
-        body.innerHTML = `<tr><td colspan="9"><span class="red">Broker position read failed — holdings unknown (not necessarily flat).</span></td></tr>`;
-        if (sum) sum.textContent = "";
+        // Transient broker-read flap: fall back to the last-known-good holdings (age-badged) instead of
+        // blanking the table — the display-side twin of the exposure gate's last-good fallback. Only a
+        // PERSISTENT failure (no fresh cache) shows the red "holdings unknown".
+        const lg = window.__lastGoodEquity;
+        const MAX_AGE_MS = 10 * 60 * 1000;
+        if (lg && lg.rows && (Date.now() - lg.at) <= MAX_AGE_MS) {
+          renderRows(lg.rows, true, Date.now() - lg.at);
+        } else {
+          body.innerHTML = `<tr><td colspan="9"><span class="red">Broker position read failed — holdings unknown (not necessarily flat).</span></td></tr>`;
+          if (sum) sum.textContent = "";
+        }
         return;
       }
       const eq = rowsAll.filter(p => (p.asset_type || "").toUpperCase() !== "OPTION");
+      // cache this confirmed-good read so a later transient flap can fall back to it
+      window.__lastGoodEquity = { rows: eq, at: Date.now() };
       if (!eq.length) { body.innerHTML = `<tr><td colspan="9"><span class="sub">No open equity positions.</span></td></tr>`; if (sum) sum.textContent = ""; return; }
-      const dash = `<span class="sub">—</span>`;
-      const totPnl = eq.reduce((a, p) => a + Number(p.pending ? 0 : (p.unrealized_pnl || 0)), 0);
-      if (sum) sum.textContent = `${eq.length} name(s) · P/L ${fmtMoney(totPnl)}`;
-      body.innerHTML = eq.map(p => {
-        const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
-        const shares = (p.shares != null ? p.shares : p.quantity);
-        const mktVal = (p.current_price != null && shares != null) ? Number(p.current_price) * Number(shares) : null;
-        const stopCell = (p.stop_loss != null)
-          ? `${fmtMoney(p.stop_loss)}${(p.current_price ? `<br><span class="sub red">${((p.stop_loss/p.current_price-1)*100).toFixed(1)}%</span>` : "")}`
-          : dash;
-        return `
-        <tr${p.pending ? ' style="opacity:.75;"' : ''}>
-          <td><strong>${p.symbol || "—"}</strong>${p.pending ? ' <span class="badge pending">PENDING</span>' : ''}</td>
-          <td>${shares != null ? shares : "—"}</td>
-          <td>${p.entry_price != null ? fmtMoney(p.entry_price) : dash}</td>
-          <td>${p.current_price != null ? fmtMoney(p.current_price) : dash}</td>
-          <td>${p.initial_cost != null ? fmtMoney(p.initial_cost) : dash}</td>
-          <td>${mktVal != null ? fmtMoney(mktVal) : dash}</td>
-          <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
-          <td class="${sign}">${p.pending ? dash : (p.unrealized_pnl_pct > 0 ? "+" : "") + p.unrealized_pnl_pct + "%"}</td>
-          <td>${stopCell}</td>
-        </tr>`;
-      }).join("");
+      renderRows(eq, false, 0);
     })();
 
     document.getElementById("positions").innerHTML = rowsAll.map(p => {
