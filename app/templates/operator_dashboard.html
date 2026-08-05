@@ -1568,9 +1568,14 @@ async function refreshAll() {
           const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
           const shares = (p.shares != null ? p.shares : p.quantity);
           const mktVal = (p.current_price != null && shares != null) ? Number(p.current_price) * Number(shares) : null;
+          // Real dynamic exit: trend = the 200-DMA level (p.stop_loss) — label it as such, not a generic
+          // stop; carry/T-bill have no PRICE stop but DO have an exit RULE (p.stage: backwardation / −15%
+          // hard stop / cash floor) — show that instead of a bare "—", so no row implies "no exit".
+          const isDMA = /200-DMA/.test(p.stage || "");
           const stopCell = (p.stop_loss != null)
-            ? `${fmtMoney(p.stop_loss)}${(p.current_price ? `<br><span class="sub red">${((p.stop_loss/p.current_price-1)*100).toFixed(1)}%</span>` : "")}`
-            : dash;
+            ? `${fmtMoney(p.stop_loss)}${isDMA ? '<br><span class="sub">200-DMA exit</span>'
+                : (p.current_price ? `<br><span class="sub red">${((p.stop_loss/p.current_price-1)*100).toFixed(1)}%</span>` : "")}`
+            : (p.stage ? `<span class="sub">${p.stage}</span>` : dash);
           // Take-Profit ladder — same source + rendering as the full Open Positions table below, so the
           // two never disagree. Momentum-reversal names carry an ATR ladder (targets[] + tps_filled,
           // banked ones ✓ green, TP4 runner trails); trend/carry/T-bill ETFs have none → dash.

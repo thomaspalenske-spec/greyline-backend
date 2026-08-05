@@ -49,7 +49,7 @@ def _dynamic_exit(sym, current_price):
             if s.get("ok"):
                 cond = "contango · hold" if s.get("contango") else "BACKWARDATION · exiting"
                 return {"stop_loss": None,
-                        "stage": f"carry exit: sell on backwardation (VIX>VIX3M) · now {s['vix']}/{s['vix3m']} = {cond}",
+                        "stage": f"carry exit: backwardation (VIX>VIX3M) OR −15% hard stop from avg · now {s['vix']}/{s['vix3m']} = {cond}",
                         "tp_note": "harvests the roll until the curve inverts (no fixed TP)"}
         if base == "SGOV":
             return {"stop_loss": None, "stage": "cash floor · no exit stop", "tp_note": "cash equivalent"}
