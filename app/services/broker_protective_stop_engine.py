@@ -40,13 +40,27 @@ class BrokerProtectiveStopEngine:
     def enabled():
         return (getenv("GREYLINE_BROKER_PROTECTIVE_STOPS", "") or "").strip().lower() == "true"
 
+    @staticmethod
+    def _topup_enabled():
+        """Coverage-aware TOP-UP: when a symbol already has a resting stop but for the WRONG quantity
+        (position grew/shrank via rebalancing), cancel-CONFIRM-replace it to the exact current qty. This
+        is EXTRA order-placing behaviour beyond the base 'place if none', so it has its own gate — default
+        OFF, arm with GREYLINE_BROKER_STOP_TOPUP=true (only meaningful when the stops themselves are armed)."""
+        return (getenv("GREYLINE_BROKER_STOP_TOPUP", "") or "").strip().lower() == "true"
+
     def _booking(self):
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         return TradeStationSimBookingEngine()
 
     def _live_state(self, b):
-        pos = (b.positions().get("response_json") or {}).get("Positions") or []
-        ords = (b.orders().get("response_json") or {}).get("Orders") or []
+        pos_resp, ord_resp = b.positions(), b.orders()
+        # reads_ok gates ANY order placement: acting on a degraded/failed read is how a stop gets stacked
+        # on an existing (unread) one and oversells the position. Both reads must be confirmed-good (HTTP
+        # 200); an empty list from a FAILED read must never look like 'no stops → place more'.
+        reads_ok = bool(pos_resp.get("ok", True)) and bool(ord_resp.get("ok", True))
+        pos = (pos_resp.get("response_json") or {}).get("Positions") or []
+        ords = (ord_resp.get("response_json") or {}).get("Orders") or []
+        self._last_reads_ok = reads_ok
         working = [o for o in ords
                    if str(o.get("StatusDescription", "")).lower() in self.WORKING]
         # Symbols with ANY working sell order are off-limits, not just those with a stop.
@@ -109,14 +123,21 @@ class BrokerProtectiveStopEngine:
         except Exception as e:
             return {"status": "BROKER_STOPS_DRILL_DEGRADED", "armed": True,
                     "detail": f"could not read broker positions/orders: {str(e)[:110]}"}
+        if not getattr(self, "_last_reads_ok", True):
+            # a degraded read would report EVERY position as unprotected (empty orders) — a false gap.
+            return {"status": "BROKER_STOPS_DRILL_DEGRADED", "armed": True,
+                    "detail": "broker positions/orders read degraded — coverage UNVERIFIED this cycle (not "
+                              "reporting false gaps); retries next cycle"}
         vrp_legs = self._vrp_leg_symbols()      # defined-risk condor legs must NOT be stopped (naked-short trap)
         stop_qty = self._resting_stop_qty(working)
-        fully, partial, unprotected = [], [], []
+        fully, partial, unprotected, over = [], [], [], []
         for p in pos:
             sym = str(p.get("Symbol") or "").upper()
             q = self._f(p.get("Quantity"))
             if q <= 0:                          # only LONGS need a resting sell-stop; flat/short skip
                 continue
+            if " " in sym:                      # a long OPTION: loss is bounded by premium (defined-risk)
+                continue                        # + managed by the exit doctrine; not an equity-gap risk
             if sym in vrp_legs or sym in closing:   # N/A: defined-risk leg, or a close already working
                 continue
             qty = int(q)
@@ -125,17 +146,19 @@ class BrokerProtectiveStopEngine:
                 unprotected.append({"symbol": sym, "position_qty": qty, "stop_qty": 0})
             elif have < qty:
                 partial.append({"symbol": sym, "position_qty": qty, "stop_qty": have})
+            elif have > qty:                    # stop bigger than the position — oversell-SHORT hazard if it fires
+                over.append({"symbol": sym, "position_qty": qty, "stop_qty": have})
             else:
                 fully.append(sym)
-        gaps = unprotected + partial
+        gaps = unprotected + partial + over
         return {"status": "BROKER_STOPS_VERIFIED" if not gaps else "BROKER_STOPS_GAP",
                 "armed": True, "verified": len(fully), "fully_protected": fully,
-                "unprotected": unprotected, "partial": partial, "gaps": gaps,
+                "unprotected": unprotected, "partial": partial, "over_covered": over, "gaps": gaps,
                 "long_positions": len(fully) + len(gaps), "timestamp": datetime.utcnow().isoformat(),
                 "detail": ("every open long has a full-quantity resting broker stop"
                            if not gaps else
-                           f"{len(unprotected)} unprotected + {len(partial)} partial-coverage long(s) — the "
-                           f"disaster backstop is INCOMPLETE; a process death would leave real risk unhedged")}
+                           f"{len(unprotected)} unprotected + {len(partial)} partial + {len(over)} over-covered "
+                           f"long(s) — the disaster backstop is MIS-SIZED; risk unhedged (or oversell on fire)")}
 
     MARKER = None   # set below (Path); kept as attr so tests can redirect it
 
@@ -217,8 +240,37 @@ class BrokerProtectiveStopEngine:
             return round(round(price / 0.05) * 0.05, 2)
         return round(price, 2)
 
+    def _reconcile_coverage(self, b, sym, qty, is_option, stop_px, dry_run=False):
+        """Cancel-CONFIRM-replace a symbol's resting stop to the FULL current qty. The CONFIRM is the
+        safety crux: a new stop is placed ONLY after the old one is verified GONE — stacking a second
+        stop on an un-cancelled one would let both fire and oversell the position SHORT (the exact
+        double-sell hazard this whole engine is built around). If the cancel can't be confirmed, we do
+        NOT place — the (wrong-qty) old stop stays, which is no worse than before, and the next cycle
+        retries."""
+        if dry_run:
+            return {"symbol": sym, "action": "would_topup", "to_qty": qty, "stop": stop_px, "dry_run": True}
+        self.clear_stop(sym)                                    # cancel every working sell-stop for sym
+        _, working2, _, _ = self._live_state(b)                # fresh read to CONFIRM the cancel landed
+        if not getattr(self, "_last_reads_ok", True):
+            return {"symbol": sym, "action": "topup_aborted",
+                    "reason": "confirm read degraded after cancel — not placing (can't verify the old stop "
+                              "is gone; would risk stacking). Retry next cycle."}
+        still = self._resting_stop_qty(working2).get(str(sym).upper(), 0)
+        if still > 0:
+            return {"symbol": sym, "action": "topup_aborted",
+                    "reason": f"old stop not confirmed cancelled ({still} still resting) — did NOT place a "
+                              f"second stop (would risk oversell); will retry next cycle"}
+        r = b.place_order(sym, qty, action="SELLTOCLOSE" if is_option else "SELL",
+                          order_type="StopMarket", stop_price=stop_px, tif="GTC")
+        if r.get("ok"):
+            return {"symbol": sym, "action": "topup_replaced", "to_qty": qty, "stop": stop_px,
+                    "order_id": r.get("order_id")}
+        return {"symbol": sym, "action": "topup_failed", "to_qty": qty,
+                "http": r.get("http_status"), "reject": r.get("reject_reason")}
+
     def ensure_stops(self, dry_run=False):
-        """Place a resting disaster stop for any live long position that lacks one."""
+        """Place a resting disaster stop for any live long position that lacks one, and (when the top-up
+        gate is armed) reconcile a wrong-quantity stop to the exact current position size."""
         if not self.enabled():
             return {"status": "PROTECTIVE_STOPS_DISABLED", "placed": 0,
                     "detail": "set GREYLINE_BROKER_PROTECTIVE_STOPS=true to arm broker-side "
@@ -226,9 +278,16 @@ class BrokerProtectiveStopEngine:
                               "GreyLine is not running"}
         b = self._booking()
         pos, working, protected, closing = self._live_state(b)
+        if not getattr(self, "_last_reads_ok", True):
+            # FAIL CLOSED: never place/reconcile on a degraded read — a stop placed on an unread book can
+            # stack on an existing one and oversell the position SHORT. The stops already resting stay put.
+            return {"status": "PROTECTIVE_STOPS_READ_DEGRADED", "placed": 0, "topped_up": 0,
+                    "detail": "broker positions/orders read degraded — placement SKIPPED this cycle to "
+                              "avoid stacking a duplicate stop; existing resting stops are untouched. Retries."}
         vrp_legs = self._vrp_leg_symbols()   # never stop a defined-risk condor's own legs
+        stop_qty = self._resting_stop_qty(working)   # quantity-aware coverage, not the coarse 'has a stop'
 
-        placed, skipped, errors = [], [], []
+        placed, topped, skipped, errors = [], [], [], []
         for p in pos:
             sym = str(p.get("Symbol") or "")
             qty = int(float(p.get("Quantity") or 0))          # LIVE broker qty, never a ledger
@@ -242,12 +301,14 @@ class BrokerProtectiveStopEngine:
                 # defined-risk structure IS its protection; a broker stop here is actively harmful.
                 skipped.append({"symbol": sym, "reason": "VRP condor leg — defined-risk, must not be stopped"})
                 continue
-            if sym.upper() in protected:
-                skipped.append({"symbol": sym, "reason": "already protected"})
-                continue
             if sym.upper() in closing:
                 # a close is already working; a stop alongside it could double-sell
                 skipped.append({"symbol": sym, "reason": "close already working — stop would risk a double sell"})
+                continue
+
+            have = stop_qty.get(sym.upper(), 0)
+            if have == qty:                                    # exactly covered — nothing to do
+                skipped.append({"symbol": sym, "reason": f"fully covered ({have}/{qty})"})
                 continue
 
             is_option = " " in sym
@@ -255,25 +316,55 @@ class BrokerProtectiveStopEngine:
             if stop_px <= 0:
                 skipped.append({"symbol": sym, "reason": "computed stop <= 0"})
                 continue
-            if dry_run:
-                placed.append({"symbol": sym, "qty": qty, "stop": stop_px, "dry_run": True})
+
+            if have == 0:
+                # UNPROTECTED — place a full-qty stop (the base behaviour).
+                if dry_run:
+                    placed.append({"symbol": sym, "qty": qty, "stop": stop_px, "action": "place", "dry_run": True})
+                    continue
+                try:
+                    r = b.place_order(sym, qty, action="SELLTOCLOSE" if is_option else "SELL",
+                                      order_type="StopMarket", stop_price=stop_px, tif="GTC")
+                    (placed if r.get("ok") else errors).append(
+                        {"symbol": sym, "qty": qty, "stop": stop_px, "order_id": r.get("order_id")}
+                        if r.get("ok") else {"symbol": sym, "http": r.get("http_status")})
+                except Exception as e:
+                    errors.append({"symbol": sym, "error": str(e)[:80]})
                 continue
-            try:
-                r = b.place_order(sym, qty,
-                                  action="SELLTOCLOSE" if is_option else "SELL",
-                                  order_type="StopMarket", stop_price=stop_px, tif="GTC")
-                if r.get("ok"):
-                    placed.append({"symbol": sym, "qty": qty, "stop": stop_px,
-                                   "order_id": r.get("order_id")})
-                else:
-                    errors.append({"symbol": sym, "http": r.get("http_status")})
-            except Exception as e:
-                errors.append({"symbol": sym, "error": str(e)[:80]})
+
+            # WRONG-QTY coverage. Only act when the top-up gate is armed (it places/cancels real orders).
+            if not self._topup_enabled():
+                skipped.append({"symbol": sym, "reason": f"coverage {have}/{qty} (wrong qty) — top-up "
+                                f"DISARMED (set GREYLINE_BROKER_STOP_TOPUP=true to reconcile)"})
+                continue
+            if have < qty:
+                # PARTIAL (position GREW): ADD only the shortfall — no cancel, so there is NO uncovered
+                # window and the resting total becomes EXACTLY the position qty (no oversell). This is
+                # strictly safer than cancel-replace, which can cancel then fail to re-place on a flap.
+                add = qty - have
+                if dry_run:
+                    topped.append({"symbol": sym, "action": "would_add", "add_qty": add, "to_qty": qty,
+                                   "stop": stop_px, "dry_run": True})
+                    continue
+                try:
+                    r = b.place_order(sym, add, action="SELLTOCLOSE" if is_option else "SELL",
+                                      order_type="StopMarket", stop_price=stop_px, tif="GTC")
+                    topped.append({"symbol": sym, "action": "topup_added", "add_qty": add, "to_qty": qty,
+                                   "stop": stop_px, "order_id": r.get("order_id")}) if r.get("ok") else \
+                        errors.append({"symbol": sym, "action": "topup_add_failed", "http": r.get("http_status")})
+                except Exception as e:
+                    errors.append({"symbol": sym, "error": str(e)[:80]})
+                continue
+            # OVER-coverage (have > qty; position SHRANK without a clear_stop) — must REDUCE, which needs a
+            # cancel. Rare (clear_stop runs on every software exit). Cancel-CONFIRM-replace to the exact qty.
+            res = self._reconcile_coverage(b, sym, qty, is_option, stop_px, dry_run=dry_run)
+            (topped if res.get("action") in ("topup_replaced", "would_topup") else errors).append(res)
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
-            "disaster_stop_pct": self.DISASTER_STOP_PCT,
+            "disaster_stop_pct": self.DISASTER_STOP_PCT, "topup_armed": self._topup_enabled(),
             "positions_seen": len(pos), "placed": len(placed), "placed_detail": placed[:10],
+            "topped_up": len(topped), "topup_detail": topped[:10],
             "skipped": skipped[:10], "errors": errors[:10],
             "note": ("failsafe only — sits far below the doctrine's ATR stop so software exits "
                      "always fire first; this covers the case where software cannot fire at all"),
