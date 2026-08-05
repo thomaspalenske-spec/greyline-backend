@@ -732,18 +732,6 @@ th {
         </div>
       </div>
 
-      <div class="card" id="condor_exits_card" style="min-width:0;">
-        <div class="section-title">Open Condor Exits</div>
-        <div class="sub" style="margin-bottom:10px;">Where each OPEN condor exits — the net BUYBACK cost to close. Profit-take at 50% of credit; hard-stop at 80% of the defined max loss; VRP liquidates at DTE ≤ 21, earnings condors exit on the IV crush. P/L is the live unrealized (P/L % = return on the defined max loss).</div>
-        <div style="overflow-x:auto;">
-          <table>
-            <thead>
-              <tr><th>Symbol</th><th>Type</th><th>DTE</th><th>Credit</th><th>Max Loss</th><th>P/L</th><th>P/L %</th><th>Profit-Take (buyback ≤)</th><th>Hard-Stop (buyback ≥)</th><th>Time Exit</th></tr>
-            </thead>
-            <tbody id="condor_exits_body"><tr><td colspan="10"><span class="sub">Loading…</span></td></tr></tbody>
-          </table>
-        </div>
-      </div>
 
       <div class="card" id="edge_court_card" style="min-width:0;">
         <div class="section-title">Edge Court — live per-sleeve verdict <span id="ec_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
@@ -1139,33 +1127,6 @@ async function refreshOpportunityBoard() {
   }
 }
 
-async function refreshCondorExits() {
-  const body = document.getElementById("condor_exits_body");
-  if (!body) return;
-  try {
-    const d = await getJSON("/condor-exits");
-    const rows = d.condors || [];
-    if (!rows.length) { body.innerHTML = `<tr><td colspan="10"><span class="sub">No open condors.</span></td></tr>`; return; }
-    body.innerHTML = rows.map(c => {
-      const isEarn = c.strategy === "earnings_vol";
-      return `<tr>
-        <td><strong>${c.symbol}</strong>${c.quantity ? ` <span class="sub">×${c.quantity}</span>` : ""}</td>
-        <td><span class="badge ${isEarn ? "neutral" : "open"}">${isEarn ? "earnings" : "VRP"}</span></td>
-        <td>${c.dte != null ? c.dte : "—"}</td>
-        <td>${fmtMoney(c.credit_total)}</td>
-        <td><span class="red">${fmtMoney(c.max_loss_total)}</span></td>
-        <td class="${c.pnl == null ? "" : c.pnl >= 0 ? "green" : "red"}">${c.pnl == null ? "—" : fmtMoney(c.pnl)}</td>
-        <td class="${c.pnl == null ? "" : c.pnl >= 0 ? "green" : "red"}">${c.pnl_pct == null ? "—" : (c.pnl_pct > 0 ? "+" : "") + c.pnl_pct + "%"}</td>
-        <td><span class="green">${fmtMoney(c.profit_take_buyback)}</span> <span class="sub">lock +${fmtMoney(c.profit_take_lock)}</span></td>
-        <td><span class="red">${fmtMoney(c.hard_stop_buyback)}</span> <span class="sub">loss −${fmtMoney(c.hard_stop_loss)}</span></td>
-        <td><span class="sub">${c.time_exit || "—"}</span></td>
-      </tr>`;
-    }).join("");
-  } catch (e) {
-    body.innerHTML = `<tr><td colspan="10"><span class="red">Condor exits unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
-  }
-}
-
 async function refreshEdgeCourt() {
   const body = document.getElementById("edge_court_body");
   const summary = document.getElementById("ec_summary");
@@ -1315,7 +1276,6 @@ async function refreshAll() {
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
   refreshTransactions();    // fire-and-forget: rolling 2-day transaction ledger
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
-  refreshCondorExits();     // static exit levels off the ledger (no live quotes) — never stalls the loop
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 

@@ -797,7 +797,13 @@ class BackgroundSchedulerService:
         # offender — so the guard matters most here; the card serves its last (pre-open) computation with
         # an age badge meanwhile.
         try:
-            if _heavy_blocked:
+            # Both condor sleeves (VRP + earnings-vol) are RETIRED and the dashboard card was removed, so
+            # this per-cycle UW recompute (the dominant open-window offender) is dead work by default. Gate
+            # it OFF; re-enable with GREYLINE_BEST_CONDORS_ENABLED=true if condors ever come back.
+            if (getenv("GREYLINE_BEST_CONDORS_ENABLED", "") or "").strip().lower() != "true":
+                best_condors = {"status": "BEST_CONDORS_DISABLED", "ran": False,
+                                "reason": "condor sleeves retired — recompute gated off"}
+            elif _heavy_blocked:
                 best_condors = {"status": "BEST_CONDORS_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
             else:
                 from app.services.best_condors_engine import BestCondorsEngine
