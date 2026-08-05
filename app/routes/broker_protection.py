@@ -14,6 +14,13 @@ def broker_protection(ensure: bool = False, dry_run: bool = True):
     return eng.ensure_stops(dry_run=dry_run) if ensure else eng.status()
 
 
+@router.get("/broker-stops-fire-drill")
+def broker_stops_fire_drill():
+    """Read-only fire drill: verify every open long has a resting broker stop covering its FULL quantity
+    (a partial-qty stop passes the coarse check but leaves risk). Never places or cancels orders."""
+    return BrokerProtectiveStopEngine().fire_drill()
+
+
 @router.get("/disaster-recovery")
 def disaster_recovery(backup: bool = False, tier2: bool = False):
     """Off-machine backup of the UNRECOVERABLE data (options surface, PIT archive, panels,

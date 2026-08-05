@@ -66,6 +66,128 @@ class BrokerProtectiveStopEngine:
         return pos, working, protected, closing
 
     @staticmethod
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _resting_stop_qty(self, working):
+        """{SYMBOL: total resting SELL StopMarket quantity} across all working orders — the actual
+        coverage at the broker, read from order quantity fields (not just 'a stop exists')."""
+        out = {}
+        for o in working:
+            leg = (o.get("Legs") or [{}])[0]
+            sym = str(leg.get("Symbol") or "").upper()
+            if not str(leg.get("BuyOrSell") or "").lower().startswith("sell"):
+                continue
+            if "stop" not in str(o.get("OrderType") or "").lower():
+                continue
+            q = 0
+            for src in (leg, o):
+                for k in ("QuantityRemaining", "QuantityOrdered", "Quantity", "ExecQuantity"):
+                    q = abs(int(self._f(src.get(k))))
+                    if q:
+                        break
+                if q:
+                    break
+            out[sym] = out.get(sym, 0) + q
+        return out
+
+    def fire_drill(self):
+        """READ-ONLY rigorous verification that every open long has a resting broker stop COVERING ITS
+        FULL quantity — the disaster backstop actually in place, not just 'we placed one once'. You can't
+        safely test-FIRE a resting stop, so the drill verifies, per position: a working SELL StopMarket
+        exists AND its quantity covers the full position (a 3-share stop on a 6-share long is a GAP the
+        coarse 'symbol has a stop' check misses). Never places/cancels orders."""
+        if not self.enabled():
+            return {"status": "BROKER_STOPS_DISARMED", "armed": False, "verified": 0, "gaps": [],
+                    "detail": "disaster stops OFF by design (GREYLINE_BROKER_PROTECTIVE_STOPS) — nothing to drill"}
+        try:
+            b = self._booking()
+            pos, working, _protected, closing = self._live_state(b)
+        except Exception as e:
+            return {"status": "BROKER_STOPS_DRILL_DEGRADED", "armed": True,
+                    "detail": f"could not read broker positions/orders: {str(e)[:110]}"}
+        vrp_legs = self._vrp_leg_symbols()      # defined-risk condor legs must NOT be stopped (naked-short trap)
+        stop_qty = self._resting_stop_qty(working)
+        fully, partial, unprotected = [], [], []
+        for p in pos:
+            sym = str(p.get("Symbol") or "").upper()
+            q = self._f(p.get("Quantity"))
+            if q <= 0:                          # only LONGS need a resting sell-stop; flat/short skip
+                continue
+            if sym in vrp_legs or sym in closing:   # N/A: defined-risk leg, or a close already working
+                continue
+            qty = int(q)
+            have = stop_qty.get(sym, 0)
+            if have <= 0:
+                unprotected.append({"symbol": sym, "position_qty": qty, "stop_qty": 0})
+            elif have < qty:
+                partial.append({"symbol": sym, "position_qty": qty, "stop_qty": have})
+            else:
+                fully.append(sym)
+        gaps = unprotected + partial
+        return {"status": "BROKER_STOPS_VERIFIED" if not gaps else "BROKER_STOPS_GAP",
+                "armed": True, "verified": len(fully), "fully_protected": fully,
+                "unprotected": unprotected, "partial": partial, "gaps": gaps,
+                "long_positions": len(fully) + len(gaps), "timestamp": datetime.utcnow().isoformat(),
+                "detail": ("every open long has a full-quantity resting broker stop"
+                           if not gaps else
+                           f"{len(unprotected)} unprotected + {len(partial)} partial-coverage long(s) — the "
+                           f"disaster backstop is INCOMPLETE; a process death would leave real risk unhedged")}
+
+    MARKER = None   # set below (Path); kept as attr so tests can redirect it
+
+    def _drill_marker_path(self):
+        from pathlib import Path
+        return self.MARKER or Path("app/data/data_quality/broker_stops_fire_drill_last.json")
+
+    def _mark_drill(self, res):
+        import json
+        p = self._drill_marker_path()
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps({"at": datetime.utcnow().isoformat(), "status": res.get("status"),
+                                     "armed": bool(res.get("armed")), "verified": res.get("verified"),
+                                     "gaps": len(res.get("gaps", []) or [])}))
+        except Exception:
+            pass
+
+    def drill_hours_since(self):
+        import json
+        try:
+            at = json.loads(self._drill_marker_path().read_text()).get("at")
+            return round((datetime.utcnow() - datetime.fromisoformat(str(at))).total_seconds() / 3600.0, 2)
+        except Exception:
+            return None
+
+    FIRE_DRILL_DUE_HOURS = 12.0
+
+    def fire_drill_if_due(self):
+        """Self-gated (~12h). Records the marker and screams CRITICAL if an ARMED book has a coverage gap.
+        Wired into the scheduler after ensure_stops."""
+        hs = self.drill_hours_since()
+        if hs is not None and hs < self.FIRE_DRILL_DUE_HOURS:
+            return {"status": "BROKER_STOPS_DRILL_NOT_DUE", "hours_since": hs}
+        res = self.fire_drill()
+        self._mark_drill(res)
+        if res.get("status") == "BROKER_STOPS_GAP":
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                g = res.get("gaps", [])
+                ExternalAlertEngine().dispatch(
+                    "GreyLine: BROKER STOP COVERAGE GAP",
+                    f"Fire drill found {len(res.get('unprotected', []))} unprotected + "
+                    f"{len(res.get('partial', []))} partial-coverage long(s) despite armed disaster stops: "
+                    f"{', '.join(str(x.get('symbol')) for x in g[:8])}. If GreyLine stops running, that risk "
+                    f"is unhedged. Re-run ensure_stops.",
+                    severity="CRITICAL", fingerprint="broker_stops_gap")
+            except Exception:
+                pass
+        return res
+
+    @staticmethod
     def _vrp_leg_symbols():
         """Symbols that are legs of an OPEN VRP defined-risk condor. These must NEVER get a broker
         stop: the wings ARE the risk cap, so stopping a wing leaves the short leg NAKED (undefined

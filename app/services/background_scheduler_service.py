@@ -1149,8 +1149,13 @@ class BackgroundSchedulerService:
             from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine
             _bp = BrokerProtectiveStopEngine()
             broker_stops = _bp.ensure_stops() if _bp.enabled() else _bp.status()
+            # FIRE DRILL: read-only, ~12h — verify the armed stops are actually resting at the broker with
+            # FULL-quantity coverage per position (a partial-qty stop passes the coarse check but leaves
+            # risk). Screams CRITICAL on a gap. Never places/cancels orders. /broker-stops-fire-drill.
+            broker_stops_fire_drill = _bp.fire_drill_if_due()
         except Exception as exc:
             broker_stops = {"status": "BROKER_STOPS_DEGRADED", "error": repr(exc)}
+            broker_stops_fire_drill = {"status": "BROKER_STOPS_DRILL_DEGRADED", "error": repr(exc)}
 
         # Second-source proof: the integrity scan only checks the CSVs against THEMSELVES.
         # Uniformly-wrong data (a shift, a mis-mapped ticker, an unadjusted split) is

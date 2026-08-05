@@ -634,6 +634,38 @@ class GreyLineRealityGuardEngine:
                            f"protection if GreyLine stops running; disaster stops are {armed}. "
                            f"Exposed: {', '.join(unprotected[:8])}")}
 
+    def _check_broker_stops_fire_drill(self):
+        """The armed disaster stops must be periodically FIRE-DRILLED — verified as actually resting at
+        the broker with FULL-quantity coverage per position, not just 'we placed one once'. The coarse
+        BROKER_SIDE_PROTECTION check above misses a partial-qty stop (3 shares resting on a 6-share long).
+        Marker-read only (the scheduler runs the actual read-only drill)."""
+        try:
+            from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine as B
+            e = B()
+            import json
+            p = e._drill_marker_path()
+            marker = json.loads(p.read_text()) if p.exists() else {}
+            hs = e.drill_hours_since()
+        except Exception as ex:
+            return {"id": "BROKER_STOPS_FIRE_DRILL", "severity": "warning", "ok": True,
+                    "detail": f"fire-drill check skipped: {str(ex)[:90]}"}
+        if marker and marker.get("armed") is False:
+            return {"id": "BROKER_STOPS_FIRE_DRILL", "severity": "warning", "ok": True,
+                    "detail": "disaster stops OFF by design — no coverage to fire-drill"}
+        if not marker or hs is None:
+            return {"id": "BROKER_STOPS_FIRE_DRILL", "severity": "warning", "ok": False,
+                    "detail": "broker-side stops have NEVER been fire-drilled — resting-stop coverage UNVERIFIED"}
+        if marker.get("status") == "BROKER_STOPS_GAP" or (marker.get("gaps") or 0) > 0:
+            return {"id": "BROKER_STOPS_FIRE_DRILL", "severity": "warning", "ok": False,
+                    "detail": f"last fire drill found {marker.get('gaps')} coverage GAP(s) — an armed book has "
+                              f"open longs with no / partial resting stop; a process death leaves them unhedged"}
+        if hs > 2 * B.FIRE_DRILL_DUE_HOURS:
+            return {"id": "BROKER_STOPS_FIRE_DRILL", "severity": "warning", "ok": False,
+                    "detail": f"last broker-stop fire drill was {hs}h ago — overdue, re-verify coverage"}
+        return {"id": "BROKER_STOPS_FIRE_DRILL", "severity": "warning", "ok": True,
+                "detail": f"broker-side stops fire-drilled {hs}h ago — {marker.get('verified')} open long(s) "
+                          f"have full-quantity resting stops"}
+
     def _check_external_alerting(self):
         """A CRITICAL event must be able to LEAVE this machine.
 
@@ -1179,6 +1211,7 @@ class GreyLineRealityGuardEngine:
             self._check_restore_drill(),
             self._check_deadman_heartbeat(),
             self._check_broker_side_protection(),
+            self._check_broker_stops_fire_drill(),
             self._check_external_alerting(),
             self._check_sleeve_edge_not_decayed(),
             self._check_momentum_stops_consistent(),
