@@ -126,7 +126,10 @@ class TrendFollowingEngine:
                 stale_syms.append(sym)
                 continue
             px = last or ask or bid
-            held = self._held(pos, sym)
+            # size against THIS sleeve's own position when per-sleeve accounting is armed (so an overlapping
+            # sleeve can't claim/liquidate trend's shares); disarmed -> broker total, byte-identical to legacy.
+            from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
+            held = SleevePositionLedgerEngine.effective_held("trend", sym, self._held(pos, sym))
             target = int(math.floor(slot / px)) if (sig["uptrend"] and px > 0) else 0
             if sig["uptrend"]:
                 uptrends += 1
@@ -181,6 +184,12 @@ class TrendFollowingEngine:
                     pass
             r = book.place_order(leg["symbol"], abs(d), action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
+            if r.get("ok"):
+                try:
+                    from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
+                    SleevePositionLedgerEngine.record("trend", leg["symbol"], d)   # signed: +buy / -sell
+                except Exception:
+                    pass
             try:
                 from app.services.execution_log_engine import ExecutionLogEngine
                 ExecutionLogEngine().record("trend", leg["symbol"], action, d, limit,

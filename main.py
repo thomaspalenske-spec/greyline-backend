@@ -343,6 +343,8 @@ from app.routes import low_volatility
 app.include_router(low_volatility.router)
 from app.routes import cross_sectional_momentum
 app.include_router(cross_sectional_momentum.router)
+from app.routes import sleeve_positions
+app.include_router(sleeve_positions.router)
 
 from app.routes import index_variance_premium
 app.include_router(index_variance_premium.router)

@@ -125,6 +125,7 @@ class CrossSectionalMomentumEngine:
     def plan(self):
         from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
         from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+        from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
         q = TradeStationQuoteLiveEngine()
         pos = TradeStationPositionsLiveEngine()
         alloc = self._alloc()
@@ -134,7 +135,9 @@ class CrossSectionalMomentumEngine:
         # target legs for the selected leaders
         for sym in self.UNIVERSE:
             bid, ask, last = self._quote(q, sym)
-            held = self._held(pos, sym)
+            # size against THIS sleeve's own position (per-sleeve accounting), not the broker total —
+            # so it never touches trend's shares in the overlapping ETFs. Disarmed -> broker total (legacy).
+            held = SleevePositionLedgerEngine.effective_held("xs_momentum", sym, self._held(pos, sym))
             px = last or ask or bid
             if sym in selected:
                 target = int(math.floor(per / px)) if px > 0 else 0
@@ -209,6 +212,12 @@ class CrossSectionalMomentumEngine:
                     pass
             r = book.place_order(leg["symbol"], abs(d), action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
+            if r.get("ok"):
+                try:
+                    from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
+                    SleevePositionLedgerEngine.record("xs_momentum", leg["symbol"], d)   # signed: +buy / -sell
+                except Exception:
+                    pass
             try:
                 from app.services.execution_log_engine import ExecutionLogEngine
                 ExecutionLogEngine().record("xs_momentum", leg["symbol"], action, d, limit,
