@@ -87,6 +87,17 @@ class EdgeProofProtocolEngine:
             "required_n": 25, "threshold_ror_pct": 1.0, "alpha": 0.05,
             "kill_rule": "at n>=required_n, CI lower bound <= threshold -> RETIRE.",
         },
+        "xs_momentum": {
+            "hypothesis": ("The cross-sectional (relative-strength) dual-momentum sleeve — rank a broad "
+                           "cross-asset ETF universe by 12-1 return, hold the top leaders clearing an "
+                           "absolute-momentum filter — earns a positive cost-net per-trade return on risk. "
+                           "The missing AQR canonical style (momentum); distinct from time-series trend and "
+                           "from the short-horizon momentum-reversal sleeve. Built 2026-08-04, ETF-universe "
+                           "so it's survivorship-clean and SIM-priceable."),
+            "null": "mean cost-net return-on-risk <= threshold",
+            "required_n": 25, "threshold_ror_pct": 1.0, "alpha": 0.05,
+            "kill_rule": "at n>=required_n, CI lower bound <= threshold -> RETIRE.",
+        },
     }
 
     # ---- pre-registration (freeze / audit) -----------------------------------------------------

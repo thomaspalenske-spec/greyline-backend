@@ -341,6 +341,8 @@ from app.routes import transactions_rolling
 app.include_router(transactions_rolling.router)
 from app.routes import low_volatility
 app.include_router(low_volatility.router)
+from app.routes import cross_sectional_momentum
+app.include_router(cross_sectional_momentum.router)
 
 from app.routes import index_variance_premium
 app.include_router(index_variance_premium.router)

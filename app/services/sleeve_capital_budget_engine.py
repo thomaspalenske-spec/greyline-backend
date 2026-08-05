@@ -45,6 +45,7 @@ class SleeveCapitalBudgetEngine:
         "vrp": 0.0,
         "earnings": 0.0,
         "low_vol": 12.0,
+        "xs_momentum": 12.0,     # cross-sectional dual-momentum ETF sleeve (forward-test candidate)
         "managed_futures": 0.0,
     }
     # Aliases so callers can use either name for the carry sleeve.
@@ -54,7 +55,7 @@ class SleeveCapitalBudgetEngine:
     # on a mystery number). These mirror the pre-conversion static caps.
     _FALLBACK_USD = {
         "momentum": 2000.0, "trend": 2217.0, "vol_carry": 1583.0, "vrp": 1200.0, "earnings": 900.0,
-        "low_vol": 2000.0,
+        "low_vol": 2000.0, "xs_momentum": 1500.0,
     }
     DEFAULT_BASE_USD = 10000.0
     _CACHE_TTL_S = 5.0            # coalesce the equity/cash reads across sleeves within one cycle

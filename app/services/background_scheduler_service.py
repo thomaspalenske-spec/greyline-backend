@@ -731,6 +731,16 @@ class BackgroundSchedulerService:
                               if _lv.enabled() else {"status": "LOW_VOL_DISABLED"})
         except Exception as exc:
             low_volatility = {"error": repr(exc), "status": "LOW_VOL_DEGRADED"}
+
+        # CROSS-SECTIONAL MOMENTUM (dual-momentum ETF sleeve) — the missing AQR canonical style, forward-test
+        # candidate. Gated OFF; monthly cadence with prompt exit on a faded leader. /cross-sectional-momentum.
+        try:
+            from app.services.cross_sectional_momentum_engine import CrossSectionalMomentumEngine
+            _xm = CrossSectionalMomentumEngine()
+            xs_momentum = (_xm.run_cycle(is_regular_session=(market_hours.get("is_regular_session") is True))
+                           if _xm.enabled() else {"status": "XSMOM_DISABLED"})
+        except Exception as exc:
+            xs_momentum = {"error": repr(exc), "status": "XSMOM_DEGRADED"}
         cls._ckpt("tf_mf_sleeves")     # sub-instrument the heavy block so a real cycle attributes the cost
 
         # OPEN-WINDOW GUARD: the 5 recomputes below are minutes-long serial UW/TS chain scans and NONE is
