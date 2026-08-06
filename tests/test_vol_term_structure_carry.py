@@ -36,6 +36,9 @@ def test_after_hours_noop(monkeypatch):
 def _plan_with(monkeypatch, vix, vix3m, held=0, avg=0.0, rv=0.20, last=57.0):
     monkeypatch.setattr("app.services.tradestation_quote_live_engine.TradeStationQuoteLiveEngine",
                         lambda: FakeQuotes(vix, vix3m, svxy_last=last, svxy_ask=last, svxy_bid=last))
+    # churn guard reads working orders; none here -> clean snapshot so vol-target sizing is unchanged
+    monkeypatch.setattr("app.services.in_flight_orders_engine.InFlightOrdersEngine.snapshot",
+                        classmethod(lambda cls, booking=None: {"ok": True, "net": {}, "count": 0}))
 
     class FakePos:
         def get_positions(self):
@@ -46,6 +49,10 @@ def _plan_with(monkeypatch, vix, vix3m, held=0, avg=0.0, rv=0.20, last=57.0):
                         lambda: FakePos())
     monkeypatch.setattr(V, "_refresh_bars", lambda self: None)
     monkeypatch.setattr(V, "_realized_vol", lambda self: rv)
+    # Pin alloc so target_shares is deterministic. Previously `_alloc` fell through to the live
+    # SleeveCapitalBudgetEngine (real equity) and the size drifted by a share (16 vs 17) depending on
+    # cached broker state a prior test file left behind — a pre-existing cross-file flake.
+    monkeypatch.setattr(V, "_alloc", classmethod(lambda cls: 2000.0))
 
 
 def test_backwardation_targets_flat(monkeypatch):

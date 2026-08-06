@@ -193,14 +193,23 @@ class VolTermStructureCarryEngine:
         held, avg = self._held(TradeStationPositionsLiveEngine())
         stopped = bool(held > 0 and avg > 0 and (px / avg - 1.0) <= -self.STOP_PCT)
 
+        # CHURN GUARD: count our own RESTING (unfilled) orders as part of the position. A patient DAY
+        # limit that hasn't filled is invisible to `held`, so without this the sleeve re-posts the same
+        # shortfall every cycle and the duplicate limits stack (observed: SVXY stacked to 154 shares).
+        from app.services.in_flight_orders_engine import InFlightOrdersEngine
+        inflight = InFlightOrdersEngine.net_working(self.SYMBOL)
+        effective_held = held + (inflight["net"] if inflight["ok"] else 0)
+
         if not sig["contango"] or stopped:
             target_shares = 0                                  # backwardation or stop -> flat
         else:
             target_shares = int(math.floor((weight * alloc) / px))
-        delta = target_shares - held
+        delta = target_shares - effective_held
         return {"status": "VOL_CARRY_PLAN", **sig, "svxy": px, "bid": bid, "ask": ask,
                 "realized_vol": rv, "target_weight": round(weight, 3), "alloc_usd": alloc,
                 "held_shares": held, "avg_price": avg, "stopped": stopped,
+                "in_flight_net": inflight["net"] if inflight["ok"] else 0,
+                "in_flight_ok": inflight["ok"], "effective_held": effective_held,
                 "target_shares": target_shares, "delta_shares": delta,
                 "delta_usd": round(delta * px, 2)}
 
@@ -226,6 +235,11 @@ class VolTermStructureCarryEngine:
         full_exit = p["target_shares"] == 0
         if delta == 0 or (not full_exit and abs(p["delta_usd"]) < self.REBALANCE_MIN_USD):
             return {**p, "status": "VOL_CARRY_IN_BALANCE", "acted": False}
+        # Blind on our own resting orders (degraded orders read) -> only a full flatten may act. A routine
+        # buy/trim placed blind is exactly the duplicate that stacks the churn loop.
+        if not p.get("in_flight_ok", True) and not full_exit:
+            return {**p, "status": "VOL_CARRY_INFLIGHT_BLIND", "acted": False,
+                    "skipped_reason": "orders read degraded — routine rebalance suppressed (churn guard)"}
         if dry_run:
             return {**p, "status": "VOL_CARRY_DRYRUN", "acted": False,
                     "would": ("BUY" if delta > 0 else "SELL", abs(delta), self.SYMBOL)}

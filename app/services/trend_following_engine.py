@@ -113,6 +113,11 @@ class TrendFollowingEngine:
         q = TradeStationQuoteLiveEngine()
         pos = TradeStationPositionsLiveEngine()
         slot = self._alloc() / len(self.BASKET)
+        # CHURN GUARD: one orders read for the whole basket. A sleeve's own RESTING (unfilled) DAY limits
+        # are invisible to `held`, so without this each cycle re-posts the same shortfall and the
+        # duplicate limits stack until they all fill and overshoot target (observed live 2026-08-04).
+        from app.services.in_flight_orders_engine import InFlightOrdersEngine
+        inflight = InFlightOrdersEngine.snapshot()
         legs, invested, uptrends, stale_syms = [], 0.0, 0, []
         for sym in self.BASKET:
             bid, ask, last = self._quote(q, sym)
@@ -130,16 +135,19 @@ class TrendFollowingEngine:
             # sleeve can't claim/liquidate trend's shares); disarmed -> broker total, byte-identical to legacy.
             from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
             held = SleevePositionLedgerEngine.effective_held("trend", sym, self._held(pos, sym))
+            inflight_net = InFlightOrdersEngine.net_working(sym, snapshot=inflight)["net"] if inflight["ok"] else 0
+            effective_held = held + inflight_net
             target = int(math.floor(slot / px)) if (sig["uptrend"] and px > 0) else 0
             if sig["uptrend"]:
                 uptrends += 1
                 invested += target * px
             legs.append({"symbol": sym, "uptrend": sig["uptrend"], "last": sig["last"],
                          "sma200": sig["sma"], "bid": bid, "ask": ask, "held": held,
-                         "target_shares": target, "delta_shares": target - held,
-                         "delta_usd": round((target - held) * px, 2)})
+                         "in_flight_net": inflight_net, "effective_held": effective_held,
+                         "target_shares": target, "delta_shares": target - effective_held,
+                         "delta_usd": round((target - effective_held) * px, 2)})
         return {"status": "TREND_PLAN", "alloc_usd": self._alloc(), "slot_usd": round(slot, 2),
-                "assets_in_uptrend": uptrends, "of": len(self.BASKET),
+                "assets_in_uptrend": uptrends, "of": len(self.BASKET), "in_flight_ok": inflight["ok"],
                 "deployed_usd": round(invested, 2), "legs": legs, "stale_symbols": stale_syms}
 
     def run_cycle(self, is_regular_session=True, dry_run=False):
@@ -157,10 +165,15 @@ class TrendFollowingEngine:
             pass
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         book = TradeStationSimBookingEngine()
-        acts = []
+        acts, skipped = [], []
         for leg in p["legs"]:
             d = leg.get("delta_shares")
             if not d:
+                continue
+            # Blind on our own resting orders (degraded read) -> only a full leg exit (target 0) may act;
+            # a routine buy/trim placed blind is the duplicate that stacks the churn loop.
+            if not p.get("in_flight_ok", True) and leg.get("target_shares") != 0:
+                skipped.append({"symbol": leg["symbol"], "reason": "orders read degraded — churn guard"})
                 continue
             # exits (sell to target, incl. downtrend->0) always act; entries respect churn threshold
             if d > 0 and abs(leg["delta_usd"]) < self.REBALANCE_MIN_USD:
@@ -199,7 +212,8 @@ class TrendFollowingEngine:
             acts.append({"symbol": leg["symbol"], "action": action, "qty": abs(d), "limit": limit,
                          "ok": r.get("ok"), "order_id": r.get("order_id")})
         return {"status": "TREND_REBALANCED" if not dry_run else "TREND_DRYRUN",
-                "acted": bool(acts and not dry_run), "actions": acts,
+                "acted": bool(acts and not dry_run), "actions": acts, "skipped": skipped,
+                "in_flight_ok": p.get("in_flight_ok", True),
                 "assets_in_uptrend": p["assets_in_uptrend"], "deployed_usd": p["deployed_usd"]}
 
     def status(self):

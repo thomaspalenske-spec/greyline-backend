@@ -47,6 +47,10 @@ def _patch(monkeypatch, tmp_path, prices, held=None):
     monkeypatch.setattr(T, "HIST", tmp_path)
     monkeypatch.setattr(T, "BASKET", ["AAA", "BBB"])
     monkeypatch.setattr(T, "SMA", 200)
+    # churn guard reads working orders; here there are none -> clean snapshot so sizing is exercised
+    # as before (the guard's blocking-on-degraded-read behaviour has its own dedicated tests).
+    monkeypatch.setattr("app.services.in_flight_orders_engine.InFlightOrdersEngine.snapshot",
+                        classmethod(lambda cls, booking=None: {"ok": True, "net": {}, "count": 0}))
     # alloc is now %-of-equity via SleeveCapitalBudgetEngine; for deterministic sizing these tests
     # drive it from the GREYLINE_TREND_ALLOC_USD env var they set (the pre-conversion contract).
     monkeypatch.setattr(T, "_alloc", classmethod(lambda cls: float(os.getenv("GREYLINE_TREND_ALLOC_USD", "") or 3000.0)))
