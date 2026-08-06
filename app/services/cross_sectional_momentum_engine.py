@@ -126,37 +126,45 @@ class CrossSectionalMomentumEngine:
         from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
         from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
         from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
+        from app.services.in_flight_orders_engine import InFlightOrdersEngine
         q = TradeStationQuoteLiveEngine()
         pos = TradeStationPositionsLiveEngine()
         alloc = self._alloc()
         selected, moms = self._rank()
         per = (alloc / len(selected)) if selected else 0.0   # equal-weight the leaders
+        # CHURN GUARD: one orders read for the whole universe — a resting DAY limit is invisible to `held`,
+        # so without this a monthly-cadence sleeve could still stack duplicates on a forced-exit day.
+        inflight = InFlightOrdersEngine.snapshot()
         legs, invested, held_off = [], 0.0, []
         # target legs for the selected leaders
         for sym in self.UNIVERSE:
             bid, ask, last = self._quote(q, sym)
-            # size against THIS sleeve's own position (per-sleeve accounting), not the broker total —
-            # so it never touches trend's shares in the overlapping ETFs. Disarmed -> broker total (legacy).
-            held = SleevePositionLedgerEngine.effective_held("xs_momentum", sym, self._held(pos, sym))
+            # size against THIS sleeve's own BROKER-CONFIRMED position (per-sleeve accounting), not the broker
+            # total — so it never touches trend's shares in the overlapping ETFs. Disarmed -> broker total.
+            broker_total = self._held(pos, sym)
+            held = SleevePositionLedgerEngine.effective_held("xs_momentum", sym, broker_total)
+            inflight_net = InFlightOrdersEngine.net_working(sym, snapshot=inflight)["net"] if inflight["ok"] else 0
+            effective_held = held + inflight_net
             px = last or ask or bid
+            base = {"symbol": sym, "momentum": moms.get(sym), "last": round(px, 2), "bid": bid, "ask": ask,
+                    "broker_total": broker_total, "held": held, "in_flight_net": inflight_net,
+                    "effective_held": effective_held}
             if sym in selected:
                 target = int(math.floor(per / px)) if px > 0 else 0
                 invested += target * px
-                legs.append({"symbol": sym, "momentum": moms.get(sym), "selected": True,
-                             "last": round(px, 2), "bid": bid, "ask": ask, "held": held,
-                             "slot_usd": round(per, 2), "target_shares": target,
-                             "delta_shares": target - held, "delta_usd": round((target - held) * px, 2)})
+                legs.append({**base, "selected": True, "slot_usd": round(per, 2), "target_shares": target,
+                             "delta_shares": target - effective_held,
+                             "delta_usd": round((target - effective_held) * px, 2)})
             else:
-                # not a leader: target 0. If we still HOLD it, it must be sold (momentum faded).
+                # not a leader: target 0. If we still HOLD it (confirmed), it must be sold (momentum faded).
                 if held > 0:
                     held_off.append(sym)
-                legs.append({"symbol": sym, "momentum": moms.get(sym), "selected": False,
-                             "last": round(px, 2), "bid": bid, "ask": ask, "held": held,
-                             "target_shares": 0, "delta_shares": -held,
-                             "delta_usd": round(-held * px, 2)})
+                legs.append({**base, "selected": False, "target_shares": 0,
+                             "delta_shares": -effective_held, "delta_usd": round(-effective_held * px, 2)})
         return {"status": "XSMOM_PLAN", "alloc_usd": round(alloc, 2), "weighting": "equal_weight_top_n",
                 "selected": list(selected.keys()), "n_selected": len(selected), "top_n": self.TOP_N,
-                "deployed_usd": round(invested, 2), "held_off_selection": held_off, "legs": legs}
+                "in_flight_ok": inflight["ok"], "deployed_usd": round(invested, 2),
+                "held_off_selection": held_off, "legs": legs}
 
     def _last_rebalance_days(self):
         try:
@@ -178,6 +186,14 @@ class CrossSectionalMomentumEngine:
         if not is_regular_session:
             return {"status": "XSMOM_MARKET_CLOSED", "acted": False}
         p = self.plan()
+        # Track this sleeve's own BROKER-CONFIRMED position EVERY cycle (not just on rebalance days): its
+        # held_qty is what trend's share-attribution subtracts, so it must stay current between the monthly
+        # rebalances or trend would re-claim xs_momentum's shares. Reconcile places no orders (read-only).
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            SleeveTradeLedgerEngine().reconcile_plan("xs_momentum", p.get("legs"))
+        except Exception:
+            pass
         # MONTHLY cadence — but ALWAYS act promptly when a held leader has fallen out of the selection
         # (exit a decayed name; don't wait a month). Otherwise only rebalance when due.
         days = self._last_rebalance_days()
@@ -187,22 +203,36 @@ class CrossSectionalMomentumEngine:
             return {"status": "XSMOM_NOT_DUE", "acted": False, "days_since": days,
                     "next_in_days": max(0, self.REBALANCE_DAYS - (days or 0)), "selected": p["selected"]}
 
+        from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         book = TradeStationSimBookingEngine()
-        acts = []
+        acts, skipped = [], []
         for leg in p["legs"]:
             d = leg.get("delta_shares")
             if not d:
                 continue
+            # Blind on our own resting orders (degraded read) -> only a real position exit (target 0) may
+            # act; a routine buy/trim placed blind is the duplicate that stacks the churn loop.
+            if not p.get("in_flight_ok", True) and leg.get("target_shares") != 0:
+                skipped.append({"symbol": leg["symbol"], "reason": "orders read degraded — churn guard"})
+                continue
             if d > 0 and abs(leg["delta_usd"]) < self.REBALANCE_MIN_USD:
                 continue                                  # buys respect the churn floor; sells always act
             action = "BUY" if d > 0 else "SELL"
+            qty = abs(d)
+            # SELL-CAP: never sell more than THIS sleeve's own broker-confirmed shares (can't touch trend's).
+            if action == "SELL" and SleevePositionLedgerEngine.armed():
+                own = SleeveTradeLedgerEngine().held_qty("xs_momentum", leg["symbol"])
+                qty = min(qty, max(0, own))
+                if qty <= 0:
+                    skipped.append({"symbol": leg["symbol"], "reason": "sell-cap: no own confirmed shares"})
+                    continue
             from app.services.execution_pricing_engine import ExecutionPricingEngine
             limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
             if not limit or limit <= 0:
                 continue
             if dry_run:
-                acts.append({"symbol": leg["symbol"], "would": action, "qty": abs(d), "limit": limit})
+                acts.append({"symbol": leg["symbol"], "would": action, "qty": qty, "limit": limit})
                 continue
             if action == "SELL":
                 try:
@@ -210,27 +240,22 @@ class CrossSectionalMomentumEngine:
                     BrokerProtectiveStopEngine().clear_stop(leg["symbol"])
                 except Exception:
                     pass
-            r = book.place_order(leg["symbol"], abs(d), action=action, order_type="Limit",
+            r = book.place_order(leg["symbol"], qty, action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
-            if r.get("ok"):
-                try:
-                    from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
-                    SleevePositionLedgerEngine.record("xs_momentum", leg["symbol"], d)   # signed: +buy / -sell
-                except Exception:
-                    pass
             try:
                 from app.services.execution_log_engine import ExecutionLogEngine
-                ExecutionLogEngine().record("xs_momentum", leg["symbol"], action, d, limit,
-                                            leg["bid"], leg["ask"], r.get("order_id"))
+                ExecutionLogEngine().record("xs_momentum", leg["symbol"], action, (qty if d > 0 else -qty),
+                                            limit, leg["bid"], leg["ask"], r.get("order_id"))
             except Exception:
                 pass
-            acts.append({"symbol": leg["symbol"], "action": action, "qty": abs(d), "limit": limit,
+            acts.append({"symbol": leg["symbol"], "action": action, "qty": qty, "limit": limit,
                          "ok": r.get("ok"), "order_id": r.get("order_id")})
         if not dry_run:
             self._mark_rebalanced()
         return {"status": "XSMOM_REBALANCED" if not dry_run else "XSMOM_DRYRUN",
                 "acted": bool(acts and not dry_run), "reason": "forced_exit" if (forced_exit and not due) else "due",
-                "selected": p["selected"], "actions": acts, "deployed_usd": p["deployed_usd"]}
+                "selected": p["selected"], "actions": acts, "skipped": skipped,
+                "in_flight_ok": p.get("in_flight_ok", True), "deployed_usd": p["deployed_usd"]}
 
     def status(self):
         return {"timestamp": datetime.utcnow().isoformat(), "enabled": self.enabled(),

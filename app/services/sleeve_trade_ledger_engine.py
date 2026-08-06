@@ -53,6 +53,20 @@ class SleeveTradeLedgerEngine:
     def held_qty(self, sleeve, symbol):
         return int(sum(self._f(r.get("remaining")) for r in self._open_lots(self._read(), sleeve, str(symbol).upper())))
 
+    @staticmethod
+    def _per_sleeve_armed():
+        from os import getenv
+        return (getenv("GREYLINE_PER_SLEEVE_SIZING", "") or "").strip().lower() == "true"
+
+    def held_qty_excluding(self, exclude_sleeve, symbol, rows=None):
+        """Confirmed open qty of `symbol` held by ALL sleeves EXCEPT exclude_sleeve. Used to attribute a
+        sleeve only its SHARE of a symbol two sleeves can both trade (trend ∩ xs_momentum overlap)."""
+        rows = self._read() if rows is None else rows
+        sym = str(symbol).upper()
+        return int(sum(self._f(r.get("remaining")) for r in rows
+                       if r.get("kind") == "lot" and str(r.get("symbol")).upper() == sym
+                       and r.get("sleeve") != exclude_sleeve and self._f(r.get("remaining")) > 0))
+
     def reconcile(self, sleeve, symbol, broker_qty, price, reason=None, now=None):
         """Reconcile the ledger's lot quantity for (sleeve, symbol) to the CONFIRMED broker quantity.
         broker_qty > ledger -> a buy filled (open a lot at `price`). broker_qty < ledger -> a sell filled
@@ -113,22 +127,42 @@ class SleeveTradeLedgerEngine:
         # almost certainly came back empty/degraded — an all-positions-vanished event is implausible.
         # Skip rather than fabricate a mass close (the phantom / fantasy-realized bug class). A genuine
         # single-name sell (other names still held) is unaffected.
-        held_vals = [leg.get("held") for leg in legs if leg.get("held") is not None]
+        # Key the guard on the WHOLE broker position (broker_total), not the sleeve's share: once per-sleeve
+        # sizing is armed a sleeve's `held` is legitimately 0 for a symbol another sleeve owns — that is not
+        # a degraded read. broker_total is 0 for every leg only when the positions read truly came back empty.
+        held_vals = [leg.get("broker_total", leg.get("held")) for leg in legs
+                     if leg.get("broker_total", leg.get("held")) is not None]
         if held_vals and all(int(self._f(h)) == 0 for h in held_vals):
             rows = self._read()
             if any(self._open_lots(rows, sleeve, str(leg.get("symbol")).upper())
                    for leg in legs if leg.get("symbol")):
                 return {"status": "SLEEVE_LEDGER_SKIP_EMPTY_READ", "sleeve": sleeve}
+        armed = self._per_sleeve_armed()
+        rows = self._read() if armed else None
         out = []
         for leg in legs:
             sym = leg.get("symbol")
-            qty = leg.get("held", leg.get("shares", leg.get("quantity")))
+            # `broker_total` is the WHOLE broker position for the symbol; `held` may be the sleeve's own
+            # share once per-sleeve sizing is armed, so prefer broker_total for the total.
+            qty = leg.get("broker_total", leg.get("held", leg.get("shares", leg.get("quantity"))))
             price = leg.get("last", leg.get("price", leg.get("current", leg.get("mark"))))
             if not sym or qty is None or not price:
                 continue
-            r = self.reconcile(sleeve, sym, qty, price, reason=reason)
+            target = qty
+            if armed:
+                # attribute this sleeve only ITS share of a symbol other sleeves may also hold: the broker
+                # total minus what every OTHER sleeve confirmed-holds. Never negative (a sleeve can't owe
+                # shares). For a disjoint symbol others=0 -> target == broker total (byte-identical).
+                try:
+                    others = self.held_qty_excluding(sleeve, sym, rows=rows)
+                    target = max(0, int(round(self._f(qty))) - others)
+                except Exception:
+                    target = qty
+            r = self.reconcile(sleeve, sym, target, price, reason=reason)
             if r.get("status") not in ("SLEEVE_LEDGER_NOOP",):
                 out.append(r)
+                if armed:
+                    rows = self._read()      # refresh after a write so later legs see this leg's lots
         return {"status": "SLEEVE_LEDGER_RECONCILED", "sleeve": sleeve, "events": out}
 
     def status(self, sleeve=None):

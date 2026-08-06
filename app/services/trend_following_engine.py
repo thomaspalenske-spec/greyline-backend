@@ -134,7 +134,8 @@ class TrendFollowingEngine:
             # size against THIS sleeve's own position when per-sleeve accounting is armed (so an overlapping
             # sleeve can't claim/liquidate trend's shares); disarmed -> broker total, byte-identical to legacy.
             from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
-            held = SleevePositionLedgerEngine.effective_held("trend", sym, self._held(pos, sym))
+            broker_total = self._held(pos, sym)                     # WHOLE broker position (for reconcile share)
+            held = SleevePositionLedgerEngine.effective_held("trend", sym, broker_total)   # this sleeve's own
             inflight_net = InFlightOrdersEngine.net_working(sym, snapshot=inflight)["net"] if inflight["ok"] else 0
             effective_held = held + inflight_net
             target = int(math.floor(slot / px)) if (sig["uptrend"] and px > 0) else 0
@@ -142,7 +143,8 @@ class TrendFollowingEngine:
                 uptrends += 1
                 invested += target * px
             legs.append({"symbol": sym, "uptrend": sig["uptrend"], "last": sig["last"],
-                         "sma200": sig["sma"], "bid": bid, "ask": ask, "held": held,
+                         "sma200": sig["sma"], "bid": bid, "ask": ask,
+                         "broker_total": broker_total, "held": held,
                          "in_flight_net": inflight_net, "effective_held": effective_held,
                          "target_shares": target, "delta_shares": target - effective_held,
                          "delta_usd": round((target - effective_held) * px, 2)})
@@ -179,13 +181,24 @@ class TrendFollowingEngine:
             if d > 0 and abs(leg["delta_usd"]) < self.REBALANCE_MIN_USD:
                 continue
             action = "BUY" if d > 0 else "SELL"
+            qty = abs(d)
+            # SELL-CAP (safety backstop): never sell more than THIS sleeve's own broker-confirmed holding —
+            # so a sizing error can't liquidate another sleeve's shares in a shared symbol or go short.
+            from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
+            if action == "SELL" and SleevePositionLedgerEngine.armed():
+                from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+                own = SleeveTradeLedgerEngine().held_qty("trend", leg["symbol"])
+                qty = min(qty, max(0, own))
+                if qty <= 0:
+                    skipped.append({"symbol": leg["symbol"], "reason": "sell-cap: no own confirmed shares"})
+                    continue
             # patient limit: post toward the mid to CAPTURE part of the spread instead of crossing it
             from app.services.execution_pricing_engine import ExecutionPricingEngine
             limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
             if not limit or limit <= 0:
                 continue
             if dry_run:
-                acts.append({"symbol": leg["symbol"], "would": action, "qty": abs(d), "limit": limit})
+                acts.append({"symbol": leg["symbol"], "would": action, "qty": qty, "limit": limit})
                 continue
             # a SELL is rejected while a protective STOP reserves the shares — clear it first; the
             # stop engine re-places one on the remaining shares next cycle.
@@ -195,21 +208,17 @@ class TrendFollowingEngine:
                     BrokerProtectiveStopEngine().clear_stop(leg["symbol"])
                 except Exception:
                     pass
-            r = book.place_order(leg["symbol"], abs(d), action=action, order_type="Limit",
+            r = book.place_order(leg["symbol"], qty, action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
-            if r.get("ok"):
-                try:
-                    from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
-                    SleevePositionLedgerEngine.record("trend", leg["symbol"], d)   # signed: +buy / -sell
-                except Exception:
-                    pass
+            # (per-sleeve position is tracked by the BROKER-CONFIRMED SleeveTradeLedgerEngine.reconcile_plan
+            #  above — not an optimistic order-count, which drifted negative and is no longer used for sizing.)
             try:
                 from app.services.execution_log_engine import ExecutionLogEngine
-                ExecutionLogEngine().record("trend", leg["symbol"], action, d, limit,
-                                            leg["bid"], leg["ask"], r.get("order_id"))
+                ExecutionLogEngine().record("trend", leg["symbol"], action, (qty if d > 0 else -qty), limit,
+                                            leg["bid"], leg["ask"], r.get("order_id"))    # ACTUAL placed qty
             except Exception:
                 pass
-            acts.append({"symbol": leg["symbol"], "action": action, "qty": abs(d), "limit": limit,
+            acts.append({"symbol": leg["symbol"], "action": action, "qty": qty, "limit": limit,
                          "ok": r.get("ok"), "order_id": r.get("order_id")})
         return {"status": "TREND_REBALANCED" if not dry_run else "TREND_DRYRUN",
                 "acted": bool(acts and not dry_run), "actions": acts, "skipped": skipped,

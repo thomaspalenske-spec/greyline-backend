@@ -76,11 +76,21 @@ class SleevePositionLedgerEngine:
 
     @classmethod
     def effective_held(cls, sleeve, symbol, broker_qty):
-        """The quantity a sleeve should SIZE against. Armed -> the sleeve's own recorded position; disarmed
-        -> the broker total (byte-identical to legacy behaviour). This is the ONE call sleeves swap _held for."""
+        """The quantity a sleeve should SIZE against. Armed -> the sleeve's own BROKER-CONFIRMED holding
+        (SleeveTradeLedgerEngine.held_qty — reconciled from observed broker deltas, drift-immune); disarmed
+        -> the broker total (byte-identical to legacy). This is the ONE call sleeves swap _held for.
+
+        NB: we deliberately size against the broker-CONFIRMED per-sleeve ledger, NOT this engine's own
+        order-based tally (position()). That tally records on order PLACEMENT and is never corrected on a
+        cancel/unfilled DAY order, so it drifts (it had gone NEGATIVE for trend). The confirmed ledger only
+        ever reflects real broker fills, so it can't drift; the in-flight guard adds the unfilled part."""
         if not cls.armed():
             return broker_qty
-        return cls.position(sleeve, symbol)
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            return int(SleeveTradeLedgerEngine().held_qty(sleeve, symbol))
+        except Exception:
+            return broker_qty        # fail SAFE to the legacy broker total rather than a wrong 0
 
     @classmethod
     def seed(cls, sleeve, holdings):
