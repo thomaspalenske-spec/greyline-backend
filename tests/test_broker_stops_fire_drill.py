@@ -130,6 +130,17 @@ def test_topup_disarmed_leaves_partial_untouched(monkeypatch, tmp_path):
     assert any("top-up" in s.get("reason", "").lower() for s in r["skipped"])
 
 
+def test_ensure_stops_skips_long_options(monkeypatch, tmp_path):
+    # a long option's loss is bounded by premium (defined-risk) — no disaster stop, and the SIM rejects
+    # it anyway. Regression for the NRG-residual churn found in the condor audit.
+    book = _Book([_pos("NRG 260807C152.5", 1, avg=1.60)], [])
+    _wire_topup(monkeypatch, tmp_path, book)
+    r = B().ensure_stops()
+    assert r["placed"] == 0 and r["topped_up"] == 0
+    assert any("option" in s.get("reason", "").lower() for s in r["skipped"])
+    assert not book._o          # nothing placed at the broker
+
+
 def test_unprotected_still_places_full_qty(monkeypatch, tmp_path):
     book = _Book([_pos("IWM", 6)], [])
     _wire_topup(monkeypatch, tmp_path, book)

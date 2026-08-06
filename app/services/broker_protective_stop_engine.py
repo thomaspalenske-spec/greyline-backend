@@ -301,6 +301,12 @@ class BrokerProtectiveStopEngine:
                 # defined-risk structure IS its protection; a broker stop here is actively harmful.
                 skipped.append({"symbol": sym, "reason": "VRP condor leg — defined-risk, must not be stopped"})
                 continue
+            if " " in sym:
+                # a long OPTION: its loss is already bounded by the premium paid (defined-risk) and the
+                # exit doctrine manages it; a 35%-below disaster stop adds nothing and the SIM rejects it
+                # anyway (deep-OTM residuals) — repeatedly. Skip, consistent with the fire-drill's exclusion.
+                skipped.append({"symbol": sym, "reason": "option — loss bounded by premium, no disaster stop needed"})
+                continue
             if sym.upper() in closing:
                 # a close is already working; a stop alongside it could double-sell
                 skipped.append({"symbol": sym, "reason": "close already working — stop would risk a double sell"})
