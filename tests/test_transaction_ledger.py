@@ -57,35 +57,32 @@ def test_etf_sleeve_trades_from_execlog_included_no_double_count(monkeypatch, tm
     assert lv["action"] == "BUY" and lv["sleeve"] == "low_vol" and lv["pnl"] is None
 
 
-def test_etf_sell_realized_pnl_from_sleeve_ledger(monkeypatch, tmp_path):
-    """ETF SELL rows get their realized P&L from the sleeve trade ledger's `close` rows (the order-intent
-    log carries none). BUYs stay blank (a buy realizes nothing); a sell with no matching close (T-bill)
-    stays blank; the day total sums the enriched sells exactly. Regression: P/L column read all '—'."""
+def test_etf_sell_realized_pnl_fifo(monkeypatch, tmp_path):
+    """ETF SELL rows get realized P&L by FIFO-matching against that sleeve+symbol's own prior BUYs in the
+    order log ((sell_px - buy_px) * qty, recorded limit prices -> est). A BUY stays blank; a partial sell
+    matches what it can; a sell with NO prior buy stays blank (no basis, not invented). Regression: the
+    P/L column read all '—' and yesterday's sells had no basis at all."""
     import json
     eng = T()
     for attr in ("EQUITY_LEDGER", "VRP_LEDGER", "OPT_LEDGER"):
         monkeypatch.setattr(T, attr, tmp_path / f"{attr}.jsonl")
     monkeypatch.setattr(T, "EXEC_LEDGER", tmp_path / "exec.jsonl")
-    monkeypatch.setattr(T, "SLEEVE_LEDGER", tmp_path / "sleeve.jsonl")
     (tmp_path / "exec.jsonl").write_text("\n".join(json.dumps(x) for x in [
+        {"ts": "2026-08-05T13:40:00", "strategy": "carry", "symbol": "SVXY", "action": "BUY", "qty": 48, "limit": 57.0},
         {"ts": "2026-08-05T13:42:00", "strategy": "carry", "symbol": "SVXY", "action": "SELL", "qty": 48, "limit": 58.0},
-        {"ts": "2026-08-05T13:42:00", "strategy": "trend", "symbol": "IWM", "action": "SELL", "qty": 5, "limit": 300.0},
-        {"ts": "2026-08-05T13:42:00", "strategy": "carry", "symbol": "SVXY", "action": "BUY", "qty": 10, "limit": 58.0},
+        {"ts": "2026-08-05T13:40:00", "strategy": "trend", "symbol": "IWM", "action": "BUY", "qty": 5, "limit": 300.0},
+        {"ts": "2026-08-05T13:42:00", "strategy": "trend", "symbol": "IWM", "action": "SELL", "qty": 5, "limit": 303.0},
+        {"ts": "2026-08-05T13:42:00", "strategy": "momentum", "symbol": "AAPL", "action": "BUY", "qty": 1, "limit": 200.0},
         {"ts": "2026-08-05T13:42:00", "strategy": "tbill", "symbol": "SGOV", "action": "SELL", "qty": 9, "limit": 100.4},
     ]))
-    # sleeve ledger names carry as 'vol_carry' -> must be aliased back to the exec log's 'carry'
-    (tmp_path / "sleeve.jsonl").write_text("\n".join(json.dumps(x) for x in [
-        {"kind": "close", "sleeve": "vol_carry", "symbol": "SVXY", "quantity": 48, "realized_pnl": 2.16, "closed_at": "2026-08-05T13:49:00"},
-        {"kind": "close", "sleeve": "trend", "symbol": "IWM", "quantity": 5, "realized_pnl": 3.30, "closed_at": "2026-08-05T13:50:00"},
-        {"kind": "lot", "sleeve": "trend", "symbol": "DBC", "closed_at": None},
-    ]))
     ev = {e["symbol"] + ":" + e["action"]: e for e in eng._events()}
-    assert ev["SVXY:SELL"]["pnl"] == 2.16 and "est P&L" in ev["SVXY:SELL"]["detail"]
-    assert ev["IWM:SELL"]["pnl"] == 3.30
+    assert ev["SVXY:SELL"]["pnl"] == 48.0 and "est P&L" in ev["SVXY:SELL"]["detail"]   # (58-57)*48
+    assert ev["IWM:SELL"]["pnl"] == 15.0                                               # (303-300)*5
     assert ev["SVXY:BUY"]["pnl"] is None            # a buy realizes nothing
-    assert ev["SGOV:SELL"]["pnl"] is None           # no matching close -> stays blank
+    assert ev["SGOV:SELL"]["pnl"] is None           # no prior buy -> no basis, stays blank
+    assert "AAPL" not in {e["symbol"] for e in eng._events()}   # momentum still excluded
     r = eng.rolling()
-    assert r["today"]["realized_pnl"] == 5.46       # 2.16 + 3.30, exact
+    assert r["today"]["realized_pnl"] == 63.0        # 48 + 15, exact
 
 
 def test_empty_ledgers_are_safe(monkeypatch):

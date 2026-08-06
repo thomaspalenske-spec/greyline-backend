@@ -27,14 +27,9 @@ class TransactionLedgerEngine:
     # already appear via the equity/VRP/OPT ledgers) so nothing is double-counted.
     EXEC_LEDGER = Path("app/data/execution/order_intent.jsonl")
     _ETF_SLEEVES = {"trend", "carry", "vol_carry", "low_vol", "managed_futures", "tbill", "xs_momentum"}
-    # The ETF sleeves' realized P&L lives HERE (the order-intent log carries none): the broker-delta
-    # reconciler writes a `close` row with realized_pnl when a sleeve's position shrinks. We look these up
-    # to fill the P/L column on ETF SELL rows. The order-intent `strategy` and the ledger `sleeve` use
-    # different names for the same sleeve (carry<->vol_carry), so normalize before matching.
-    SLEEVE_LEDGER = Path("app/data/paper_trading/sleeve_trade_ledger.jsonl")
-    _SLEEVE_ALIAS = {"carry": "vol_carry", "vol_carry": "vol_carry", "trend": "trend",
-                     "low_vol": "low_vol", "managed_futures": "managed_futures", "tbill": "tbill",
-                     "xs_momentum": "xs_momentum"}
+    # The order-intent log carries no per-order realized P&L, so an ETF SELL's P&L is reconstructed by
+    # FIFO-matching it against that sleeve+symbol's own prior BUYs in this same log (see
+    # _attach_etf_realized). Prices are the recorded LIMIT (intended fill) -> the result is an estimate.
 
     # Outcome-NEUTRAL exit labels. A close reason must never read like a result (e.g. the old
     # "EARNINGS_CRUSH_CAPTURED" wore a "captured" badge on a losing trade). The reason names the TRIGGER;
@@ -124,7 +119,7 @@ class TransactionLedgerEngine:
                 continue
             lim = self._f(it.get("limit"))
             etf.append({"ts": ts, "sleeve": sleeve, "symbol": it.get("symbol"), "action": action,
-                        "quantity": it.get("qty"),
+                        "quantity": it.get("qty"), "_px": lim,
                         "detail": (f"@ ${lim:.2f}" if lim else "market") + (" · limit" if lim else ""),
                         "pnl": None})
         self._attach_etf_realized(etf)
@@ -132,51 +127,43 @@ class TransactionLedgerEngine:
         return ev
 
     def _attach_etf_realized(self, etf_events):
-        """Fill the P/L column on ETF SELL rows from the sleeve trade ledger's `close` rows (which DO
-        carry realized_pnl, on a quote_estimate basis). Matched by (normalized sleeve, symbol, ET date);
-        when a key has several sells the realized total is split across them by quantity so the DAY total
-        is exact. A BUY realizes nothing and stays blank; a sell with no matching close (e.g. T-bill SGOV,
-        which the reconciler doesn't track) also stays blank."""
-        from collections import defaultdict
-        closes = {}                                        # (sleeve_norm, symbol, et_date) -> total realized
-        for r in self._read(self.SLEEVE_LEDGER):
-            if str(r.get("kind")) != "close":
-                continue
-            pnl = self._f(r.get("realized_pnl"))
-            if pnl is None:
-                continue
-            try:
-                d = self._to_et(r.get("closed_at")).date()
-            except Exception:
-                continue
-            sl = self._SLEEVE_ALIAS.get(str(r.get("sleeve")), str(r.get("sleeve")))
-            closes[(sl, str(r.get("symbol") or "").upper(), d)] = \
-                closes.get((sl, str(r.get("symbol") or "").upper(), d), 0.0) + pnl
-        if not closes:
-            return
-        sells = defaultdict(list)
+        """Fill the P/L column on ETF SELL rows by FIFO-matching each sell against that sleeve+symbol's own
+        prior BUYs in the order log. realized = sum over matched lots of (sell_px - buy_px) * qty, using the
+        recorded LIMIT prices (intended fill) — an ESTIMATE, labeled as such. Covers EVERY sell (all days),
+        self-consistent, and independent of any downstream reconciler. A BUY realizes nothing (stays blank);
+        a sell qty with no prior buy in the log (position predates logging) leaves that portion unbasised —
+        if NONE of it can be matched the row stays blank rather than inventing a number."""
+        from collections import defaultdict, deque
+        groups = defaultdict(list)
         for e in etf_events:
-            if e["action"] != "SELL":
-                continue
-            try:
-                d = self._to_et(e["ts"]).date()
-            except Exception:
-                continue
-            sl = self._SLEEVE_ALIAS.get(e["sleeve"], e["sleeve"])
-            sells[(sl, str(e["symbol"] or "").upper(), d)].append(e)
-        for key, group in sells.items():
-            total = closes.get(key)
-            if total is None:
-                continue
-            qtys = [abs(self._f(e.get("quantity")) or 0.0) for e in group]
-            tq = sum(qtys) or float(len(group))
-            running = 0.0
-            for i, e in enumerate(group):
-                share = round(total - running, 2) if i == len(group) - 1 else round(total * (qtys[i] / tq), 2)
-                running += share
-                e["pnl"] = share
-                if "est" not in e["detail"]:
-                    e["detail"] = e["detail"] + " · est P&L"
+            groups[(e["sleeve"], str(e["symbol"] or "").upper())].append(e)
+        for evs in groups.values():
+            evs.sort(key=lambda x: str(x["ts"]))
+            lots = deque()                                  # FIFO open BUY lots: [qty, price]
+            for e in evs:
+                px = self._f(e.get("_px"))
+                qty = abs(self._f(e.get("quantity")) or 0.0)
+                if e["action"] == "BUY":
+                    if px and qty:
+                        lots.append([qty, px])
+                    continue
+                if e["action"] != "SELL" or not qty:
+                    continue
+                remaining, realized, matched = qty, 0.0, 0.0
+                while remaining > 0 and lots:
+                    lot = lots[0]
+                    take = min(lot[0], remaining)
+                    if px and lot[1]:
+                        realized += (px - lot[1]) * take
+                        matched += take
+                    lot[0] -= take
+                    remaining -= take
+                    if lot[0] <= 0:
+                        lots.popleft()
+                if matched > 0:                             # at least partly basised -> show it (est)
+                    e["pnl"] = round(realized, 2)
+                    if "est" not in e["detail"]:
+                        e["detail"] = e["detail"] + " · est P&L"
 
     def _to_et(self, iso):
         """Naive-UTC ISO -> ET-aware datetime (raises on unparseable, caller filters)."""
