@@ -66,6 +66,20 @@ def test_xs_buys_own_fresh_shares_never_sells_trends(monkeypatch, tmp_path):
     assert 5 - trend_held == 0                                  # trend already at its own target -> no churn
 
 
+def test_sizing_uses_fresh_total_not_lagged_own_ledger(monkeypatch, tmp_path):
+    """THE 2026-08-06 over-deploy fix. The broker holds 1406 DBC (fresh read). The confirmed ledger has
+    xs's 1000 lot but trend's own lot NOT yet reconciled (stale-low) — the exact fill-lag state. Sizing
+    must use broker_total - others = 1406 - 1000 = 406 for trend (-> it SELLS toward target), NOT trend's
+    stale own held_qty of 0 (which the OLD code returned, giving delta = target - 0 = a BUY -> stacking)."""
+    monkeypatch.setenv("GREYLINE_PER_SLEEVE_SIZING", "true")
+    monkeypatch.setattr(ST, "LEDGER", _ledger(tmp_path, [_lot("xs_momentum", "DBC", 1000, px=28.7)]))
+    assert ST().held_qty("trend", "DBC") == 0                       # trend's own ledger is stale-LOW
+    eff = SP.effective_held("trend", "DBC", 1406)                   # broker_total passed in is the FRESH read
+    assert eff == 406                                               # 1406 - 1000, the true share (not 0)
+    target = 16
+    assert target - eff == -390                                    # a SELL toward target, never a stacking BUY
+
+
 def test_reconcile_disarmed_is_legacy_broker_total(monkeypatch, tmp_path):
     monkeypatch.delenv("GREYLINE_PER_SLEEVE_SIZING", raising=False)
     monkeypatch.setattr(ST, "LEDGER", _ledger(tmp_path, []))

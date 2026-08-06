@@ -76,19 +76,22 @@ class SleevePositionLedgerEngine:
 
     @classmethod
     def effective_held(cls, sleeve, symbol, broker_qty):
-        """The quantity a sleeve should SIZE against. Armed -> the sleeve's own BROKER-CONFIRMED holding
-        (SleeveTradeLedgerEngine.held_qty — reconciled from observed broker deltas, drift-immune); disarmed
-        -> the broker total (byte-identical to legacy). This is the ONE call sleeves swap _held for.
+        """The quantity a sleeve should SIZE against. Armed -> this sleeve's SHARE of the CURRENT broker
+        position = the FRESH broker total (broker_qty, passed in from a live positions read) MINUS what
+        every OTHER sleeve confirmed-holds. Disarmed -> the broker total (byte-identical to legacy).
 
-        NB: we deliberately size against the broker-CONFIRMED per-sleeve ledger, NOT this engine's own
-        order-based tally (position()). That tally records on order PLACEMENT and is never corrected on a
-        cancel/unfilled DAY order, so it drifts (it had gone NEGATIVE for trend). The confirmed ledger only
-        ever reflects real broker fills, so it can't drift; the in-flight guard adds the unfilled part."""
+        WHY fresh-total-minus-others, not the sleeve's own confirmed held_qty: held_qty is updated by a
+        reconcile that runs AFTER sizing, so it LAGS a cycle — it reads stale-LOW right after a fill, which
+        makes delta = target - held explode and the sleeve STACK orders (the 2026-08-06 12x over-deploy).
+        broker_qty is the live total and can't read stale-low; subtracting other sleeves' confirmed holds
+        gives this sleeve's share without the lag. `others` is small/stable, so its own reconcile lag is a
+        minor error, and the hard BookDeploymentCap backstops any residual. In-flight adds the unfilled part."""
         if not cls.armed():
             return broker_qty
         try:
             from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
-            return int(SleeveTradeLedgerEngine().held_qty(sleeve, symbol))
+            others = int(SleeveTradeLedgerEngine().held_qty_excluding(sleeve, symbol))
+            return max(0, int(round(float(broker_qty))) - others)
         except Exception:
             return broker_qty        # fail SAFE to the legacy broker total rather than a wrong 0
 

@@ -163,6 +163,23 @@ class TradeStationSimBookingEngine:
     def place_order(self, symbol, quantity, action="BUY", order_type="Market",
                     limit_price=None, stop_price=None, tif="DAY"):
         """Place a real SIMULATED order in the SIM account. Guard runs inside _build_order."""
+        # HARD BOOK-DEPLOYMENT CAP: no EQUITY BUY may push the book's committed long-equity value past
+        # MAX_DEPLOY_FRAC x the mission base — the bulletproof backstop against the 12x over-deployment
+        # fault (a stale-`held` delta stacking orders). Independent of any sizing engine; fail-closed on a
+        # degraded read. Sells / options / stop orders are never gated. See BookDeploymentCapEngine.
+        a = str(action or "").upper()
+        is_equity = " " not in str(symbol or "")
+        if is_equity and a in ("BUY", "BUYTOOPEN") and str(order_type or "").lower() != "stopmarket":
+            try:
+                from app.services.book_deployment_cap_engine import BookDeploymentCapEngine
+                chk = BookDeploymentCapEngine.check_equity_buy(symbol, quantity, limit_price, self)
+            except Exception as e:
+                chk = {"allowed": False, "reason": f"book cap check errored — buy blocked (fail-closed): {str(e)[:80]}"}
+            if not chk.get("allowed"):
+                return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
+                        "http_status": None, "ok": False, "order_id": None,
+                        "reject_reason": chk.get("reason"), "book_cap_blocked": True, "book_cap": chk,
+                        "request": {"Symbol": symbol, "Quantity": quantity, "action": a}}
         body = self._build_order(symbol, quantity, action, order_type, limit_price, stop_price, tif)
         resp = self._request("POST", f"{SIM_HOST}/v3/orderexecution/orders", json_body=body)
         payload = _safe_json(resp)
