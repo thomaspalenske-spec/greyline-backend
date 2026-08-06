@@ -33,6 +33,30 @@ def test_rolling_buckets_and_dropoff(monkeypatch):
     assert "OLD" not in shown          # 3-days-ago dropped
 
 
+def test_etf_sleeve_trades_from_execlog_included_no_double_count(monkeypatch, tmp_path):
+    """Direct-to-broker ETF sleeves' trades come from the ExecutionLog; momentum + condors (already in the
+    equity/condor ledgers) and direct-fill entries are excluded so nothing double-counts. Regression for the
+    '0 txn today' while the ETF sleeves actively traded."""
+    import json
+    eng = T()
+    for attr in ("EQUITY_LEDGER", "VRP_LEDGER", "OPT_LEDGER"):
+        monkeypatch.setattr(T, attr, tmp_path / f"{attr}.jsonl")
+    monkeypatch.setattr(T, "EXEC_LEDGER", tmp_path / "exec.jsonl")
+    (tmp_path / "exec.jsonl").write_text("\n".join(json.dumps(x) for x in [
+        {"ts": "2026-08-05T13:42:00", "strategy": "low_vol", "symbol": "USMV", "action": "BUY", "qty": 3, "limit": 100.0},
+        {"ts": "2026-08-05T13:42:00", "strategy": "carry", "symbol": "SVXY", "action": "SELL", "qty": 48, "limit": 58.0},
+        {"ts": "2026-08-05T13:42:00", "strategy": "momentum", "symbol": "AAPL", "action": "BUY", "qty": 1, "limit": 200.0},
+        {"ts": "2026-08-05T13:42:00", "strategy": "premium_earnings", "symbol": "CLX", "action": "SELL", "qty": 1, "direct": True},
+    ]))
+    ev = eng._events()
+    syms = {e["symbol"] for e in ev}
+    assert "USMV" in syms and "SVXY" in syms          # ETF sleeves appear
+    assert "AAPL" not in syms                         # momentum NOT double-counted from the exec log
+    assert "CLX" not in syms                          # condor / direct-fill entry excluded
+    lv = next(e for e in ev if e["symbol"] == "USMV")
+    assert lv["action"] == "BUY" and lv["sleeve"] == "low_vol" and lv["pnl"] is None
+
+
 def test_empty_ledgers_are_safe(monkeypatch):
     monkeypatch.setattr(T, "_events", lambda self: [])
     r = T().rolling()

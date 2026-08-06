@@ -21,6 +21,12 @@ class TransactionLedgerEngine:
     EQUITY_LEDGER = Path("app/data/paper_trading/paper_trade_ledger.jsonl")
     VRP_LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
     OPT_LEDGER = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
+    # The direct-to-broker ETF sleeves (trend/carry/low-vol/managed-futures/T-bill) write to NONE of the
+    # ledgers above — they book straight to the broker and log the order intent here. Without this the
+    # table read "0 txn" on days those sleeves actively rebalanced. momentum + condors are EXCLUDED (they
+    # already appear via the equity/VRP/OPT ledgers) so nothing is double-counted.
+    EXEC_LEDGER = Path("app/data/execution/order_intent.jsonl")
+    _ETF_SLEEVES = {"trend", "carry", "vol_carry", "low_vol", "managed_futures", "tbill", "xs_momentum"}
 
     # Outcome-NEUTRAL exit labels. A close reason must never read like a result (e.g. the old
     # "EARNINGS_CRUSH_CAPTURED" wore a "captured" badge on a losing trade). The reason names the TRIGGER;
@@ -94,6 +100,23 @@ class TransactionLedgerEngine:
                 ev.append({"ts": r["closed_at"], "sleeve": sleeve, "symbol": r.get("symbol"),
                            "action": "CLOSE", "quantity": qty,
                            "detail": self._close_detail(r.get("close_reason"), _pnl), "pnl": _pnl})
+
+        # direct-to-broker ETF sleeves — their trades are order INTENTS (BUY/SELL rebalances, not clean
+        # opens/closes), logged with a decision-time timestamp (`ts`). Realized P&L isn't carried per-order
+        # here (the sleeve's realized shows in the edge court), so pnl stays None — the trade still appears.
+        for it in self._read(self.EXEC_LEDGER):
+            sleeve = str(it.get("strategy") or "")
+            if sleeve not in self._ETF_SLEEVES or it.get("direct"):   # skip momentum/condors + direct fills
+                continue
+            ts = it.get("ts")
+            action = str(it.get("action") or "").upper()
+            if not ts or action not in ("BUY", "SELL"):
+                continue
+            lim = self._f(it.get("limit"))
+            ev.append({"ts": ts, "sleeve": sleeve, "symbol": it.get("symbol"), "action": action,
+                       "quantity": it.get("qty"),
+                       "detail": (f"@ ${lim:.2f}" if lim else "market") + (" · limit" if lim else ""),
+                       "pnl": None})
         return ev
 
     def _to_et(self, iso):
@@ -125,8 +148,10 @@ class TransactionLedgerEngine:
             return {
                 "date": day.isoformat() if day else None,
                 "count": len(evs),
-                "opens": sum(1 for e in evs if e["action"] == "OPEN"),
-                "closes": sum(1 for e in evs if e["action"] == "CLOSE"),
+                # ETF-sleeve rebalances are BUY/SELL, not clean OPEN/CLOSE — count a BUY as an open-side
+                # event and a SELL as a close-side event so the summary stays coherent across sleeve types.
+                "opens": sum(1 for e in evs if e["action"] in ("OPEN", "BUY")),
+                "closes": sum(1 for e in evs if e["action"] in ("CLOSE", "SELL")),
                 "realized_pnl": round(sum(pnls), 2) if pnls else 0.0,
                 "realized_label": "running" if running else "session",
                 "transactions": [{k: e.get(k) for k in
