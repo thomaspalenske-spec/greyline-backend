@@ -1072,10 +1072,25 @@ async function refreshTransactions() {
             + ` <span class="sub" style="font-weight:600;">${b.date || "—"} · ${b.count || 0} txn `
             + `(${b.opens || 0} open / ${b.closes || 0} close) · realized ${money(b.realized_pnl || 0)}`
             + `${running ? " (running)" : ""}</span></td></tr>`;
+      // BY POSITION (the P&L story) — one netted line per name, so dozens of rebalance legs collapse to
+      // "carry SVXY: +$X net". This is the default view; the raw fills follow below for the audit trail.
+      const pos = b.by_position || [];
+      if (pos.length) {
+        html += `<tr><td colspan="7" class="sub" style="padding-top:6px;font-weight:700;letter-spacing:.04em;">BY POSITION — net realized P&L</td></tr>`;
+        for (const p of pos) {
+          const net = (p.bought || 0) - (p.sold || 0);
+          html += `<tr><td class="sub">net</td><td><span class="sub">${p.sleeve || ""}</span></td>`
+                + `<td><b>${p.symbol || ""}</b></td><td class="sub">${net >= 0 ? "+" : ""}${net}</td>`
+                + `<td></td>`
+                + `<td><span class="sub">${p.bought || 0} bought · ${p.sold || 0} sold · ${p.fills || 0} fills</span></td>`
+                + `<td>${pnlCell(p.realized_pnl)}</td></tr>`;
+        }
+      }
       const txns = b.transactions || [];
       if (!txns.length) { html += `<tr><td colspan="7"><span class="sub">no transactions</span></td></tr>`; return; }
+      html += `<tr><td colspan="7" class="sub" style="padding-top:10px;font-weight:700;letter-spacing:.04em;">ALL FILLS (${txns.length})</td></tr>`;
       for (const x of txns) {
-        html += `<tr><td>${x.et_time || ""}</td><td><span class="sub">${x.sleeve || ""}</span></td>`
+        html += `<tr style="opacity:.72;"><td>${x.et_time || ""}</td><td><span class="sub">${x.sleeve || ""}</span></td>`
               + `<td><b>${x.symbol || ""}</b></td><td>${x.action || ""}</td>`
               + `<td>${x.quantity != null ? x.quantity : ""}</td>`
               + `<td><span class="sub">${x.detail || ""}</span></td><td>${pnlCell(x.pnl)}</td></tr>`;

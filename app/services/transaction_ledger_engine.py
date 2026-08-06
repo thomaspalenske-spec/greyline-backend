@@ -176,6 +176,37 @@ class TransactionLedgerEngine:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(self.MARKET_TZ)
 
+    @staticmethod
+    def _by_position(evs):
+        """Net every fill on a name into one row: {sleeve, symbol, bought, sold, fills, realized_pnl}.
+        realized_pnl sums the P&L-bearing closes (None if the name had none). This is the P&L story —
+        it turns 40 SVXY churn legs into a single 'carry SVXY: +$X net' line."""
+        pos = {}
+        for e in evs:
+            k = (e.get("sleeve"), e.get("symbol"))
+            a = pos.setdefault(k, {"sleeve": e.get("sleeve"), "symbol": e.get("symbol"),
+                                   "bought": 0, "sold": 0, "fills": 0, "_pnl": 0.0, "_pnl_rows": 0})
+            try:
+                q = abs(int(e.get("quantity"))) if e.get("quantity") is not None else 0
+            except (TypeError, ValueError):
+                q = 0
+            if e.get("action") in ("BUY", "OPEN"):
+                a["bought"] += q
+            elif e.get("action") in ("SELL", "CLOSE"):
+                a["sold"] += q
+            a["fills"] += 1
+            if e.get("pnl") is not None:
+                a["_pnl"] += e["pnl"]
+                a["_pnl_rows"] += 1
+        out = []
+        for a in pos.values():
+            a["realized_pnl"] = round(a.pop("_pnl"), 2) if a.pop("_pnl_rows") else None
+            out.append(a)
+        # losers first (most negative), names with a P&L before names without, then most fills
+        out.sort(key=lambda r: (r["realized_pnl"] is None, r["realized_pnl"] if r["realized_pnl"] is not None else 0,
+                                -r["fills"]))
+        return out
+
     def rolling(self):
         dated = []
         for e in self._events():
@@ -204,6 +235,11 @@ class TransactionLedgerEngine:
                 "closes": sum(1 for e in evs if e["action"] in ("CLOSE", "SELL")),
                 "realized_pnl": round(sum(pnls), 2) if pnls else 0.0,
                 "realized_label": "running" if running else "session",
+                # BY POSITION: collapse the rebalance churn (dozens of BUY/SELL legs on one name) into ONE
+                # line per (sleeve, symbol) with its NET realized P&L — the actual "what did each name do"
+                # view. realized_pnl is None (not 0) when a name had no P&L-bearing close, so it reads "—"
+                # instead of a fake $0. Losers first (most negative net P&L), then most-active names.
+                "by_position": self._by_position(evs),
                 "transactions": [{k: e.get(k) for k in
                                   ("et_time", "sleeve", "symbol", "action", "quantity", "detail", "pnl")}
                                  for e in evs],

@@ -85,6 +85,28 @@ def test_etf_sell_realized_pnl_fifo(monkeypatch, tmp_path):
     assert r["today"]["realized_pnl"] == 63.0        # 48 + 15, exact
 
 
+def test_by_position_nets_churn_into_one_line(monkeypatch):
+    """The rebalance churn (many BUY/SELL legs on one name) collapses to ONE netted line per (sleeve,
+    symbol) with its total realized P&L — losers first; a name with no P&L-bearing close reads None not 0."""
+    eng = T()
+    today = datetime.now(eng.MARKET_TZ).date()
+    iso = lambda d: f"{d.isoformat()}T15:00:00"
+    events = [
+        {"ts": iso(today), "sleeve": "carry", "symbol": "SVXY", "action": "BUY", "quantity": 20, "detail": "b", "pnl": None},
+        {"ts": iso(today), "sleeve": "carry", "symbol": "SVXY", "action": "SELL", "quantity": 11, "detail": "s", "pnl": 5.0},
+        {"ts": iso(today), "sleeve": "carry", "symbol": "SVXY", "action": "SELL", "quantity": 9, "detail": "s", "pnl": -2.0},
+        {"ts": iso(today), "sleeve": "earnings", "symbol": "PLTR", "action": "CLOSE", "quantity": 5, "detail": "x", "pnl": -210.0},
+        {"ts": iso(today), "sleeve": "low_vol", "symbol": "USMV", "action": "BUY", "quantity": 3, "detail": "b", "pnl": None},
+    ]
+    monkeypatch.setattr(T, "_events", lambda self: events)
+    bypos = {p["symbol"]: p for p in eng.rolling()["today"]["by_position"]}
+    assert bypos["SVXY"]["realized_pnl"] == 3.0 and bypos["SVXY"]["fills"] == 3      # 5 - 2, churn netted
+    assert bypos["SVXY"]["bought"] == 20 and bypos["SVXY"]["sold"] == 20
+    assert bypos["USMV"]["realized_pnl"] is None                                     # buy-only -> None, not 0
+    order = [p["symbol"] for p in eng.rolling()["today"]["by_position"]]
+    assert order[0] == "PLTR"                                                        # biggest loser first
+
+
 def test_empty_ledgers_are_safe(monkeypatch):
     monkeypatch.setattr(T, "_events", lambda self: [])
     r = T().rolling()
