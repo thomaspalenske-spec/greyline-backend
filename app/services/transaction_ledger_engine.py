@@ -164,6 +164,10 @@ class TransactionLedgerEngine:
                     e["pnl"] = round(realized, 2)
                     if "est" not in e["detail"]:
                         e["detail"] = e["detail"] + " · est P&L"
+                    if matched < qty:                       # part of the sell had no logged buy to match
+                        e["detail"] = e["detail"] + f" (basis for {int(qty - matched)} pre-log)"
+                else:                                        # NO logged buy -> honest 'no basis', never faked
+                    e["detail"] = e["detail"] + " · P&L n/a (bought before this log began)"
 
     def _to_et(self, iso):
         """Naive-UTC ISO -> ET-aware datetime (raises on unparseable, caller filters)."""
