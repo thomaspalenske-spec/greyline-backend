@@ -180,6 +180,16 @@ class CrossSectionalMomentumEngine:
         except Exception:
             pass
 
+    @staticmethod
+    def _trend_owned():
+        """Symbols the TREND sleeve owns (its basket). xs_momentum ranks them but never trades them, so the
+        two sleeves stop fighting over the shared ETFs. Read live from trend so the sets can't drift apart."""
+        try:
+            from app.services.trend_following_engine import TrendFollowingEngine
+            return {str(s).upper() for s in getattr(TrendFollowingEngine, "BASKET", [])}
+        except Exception:
+            return {"QQQM", "IWM", "EFA", "DBC", "GLDM", "TLT"}     # last-known basket as a safe fallback
+
     def run_cycle(self, is_regular_session=True, dry_run=False):
         if not self.enabled():
             return {"status": "XSMOM_DISABLED", "acted": False}
@@ -211,10 +221,17 @@ class CrossSectionalMomentumEngine:
         # can't eat the book within the total book cap.
         _deployed = sum(max(0, int(lg.get("held") or 0)) * (lg.get("last") or 0) for lg in p["legs"])
         buy_headroom = SleeveCapitalBudgetEngine.deployment_headroom_usd("xs_momentum", _deployed)
+        trend_owned = self._trend_owned()                  # symbols trend owns — xs ranks them but never trades them
         acts, skipped = [], []
         for leg in p["legs"]:
             d = leg.get("delta_shares")
             if not d:
+                continue
+            # OWNERSHIP: a shared ETF (in trend's basket) is trend-owned. xs still RANKS it (its momentum
+            # informs the selection) but must not TRADE it — otherwise the two sleeves fight over the same
+            # broker position and churn (trend buys IWM while xs sells it, all day). See _trend_owned.
+            if str(leg["symbol"]).upper() in trend_owned:
+                skipped.append({"symbol": leg["symbol"], "reason": "trend-owned symbol — xs trades only its non-overlap names"})
                 continue
             # Blind on our own resting orders (degraded read) -> only a real position exit (target 0) may
             # act; a routine buy/trim placed blind is the duplicate that stacks the churn loop.

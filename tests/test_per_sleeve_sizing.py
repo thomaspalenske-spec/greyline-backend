@@ -104,3 +104,15 @@ def test_empty_read_guard_keys_on_broker_total(monkeypatch, tmp_path):
     # xs holds 2; broker_total 7 (trend holds 5 more). Not a degraded read -> must reconcile, not skip.
     r = eng.reconcile_plan("xs_momentum", [{"symbol": "QQQM", "held": 0, "broker_total": 7, "last": 301}])
     assert r["status"] == "SLEEVE_LEDGER_RECONCILED"           # NOT SLEEVE_LEDGER_SKIP_EMPTY_READ
+
+
+def test_xs_momentum_trades_only_non_overlap_names(monkeypatch):
+    """xs_momentum RANKS the full ETF universe but must never TRADE a symbol trend owns — so the two
+    sleeves stop fighting over IWM/EFA/DBC/QQQM (the 2026-08-07 all-day churn). Regression on the filter."""
+    from app.services.cross_sectional_momentum_engine import CrossSectionalMomentumEngine as XS
+    from app.services.trend_following_engine import TrendFollowingEngine as TR
+    owned = XS._trend_owned()
+    assert owned == {s.upper() for s in TR.BASKET}                  # tracks trend's basket live (no drift)
+    tradeable = {s.upper() for s in XS.UNIVERSE} - owned
+    assert "IWM" not in tradeable and "EFA" not in tradeable and "QQQM" not in tradeable   # trend-owned
+    assert {"EEM", "HYG", "IEF", "VNQ"} <= tradeable                # xs's own non-overlap names remain
