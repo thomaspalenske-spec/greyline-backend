@@ -7463,5 +7463,10 @@
     "last_bar_date": "2026-07-24",
     "detected_at": "2026-08-04T06:05:47.484049",
     "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "ALOVU": {
+    "last_bar_date": "2026-07-27",
+    "detected_at": "2026-08-07T00:10:32.010963",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
   }
 }
