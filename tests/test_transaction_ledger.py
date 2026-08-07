@@ -43,10 +43,10 @@ def test_etf_sleeve_trades_from_execlog_included_no_double_count(monkeypatch, tm
         monkeypatch.setattr(T, attr, tmp_path / f"{attr}.jsonl")
     monkeypatch.setattr(T, "EXEC_LEDGER", tmp_path / "exec.jsonl")
     (tmp_path / "exec.jsonl").write_text("\n".join(json.dumps(x) for x in [
-        {"ts": "2026-08-05T13:42:00", "strategy": "low_vol", "symbol": "USMV", "action": "BUY", "qty": 3, "limit": 100.0},
-        {"ts": "2026-08-05T13:42:00", "strategy": "carry", "symbol": "SVXY", "action": "SELL", "qty": 48, "limit": 58.0},
-        {"ts": "2026-08-05T13:42:00", "strategy": "momentum", "symbol": "AAPL", "action": "BUY", "qty": 1, "limit": 200.0},
-        {"ts": "2026-08-05T13:42:00", "strategy": "premium_earnings", "symbol": "CLX", "action": "SELL", "qty": 1, "direct": True},
+        {"ts": "2026-08-05T13:42:00", "strategy": "low_vol", "symbol": "USMV", "action": "BUY", "qty": 3, "limit": 100.0, "order_id": "o1"},
+        {"ts": "2026-08-05T13:42:00", "strategy": "carry", "symbol": "SVXY", "action": "SELL", "qty": 48, "limit": 58.0, "order_id": "o1"},
+        {"ts": "2026-08-05T13:42:00", "strategy": "momentum", "symbol": "AAPL", "action": "BUY", "qty": 1, "limit": 200.0, "order_id": "o1"},
+        {"ts": "2026-08-05T13:42:00", "strategy": "premium_earnings", "symbol": "CLX", "action": "SELL", "qty": 1, "direct": True, "order_id": "o1"},
     ]))
     ev = eng._events()
     syms = {e["symbol"] for e in ev}
@@ -70,12 +70,12 @@ def test_etf_sell_realized_pnl_fifo(monkeypatch, tmp_path):
         monkeypatch.setattr(T, attr, tmp_path / f"{attr}.jsonl")
     monkeypatch.setattr(T, "EXEC_LEDGER", tmp_path / "exec.jsonl")
     (tmp_path / "exec.jsonl").write_text("\n".join(json.dumps(x) for x in [
-        {"ts": f"{today}T13:40:00", "strategy": "carry", "symbol": "SVXY", "action": "BUY", "qty": 48, "limit": 57.0},
-        {"ts": f"{today}T13:42:00", "strategy": "carry", "symbol": "SVXY", "action": "SELL", "qty": 48, "limit": 58.0},
-        {"ts": f"{today}T13:40:00", "strategy": "trend", "symbol": "IWM", "action": "BUY", "qty": 5, "limit": 300.0},
-        {"ts": f"{today}T13:42:00", "strategy": "trend", "symbol": "IWM", "action": "SELL", "qty": 5, "limit": 303.0},
-        {"ts": f"{today}T13:42:00", "strategy": "momentum", "symbol": "AAPL", "action": "BUY", "qty": 1, "limit": 200.0},
-        {"ts": "2026-08-05T13:42:00", "strategy": "tbill", "symbol": "SGOV", "action": "SELL", "qty": 9, "limit": 100.4},
+        {"ts": f"{today}T13:40:00", "strategy": "carry", "symbol": "SVXY", "action": "BUY", "qty": 48, "limit": 57.0, "order_id": "o1"},
+        {"ts": f"{today}T13:42:00", "strategy": "carry", "symbol": "SVXY", "action": "SELL", "qty": 48, "limit": 58.0, "order_id": "o1"},
+        {"ts": f"{today}T13:40:00", "strategy": "trend", "symbol": "IWM", "action": "BUY", "qty": 5, "limit": 300.0, "order_id": "o1"},
+        {"ts": f"{today}T13:42:00", "strategy": "trend", "symbol": "IWM", "action": "SELL", "qty": 5, "limit": 303.0, "order_id": "o1"},
+        {"ts": f"{today}T13:42:00", "strategy": "momentum", "symbol": "AAPL", "action": "BUY", "qty": 1, "limit": 200.0, "order_id": "o1"},
+        {"ts": "2026-08-05T13:42:00", "strategy": "tbill", "symbol": "SGOV", "action": "SELL", "qty": 9, "limit": 100.4, "order_id": "o1"},
     ]))
     ev = {e["symbol"] + ":" + e["action"]: e for e in eng._events()}
     assert ev["SVXY:SELL"]["pnl"] == 48.0 and "est P&L" in ev["SVXY:SELL"]["detail"]   # (58-57)*48

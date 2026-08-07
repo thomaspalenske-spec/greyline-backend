@@ -113,6 +113,8 @@ class TransactionLedgerEngine:
             sleeve = str(it.get("strategy") or "")
             if sleeve not in self._ETF_SLEEVES or it.get("direct"):   # skip momentum/condors + direct fills
                 continue
+            if not it.get("order_id"):                                # BLOCKED/rejected order (no broker id)
+                continue                                              # never became a fill — drop it entirely
             ts = it.get("ts")
             action = str(it.get("action") or "").upper()
             if not ts or action not in ("BUY", "SELL"):
