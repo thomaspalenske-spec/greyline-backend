@@ -207,6 +207,35 @@ class TransactionLedgerEngine:
                                 -r["fills"]))
         return out
 
+    def _enrich_unrealized(self, by_position):
+        """Add UNREALIZED P&L (current mark vs cost) to the open-position rows, attributed to each sleeve
+        by its confirmed share of the symbol's broker quantity. Fail-safe: any read error leaves the rows
+        untouched so realized P&L still renders. This is a CURRENT snapshot — only the open book has it."""
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            positions = BrokerAccountViewEngine().snapshot().get("positions", []) or []
+        except Exception:
+            return
+        by_sym = {}
+        for p in positions:
+            sym = str(p.get("symbol") or "").split()[0].upper()      # OSI option symbols carry spaces
+            if not sym:
+                continue
+            b = by_sym.setdefault(sym, {"upnl": 0.0, "qty": 0.0})
+            b["upnl"] += self._f(p.get("unrealized_pnl")) or 0.0
+            b["qty"] += abs(self._f(p.get("quantity")) or 0.0)
+        st = SleeveTradeLedgerEngine()
+        alias = {"carry": "vol_carry"}
+        for row in by_position:
+            sym = str(row.get("symbol") or "").upper()
+            b = by_sym.get(sym)
+            if not b or b["qty"] <= 0:
+                continue
+            held = st.held_qty(alias.get(row.get("sleeve"), row.get("sleeve")), sym)
+            if held:
+                row["unrealized_pnl"] = round(b["upnl"] * (min(held, b["qty"]) / b["qty"]), 2)
+
     def rolling(self):
         dated = []
         for e in self._events():
@@ -245,7 +274,7 @@ class TransactionLedgerEngine:
                                  for e in evs],
             }
 
-        return {
+        out = {
             "timestamp": datetime.utcnow().isoformat(),
             "today": pack(today_ev, today, running=True),
             "yesterday": pack(yday_ev, yday, running=False),
@@ -254,3 +283,9 @@ class TransactionLedgerEngine:
                      "the prior session drops off. Source: GreyLine's own sleeve ledgers."),
             "status": "TRANSACTIONS_ROLLING_READY",
         }
+        # unrealized is a CURRENT-book snapshot -> only enrich today's open positions (fail-safe)
+        try:
+            self._enrich_unrealized(out["today"]["by_position"])
+        except Exception:
+            pass
+        return out

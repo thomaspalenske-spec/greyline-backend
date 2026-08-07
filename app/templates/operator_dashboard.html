@@ -702,7 +702,7 @@ th {
         <div class="sub" style="margin-bottom:10px;">Yesterday's completed session and today's running tally, from GreyLine's own sleeve ledgers. Rolls automatically at the open — the newest session becomes Today, Today becomes Yesterday, and anything older than the prior session drops off. No nightly shift job; it's a pure function of the ET date and the ledger timestamps.</div>
         <table>
           <thead>
-            <tr><th>Time (ET)</th><th>Sleeve</th><th>Symbol</th><th>Action</th><th>Qty</th><th>Detail</th><th>Realized P&amp;L</th></tr>
+            <tr><th>Time (ET)</th><th>Sleeve</th><th>Symbol</th><th>Action</th><th>Qty</th><th>Detail</th><th>Realized &amp; Unrealized P&amp;L</th></tr>
           </thead>
           <tbody id="transactions_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
         </table>
@@ -1060,6 +1060,9 @@ async function refreshTransactions() {
   const money = (v) => (v == null ? "" : (v >= 0 ? "+$" : "-$") + Math.abs(Number(v)).toFixed(2));
   const pnlCell = (v) => (v == null ? '<span class="sub">—</span>'
                           : `<span class="${Number(v) >= 0 ? 'green' : 'red'}">${money(v)}</span>`);
+  // unrealized shown in parentheses beside realized, e.g. "— (+$12.34)". Muted so realized still leads.
+  const unrlParen = (v) => (v == null ? ""
+                          : ` <span class="sub">(<span class="${Number(v) >= 0 ? 'green' : 'red'}" style="opacity:.85;">${money(v)}</span> unrl)</span>`);
   try {
     const d = await getJSON("/transactions-rolling");
     const y = d.yesterday || {}, t = d.today || {};
@@ -1076,14 +1079,14 @@ async function refreshTransactions() {
       // "carry SVXY: +$X net". This is the default view; the raw fills follow below for the audit trail.
       const pos = b.by_position || [];
       if (pos.length) {
-        html += `<tr><td colspan="7" class="sub" style="padding-top:6px;font-weight:700;letter-spacing:.04em;">BY POSITION — net realized P&L</td></tr>`;
+        html += `<tr><td colspan="7" class="sub" style="padding-top:6px;font-weight:700;letter-spacing:.04em;">BY POSITION — net realized &amp; unrealized P&L</td></tr>`;
         for (const p of pos) {
           const net = (p.bought || 0) - (p.sold || 0);
           html += `<tr><td class="sub">net</td><td><span class="sub">${p.sleeve || ""}</span></td>`
                 + `<td><b>${p.symbol || ""}</b></td><td class="sub">${net >= 0 ? "+" : ""}${net}</td>`
                 + `<td></td>`
                 + `<td><span class="sub">${p.bought || 0} bought · ${p.sold || 0} sold · ${p.fills || 0} fills</span></td>`
-                + `<td>${pnlCell(p.realized_pnl)}</td></tr>`;
+                + `<td>${pnlCell(p.realized_pnl)}${unrlParen(p.unrealized_pnl)}</td></tr>`;
         }
       }
       const txns = b.transactions || [];
