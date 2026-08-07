@@ -1463,10 +1463,12 @@ async function refreshAll() {
     setText("total_trades", l.option_trade_count ?? trades.length);
     setText("closed_trade_count", l.closed_option_trade_count ?? 0);
 
-    // Color the SAME value the card shows, and neutral when unavailable (never green on a "—").
-    setClassBySign("unrealized", unavailable ? 0 : acct.unrealized_pnl);
-    setClassBySign("total_return", unavailable ? 0 : acct.total_return_pct);
-    setClassBySign("realized_pnl", unavailable ? 0 : acct.realized_pnl);
+    // Color the SAME value the card shows — read `src` (the last-good value actually displayed on a stale
+    // tile), NOT `acct` (whose fields are null on a degraded read, so Number(null||0)=0 painted a negative
+    // stale value GREEN). Neutral only when there's truly nothing to show.
+    setClassBySign("unrealized", unavailable ? 0 : src.unrealized_pnl);
+    setClassBySign("total_return", unavailable ? 0 : src.total_return_pct);
+    setClassBySign("realized_pnl", unavailable ? 0 : src.realized_pnl);
 
     // Render the WHOLE book from /open-positions (equity + options). This panel used
     // to read only the options ledger, so it reported "No open positions" while real
