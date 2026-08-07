@@ -225,12 +225,13 @@ class TrendFollowingEngine:
                                  limit_price=limit, tif="DAY")
             # (per-sleeve position is tracked by the BROKER-CONFIRMED SleeveTradeLedgerEngine.reconcile_plan
             #  above — not an optimistic order-count, which drifted negative and is no longer used for sizing.)
-            try:
-                from app.services.execution_log_engine import ExecutionLogEngine
-                ExecutionLogEngine().record("trend", leg["symbol"], action, (qty if d > 0 else -qty), limit,
-                                            leg["bid"], leg["ask"], r.get("order_id"))    # ACTUAL placed qty
-            except Exception:
-                pass
+            if r.get("ok"):                                  # only log ACCEPTED orders — a cap-rejected buy
+                try:                                         # never became a position, so it must not appear
+                    from app.services.execution_log_engine import ExecutionLogEngine
+                    ExecutionLogEngine().record("trend", leg["symbol"], action, (qty if d > 0 else -qty), limit,
+                                                leg["bid"], leg["ask"], r.get("order_id"))
+                except Exception:
+                    pass
             acts.append({"symbol": leg["symbol"], "action": action, "qty": qty, "limit": limit,
                          "ok": r.get("ok"), "order_id": r.get("order_id")})
         return {"status": "TREND_REBALANCED" if not dry_run else "TREND_DRYRUN",

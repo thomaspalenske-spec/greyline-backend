@@ -208,33 +208,56 @@ class TransactionLedgerEngine:
         return out
 
     def _enrich_unrealized(self, by_position):
-        """Add UNREALIZED P&L (current mark vs cost) to the open-position rows, attributed to each sleeve
-        by its confirmed share of the symbol's broker quantity. Fail-safe: any read error leaves the rows
-        untouched so realized P&L still renders. This is a CURRENT snapshot — only the open book has it."""
+        """Enrich the BY-POSITION rows with UNREALIZED P&L AND drop phantom rows, using the live broker
+        holdings as truth. Returns the cleaned list (fail-safe: on a broker-read error returns the input
+        unchanged so realized P&L still renders).
+
+        PHANTOM DROP: a row that is net-LONG (bought > sold) but the broker holds NONE of that symbol and it
+        never realized anything is an order the deployment caps REJECTED — it never became a position, so it
+        must not appear as one. Net-seller / realized rows are kept (real activity).
+
+        UNREALIZED: the broker's total unrealized for a held symbol is split across that symbol's net-long
+        rows by their displayed net (bought − sold), so every net-long sleeve shows its slice and the slices
+        sum to the broker's real unrealized (aggregate-truthful, per-row complete)."""
+        from collections import defaultdict
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
-            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
             positions = BrokerAccountViewEngine().snapshot().get("positions", []) or []
         except Exception:
-            return
-        by_sym = {}
+            return by_position
+        held_upnl = defaultdict(float)
         for p in positions:
             sym = str(p.get("symbol") or "").split()[0].upper()      # OSI option symbols carry spaces
-            if not sym:
-                continue
-            b = by_sym.setdefault(sym, {"upnl": 0.0, "qty": 0.0})
-            b["upnl"] += self._f(p.get("unrealized_pnl")) or 0.0
-            b["qty"] += abs(self._f(p.get("quantity")) or 0.0)
-        st = SleeveTradeLedgerEngine()
-        alias = {"carry": "vol_carry"}
+            if sym and abs(self._f(p.get("quantity")) or 0.0) > 0:
+                held_upnl[sym] += self._f(p.get("unrealized_pnl")) or 0.0
+        # EMPTY-READ GUARD: a broker read showing ZERO holdings while we have net-long rows is almost
+        # certainly degraded (an all-positions-vanished event is implausible). Don't drop every row as a
+        # phantom on a bad read — leave the rows untouched (same fail-closed pattern as the sleeve ledger).
+        if not held_upnl and any((int(r.get("bought") or 0) - int(r.get("sold") or 0)) > 0 for r in by_position):
+            return by_position
+        cleaned, rows_by_sym = [], defaultdict(list)
         for row in by_position:
             sym = str(row.get("symbol") or "").upper()
-            b = by_sym.get(sym)
-            if not b or b["qty"] <= 0:
+            net = int(row.get("bought") or 0) - int(row.get("sold") or 0)
+            if net > 0 and sym not in held_upnl and row.get("realized_pnl") is None:
+                continue                                             # rejected-buy phantom — drop it
+            cleaned.append(row)
+            rows_by_sym[sym].append(row)
+        for sym, rows in rows_by_sym.items():
+            if sym not in held_upnl:
                 continue
-            held = st.held_qty(alias.get(row.get("sleeve"), row.get("sleeve")), sym)
-            if held:
-                row["unrealized_pnl"] = round(b["upnl"] * (min(held, b["qty"]) / b["qty"]), 2)
+            upnl = round(held_upnl[sym], 2)
+            longs = [(r, max(0, int(r.get("bought") or 0) - int(r.get("sold") or 0))) for r in rows]
+            tot = sum(w for _, w in longs)
+            net_rows = [(r, w) for r, w in longs if w > 0]
+            if tot <= 0 or not net_rows:
+                continue
+            running = 0.0
+            for i, (row, w) in enumerate(net_rows):
+                share = round(upnl - running, 2) if i == len(net_rows) - 1 else round(upnl * w / tot, 2)
+                running += share
+                row["unrealized_pnl"] = share
+        return cleaned
 
     def rolling(self):
         dated = []
@@ -283,9 +306,9 @@ class TransactionLedgerEngine:
                      "the prior session drops off. Source: GreyLine's own sleeve ledgers."),
             "status": "TRANSACTIONS_ROLLING_READY",
         }
-        # unrealized is a CURRENT-book snapshot -> only enrich today's open positions (fail-safe)
+        # unrealized is a CURRENT-book snapshot -> enrich + drop rejected-order phantoms on today's rows
         try:
-            self._enrich_unrealized(out["today"]["by_position"])
+            out["today"]["by_position"] = self._enrich_unrealized(out["today"]["by_position"])
         except Exception:
             pass
         return out

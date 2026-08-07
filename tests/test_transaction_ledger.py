@@ -64,7 +64,7 @@ def test_etf_sell_realized_pnl_fifo(monkeypatch, tmp_path):
     P/L column read all '—' and yesterday's sells had no basis at all."""
     import json
     eng = T()
-    monkeypatch.setattr(T, "_enrich_unrealized", lambda self, bp: None)   # no broker read in the unit test
+    monkeypatch.setattr(T, "_enrich_unrealized", lambda self, bp: bp)     # no broker read in the unit test
     today = datetime.now(eng.MARKET_TZ).date().isoformat()               # date-robust: use TODAY, not a literal
     for attr in ("EQUITY_LEDGER", "VRP_LEDGER", "OPT_LEDGER"):
         monkeypatch.setattr(T, attr, tmp_path / f"{attr}.jsonl")

@@ -254,12 +254,13 @@ class CrossSectionalMomentumEngine:
                     pass
             r = book.place_order(leg["symbol"], qty, action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
-            try:
-                from app.services.execution_log_engine import ExecutionLogEngine
-                ExecutionLogEngine().record("xs_momentum", leg["symbol"], action, (qty if d > 0 else -qty),
-                                            limit, leg["bid"], leg["ask"], r.get("order_id"))
-            except Exception:
-                pass
+            if r.get("ok"):                                  # only log ACCEPTED orders (not cap-rejected)
+                try:
+                    from app.services.execution_log_engine import ExecutionLogEngine
+                    ExecutionLogEngine().record("xs_momentum", leg["symbol"], action, (qty if d > 0 else -qty),
+                                                limit, leg["bid"], leg["ask"], r.get("order_id"))
+                except Exception:
+                    pass
             acts.append({"symbol": leg["symbol"], "action": action, "qty": qty, "limit": limit,
                          "ok": r.get("ok"), "order_id": r.get("order_id")})
         if not dry_run:

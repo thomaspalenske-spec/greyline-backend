@@ -270,12 +270,13 @@ class VolTermStructureCarryEngine:
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         r = TradeStationSimBookingEngine().place_order(self.SYMBOL, qty, action=action,
                                                        order_type="Limit", limit_price=limit, tif="DAY")
-        try:
-            from app.services.execution_log_engine import ExecutionLogEngine
-            ExecutionLogEngine().record("carry", self.SYMBOL, action, (qty if delta > 0 else -qty), limit,
-                                        p["bid"], p["ask"], r.get("order_id"))
-        except Exception:
-            pass
+        if r.get("ok"):                                      # only log ACCEPTED orders (not cap-rejected)
+            try:
+                from app.services.execution_log_engine import ExecutionLogEngine
+                ExecutionLogEngine().record("carry", self.SYMBOL, action, (qty if delta > 0 else -qty), limit,
+                                            p["bid"], p["ask"], r.get("order_id"))
+            except Exception:
+                pass
         return {**p, "status": "VOL_CARRY_ORDERED", "acted": True, "action": action,
                 "qty": qty, "limit": limit, "ok": r.get("ok"), "order_id": r.get("order_id")}
 
