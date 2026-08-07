@@ -153,8 +153,12 @@ class LowVolatilityEngine:
         except Exception:
             pass
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
         book = TradeStationSimBookingEngine()
-        acts = []
+        # PER-SLEEVE DEPLOYMENT CAP: this sleeve's own value can't exceed its budget (x buffer).
+        _deployed = sum(max(0, int(lg.get("held") or 0)) * (lg.get("last") or 0) for lg in p["legs"])
+        buy_headroom = SleeveCapitalBudgetEngine.deployment_headroom_usd("low_vol", _deployed)
+        acts, skipped = [], []
         for leg in p["legs"]:
             d = leg.get("delta_shares")
             if not d:
@@ -163,12 +167,20 @@ class LowVolatilityEngine:
             if d > 0 and abs(leg["delta_usd"]) < self.REBALANCE_MIN_USD:
                 continue
             action = "BUY" if d > 0 else "SELL"
+            qty = abs(d)
             from app.services.execution_pricing_engine import ExecutionPricingEngine
             limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
             if not limit or limit <= 0:
                 continue
+            if action == "BUY":                              # cap the buy at the sleeve's remaining budget
+                if qty * limit > buy_headroom:
+                    qty = int(buy_headroom / limit) if limit > 0 else 0
+                if qty <= 0:
+                    skipped.append({"symbol": leg["symbol"], "reason": "per-sleeve budget cap — at/over budget"})
+                    continue
+                buy_headroom -= qty * limit
             if dry_run:
-                acts.append({"symbol": leg["symbol"], "would": action, "qty": abs(d), "limit": limit})
+                acts.append({"symbol": leg["symbol"], "would": action, "qty": qty, "limit": limit})
                 continue
             if action == "SELL":
                 try:
@@ -176,18 +188,19 @@ class LowVolatilityEngine:
                     BrokerProtectiveStopEngine().clear_stop(leg["symbol"])
                 except Exception:
                     pass
-            r = book.place_order(leg["symbol"], abs(d), action=action, order_type="Limit",
+            r = book.place_order(leg["symbol"], qty, action=action, order_type="Limit",
                                  limit_price=limit, tif="DAY")
             try:
                 from app.services.execution_log_engine import ExecutionLogEngine
-                ExecutionLogEngine().record("low_vol", leg["symbol"], action, d, limit,
+                ExecutionLogEngine().record("low_vol", leg["symbol"], action, (qty if d > 0 else -qty), limit,
                                             leg["bid"], leg["ask"], r.get("order_id"))
             except Exception:
                 pass
-            acts.append({"symbol": leg["symbol"], "action": action, "qty": abs(d), "limit": limit,
+            acts.append({"symbol": leg["symbol"], "action": action, "qty": qty, "limit": limit,
                          "ok": r.get("ok"), "order_id": r.get("order_id")})
         return {"status": "LOW_VOL_REBALANCED" if not dry_run else "LOW_VOL_DRYRUN",
-                "acted": bool(acts and not dry_run), "actions": acts, "deployed_usd": p["deployed_usd"]}
+                "acted": bool(acts and not dry_run), "actions": acts, "skipped": skipped,
+                "deployed_usd": p["deployed_usd"]}
 
     def status(self):
         return {"timestamp": datetime.utcnow().isoformat(), "enabled": self.enabled(),

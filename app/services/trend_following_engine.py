@@ -157,16 +157,22 @@ class TrendFollowingEngine:
             return {"status": "TREND_DISABLED", "acted": False}
         if not is_regular_session:
             return {"status": "TREND_MARKET_CLOSED", "acted": False}
-        p = self.plan()
-        # make this sleeve's fills VISIBLE to the edge court (books straight to the broker). Broker-
-        # confirmed FIFO; the empty-read guard makes it safe on a degraded positions read.
+        # RECONCILE-FIRST: sync confirmed held to the live broker BEFORE sizing, so the ledger "others"
+        # every sleeve subtracts (and the edge court) is never stale at decision time — the reconcile-
+        # after-sizing lag that let deltas explode. Also makes the sleeve's fills visible to the court.
         try:
             from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
-            SleeveTradeLedgerEngine().reconcile_plan("trend", p.get("legs"))
+            SleeveTradeLedgerEngine().reconcile_from_broker("trend", self.BASKET)
         except Exception:
             pass
+        p = self.plan()
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
         book = TradeStationSimBookingEngine()
+        # PER-SLEEVE DEPLOYMENT CAP: this sleeve's own committed value can't exceed its budget (x buffer),
+        # so it can't eat the whole book within the total book cap (the carry SVXY-87 failure mode).
+        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+        _deployed = sum(max(0, int(lg.get("held") or 0)) * (lg.get("last") or 0) for lg in p["legs"])
+        buy_headroom = SleeveCapitalBudgetEngine.deployment_headroom_usd("trend", _deployed)
         acts, skipped = [], []
         for leg in p["legs"]:
             d = leg.get("delta_shares")
@@ -197,6 +203,13 @@ class TrendFollowingEngine:
             limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
             if not limit or limit <= 0:
                 continue
+            if action == "BUY":                              # cap the buy at the sleeve's remaining budget
+                if qty * limit > buy_headroom:
+                    qty = int(buy_headroom / limit) if limit > 0 else 0
+                if qty <= 0:
+                    skipped.append({"symbol": leg["symbol"], "reason": "per-sleeve budget cap — at/over budget"})
+                    continue
+                buy_headroom -= qty * limit
             if dry_run:
                 acts.append({"symbol": leg["symbol"], "would": action, "qty": qty, "limit": limit})
                 continue

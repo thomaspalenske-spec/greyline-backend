@@ -185,15 +185,15 @@ class CrossSectionalMomentumEngine:
             return {"status": "XSMOM_DISABLED", "acted": False}
         if not is_regular_session:
             return {"status": "XSMOM_MARKET_CLOSED", "acted": False}
-        p = self.plan()
-        # Track this sleeve's own BROKER-CONFIRMED position EVERY cycle (not just on rebalance days): its
-        # held_qty is what trend's share-attribution subtracts, so it must stay current between the monthly
-        # rebalances or trend would re-claim xs_momentum's shares. Reconcile places no orders (read-only).
+        # RECONCILE-FIRST (every cycle, not just rebalance days): sync confirmed held to the live broker
+        # BEFORE sizing, so the ledger isn't stale at decision time and trend's share-attribution subtracts
+        # xs_momentum's CURRENT holding, not a lagged one. Places no orders.
         try:
             from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
-            SleeveTradeLedgerEngine().reconcile_plan("xs_momentum", p.get("legs"))
+            SleeveTradeLedgerEngine().reconcile_from_broker("xs_momentum", self.UNIVERSE)
         except Exception:
             pass
+        p = self.plan()
         # MONTHLY cadence — but ALWAYS act promptly when a held leader has fallen out of the selection
         # (exit a decayed name; don't wait a month). Otherwise only rebalance when due.
         days = self._last_rebalance_days()
@@ -205,7 +205,12 @@ class CrossSectionalMomentumEngine:
 
         from app.services.sleeve_position_ledger_engine import SleevePositionLedgerEngine
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
         book = TradeStationSimBookingEngine()
+        # PER-SLEEVE DEPLOYMENT CAP: this sleeve's own value can't exceed its budget (x buffer) — one sleeve
+        # can't eat the book within the total book cap.
+        _deployed = sum(max(0, int(lg.get("held") or 0)) * (lg.get("last") or 0) for lg in p["legs"])
+        buy_headroom = SleeveCapitalBudgetEngine.deployment_headroom_usd("xs_momentum", _deployed)
         acts, skipped = [], []
         for leg in p["legs"]:
             d = leg.get("delta_shares")
@@ -231,6 +236,13 @@ class CrossSectionalMomentumEngine:
             limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
             if not limit or limit <= 0:
                 continue
+            if action == "BUY":                              # cap the buy at the sleeve's remaining budget
+                if qty * limit > buy_headroom:
+                    qty = int(buy_headroom / limit) if limit > 0 else 0
+                if qty <= 0:
+                    skipped.append({"symbol": leg["symbol"], "reason": "per-sleeve budget cap — at/over budget"})
+                    continue
+                buy_headroom -= qty * limit
             if dry_run:
                 acts.append({"symbol": leg["symbol"], "would": action, "qty": qty, "limit": limit})
                 continue

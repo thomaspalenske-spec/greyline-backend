@@ -218,17 +218,16 @@ class VolTermStructureCarryEngine:
             return {"status": "VOL_CARRY_DISABLED", "acted": False}
         if not is_regular_session:
             return {"status": "VOL_CARRY_MARKET_CLOSED", "acted": False}
+        # RECONCILE-FIRST: sync confirmed held to the live broker BEFORE sizing (no stale ledger at
+        # decision time) and make fills visible to the edge court.
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            SleeveTradeLedgerEngine().reconcile_from_broker("vol_carry", [self.SYMBOL])
+        except Exception:
+            pass
         p = self.plan()
         if p["status"] not in ("VOL_CARRY_PLAN",):
             return {**p, "acted": False}
-        # make this single-position sleeve's fills VISIBLE to the edge court (books straight to the
-        # broker). Broker-confirmed FIFO; empty-read guard makes it safe on a degraded positions read.
-        try:
-            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
-            SleeveTradeLedgerEngine().reconcile_plan(
-                "vol_carry", [{"symbol": self.SYMBOL, "held": p.get("held_shares"), "last": p.get("svxy")}])
-        except Exception:
-            pass
         delta = p["delta_shares"]
         # A FULL exit (target 0 — backwardation / stop) always acts. A routine vol-target trim in
         # EITHER direction respects the churn band, so we don't pay the spread on tiny daily wiggles.
@@ -244,6 +243,19 @@ class VolTermStructureCarryEngine:
             return {**p, "status": "VOL_CARRY_DRYRUN", "acted": False,
                     "would": ("BUY" if delta > 0 else "SELL", abs(delta), self.SYMBOL)}
         action = "BUY" if delta > 0 else "SELL"
+        qty = abs(delta)
+        # PER-SLEEVE DEPLOYMENT CAP: this sleeve's own value can never exceed its budget (x buffer). The
+        # 2026-08-07 SVXY overshoot (87 shares / $5.2k within the total book cap) is exactly what this
+        # stops — one sleeve eating the book. Buys only; a SELL always unwinds freely.
+        if action == "BUY":
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            px = self._f(p.get("svxy")) or 0.0
+            deployed = max(0, int(self._f(p.get("held_shares")))) * px
+            headroom = SleeveCapitalBudgetEngine.deployment_headroom_usd("vol_carry", deployed)
+            qty = min(qty, int(headroom / px) if px > 0 else 0)
+            if qty <= 0:
+                return {**p, "status": "VOL_CARRY_BUDGET_CAP", "acted": False,
+                        "skipped_reason": f"sleeve at/over budget (deployed ${deployed:.0f}) — buy refused"}
         # A SELL is rejected if a broker protective STOP still reserves the shares ("long N with N on
         # sell orders"). Clear it first; the stop engine re-places one on the remaining shares next cycle.
         if action == "SELL":
@@ -256,16 +268,16 @@ class VolTermStructureCarryEngine:
         from app.services.execution_pricing_engine import ExecutionPricingEngine
         limit = ExecutionPricingEngine.patient_limit(p["bid"], p["ask"], delta > 0)
         from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
-        r = TradeStationSimBookingEngine().place_order(self.SYMBOL, abs(delta), action=action,
+        r = TradeStationSimBookingEngine().place_order(self.SYMBOL, qty, action=action,
                                                        order_type="Limit", limit_price=limit, tif="DAY")
         try:
             from app.services.execution_log_engine import ExecutionLogEngine
-            ExecutionLogEngine().record("carry", self.SYMBOL, action, delta, limit,
+            ExecutionLogEngine().record("carry", self.SYMBOL, action, (qty if delta > 0 else -qty), limit,
                                         p["bid"], p["ask"], r.get("order_id"))
         except Exception:
             pass
         return {**p, "status": "VOL_CARRY_ORDERED", "acted": True, "action": action,
-                "qty": abs(delta), "limit": limit, "ok": r.get("ok"), "order_id": r.get("order_id")}
+                "qty": qty, "limit": limit, "ok": r.get("ok"), "order_id": r.get("order_id")}
 
     def status(self):
         return {"timestamp": datetime.utcnow().isoformat(), "armed": self.enabled(), **self.plan()}

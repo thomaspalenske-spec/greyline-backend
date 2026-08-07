@@ -119,6 +119,47 @@ class SleeveTradeLedgerEngine:
                 "closed": closed, "unmatched": to_close,
                 "realized_total": round(sum(c["realized_pnl"] for c in closed), 2)}
 
+    @staticmethod
+    def _pos_price(p):
+        for k in ("Last", "MarkToMarketPrice", "MarkPrice", "AveragePrice"):
+            v = p.get(k)
+            if v not in (None, "", 0, "0"):
+                try:
+                    return abs(float(v))
+                except (TypeError, ValueError):
+                    continue
+        return 0.0
+
+    def reconcile_from_broker(self, sleeve, symbols):
+        """RECONCILE-FIRST: sync this sleeve's confirmed held to the CURRENT broker BEFORE the sleeve sizes,
+        so the ledger is never stale at decision time — the reconcile-after-sizing lag that let deltas
+        explode (2026-08-06). Reads positions ONCE (shared cache); prices come from the position mark, or
+        the sleeve's own last lot entry as a fallback so a sold-off name can still be priced to CLOSE.
+        Delegates the share-attribution + empty-read guard to reconcile_plan."""
+        try:
+            from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+            rj = (TradeStationPositionsLiveEngine().get_positions().get("response_json") or {})
+        except Exception as e:
+            return {"status": "RECONCILE_FIRST_READ_FAILED", "sleeve": sleeve, "detail": str(e)[:100]}
+        posmap = {str(p.get("Symbol")).upper(): p for p in (rj.get("Positions") or [])
+                  if str(p.get("AssetType")) == "STOCK"}
+        rows = self._read()
+        legs = []
+        for sym in symbols:
+            s = str(sym).upper()
+            p = posmap.get(s)
+            qty = int(self._f(p.get("Quantity"))) if p else 0
+            price = self._pos_price(p) if p else 0.0
+            if price <= 0:                                  # sold-off name: price the close from our own lot
+                lots = self._open_lots(rows, sleeve, s)
+                if lots:
+                    price = self._f(lots[-1].get("entry_price"))
+            if price > 0:
+                legs.append({"symbol": s, "broker_total": qty, "last": price})
+        if not legs:
+            return {"status": "RECONCILE_FIRST_NOOP", "sleeve": sleeve}
+        return self.reconcile_plan(sleeve, legs)
+
     def reconcile_plan(self, sleeve, legs, reason=None):
         """Reconcile every basket leg from a sleeve plan in one pass. Reads each leg's broker-held qty and
         a current price mark under flexible keys so it works across the sleeves' slightly different plans."""

@@ -187,6 +187,21 @@ class SleeveCapitalBudgetEngine:
             budget = min(budget, cash)
         return round(max(0.0, budget), 2)
 
+    # A sleeve's own deployed value may reach this multiple of its budget before new buys are refused.
+    # >1 gives headroom for whole-share rounding + intraday marks; the 2026-08-07 carry SVXY overshoot
+    # (87 shares / $5.2k vs a ~$2.3k budget) is well beyond it, so it is caught while legit sizing isn't.
+    SLEEVE_DEPLOY_CAP_FRAC = 1.15
+
+    @classmethod
+    def deployment_headroom_usd(cls, sleeve, sleeve_deployed_usd):
+        """USD this sleeve may still BUY without exceeding its own budget x SLEEVE_DEPLOY_CAP_FRAC. <=0
+        means the sleeve is at/over its budget -> refuse new buys (sells still allowed). The per-sleeve
+        analog of the book cap: stops ONE sleeve eating the whole book within the total ceiling."""
+        budget = cls.budget_usd(sleeve)
+        if budget <= 0:
+            return 0.0
+        return max(0.0, budget * cls.SLEEVE_DEPLOY_CAP_FRAC - max(0.0, float(sleeve_deployed_usd or 0)))
+
     CONDOR_MAX_LOSS_PCT_DEFAULT = 5.0        # per-condor max loss as % of equity
     CONDOR_MAX_LOSS_FLOOR_USD = 500.0        # ...but never below this (strikes are quantized — below
     #                                          a floor, wide-strike names can't form a defined-risk condor)
