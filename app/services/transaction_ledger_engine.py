@@ -126,20 +126,75 @@ class TransactionLedgerEngine:
         ev.extend(etf)
         return ev
 
+    def _carried_basis(self):
+        """FIFO the ARCHIVED order logs (preserved by every reset) to reconstruct the open BUY lots carried
+        into the current log — the real cost basis of shares 'bought before this log began'. Returns
+        {(sleeve, symbol): deque([[qty, price], ...])}. Read-only; archives never change. This is the 'seed
+        cost basis' so a sell of carried-over shares matches a real (est) basis instead of reading n/a."""
+        from collections import defaultdict, deque
+        from pathlib import Path
+        rows = []
+        for a in sorted(Path("app/data/_archive").glob("reset-*/order_intent.jsonl")):
+            for it in self._read(a):
+                sleeve = str(it.get("strategy") or "")
+                action = str(it.get("action") or "").upper()
+                if sleeve in self._ETF_SLEEVES and not it.get("direct") and action in ("BUY", "SELL"):
+                    rows.append((str(it.get("ts")), sleeve, str(it.get("symbol") or "").upper(),
+                                 action, abs(self._f(it.get("qty")) or 0.0), self._f(it.get("limit"))))
+        groups = defaultdict(list)
+        for ts, sleeve, sym, action, qty, px in rows:
+            groups[(sleeve, sym)].append((ts, action, qty, px))
+        out = {}
+        for key, evs in groups.items():
+            evs.sort(key=lambda x: x[0])
+            lots = deque()
+            for ts, action, qty, px in evs:
+                if action == "BUY":
+                    if px and qty:
+                        lots.append([qty, px])
+                elif qty:                                   # SELL consumes carried lots FIFO
+                    rem = qty
+                    while rem > 0 and lots:
+                        take = min(lots[0][0], rem)
+                        lots[0][0] -= take
+                        rem -= take
+                        if lots[0][0] <= 0:
+                            lots.popleft()
+            if lots:
+                out[key] = lots
+        return out
+
+    def _broker_entry_prices(self):
+        """{SYMBOL: broker average cost} from the live positions — the final cost-basis fallback for shares
+        a sleeve holds via cross-sleeve attribution and never bought in any log. Fail-safe -> {} on error."""
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            out = {}
+            for p in (BrokerAccountViewEngine().snapshot().get("positions") or []):
+                sym = str(p.get("symbol") or "").split()[0].upper()
+                ep = self._f(p.get("entry_price"))
+                if sym and ep > 0:
+                    out[sym] = ep
+            return out
+        except Exception:
+            return {}
+
     def _attach_etf_realized(self, etf_events):
         """Fill the P/L column on ETF SELL rows by FIFO-matching each sell against that sleeve+symbol's own
-        prior BUYs in the order log. realized = sum over matched lots of (sell_px - buy_px) * qty, using the
-        recorded LIMIT prices (intended fill) — an ESTIMATE, labeled as such. Covers EVERY sell (all days),
-        self-consistent, and independent of any downstream reconciler. A BUY realizes nothing (stays blank);
-        a sell qty with no prior buy in the log (position predates logging) leaves that portion unbasised —
-        if NONE of it can be matched the row stays blank rather than inventing a number."""
+        prior BUYs — SEEDED with the carried-over lots reconstructed from the archived logs (_carried_basis),
+        so a sell of shares bought before this log still matches a real (est) cost. realized = sum over
+        matched lots of (sell_px - buy_px) * qty (recorded LIMIT prices -> estimate). A BUY realizes nothing;
+        only a sell with no basis anywhere (current log OR archive) stays blank rather than inventing one."""
         from collections import defaultdict, deque
+        carried = self._carried_basis()
+        entry_by_sym = self._broker_entry_prices()          # FINAL fallback: the broker's own cost basis
         groups = defaultdict(list)
         for e in etf_events:
             groups[(e["sleeve"], str(e["symbol"] or "").upper())].append(e)
-        for evs in groups.values():
+        for gkey, evs in groups.items():
+            sym = gkey[1]
             evs.sort(key=lambda x: str(x["ts"]))
-            lots = deque()                                  # FIFO open BUY lots: [qty, price]
+            lots = carried.get(gkey) or deque()             # SEED with carried-over basis, then live buys
             for e in evs:
                 px = self._f(e.get("_px"))
                 qty = abs(self._f(e.get("quantity")) or 0.0)
@@ -150,6 +205,7 @@ class TransactionLedgerEngine:
                 if e["action"] != "SELL" or not qty:
                     continue
                 remaining, realized, matched = qty, 0.0, 0.0
+                broker_basis = False
                 while remaining > 0 and lots:
                     lot = lots[0]
                     take = min(lot[0], remaining)
@@ -160,13 +216,20 @@ class TransactionLedgerEngine:
                     remaining -= take
                     if lot[0] <= 0:
                         lots.popleft()
+                # ADOPTED shares (held via cross-sleeve attribution, never bought in any log): fall back to
+                # the BROKER's own average cost for the symbol — the real basis of the shares, whoever booked
+                # them. Only for the still-uncovered remainder, so a logged basis always wins.
+                entry = entry_by_sym.get(sym)
+                if remaining > 0 and px and entry:
+                    realized += (px - entry) * remaining
+                    matched += remaining
+                    remaining = 0
+                    broker_basis = True
                 if matched > 0:                             # at least partly basised -> show it (est)
                     e["pnl"] = round(realized, 2)
                     if "est" not in e["detail"]:
-                        e["detail"] = e["detail"] + " · est P&L"
-                    if matched < qty:                       # part of the sell had no logged buy to match
-                        e["detail"] = e["detail"] + f" (basis for {int(qty - matched)} pre-log)"
-                else:                                        # NO logged buy -> honest 'no basis', never faked
+                        e["detail"] = e["detail"] + (" · est P&L (broker cost)" if broker_basis else " · est P&L")
+                else:                                        # NO basis anywhere -> honest 'n/a', never faked
                     e["detail"] = e["detail"] + " · P&L n/a (bought before this log began)"
 
     def _to_et(self, iso):
