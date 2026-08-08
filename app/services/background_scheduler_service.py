@@ -921,10 +921,20 @@ class BackgroundSchedulerService:
         # EDGE PERSISTENCE (Medallion discipline, additive read-only): record today's per-sleeve marks
         # so each strategy builds a LIVE track record — the foundation for retiring decayed sleeves on
         # evidence. Overwrites today's row each cycle, so it ends the day on the latest marks.
+        # FILL-CONFIRM sleeve closes BEFORE the court reads them: upgrade quote_estimate exits to the real
+        # broker fill while it is still in the order window, so the court judges REAL fills, not marks. Runs
+        # every cycle, idempotent, fail-closed — never places an order. (2026-08-08)
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            sleeve_fill_confirm = SleeveTradeLedgerEngine().upgrade_close_fills()
+        except Exception as exc:
+            sleeve_fill_confirm = {"error": repr(exc), "status": "SLEEVE_FILLS_DEGRADED"}
+
         try:
             from app.services.edge_persistence_engine import EdgePersistenceEngine
             _epe = EdgePersistenceEngine()
             edge_persistence = _epe.snapshot()
+            edge_persistence["fill_confirm"] = sleeve_fill_confirm
             # RETIRE half of the discipline: page (deduped) if the court judged any sleeve DECAYED.
             edge_persistence["decay_alert"] = _epe.decay_alert()
             # REALLOCATE half: page (deduped) when a measured verdict drifts the evidence-based

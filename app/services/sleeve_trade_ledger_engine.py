@@ -120,6 +120,76 @@ class SleeveTradeLedgerEngine:
                 "realized_total": round(sum(c["realized_pnl"] for c in closed), 2)}
 
     @staticmethod
+    def _ts_secs(ts):
+        try:
+            return datetime.fromisoformat(str(ts)).timestamp()
+        except Exception:
+            return None
+
+    def upgrade_close_fills(self, window_hours=48):
+        """Upgrade `quote_estimate` CLOSE rows to REAL fills.
+
+        The close path (reconcile) prices exits at the position MARK, not the actual sell fill, and tags
+        them 'quote_estimate' — honest, but the edge court then judges the sleeve on estimated exits. This
+        joins each estimate close back to the sell that caused it via ExecutionLog: every direct-to-broker
+        sleeve logs its SELL order (strategy, symbol, qty, order_id) at placement, and ExecutionLog resolves
+        {order_id: fill_price} from the broker. Match = same sleeve+symbol, nearest in time (the sell precedes
+        the reconcile that recorded the close), broker-confirmed fill. On a match: exit_price := real fill,
+        realized_pnl := (fill - entry) * qty, basis := 'fills' (permanent — never needs the broker again).
+
+        Runs each cycle so it catches a fill while it is still in the broker's order window; a fill that has
+        already aged out stays honestly 'quote_estimate' (NEVER fabricated). Idempotent (only touches
+        quote_estimate rows), best-effort, and never places or cancels an order."""
+        rows = self._read()
+        pending = [r for r in rows if r.get("kind") == "close"
+                   and str(r.get("realized_pnl_basis") or "quote_estimate") == "quote_estimate"]
+        if not pending:
+            return {"status": "SLEEVE_FILLS_NO_PENDING", "upgraded": 0}
+        try:
+            from app.services.execution_log_engine import ExecutionLogEngine
+            xe = ExecutionLogEngine()
+            intents = xe._intents()
+            fills = xe._broker_fills()               # {order_id: fill_price}, in-window fills only
+        except Exception as e:
+            return {"status": "SLEEVE_FILLS_DEGRADED", "error": str(e)[:120], "upgraded": 0}
+        # broker-confirmed SELL fills, per sleeve+symbol, with an allocation budget so one sell can't be
+        # reused across unrelated rebalances (its shares split FIFO into >=1 close rows all at one price).
+        sells = []
+        for it in intents:
+            fp = fills.get(it.get("order_id"))
+            if not fp or fp <= 0 or not str(it.get("action", "")).upper().startswith("SELL"):
+                continue
+            q = int(self._f(it.get("qty")))
+            sells.append({"sleeve": str(it.get("strategy")), "symbol": str(it.get("symbol")).upper(),
+                          "secs": self._ts_secs(it.get("ts")), "fill": fp, "alloc": q,
+                          "order_id": it.get("order_id")})
+        if not sells:
+            return {"status": "SLEEVE_FILLS_NONE_RESOLVABLE", "upgraded": 0, "pending": len(pending)}
+        win = window_hours * 3600
+        upgraded = 0
+        for r in sorted(pending, key=lambda x: str(x.get("closed_at"))):
+            sl, sym = str(r.get("sleeve")), str(r.get("symbol")).upper()
+            csecs = self._ts_secs(r.get("closed_at"))
+            cands = [s for s in sells if s["sleeve"] == sl and s["symbol"] == sym and s["alloc"] > 0
+                     and s["secs"] is not None and csecs is not None
+                     and -60 <= (csecs - s["secs"]) <= win]     # sell precedes the close (small clock slack)
+            if not cands:
+                continue
+            cand = min(cands, key=lambda s: abs(csecs - s["secs"]))
+            need = int(self._f(r.get("quantity")))
+            entry = self._f(r.get("entry_price"))
+            r["exit_price"] = round(cand["fill"], 4)
+            r["realized_pnl"] = round((cand["fill"] - entry) * need, 2)
+            r["realized_pnl_basis"] = "fills"
+            r["fill_order_id"] = cand["order_id"]
+            cand["alloc"] -= max(need, 1)
+            upgraded += 1
+        if upgraded:
+            self._write(rows)
+        return {"status": "SLEEVE_FILLS_UPGRADED" if upgraded else "SLEEVE_FILLS_NO_MATCH",
+                "upgraded": upgraded, "pending_remaining": len(pending) - upgraded}
+
+    @staticmethod
     def _pos_price(p):
         for k in ("Last", "MarkToMarketPrice", "MarkPrice", "AveragePrice"):
             v = p.get(k)

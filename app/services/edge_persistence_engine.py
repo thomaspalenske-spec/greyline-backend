@@ -195,10 +195,17 @@ class EdgePersistenceEngine:
                            "risk_kind": f"stop_proxy_{int(self.EQUITY_STOP_PCT * 100)}pct"})
         return trades, excluded
 
-    # court sleeve -> ExecutionLog strategy key (only the direct-to-broker equity sleeves are instrumented)
+    # court sleeve -> ExecutionLog strategy key (the direct-to-broker equity sleeves are instrumented, each
+    # under its own tag — verified in cross_sectional_momentum / low_vol / trend / carry / MF / tbill)
     _EXEC_STRATEGY = {"carry": "carry", "trend": "trend", "tbill": "tbill", "managed_futures": "managed_futures",
+                      "xs_momentum": "xs_momentum", "low_vol": "low_vol",
                       "premium_vrp": "premium_vrp", "premium_earnings": "premium_earnings"}
-    _COURT_SLEEVES = ("momentum", "carry", "trend", "tbill", "managed_futures", "premium_vrp", "premium_earnings")
+    _COURT_SLEEVES = ("momentum", "carry", "trend", "tbill", "managed_futures", "xs_momentum", "low_vol",
+                      "premium_vrp", "premium_earnings")
+
+    # basis tags that mean the exit price was ESTIMATED (a mark/quote), not a broker-confirmed fill. A
+    # verdict resting mostly on these is provisional — the court says so rather than presenting them as real.
+    _ESTIMATE_BASES = ("quote_estimate", "mid_estimate", "quote")
 
     def _execution_cost_by_sleeve(self):
         """Per-sleeve MEASURED execution slippage (decision-mid vs fill) from ExecutionLog. A DIAGNOSTIC
@@ -280,6 +287,18 @@ class EdgePersistenceEngine:
                            f"< {round(self.MIN_EDGE_ROR * 100, 2)}% action floor")
             else:
                 verdict = "UNPROVEN — edge indistinguishable from zero net of cost"
+            # Fill-confirmation honesty: how many of this sleeve's exits are broker-confirmed fills vs
+            # mark/quote ESTIMATES. A verdict resting mostly on estimates is flagged PROVISIONAL so the
+            # court never presents an estimate-priced edge as settled truth. (2026-08-08)
+            est = sum(1 for t in ts if str(t.get("basis")) in self._ESTIMATE_BASES)
+            stat["estimated_trades"] = est
+            stat["fill_confirmed_trades"] = len(ts) - est
+            if est and est > len(ts) / 2:
+                stat["fill_confirmation"] = (f"{est}/{len(ts)} exits are quote/mark ESTIMATES, not "
+                                             "broker-confirmed fills — verdict provisional until fills reconcile")
+                verdict += f" · PROVISIONAL ({est}/{len(ts)} exits estimate-priced, not fill-confirmed)"
+            else:
+                stat["fill_confirmation"] = f"{len(ts) - est}/{len(ts)} exits broker-confirmed"
             stat["verdict"] = verdict
             stat["_t"] = t_stat
             sleeves[sleeve] = stat
