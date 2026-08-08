@@ -300,7 +300,8 @@ class PreOpenReadinessEngine:
                 if not src_ok:
                     bad.append(f"account source unresolved ({src.get('error')})")
                 if not reads_ok:
-                    bad.append(f"broker reads degraded ({view.get('status')})")
+                    bad.append("broker reads degraded (" + (view.get("read_detail") or view.get("status") or "")
+                               + (" — TradeStation server error, broker-side" if view.get("read_broker_side") else "") + ")")
                 # A degraded READ with a healthy token+source is a transient broker-side blip (the same
                 # self-healing class the money tiles / reality guard treat as degraded-not-broken, and
                 # snapshot() already bounded-retries before reporting) — WARN like the sibling checks

@@ -143,9 +143,27 @@ class BrokerAccountViewEngine:
                 "marked": "BROKER_LIVE",
             })
 
+        # When degraded, capture WHY (the actual HTTP statuses) so the guard/banner can name the real cause
+        # — "TradeStation HTTP 500 (broker-side outage)" vs a local transient — instead of always guessing
+        # "busy scheduler cycle". broker_side is True on any 5xx (their server), else it's likely transient.
+        read_detail, broker_side = None, False
+        if not reads_ok:
+            parts = []
+            for name, resp in (("balances", bal), ("positions", pos), ("orders", ords)):
+                hs = (resp or {}).get("http_status")
+                if hs != 200:
+                    parts.append(f"{name} HTTP {hs if hs is not None else 'no-response'}")
+                    if isinstance(hs, int) and 500 <= hs <= 599:
+                        broker_side = True
+            if not parts and not balances_ok:
+                parts.append("balances body empty/unparseable")
+            read_detail = ", ".join(parts) or "unknown"
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "reads_ok": reads_ok,
+            "read_detail": read_detail,          # e.g. "positions HTTP 500, balances HTTP 500" when degraded
+            "read_broker_side": broker_side,     # True -> TradeStation server error (5xx), not a local blip
             "account_mode": src.get("mode"),
             "account_id": src.get("account_id"),
             "account_label": src.get("label"),

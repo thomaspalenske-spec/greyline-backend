@@ -118,12 +118,22 @@ class ScheduledOperatorReportsEngine:
                 + cls._earnings_readiness_line(),
                 "INFO", f"PREOPEN_READY:{today}")
         fails = [c for c in (audit.get("checks") or []) if c.get("status") == "FAIL"]
-        detail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:60]}" for c in fails[:6]) or "see /pre-open-readiness"
+        warns = [c for c in (audit.get("checks") or []) if c.get("status") == "WARN"]
+        if fails:
+            detail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:70]}" for c in fails[:6])
+            return cls._dispatch(
+                "GreyLine NOT READY for the open",
+                f"Pre-open audit = {overall}, {len(fails)} FAIL. The open may not fire "
+                f"cleanly. FAILING: {detail}. Fix NOW." + cls._earnings_readiness_line(),
+                "CRITICAL", f"PREOPEN_NOTREADY:{today}")
+        # No FAILs, but not clean READY -> warnings only (READY_WITH_WARNINGS). Text them BY NAME (e.g. the
+        # broker-read / TradeStation-500 warning) at WARNING severity — not a false "NOT READY / 0 FAIL".
+        wdetail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:70]}" for c in warns[:6]) or "see /pre-open-readiness"
         return cls._dispatch(
-            "GreyLine NOT READY for the open",
-            f"Pre-open audit = {overall}, {audit.get('fail_count')} FAIL. The open may not fire "
-            f"cleanly. FAILING: {detail}. Fix NOW." + cls._earnings_readiness_line(),
-            "CRITICAL", f"PREOPEN_NOTREADY:{today}")
+            "GreyLine open — READY with warnings",
+            f"Pre-open audit = {overall} (0 FAIL, {len(warns)} warn). Armed for the {today} open; "
+            f"review: {wdetail}." + cls._earnings_readiness_line(),
+            "WARNING", f"PREOPEN_WARN:{today}")
 
     @classmethod
     def _post_close_report(cls, today):

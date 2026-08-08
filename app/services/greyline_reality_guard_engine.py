@@ -69,8 +69,11 @@ class GreyLineRealityGuardEngine:
         return {
             "id": "BROKER_READS_OK", "severity": "critical", "degraded_class": True,
             "ok": bool(view.get("reads_ok")),
+            "broker_side": bool(view.get("read_broker_side")),   # 5xx from TS = their server, not our blip
             "detail": (f"reading {view.get('account_label')}" if view.get("reads_ok")
-                       else f"broker read failed ({view.get('status')})"),
+                       else ("broker read failed — " + (view.get("read_detail") or view.get("status") or "")
+                             + (" (TradeStation server error — broker-side outage)"
+                                if view.get("read_broker_side") else " (likely a transient local blip)"))),
         }
 
     def _check_phantom_positions(self, view):
