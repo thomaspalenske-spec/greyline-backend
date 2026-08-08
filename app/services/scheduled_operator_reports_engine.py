@@ -120,7 +120,7 @@ class ScheduledOperatorReportsEngine:
         fails = [c for c in (audit.get("checks") or []) if c.get("status") == "FAIL"]
         warns = [c for c in (audit.get("checks") or []) if c.get("status") == "WARN"]
         if fails:
-            detail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:70]}" for c in fails[:6])
+            detail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:120]}" for c in fails[:6])
             return cls._dispatch(
                 "GreyLine NOT READY for the open",
                 f"Pre-open audit = {overall}, {len(fails)} FAIL. The open may not fire "
@@ -128,7 +128,7 @@ class ScheduledOperatorReportsEngine:
                 "CRITICAL", f"PREOPEN_NOTREADY:{today}")
         # No FAILs, but not clean READY -> warnings only (READY_WITH_WARNINGS). Text them BY NAME (e.g. the
         # broker-read / TradeStation-500 warning) at WARNING severity — not a false "NOT READY / 0 FAIL".
-        wdetail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:70]}" for c in warns[:6]) or "see /pre-open-readiness"
+        wdetail = "; ".join(f"{c.get('check')}: {str(c.get('detail'))[:120]}" for c in warns[:6]) or "see /pre-open-readiness"
         return cls._dispatch(
             "GreyLine open — READY with warnings",
             f"Pre-open audit = {overall} (0 FAIL, {len(warns)} warn). Armed for the {today} open; "
