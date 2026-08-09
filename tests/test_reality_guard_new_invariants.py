@@ -95,6 +95,38 @@ def test_missing_cache_is_not_flagged(tmp_path, monkeypatch):
     assert G()._check_decision_caches_fresh()["ok"] is True        # warming state, own concern
 
 
+# ---- DATA_SOURCE_REAL: disarmed momentum's stale candidate snapshot is not cry-wolf ---------------
+
+def _write_candidates(obj):
+    p = Path("app/data/momentum_reversal/top_candidates_cache.json")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(obj))
+
+
+def test_stale_candidates_flag_when_momentum_armed(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GREYLINE_MOMENTUM_ENABLED", "true")        # armed -> it WOULD trade on this data
+    _write_candidates({"data_source": "TRADESTATION_LIVE_CACHED", "as_of": "2026-07-01"})   # very stale
+    r = G()._check_data_source()
+    assert r["ok"] is False and "suspect" in r["detail"]
+
+
+def test_stale_candidates_ignored_when_momentum_disarmed(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GREYLINE_MOMENTUM_ENABLED", "false")       # disarmed -> nothing refreshes/consumes it
+    _write_candidates({"data_source": "TRADESTATION_LIVE_CACHED", "as_of": "2026-07-01"})
+    r = G()._check_data_source()
+    assert r["ok"] is True and "momentum disarmed" in r["detail"]
+
+
+def test_fake_source_flags_even_when_disarmed(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GREYLINE_MOMENTUM_ENABLED", "false")
+    _write_candidates({"data_source": "FABRICATED", "as_of": "2026-08-09"})   # fresh but FAKE source
+    r = G()._check_data_source()
+    assert r["ok"] is False        # a fabricated source is wrong the moment momentum re-arms
+
+
 # ---- READOUT_INTEGRITY ----------------------------------------------------------------------------
 
 def test_degraded_readout_section_trips_the_warning(monkeypatch):

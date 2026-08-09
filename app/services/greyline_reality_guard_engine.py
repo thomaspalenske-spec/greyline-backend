@@ -253,6 +253,7 @@ class GreyLineRealityGuardEngine:
             if not cache.exists():
                 return {"id": "DATA_SOURCE_REAL", "severity": "warning", "ok": True,
                         "detail": "no candidate snapshot computed yet"}
+            from os import getenv
             d = json.loads(cache.read_text())
             source = d.get("data_source")
             as_of = d.get("as_of")
@@ -263,9 +264,16 @@ class GreyLineRealityGuardEngine:
                     stale = (datetime.utcnow().date() - datetime.fromisoformat(str(as_of)[:10]).date()).days > MAX_CANDIDATE_STALE_DAYS
                 except (ValueError, TypeError):
                     stale = False
-            ok = source_ok and not stale
+            # This candidate snapshot is ONLY refreshed and consumed by the momentum strategy. When momentum
+            # is DISARMED nothing reads it and nothing refreshes it, so a stale snapshot is EXPECTED — not a
+            # strategy trading on old data (same retired-sleeve cry-wolf as the condor cache). Still flag a
+            # FAKE source: that would be wrong the moment momentum re-arms.
+            momentum_on = (getenv("GREYLINE_MOMENTUM_ENABLED", "true") or "").strip().lower() == "true"
+            stale_flag = stale and momentum_on
+            ok = source_ok and not stale_flag
+            note = "" if momentum_on else " (momentum disarmed — snapshot not refreshed/consumed)"
             return {"id": "DATA_SOURCE_REAL", "severity": "warning", "ok": ok,
-                    "detail": (f"candidates from {source} as of {as_of}" if ok
+                    "detail": (f"candidates from {source} as of {as_of}{note}" if ok
                                else f"suspect candidate source={source!r} as_of={as_of!r} "
                                     f"(real sources: {sorted(REAL_DATA_SOURCES)}, max {MAX_CANDIDATE_STALE_DAYS}d stale)")}
         except Exception as e:
