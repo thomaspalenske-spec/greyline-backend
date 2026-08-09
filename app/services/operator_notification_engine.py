@@ -101,10 +101,12 @@ class OperatorNotificationEngine:
             rows.append(r)
 
         rows = sorted(rows, key=lambda r: r.get("timestamp", ""), reverse=True)[:limit]
+        unread_critical_count = sum(1 for r in rows if str(r.get("severity")).upper() == "CRITICAL")
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "OperatorNotificationEngine",
             "unread_count": len(rows),
+            "unread_critical_count": unread_critical_count,   # genuine attention items vs routine backlog
             "historical_unread_count": historical_unread_count,
             "active_alert_window_hours": 24,
             "read_only_execution_blocks_suppressed": True,
