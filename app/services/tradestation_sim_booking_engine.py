@@ -59,6 +59,45 @@ def _interpret_order(status_code, payload):
     return True, str(oid), None
 
 
+# ---- MASTER EXECUTION KILL SWITCH ----------------------------------------------------------------
+# The ONE switch that halts autonomous trading. Historically only momentum + ExecutionGovernor honored
+# GREYLINE_PAPER_EXECUTION_ENABLED; trend/low_vol/xs/carry booked straight through place_order and
+# ignored it, so flipping the "master" off did NOT stop them (the 2026-08-08 gap). Enforcing it HERE, at
+# the single choke point every sleeve routes through, makes it a real kill switch that cannot be bypassed
+# by a sleeve that forgot to check its own flag.
+#
+# Scope: it blocks only orders that OPEN or INCREASE exposure. De-risking ALWAYS passes — closes
+# (SELLTOCLOSE/BUYTOCLOSE/BUYTOCOVER), plain equity SELLs, and protective stops are never gated, so an
+# operator can always flatten/exit while execution is halted. Semantics mirror ExecutionGovernor
+# (paper OR live enabled) so the switch and the governor never disagree.
+
+_OPENING_ACTIONS = ("BUY", "BUYTOOPEN", "SELLTOOPEN")
+
+
+def _master_execution_on():
+    paper = (getenv("GREYLINE_PAPER_EXECUTION_ENABLED", "false") or "").strip().lower() == "true"
+    live = (getenv("GREYLINE_LIVE_TRADING_ENABLED", "false") or "").strip().lower() == "true"
+    return paper or live
+
+
+def _is_opening_order(action, order_type=None):
+    """True only for orders that OPEN/INCREASE exposure (never a close/cover, never a protective stop)."""
+    if str(action or "").upper() not in _OPENING_ACTIONS:
+        return False
+    if str(order_type or "").lower() == "stopmarket":     # a protective stop is defensive, not an open
+        return False
+    return True
+
+
+def _kill_switch_reject(request_desc):
+    return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
+            "http_status": None, "ok": False, "order_id": None,
+            "reject_reason": ("execution disabled — master kill switch "
+                              "(GREYLINE_PAPER_EXECUTION_ENABLED=false, live off): opens blocked, "
+                              "exits still allowed"),
+            "execution_blocked": True, "request": request_desc}
+
+
 class TradeStationSimBookingEngine:
 
     def __init__(self):
@@ -163,6 +202,12 @@ class TradeStationSimBookingEngine:
     def place_order(self, symbol, quantity, action="BUY", order_type="Market",
                     limit_price=None, stop_price=None, tif="DAY"):
         """Place a real SIMULATED order in the SIM account. Guard runs inside _build_order."""
+        # MASTER KILL SWITCH (first — before any sizing/cap logic): an OPENING order is refused when
+        # execution is disabled. Exits/covers/stops pass so the book can always be flattened. This is the
+        # single choke point that makes GREYLINE_PAPER_EXECUTION_ENABLED a real kill switch for EVERY sleeve.
+        if _is_opening_order(action, order_type) and not _master_execution_on():
+            return _kill_switch_reject({"Symbol": symbol, "Quantity": quantity,
+                                        "action": str(action or "").upper()})
         # HARD BOOK-DEPLOYMENT CAP: no EQUITY BUY may push the book's committed long-equity value past
         # MAX_DEPLOY_FRAC x the mission base — the bulletproof backstop against the 12x over-deployment
         # fault (a stale-`held` delta stacking orders). Independent of any sizing engine; fail-closed on a
@@ -230,6 +275,11 @@ class TradeStationSimBookingEngine:
 
     def place_multileg(self, legs, order_type="Limit", limit_price=None, tif="DAY"):
         """Place ONE atomic multi-leg order (all legs fill together or none). ok is BODY-verified."""
+        # MASTER KILL SWITCH: a spread that OPENS a position (any TOOPEN leg — e.g. a condor open) is
+        # refused when execution is disabled; a closing spread (all TOCLOSE legs) still passes so open
+        # condors can always be unwound.
+        if any(_is_opening_order(l.get("action")) for l in (legs or [])) and not _master_execution_on():
+            return {**_kill_switch_reject({"legs": legs}), "legs": legs, "limit_price": limit_price}
         body = self._build_multileg_order(legs, order_type, limit_price, tif)
         resp = self._request("POST", f"{SIM_HOST}/v3/orderexecution/orders", json_body=body)
         payload = _safe_json(resp)
