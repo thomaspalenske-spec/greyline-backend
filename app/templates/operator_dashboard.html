@@ -757,6 +757,15 @@ th {
             <tbody id="capital_alloc_body"><tr><td colspan="5"><span class="sub">Loading…</span></td></tr></tbody>
           </table>
         </div>
+        <div id="ca_applypath" style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+          <div class="sub" style="margin-bottom:6px;"><b>Auto-apply plan</b> — the capped, evidence-only step toward the recommendation. Approving writes a reversible %-override the sizing engines read at the next rebalance; it places NO order now. Approval binds to the exact plan shown (token): if the evidence shifts before you click, the server refuses and asks you to re-review — so exactly the reviewed allocation applies, or none.</div>
+          <div id="ca_plan_body"><span class="sub">Loading…</span></div>
+          <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap;">
+            <button id="ca_apply_btn" class="primary" onclick="approveApplyAllocation()" disabled>Approve &amp; apply plan</button>
+            <button id="ca_revert_btn" onclick="revertAllocation()" disabled>Revert overrides</button>
+            <span id="ca_action_result" class="sub"></span>
+          </div>
+        </div>
       </div>
 
       <div class="card" id="cycle_cost_card" style="min-width:0;">
@@ -1247,9 +1256,70 @@ async function refreshCapitalAllocation() {
         <td>${ov}</td>
       </tr>`;
     }).join("") || `<tr><td colspan="5"><span class="sub">No sleeves.</span></td></tr>`;
+
+    // --- apply-path: the capped, evidence-only plan + operator-approved apply/revert ---
+    const plan = aa.plan_preview || {};
+    const moves = plan.moves || [];
+    const token = plan.plan_token || "";
+    window._caPlanToken = token;
+    const planBody = document.getElementById("ca_plan_body");
+    const applyBtn = document.getElementById("ca_apply_btn");
+    const revertBtn = document.getElementById("ca_revert_btn");
+    if (planBody) {
+      if (moves.length) {
+        planBody.innerHTML = moves.map(m =>
+          `<div style="font-variant-numeric:tabular-nums;font-size:12px;margin:2px 0;">
+             <b>${m.sleeve}</b>: ${Number(m.from_pct).toFixed(1)}% → <b>${Number(m.to_pct).toFixed(1)}%</b>
+             <span class="sub">(step ${m.step_pct > 0 ? "+" : ""}${Number(m.step_pct).toFixed(1)} pts toward ${Number(m.target_pct).toFixed(1)}%)</span>
+           </div>`).join("") +
+          `<div class="sub" style="margin-top:6px;">resulting book ${Number(plan.resulting_total_pct).toFixed(1)}% of equity${plan.book_clamped_to_100 ? " (clamped to 100%)" : ""} · plan token <code>${token}</code></div>`;
+      } else {
+        planBody.innerHTML = `<span class="sub">No moves — every sleeve is on a static prior (no measured court verdict yet), and auto-apply only steps evidence-driven sleeves. Nothing to apply until a sleeve earns a verdict. plan token <code>${token || "—"}</code></span>`;
+      }
+    }
+    if (applyBtn) { applyBtn.disabled = !moves.length; applyBtn.title = moves.length ? "" : "no evidence-driven moves to apply yet"; }
+    if (revertBtn) { revertBtn.disabled = nOv === 0; revertBtn.title = nOv === 0 ? "no active overrides to revert" : ""; }
   } catch (e) {
     body.innerHTML = `<tr><td colspan="5"><span class="red">Capital allocation unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
   }
+}
+
+async function approveApplyAllocation() {
+  // Operator-approved apply: carries the exact plan_token shown, so the server applies ONLY the reviewed
+  // plan (AUTOAPPLY_PLAN_CHANGED if evidence shifted). Writes a reversible override; places no order.
+  const token = window._caPlanToken;
+  const out = document.getElementById("ca_action_result");
+  if (!token) return;
+  if (!confirm("Approve and apply THIS allocation plan (token " + token + ")?\n\nIt writes a reversible sleeve %-override the sizing engines use at the next rebalance. No order is placed now; fully reversible via Revert.")) return;
+  if (out) { out.textContent = "Applying…"; out.className = "sub"; }
+  try {
+    const res = await fetch("/sleeve-budget-autoapply/apply?plan_token=" + encodeURIComponent(token), { method: "POST" });
+    const j = await res.json();
+    if (j.applied) {
+      if (out) { out.textContent = "Applied: " + (j.moves || []).map(m => `${m.sleeve}→${Number(m.to_pct).toFixed(1)}%`).join(", "); out.className = "green"; }
+    } else if (j.status === "AUTOAPPLY_PLAN_CHANGED") {
+      if (out) { out.textContent = "Plan changed since you reviewed it — re-review the refreshed plan and approve again."; out.className = "yellow"; }
+    } else {
+      if (out) { out.textContent = "Not applied: " + (j.status || j.note || "no moves"); out.className = "yellow"; }
+    }
+  } catch (e) {
+    if (out) { out.textContent = "Apply failed: " + String(e).slice(0, 80); out.className = "red"; }
+  }
+  refreshCapitalAllocation();
+}
+
+async function revertAllocation() {
+  const out = document.getElementById("ca_action_result");
+  if (!confirm("Revert ALL auto-applied sleeve %-overrides? Every sleeve falls back to its env/default budget.")) return;
+  if (out) { out.textContent = "Reverting…"; out.className = "sub"; }
+  try {
+    const res = await fetch("/sleeve-budget-autoapply/revert", { method: "POST" });
+    const j = await res.json();
+    if (out) { out.textContent = j.reverted ? "Reverted — overrides cleared." : (j.status || "nothing to revert"); out.className = j.reverted ? "green" : "sub"; }
+  } catch (e) {
+    if (out) { out.textContent = "Revert failed: " + String(e).slice(0, 80); out.className = "red"; }
+  }
+  refreshCapitalAllocation();
 }
 
 function renderCycleCost(s) {
