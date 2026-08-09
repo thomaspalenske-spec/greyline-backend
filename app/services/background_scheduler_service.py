@@ -606,6 +606,24 @@ class BackgroundSchedulerService:
         except Exception as exc:
             flatten_all = {"error": repr(exc), "status": "FLATTEN_ALL_DEGRADED"}
 
+        # TARGETED orphan flatten (GATED by GREYLINE_ORPHAN_FLATTEN=<comma symbols>): close ONLY the named
+        # positions — orphans left UNMANAGED when their sleeve was disarmed (e.g. the low_vol/xs names when
+        # the book narrowed to trend-only). Reuses FlattenAll's marketable-close safety on just those
+        # tickers; trend / carry / everything else is untouched. Sells-only close = allowed under the master
+        # kill switch. Market-closed short-circuits before any broker read; self-terminating once flat.
+        try:
+            _orphans = [s.strip().upper()
+                        for s in (_getenv("GREYLINE_ORPHAN_FLATTEN", "") or "").split(",") if s.strip()]
+            if _orphans:
+                from app.services.flatten_all_positions_engine import FlattenAllPositionsEngine
+                orphan_flatten = FlattenAllPositionsEngine().run_cycle(
+                    is_regular_session=(market_hours.get("is_regular_session") is True),
+                    only_symbols=_orphans)
+            else:
+                orphan_flatten = {"status": "ORPHAN_FLATTEN_UNSET"}
+        except Exception as exc:
+            orphan_flatten = {"error": repr(exc), "status": "ORPHAN_FLATTEN_DEGRADED"}
+
         # Volatility term-structure CARRY sleeve (GATED OFF by GREYLINE_VOL_CARRY_ENABLED). The one
         # backtestable variance-premium edge: SHORT vol (long SVXY, defined-risk) ONLY in contango,
         # FLAT in backwardation, vol-targeted small. Rebalances the sleeve toward its target each
@@ -1294,6 +1312,7 @@ class BackgroundSchedulerService:
                 "trend_assets_in_uptrend": trend_following.get("assets_in_uptrend"),
                 "tbill_sweep_status": tbill_sweep.get("status"),
                 "flatten_all_status": flatten_all.get("status"),
+                "orphan_flatten_status": orphan_flatten.get("status"),
                 "risk_governor_daily_pnl": risk_governor.get("daily_pnl"),
                 "risk_governor_deployed_pct": risk_governor.get("deployed_pct"),
                 "risk_governor_alerts": risk_governor.get("alerts_fired"),

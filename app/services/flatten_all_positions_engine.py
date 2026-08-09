@@ -93,8 +93,11 @@ class FlattenAllPositionsEngine:
 
     # ---- main cycle ----------------------------------------------------------------------------
 
-    def run_cycle(self, is_regular_session=True, dry_run=False):
-        if not self.enabled():
+    def run_cycle(self, is_regular_session=True, dry_run=False, only_symbols=None):
+        # TARGETED mode: only_symbols flattens ONLY those tickers (e.g. orphaned positions from a disarmed
+        # sleeve), leaving every other position untouched. The caller owns the gate in targeted mode (the
+        # scheduler checks GREYLINE_ORPHAN_FLATTEN); the GREYLINE_FLATTEN_ALL_ENABLED arm is for whole-book.
+        if only_symbols is None and not self.enabled():
             return {"status": "FLATTEN_ALL_DISABLED", "held": 0, "actions": []}
         if not is_regular_session:
             return {"status": "FLATTEN_ALL_MARKET_CLOSED", "held": 0, "actions": [],
@@ -106,9 +109,13 @@ class FlattenAllPositionsEngine:
         quotes = TradeStationQuoteLiveEngine()
 
         held = self._positions(book)
+        if only_symbols is not None:
+            allow = {str(s).upper().strip() for s in only_symbols}
+            held = [(sym, qty) for (sym, qty) in held if str(sym).upper().strip() in allow]
         if not held:
             return {"status": "FLATTEN_ALL_FLAT", "held": 0, "actions": [],
-                    "note": "no positions held — book is flat"}
+                    "note": ("targeted symbols already flat" if only_symbols is not None
+                             else "no positions held — book is flat")}
 
         # shorts first (buy-to-close removes naked-risk), then longs
         held.sort(key=lambda sq: 0 if sq[1] < 0 else 1)

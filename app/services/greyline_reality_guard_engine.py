@@ -280,6 +280,35 @@ class GreyLineRealityGuardEngine:
             return {"id": "DATA_SOURCE_REAL", "severity": "warning", "ok": True,
                     "detail": f"data-source check skipped: {str(e)[:100]}"}
 
+    def _active_universe(self):
+        """Symbols whose bar quality actually matters RIGHT NOW: what GreyLine holds/manages plus the
+        trading universe of each ARMED sleeve. A corrupt/mismatched bar in a symbol no armed sleeve trades
+        and we don't hold is real but INERT — it can't poison a live signal, ATR or stop — so it should NOT
+        raise the banner. Returns None to mean "don't scope, check everything" (when momentum is armed its
+        screener universe is broad enough that effectively everything is signal-relevant). Reads only local
+        ledgers + static sleeve baskets — never the broker (this runs on every dashboard refresh)."""
+        from os import getenv
+        if (getenv("GREYLINE_MOMENTUM_ENABLED", "true") or "").strip().lower() == "true":
+            return None
+        active = {str(s).upper() for s in self.managed_symbols()}
+        for flag, module, cls, attr in (
+                ("GREYLINE_TREND_ENABLED", "trend_following_engine", "TrendFollowingEngine", "BASKET"),
+                ("GREYLINE_LOW_VOL_ENABLED", "low_volatility_engine", "LowVolatilityEngine", "BASKET"),
+                ("XSMOM_ENABLED", "cross_sectional_momentum_engine", "CrossSectionalMomentumEngine", "UNIVERSE")):
+            if (getenv(flag, "") or "").strip().lower() == "true":
+                try:
+                    import importlib
+                    m = importlib.import_module("app.services." + module)
+                    active |= {str(s).upper() for s in getattr(getattr(m, cls), attr)}
+                except Exception:
+                    pass
+        return active
+
+    @staticmethod
+    def _scope_symbols(raw):
+        """Flatten a scan issue's `symbol` field (may be a comma-joined DUP list) to individual tickers."""
+        return {s.strip().upper() for s in str(raw or "").split(",") if s.strip()}
+
     def _check_price_bars(self):
         """The price bars every signal/ATR/stop is computed from must not be corrupt.
 
@@ -306,6 +335,23 @@ class GreyLineRealityGuardEngine:
         if crit == 0:
             return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
                     "detail": f"{scan.get('symbols_checked')} symbols clean ({scan.get('mode')}{age})"}
+        # SCOPE to the active universe: a corrupt bar in a symbol no armed sleeve trades and we don't hold
+        # is real but INERT (it can't poison a live signal). Alarm only on corruption that's actually live.
+        from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as _P
+        active = self._active_universe()
+        if active is not None:
+            corrupt_syms = set()
+            for i in (scan.get("issues") or []):
+                if i.get("type") in _P.CRITICAL_TYPES:
+                    corrupt_syms |= self._scope_symbols(i.get("symbol"))
+            live_bad = sorted(corrupt_syms & active)
+            if not live_bad:
+                return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
+                        "detail": (f"{crit} corrupt bar(s) in {scan.get('symbols_checked')} symbols, but NONE "
+                                   f"in the active universe (untraded names — inert){age}")}
+            return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": False,
+                    "detail": (f"{len(live_bad)} corrupt bar(s) in ACTIVELY-TRADED symbols: "
+                               f"{', '.join(live_bad[:8])} — signals/ATR/stops at risk{age}")}
         return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": False,
                 "detail": (f"{crit} corrupt bar(s) across {scan.get('symbols_checked')} symbols "
                            f"— {scan.get('counts')}{age}")}
@@ -343,7 +389,19 @@ class GreyLineRealityGuardEngine:
             return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
                     "detail": (f"{run.get('matched')}/{run.get('checked')} symbols match "
                                f"TradeStation barcharts{age}")}
-        names = ", ".join(m.get("symbol") for m in (run.get("mismatches") or [])[:5])
+        mism = [m.get("symbol") for m in (run.get("mismatches") or [])]
+        # SCOPE: a mismatch in a symbol no armed sleeve trades and we don't hold poisons no live signal.
+        active = self._active_universe()
+        if active is not None:
+            live_bad = sorted({str(s).upper() for s in mism if s} & active)
+            if not live_bad:
+                return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
+                        "detail": (f"{bad} symbol(s) disagree with TradeStation ({', '.join([s for s in mism if s][:5])}), "
+                                   f"but NONE in the active universe (untraded — inert){age}")}
+            return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": False,
+                    "detail": (f"{len(live_bad)} ACTIVELY-TRADED symbol(s) DISAGREE with TradeStation barcharts"
+                               f"{age}: {', '.join(live_bad[:5])} — signals computed from wrong prices")}
+        names = ", ".join(s for s in mism[:5] if s)
         return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": False,
                 "detail": (f"{bad} symbol(s) DISAGREE with TradeStation barcharts{age}: "
                            f"{names} — signals on these are computed from wrong prices")}

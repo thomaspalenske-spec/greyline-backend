@@ -141,3 +141,68 @@ def test_clean_readout_passes(monkeypatch):
     import app.services.decision_readout_engine as dre
     monkeypatch.setattr(dre.DecisionReadoutEngine, "readout", lambda self, **k: {"degraded_sections": []})
     assert G()._check_readout_integrity()["ok"] is True
+
+
+# ---- PRICE_BARS scoped to the ACTIVE universe (inert corruption in untraded names doesn't alarm) ----
+
+def _scan(issues, symbols_checked=2135):
+    from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as P
+    counts = {}
+    for i in issues:
+        counts[i["type"]] = counts.get(i["type"], 0) + 1
+    crit = sum(counts.get(t, 0) for t in P.CRITICAL_TYPES)
+    return {"critical_count": crit, "counts": counts, "symbols_checked": symbols_checked,
+            "issues": issues, "mode": "FULL", "scanned_at": "2026-08-09T00:00:00"}
+
+
+def test_active_universe_is_none_when_momentum_armed(monkeypatch):
+    monkeypatch.setenv("GREYLINE_MOMENTUM_ENABLED", "true")
+    assert G()._active_universe() is None            # broad screener -> don't scope, check everything
+
+
+def test_price_bars_inert_corruption_does_not_alarm(monkeypatch):
+    from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as P
+    monkeypatch.setattr(P, "last_scan", lambda self: _scan(
+        [{"symbol": "AAAC", "type": "NONPOSITIVE", "date": "d"},
+         {"symbol": "ABI", "type": "OHLC_VIOLATION", "date": "d"}]))
+    monkeypatch.setattr(G, "_active_universe", lambda self: {"QQQM", "IWM", "DBC"})
+    r = G()._check_price_bars()
+    assert r["ok"] is True and "inert" in r["detail"]
+
+
+def test_price_bars_active_corruption_alarms(monkeypatch):
+    from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as P
+    monkeypatch.setattr(P, "last_scan", lambda self: _scan(
+        [{"symbol": "QQQM", "type": "NONPOSITIVE", "date": "d"}]))
+    monkeypatch.setattr(G, "_active_universe", lambda self: {"QQQM", "IWM", "DBC"})
+    r = G()._check_price_bars()
+    assert r["ok"] is False and "QQQM" in r["detail"] and "ACTIVELY-TRADED" in r["detail"]
+
+
+def test_price_bars_momentum_armed_checks_everything(monkeypatch):
+    from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as P
+    monkeypatch.setattr(P, "last_scan", lambda self: _scan(
+        [{"symbol": "AAAC", "type": "NONPOSITIVE", "date": "d"}]))
+    monkeypatch.setattr(G, "_active_universe", lambda self: None)   # momentum armed -> no scope
+    r = G()._check_price_bars()
+    assert r["ok"] is False                          # any critical corruption still alarms
+
+
+def test_match_source_inert_mismatch_does_not_alarm(monkeypatch):
+    from app.services.price_bar_cross_source_engine import PriceBarCrossSourceEngine as X
+    monkeypatch.setattr(X, "last_run", lambda self: {
+        "mismatched": 1, "mismatches": [{"symbol": "BAOS"}], "matched": 39, "checked": 40,
+        "ok": False, "timestamp": "2026-08-09T00:00:00"})
+    monkeypatch.setattr(G, "_active_universe", lambda self: {"QQQM", "IWM"})
+    r = G()._check_price_bars_match_source()
+    assert r["ok"] is True and "inert" in r["detail"]
+
+
+def test_match_source_active_mismatch_alarms(monkeypatch):
+    from app.services.price_bar_cross_source_engine import PriceBarCrossSourceEngine as X
+    monkeypatch.setattr(X, "last_run", lambda self: {
+        "mismatched": 1, "mismatches": [{"symbol": "QQQM"}], "matched": 39, "checked": 40,
+        "ok": False, "timestamp": "2026-08-09T00:00:00"})
+    monkeypatch.setattr(G, "_active_universe", lambda self: {"QQQM", "IWM"})
+    r = G()._check_price_bars_match_source()
+    assert r["ok"] is False and "QQQM" in r["detail"]
