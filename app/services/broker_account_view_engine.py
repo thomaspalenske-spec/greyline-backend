@@ -52,6 +52,12 @@ class BrokerAccountViewEngine:
             if (bal.get("http_status") == 200 and pos.get("http_status") == 200
                     and ords.get("http_status") == 200 and bal.get("response_json") and _b):
                 break                                     # got a real read — stop retrying
+            # A 429 means "you are calling too often" — RETRYING AMPLIFIES it: 4 rapid calls into a rate
+            # limit make it worse and hold the throttle open longer (and TradeStation has flagged us for
+            # excessive calls before). Respect it: stop immediately and let the window reset. The read
+            # fails-closed this cycle (honest last-known-good, not fabricated); the next cycle retries fresh.
+            if any((r or {}).get("http_status") == 429 for r in (bal, pos, ords)):
+                break
             if _attempt < 3:
                 _t.sleep(1.5)                             # brief backoff, then try to catch a clear window
 
@@ -146,7 +152,7 @@ class BrokerAccountViewEngine:
         # When degraded, capture WHY (the actual HTTP statuses) so the guard/banner can name the real cause
         # — "TradeStation HTTP 500 (broker-side outage)" vs a local transient — instead of always guessing
         # "busy scheduler cycle". broker_side is True on any 5xx (their server), else it's likely transient.
-        read_detail, broker_side = None, False
+        read_detail, broker_side, rate_limited = None, False, False
         if not reads_ok:
             parts = []
             for name, resp in (("balances", bal), ("positions", pos), ("orders", ords)):
@@ -155,15 +161,18 @@ class BrokerAccountViewEngine:
                     parts.append(f"{name} HTTP {hs if hs is not None else 'no-response'}")
                     if isinstance(hs, int) and 500 <= hs <= 599:
                         broker_side = True
+                    if hs == 429:
+                        rate_limited = True           # throttled — self-clears; we back off, don't retry
             if not parts and not balances_ok:
                 parts.append("balances body empty/unparseable")
-            read_detail = ", ".join(parts) or "unknown"
+            read_detail = (", ".join(parts) or "unknown") + (" (rate-limited — backing off)" if rate_limited else "")
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "reads_ok": reads_ok,
             "read_detail": read_detail,          # e.g. "positions HTTP 500, balances HTTP 500" when degraded
             "read_broker_side": broker_side,     # True -> TradeStation server error (5xx), not a local blip
+            "read_rate_limited": rate_limited,   # True -> HTTP 429 throttle; we back off (never retry into it)
             "account_mode": src.get("mode"),
             "account_id": src.get("account_id"),
             "account_label": src.get("label"),
