@@ -244,6 +244,11 @@ class BackgroundSchedulerService:
             prev_failures = cls._consecutive_failures
             cls._success_count += 1
             cls._consecutive_failures = 0
+            # last_error is "the error from the LAST cycle" — clear it on success so a long-since-FIXED
+            # failure (e.g. the 2026-07-26 MarketHoursEngine bug) stops rendering as a live problem in
+            # /background-scheduler/status and the reality guard weeks after it was resolved.
+            cls._last_error = None
+            cls._last_error_at = None
             if prev_failures >= cls._ALERT_AFTER_FAILURES:
                 cls._alert_cycle_recovered(prev_failures)      # tell the operator it's back
             cls._watch_cycle_duration(duration_ms)             # page if the cycle ran pathologically long

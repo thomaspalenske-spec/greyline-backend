@@ -970,12 +970,19 @@ class GreyLineRealityGuardEngine:
         decision caches it doesn't."""
         import json
         import time
+        from os import getenv
         from pathlib import Path
 
+        caches = [("optionable-universe", "app/data/research/optionable_universe.json", 4 * 86400)]
+        # The best-condors cache only drives LIVE decisions while the condor/VRP sleeve is active. It was
+        # RETIRED 2026-08-04 (GREYLINE_VRP_SHORT_PREMIUM_ENABLED=false), so nothing refreshes it and its
+        # staleness is EXPECTED — not a wedged scheduler. Only check it when the sleeve is actually on, else
+        # it cries wolf ("scheduler may be wedged") on a cache no live path reads.
+        if (getenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "") or "").strip().lower() == "true":
+            caches.insert(0, ("best-condors", "app/data/condor_shadow/best_condors.json", 24 * 3600))
+
         stale = []
-        for label, path, max_age_s in (
-                ("best-condors", "app/data/condor_shadow/best_condors.json", 24 * 3600),
-                ("optionable-universe", "app/data/research/optionable_universe.json", 4 * 86400)):
+        for label, path, max_age_s in caches:
             try:
                 d = json.loads(Path(path).read_text())
                 age = time.time() - float(d.get("computed_epoch") or 0)
@@ -984,7 +991,8 @@ class GreyLineRealityGuardEngine:
             except Exception:
                 pass                                     # missing cache is handled by its own warming state
         return {"id": "DECISION_CACHES_FRESH", "severity": "warning", "ok": not stale,
-                "detail": ("condor + universe decision caches are current" if not stale
+                "detail": (f"{len(caches)} live decision cache(s) current ({', '.join(l for l, _, _ in caches)})"
+                           if not stale
                            else "STALE decision cache(s) rendered as live — scheduler may be wedged: "
                                 + ", ".join(stale))}
 

@@ -30,6 +30,17 @@ def test_no_alert_below_threshold(monkeypatch):
     assert fired == []
 
 
+def test_success_clears_stale_last_error(monkeypatch):
+    # last_error must reflect the LAST cycle: a COMPLETE cycle clears a prior failure so a long-since-fixed
+    # error (the 2026-07-26 MarketHoursEngine bug) stops rendering as a live problem weeks later.
+    _reset(monkeypatch)
+    monkeypatch.setattr(S, "_alert_cycle_failures", classmethod(lambda cls, n, e: None))
+    S._record_result("FAILED", NOW, error="boom")
+    assert S._last_error == "boom" and S._last_error_at is not None
+    S._record_result("COMPLETE", NOW)
+    assert S._last_error is None and S._last_error_at is None
+
+
 def test_alert_at_threshold_and_keeps_calling(monkeypatch):
     _reset(monkeypatch)
     fired = []

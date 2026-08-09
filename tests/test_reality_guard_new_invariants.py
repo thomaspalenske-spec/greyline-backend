@@ -66,10 +66,21 @@ def _write_cache(rel, epoch):
 
 def test_stale_condor_cache_trips_the_warning(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "true")   # condor sleeve ACTIVE -> cache matters
     _write_cache("app/data/condor_shadow/best_condors.json", time.time() - 48 * 3600)   # 2 days old
     _write_cache("app/data/research/optionable_universe.json", time.time())
     r = G()._check_decision_caches_fresh()
     assert r["ok"] is False and "best-condors" in r["detail"]
+
+
+def test_stale_condor_cache_ignored_when_sleeve_retired(tmp_path, monkeypatch):
+    # condor/VRP sleeve RETIRED -> nothing refreshes best-condors, so its staleness is EXPECTED, not a wedge
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "false")
+    _write_cache("app/data/condor_shadow/best_condors.json", time.time() - 105 * 3600)  # very stale
+    _write_cache("app/data/research/optionable_universe.json", time.time())
+    r = G()._check_decision_caches_fresh()
+    assert r["ok"] is True and "best-condors" not in r["detail"]
 
 
 def test_fresh_caches_pass(tmp_path, monkeypatch):
