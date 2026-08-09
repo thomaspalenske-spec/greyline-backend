@@ -18,6 +18,7 @@ engines read, toward what the court already measured. Right now (all sleeves bas
 is a complete no-op.
 """
 
+import hashlib
 import json
 from datetime import datetime
 from os import getenv
@@ -106,28 +107,57 @@ class SleeveBudgetAutoApplyEngine:
                 new_overrides[m["sleeve"]] = m["to_pct"]
             clamped = True
 
+        token = self._plan_token(new_overrides, moves, rec.get("basis"))
         return {"moves": moves, "skipped": skipped, "new_overrides": new_overrides,
                 "resulting_total_pct": round(sum(
                     new_overrides.get(s, SleeveCapitalBudgetEngine.pct(s))
                     for s in SleeveCapitalBudgetEngine.DEFAULT_PCT), 2),
                 "book_clamped_to_100": clamped, "allocator_basis": rec.get("basis"),
-                "enabled": self.enabled()}
+                "plan_token": token, "enabled": self.enabled()}
 
-    def apply(self, force=False):
-        """Write the stepped override file (evidence-driven only). GATED: no-op unless enabled (or force
-        for an operator route). Dedupes an identical override map. Never places an order. Reversible via
-        revert()."""
-        if not (self.enabled() or force):
-            return {"status": "AUTOAPPLY_DISABLED", "applied": False,
-                    "note": "GREYLINE_ALLOC_AUTOAPPLY_ENABLED is not true"}
+    @staticmethod
+    def _plan_token(new_overrides, moves, allocator_basis):
+        """A stable fingerprint of THE MATERIAL DECISION (which sleeves move to which %, and on what
+        allocator basis) — deterministic, no timestamps. An operator approval carries this token; apply()
+        refuses if the live plan's token no longer matches, so evidence that shifted between review and
+        click can't cause a DIFFERENT allocation to be applied than the one the operator saw."""
+        material = {
+            "new_overrides": {str(k): round(float(v), 2) for k, v in sorted(new_overrides.items())},
+            "moves": sorted((str(m["sleeve"]), round(float(m["to_pct"]), 2)) for m in moves),
+            "allocator_basis": str(allocator_basis or ""),
+        }
+        blob = json.dumps(material, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+    def apply(self, force=False, plan_token=None):
+        """Write the stepped override file (evidence-driven only). GATED: no-op unless enabled, or force
+        (deliberate operator apply), or a matching plan_token (operator APPROVED this exact plan). Dedupes
+        an identical override map. Never places an order. Reversible via revert().
+
+        plan_token binds the approval to what was reviewed: if it doesn't match the live plan (evidence
+        shifted between review and click), apply REFUSES rather than silently applying a different
+        allocation — the discipline a capital-moving action needs."""
         p = self.plan()
+        approved = False
+        if plan_token is not None:
+            if plan_token != p["plan_token"]:
+                return {"status": "AUTOAPPLY_PLAN_CHANGED", "applied": False,
+                        "reason": ("the plan changed since you reviewed it — re-review "
+                                   "/sleeve-budget-autoapply and re-approve the current plan"),
+                        "reviewed_token": plan_token, "current_token": p["plan_token"], "plan": p}
+            approved = True                        # a matching token IS the operator's approval of this plan
+        if not (self.enabled() or force or approved):
+            return {"status": "AUTOAPPLY_DISABLED", "applied": False,
+                    "note": "GREYLINE_ALLOC_AUTOAPPLY_ENABLED is not true (pass a matching plan_token to approve)"}
         if not p["moves"]:
             return {"status": "AUTOAPPLY_NO_MOVES", "applied": False, "plan": p}
         existing = self._existing_overrides()
         if existing == {k: v for k, v in p["new_overrides"].items()}:
             return {"status": "AUTOAPPLY_UNCHANGED", "applied": False, "plan": p}
-        payload = {"applied_at": datetime.utcnow().isoformat(), "source": "auto_apply",
-                   "pct": p["new_overrides"], "moves": p["moves"]}
+        source = ("operator_approved" if approved
+                  else "operator_forced" if (force and not self.enabled()) else "auto_apply")
+        payload = {"applied_at": datetime.utcnow().isoformat(), "source": source,
+                   "plan_token": p["plan_token"], "pct": p["new_overrides"], "moves": p["moves"]}
         try:
             self.OVERRIDE_FILE.parent.mkdir(parents=True, exist_ok=True)
             self.OVERRIDE_FILE.write_text(json.dumps(payload, indent=2))
@@ -135,7 +165,8 @@ class SleeveBudgetAutoApplyEngine:
                 f.write(json.dumps(payload) + "\n")
         except Exception as e:
             return {"status": "AUTOAPPLY_WRITE_FAILED", "applied": False, "error": str(e)[:120], "plan": p}
-        return {"status": "AUTOAPPLY_APPLIED", "applied": True, "moves": p["moves"],
+        return {"status": "AUTOAPPLY_APPLIED", "applied": True, "source": source,
+                "plan_token": p["plan_token"], "moves": p["moves"],
                 "new_overrides": p["new_overrides"], "resulting_total_pct": p["resulting_total_pct"]}
 
     def revert(self):

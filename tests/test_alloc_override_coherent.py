@@ -35,10 +35,11 @@ def test_no_override_file_is_clean(monkeypatch, tmp_path):
 
 
 def test_coherent_overrides_pass(monkeypatch, tmp_path):
-    # vrp 15->13, earnings 12->10: book total 25+28+20+13+10+0 = 96 <= 100, both have a recorded apply
-    _files(monkeypatch, tmp_path, overrides={"vrp": 13.0, "earnings": 10.0})
+    # trend 28->24, momentum 25->22 (moved DOWN so the book stays <= 100 under the live sleeve set);
+    # both have a recorded apply. (Not the exact total — that shifts as the default sleeve set evolves.)
+    _files(monkeypatch, tmp_path, overrides={"trend": 24.0, "momentum": 22.0})
     r = G()._check_alloc_override_coherent()
-    assert r["ok"] is True and "coherent" in r["detail"] and "96" in r["detail"]
+    assert r["ok"] is True and "coherent" in r["detail"]
 
 
 def test_out_of_range_pct_flags(monkeypatch, tmp_path):
@@ -68,8 +69,8 @@ def test_missing_history_is_unverified(monkeypatch, tmp_path):
 
 
 def test_env_pin_shadow_is_noted_not_failed(monkeypatch, tmp_path):
-    _files(monkeypatch, tmp_path, overrides={"vrp": 13.0})
-    monkeypatch.setenv("GREYLINE_VRP_ALLOC_PCT", "13")     # env pin shadows the override; keeps book <=100
+    _files(monkeypatch, tmp_path, overrides={"trend": 24.0})
+    monkeypatch.setenv("GREYLINE_TREND_ALLOC_PCT", "24")   # env pin shadows the override; keeps book <=100
     r = G()._check_alloc_override_coherent()
     assert r["ok"] is True and "shadowed by an env pin" in r["detail"]
 

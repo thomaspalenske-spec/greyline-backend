@@ -16,10 +16,15 @@ def sleeve_budget_autoapply_status():
 
 
 @router.post("/sleeve-budget-autoapply/apply")
-def sleeve_budget_autoapply_apply(force: bool = False):
-    """Apply one capped step toward the measured allocation. No-op unless GREYLINE_ALLOC_AUTOAPPLY_ENABLED
-    (or ?force=true for a deliberate operator apply). Writes the reversible override file; places no order."""
-    return SleeveBudgetAutoApplyEngine().apply(force=force)
+def sleeve_budget_autoapply_apply(force: bool = False, plan_token: str = None):
+    """Apply one capped step toward the measured allocation. Writes the reversible override file; places no
+    order. Three ways to authorize:
+      * ?plan_token=<token from GET> — operator-APPROVED: applies ONLY if the token still matches the live
+        plan; if evidence shifted since you reviewed it, it REFUSES (AUTOAPPLY_PLAN_CHANGED) so exactly the
+        reviewed allocation is what applies. This is the recommended operator flow.
+      * ?force=true — deliberate operator apply of whatever the plan is right now (no review binding).
+      * neither — no-op unless GREYLINE_ALLOC_AUTOAPPLY_ENABLED (the scheduler's auto path)."""
+    return SleeveBudgetAutoApplyEngine().apply(force=force, plan_token=plan_token)
 
 
 @router.post("/sleeve-budget-autoapply/revert")
