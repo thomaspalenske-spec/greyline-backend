@@ -682,7 +682,7 @@ th {
 
     <section class="grid metrics">
       <div class="card"><div class="label">Account Equity</div><div class="value" id="equity">$--</div></div>
-      <div class="card"><div class="label">Cash On Hand</div><div class="value" id="cash">$--</div></div>
+      <div class="card"><div class="label">Cash On Hand</div><div class="value" id="cash">$--</div><div class="sub" id="cash_sub"></div></div>
       <div class="card"><div class="label">Buying Power</div><div class="value" id="buying_power">$--</div></div>
       <div class="card"><div class="label">Deployed Capital</div><div class="value" id="deployed">$--</div><div class="sub" id="deployed_pct">--</div></div>
       <div class="card"><div class="label">Unrealized P/L</div><div class="value" id="unrealized">$--</div></div>
@@ -1516,6 +1516,12 @@ async function refreshAll() {
     const M = (v) => unavailable ? "—" : (fmtMoney(v) + st);
     setText("equity", M(src.total_equity));
     setText("cash", M(src.cash_on_hand));
+    // "Cash On Hand" counts SGOV as a cash-equivalent, so surface how much of it is actually PARKED in
+    // T-bills vs genuinely free — otherwise the swept cash looks idle. (Answers "why isn't cash in Treasury".)
+    setText("cash_sub", (unavailable || src.tbill_sweep_value == null) ? "" :
+      (src.tbill_sweep_value > 0
+        ? `${fmtMoney(src.tbill_sweep_value)} parked in SGOV · ${fmtMoney((src.cash_on_hand || 0) - src.tbill_sweep_value)} free`
+        : "all free (T-bill sweep idle)"));
     setText("buying_power", M(src.buying_power));
     setText("deployed", M(src.deployed_capital));
     setText("deployed_pct", unavailable ? "—" :
