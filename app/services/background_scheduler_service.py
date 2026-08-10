@@ -800,6 +800,19 @@ class BackgroundSchedulerService:
             optionable_universe = {"error": repr(exc), "status": "OPTIONABLE_UNIVERSE_DEGRADED"}
         cls._ckpt("optionable_universe")
 
+        # MOMENTUM SCAN WARM: once/day live universe scan so the equity shadow can open weekly cohorts on
+        # a FRESH live signal (the shadow never triggers this heavy ~5-min TS fetch itself). Same heavy-
+        # window gate as the universe/condor refreshes → runs overnight/post-close. Gated OFF by default.
+        try:
+            if _heavy_blocked:
+                momentum_scan_warm = {"status": "MOM_SCAN_WARM_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.momentum_scan_warm_engine import MomentumScanWarmEngine
+                momentum_scan_warm = MomentumScanWarmEngine().warm_if_due(market_hours)
+        except Exception as exc:
+            momentum_scan_warm = {"error": repr(exc), "status": "MOM_SCAN_WARM_DEGRADED"}
+        cls._ckpt("momentum_scan_warm")
+
         # SECTOR MAP: keep the concentration-cap's sector buckets current with the drifting traded
         # universe — same once-per-day post-close gate as the optionable universe. Stocks are data-derived
         # from UW; ETFs stay in the exposure engine's deliberate literal map. Unmapped traded names are

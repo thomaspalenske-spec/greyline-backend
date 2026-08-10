@@ -173,6 +173,14 @@ def top_candidates(force: bool = False, top_n: int = 5):
     return _attach_exec_status(result)
 
 
+@router.get("/momentum-scan-warm")
+def momentum_scan_warm():
+    """Status of the once/day live universe scan that keeps the momentum shadow able to open weekly cohorts
+    on fresh data (GREYLINE_MOMENTUM_SCAN_WARM). Read-only — the scheduler runs the warm off-window."""
+    from app.services.momentum_scan_warm_engine import MomentumScanWarmEngine
+    return MomentumScanWarmEngine().status()
+
+
 @router.get("/momentum-equity-shadow")
 def momentum_equity_shadow():
     """Zero-capital forward-test of the EQUITY momentum-reversal factor: a weekly long/short basket opened

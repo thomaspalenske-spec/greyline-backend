@@ -221,12 +221,20 @@ class MomentumReversalShadowEngine:
             else:
                 picks = [t for t in targets if self._f2(t.get("last_close")) and self._f2(t.get("last_close")) > 0]
                 if picks:
+                    # ENTER at the LIVE price, not the scan's last_close: the scan may have run overnight, so
+                    # re-quote the picks now (cheap batch, 60s cache) and use the live quote as entry when
+                    # available (fall back to the scan close). Keeps entries truly current, never day-stale.
+                    live = self._live_prices([t["symbol"] for t in picks])
+                    legs = []
+                    for t in picks:
+                        sym = str(t["symbol"]).upper()
+                        entry = live.get(sym) or float(t["last_close"])
+                        legs.append({"symbol": t["symbol"], "side": t["side"],
+                                     "entry_close": round(float(entry), 4),
+                                     "entry_live": sym in live, "conviction": t.get("conviction")})
                     opened = {
                         "opened": self._today().isoformat(), "opened_at": datetime.utcnow().isoformat(),
-                        "top_n": top_n, "source": source,
-                        "legs": [{"symbol": t["symbol"], "side": t["side"],
-                                  "entry_close": round(float(t["last_close"]), 4),
-                                  "conviction": t.get("conviction")} for t in picks],
+                        "top_n": top_n, "source": source, "legs": legs,
                     }
                     still_open.append(opened)
 
