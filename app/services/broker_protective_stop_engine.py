@@ -386,12 +386,16 @@ class BrokerProtectiveStopEngine:
             if count == 0:
                 # GENUINELY UNPROTECTED — no resting stop AT ALL (count, not qty: a stop whose qty this read
                 # can't parse still COUNTS as protection; placing on qty==0 while a stop exists is the exact
-                # double-sell/stacking bug). ANTI-STACK guard: if confirmed covered <45m ago but none seen
-                # now, the orders read is almost certainly degraded/partial — skip rather than stack.
+                # double-sell/stacking bug). ANTI-STACK guard: this whole loop only runs on a NON-degraded read
+                # (the cycle fails closed above otherwise), so a count==0 here is probably real — but a single
+                # cycle can still individually flap on the orders leg. Skip ONE cycle when we confirmed coverage
+                # in the last ~6 min; if the stop is still missing next cycle it's a REAL naked (e.g. a cancel-
+                # replace whose replace failed, as DBC hit on 2026-08-10) and we PLACE. A long window (45m) would
+                # strand such a naked — the anti-stack cure must never outlast the double-stop disease it prevents.
                 prev = cov.get(sym.upper())
-                if prev and int(prev.get("qty", 0)) > 0 and self._recent(prev.get("at"), 45):
-                    skipped.append({"symbol": sym, "reason": "no stop seen but confirmed covered <45m ago — "
-                                    "suspect degraded orders read, NOT placing (anti-stack)"})
+                if prev and int(prev.get("qty", 0)) > 0 and self._recent(prev.get("at"), 6):
+                    skipped.append({"symbol": sym, "reason": "no stop seen but confirmed covered <6m ago — "
+                                    "one-cycle anti-stack grace (re-places next cycle if still missing)"})
                     continue
                 if dry_run:
                     placed.append({"symbol": sym, "qty": qty, "stop": stop_px, "action": "place", "dry_run": True})

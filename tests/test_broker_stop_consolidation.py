@@ -5,7 +5,7 @@ No network — the booking engine is faked; no real orders.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine as B
 
@@ -83,6 +83,18 @@ def test_anti_stack_skips_when_read_shows_zero_but_recently_covered(monkeypatch,
     res = B().ensure_stops()
     assert len(_dbc_stops(book)) == 0                        # did NOT place (no stack)
     assert any("anti-stack" in str(s.get("reason", "")) for s in res.get("skipped", []))
+
+
+def test_stale_coverage_self_heals_a_genuine_naked(monkeypatch, tmp_path):
+    # The DBC 2026-08-10 failure mode: a cancel-replace cancelled the stops but the replace never landed,
+    # leaving the position NAKED while the coverage marker still said 'covered'. The anti-stack grace must
+    # expire (~6 min) so the very next cycle RE-PLACES rather than stranding the naked behind a stale marker.
+    stale = (datetime.utcnow() - timedelta(minutes=30)).isoformat()
+    (tmp_path / "cov.json").write_text(json.dumps({"DBC": {"qty": 27, "at": stale}}))
+    book = _Book([_pos("DBC", 27)], [])                     # held, zero stops, coverage marker is STALE
+    _wire(monkeypatch, tmp_path, book)
+    B().ensure_stops()
+    assert len(_dbc_stops(book)) == 1                        # re-placed — not stranded behind the old marker
 
 
 def test_first_placement_still_happens_without_prior_coverage(monkeypatch, tmp_path):
