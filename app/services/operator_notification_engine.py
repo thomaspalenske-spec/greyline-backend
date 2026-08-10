@@ -13,6 +13,37 @@ class OperatorNotificationEngine:
     def __init__(self):
         self.ledger_file = Path("app/data/operator_notifications/operator_notifications.jsonl")
         self.ledger_file.parent.mkdir(parents=True, exist_ok=True)
+        self.snooze_file = self.ledger_file.parent / "snoozed_event_types.json"
+
+    # ---- snooze: an acknowledged, still-true condition should not immediately re-nag ---------------
+    def _snoozes(self):
+        try:
+            return json.loads(self.snooze_file.read_text())
+        except Exception:
+            return {}
+
+    def _save_snoozes(self, d):
+        try:
+            self.snooze_file.write_text(json.dumps(d, indent=2))
+        except Exception:
+            pass
+
+    def _is_snoozed(self, event_type):
+        until = self._snoozes().get(str(event_type))
+        if not until:
+            return False
+        try:
+            return datetime.utcnow() < parse_utc(until)
+        except Exception:
+            return False
+
+    def snooze(self, event_type, hours):
+        """Quiet one event_type for `hours` — the operator acknowledged it and doesn't want it re-nagging
+        while it's still true. Only THIS type is affected; it re-surfaces when the snooze lapses."""
+        d = self._snoozes()
+        d[str(event_type)] = (datetime.utcnow() + timedelta(hours=float(hours))).isoformat()
+        self._save_snoozes(d)
+        return {"event_type": event_type, "snoozed_until": d[str(event_type)]}
 
     def _read(self):
         if not self.ledger_file.exists():
@@ -33,6 +64,12 @@ class OperatorNotificationEngine:
         )
 
     def record(self, event_type, title, message, severity="INFO", source="GREYLINE", payload=None):
+        # SNOOZED: the operator already acknowledged this alert type and asked for quiet. Skip re-recording
+        # (and re-paging) an already-known, still-true condition until the snooze lapses — the live state is
+        # still visible on the dashboard (exposure gate / reality guard), so nothing is hidden.
+        if self._is_snoozed(event_type):
+            return {"notification_recorded": False, "event_type": event_type,
+                    "status": "OPERATOR_NOTIFICATION_SNOOZED"}
         payload = payload or {}
         notification_id = f"{event_type}-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
 
@@ -134,11 +171,12 @@ class OperatorNotificationEngine:
             "status": "OPERATOR_NOTIFICATION_ACKNOWLEDGED" if matched else "OPERATOR_NOTIFICATION_NOT_FOUND",
         }
 
-    def acknowledge_all(self):
+    def acknowledge_all(self, snooze_hours=None):
         rows = self._read()
         now = datetime.utcnow().isoformat()
         previous_unread_count = 0
         acknowledged_count = 0
+        acked_types = set()
 
         for r in rows:
             if r.get("acknowledged") is not True:
@@ -146,9 +184,23 @@ class OperatorNotificationEngine:
                 r["acknowledged"] = True
                 r["acknowledged_at"] = now
                 acknowledged_count += 1
+                if r.get("event_type"):
+                    acked_types.add(str(r.get("event_type")))
 
         if acknowledged_count:
             self._write(rows)
+
+        # Optionally SNOOZE every acknowledged type so a still-true, already-seen condition (e.g. a real
+        # over-deployment being resolved at the next open) doesn't immediately re-nag. Each re-surfaces
+        # when the snooze lapses; a NEW/different alert type is never snoozed.
+        snoozed = []
+        if snooze_hours and acked_types:
+            d = self._snoozes()
+            until = (datetime.utcnow() + timedelta(hours=float(snooze_hours))).isoformat()
+            for et in acked_types:
+                d[et] = until
+                snoozed.append(et)
+            self._save_snoozes(d)
 
         remaining_unread_count = len([r for r in rows if r.get("acknowledged") is not True])
 
@@ -158,6 +210,8 @@ class OperatorNotificationEngine:
             "previous_unread_count": previous_unread_count,
             "acknowledged_count": acknowledged_count,
             "remaining_unread_count": remaining_unread_count,
+            "snoozed_event_types": sorted(snoozed),
+            "snooze_hours": snooze_hours,
             "status": "OPERATOR_NOTIFICATIONS_ACKNOWLEDGED_ALL",
         }
 
