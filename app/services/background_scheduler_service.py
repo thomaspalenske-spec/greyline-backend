@@ -856,6 +856,17 @@ class BackgroundSchedulerService:
                 xs_momentum_shadow = CrossSectionalMomentumShadowEngine().mark()
         except Exception as exc:
             xs_momentum_shadow = {"error": repr(exc), "status": "XSMOM_SHADOW_DEGRADED"}
+        # MOMENTUM-REVERSAL EQUITY shadow — measure the true (un-survivorship-biased) equity factor edge on
+        # paper (NO orders, NO budget) while the sleeve is parked, so we learn if it survives live before
+        # committing capital. Weekly non-overlapping cohorts on settled bars. /momentum-equity-shadow.
+        try:
+            if _heavy_blocked:
+                momentum_equity_shadow = {"status": "MOM_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.momentum_reversal_shadow_engine import MomentumReversalShadowEngine
+                momentum_equity_shadow = MomentumReversalShadowEngine().mark()
+        except Exception as exc:
+            momentum_equity_shadow = {"error": repr(exc), "status": "MOM_SHADOW_DEGRADED"}
         cls._ckpt("mf_shadow")
         cls._ckpt("trend_mf_carry")    # terminal marker kept (≈0 now) so existing consumers of the label still resolve
 

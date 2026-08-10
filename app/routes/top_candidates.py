@@ -171,3 +171,12 @@ def top_candidates(force: bool = False, top_n: int = 5):
     result["cache"] = "MISS_COMPUTED"
     result["momentum_enabled"] = _momentum_enabled()
     return _attach_exec_status(result)
+
+
+@router.get("/momentum-equity-shadow")
+def momentum_equity_shadow():
+    """Zero-capital forward-test of the EQUITY momentum-reversal factor: a weekly long/short basket run
+    on real settled bars (NO orders, NO budget), net of cost, so we learn whether the factor survives
+    live BEFORE committing capital. Verdict mirrors the edge court (accumulating -> measuring)."""
+    from app.services.momentum_reversal_shadow_engine import MomentumReversalShadowEngine
+    return MomentumReversalShadowEngine().report()
