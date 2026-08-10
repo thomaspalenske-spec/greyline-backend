@@ -201,8 +201,22 @@ class UnifiedOpportunityBoardEngine:
             out["note"] = "no buildable VRP condors cached right now — refreshes each scheduler cycle"
         return out
 
+    @staticmethod
+    def _on(flag):
+        from os import getenv
+        return (getenv(flag, "") or "").strip().lower() == "true"
+
     def board(self):
-        groups = [self._momentum_group(), self._earnings_group(), self._vrp_group()]
+        # The condor sleeves (earnings-vol IV-crush, VRP) were RETIRED 2026-08-04 — the SIM can't price
+        # atomic condor closes — so a DISABLED condor sleeve must not paint the board with "OFF, would sell
+        # if armed" candidates for a strategy we've decided not to trade (it reads as still-live). Include a
+        # condor sleeve ONLY when it's actually enabled; re-arming its flag re-surfaces its candidates.
+        # Momentum stays regardless — it's a kill-switch (disarmed-but-viable), not a retired strategy.
+        groups = [self._momentum_group()]
+        if self._on("GREYLINE_EARNINGS_VOL_ENABLED"):
+            groups.append(self._earnings_group())
+        if self._on("GREYLINE_VRP_SHORT_PREMIUM_ENABLED"):
+            groups.append(self._vrp_group())
         total = sum(len(g.get("candidates") or []) for g in groups)
         # A top-level flag for PROGRAMMATIC consumers (the reality guard): a group that threw is already
         # surfaced per-group (its `error` key, rendered red on the card), but nothing could see "a sleeve
