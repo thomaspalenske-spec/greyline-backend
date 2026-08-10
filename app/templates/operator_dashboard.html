@@ -732,6 +732,19 @@ th {
         </div>
       </div>
 
+      <div class="card" id="condor_shadow_card" style="min-width:0;">
+        <div class="section-title">Condor Shadow — VRP vs Earnings edge <span id="cs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Two ZERO-capital forward-tests of the short-premium edge, measured <strong>separately</strong>: the SIM sandbox can't price condors, so this builds + marks the condors each sleeve WOULD open off Unusual Whales (clean greeks + NBBO), <strong>no orders</strong>. Each sleeve needs its min closed count before its verdict is trustworthy. Full detail at <a href="/condor-shadow" style="color:inherit;">/condor-shadow</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Sleeve</th><th>Open</th><th>Closed</th><th>Realized</th><th>Win %</th><th>Verdict</th></tr>
+            </thead>
+            <tbody id="condor_shadow_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="open_equity_positions_card" style="min-width:0;">
         <div class="section-title">Open Equity Positions <span id="oeq_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Every whole-share equity &amp; ETF holding across the sleeves — momentum-reversal names plus the trend / vol-carry / managed-futures / T-bill ETFs. Cost = what we paid (shares × entry); Market Value = shares × current price; P/L is live unrealized (P/L % = return on cost). Stop is the sleeve's dynamic exit; Take Profit is the momentum names' ATR ladder (TP1–3 bank tranches ✓ when reached, TP4 runner trails). Trend / vol-carry / T-bill ETFs exit on signal or rebalance, not a fixed stop/TP.</div>
@@ -1202,6 +1215,38 @@ async function refreshMomentumShadow() {
   }
 }
 
+async function refreshCondorShadow() {
+  const body = document.getElementById("condor_shadow_body");
+  const summary = document.getElementById("cs_summary");
+  try {
+    const d = await getJSON("/condor-shadow");
+    const bs = d.by_sleeve || {};
+    if (summary) {
+      summary.textContent = d.degraded
+        ? "degraded — a sleeve threw during candidate generation (verdict may be biased)"
+        : `${d.open_condors || 0} open · ${d.closed_condors || 0} closed · zero-capital, priced off Unusual Whales`;
+    }
+    const label = { vrp: "VRP", earnings: "Earnings-vol" };
+    const rows = ["vrp", "earnings"].map(k => {
+      const m = bs[k] || {};
+      const r = m.realized_pnl;
+      const rcls = r == null ? "" : (r >= 0 ? "green" : "red");
+      const measuring = m.status === "CONDOR_SHADOW_MEASURING";
+      return `<tr>
+        <td><strong>${label[k]}</strong></td>
+        <td>${m.open_condors != null ? m.open_condors : "—"}</td>
+        <td>${m.closed_condors != null ? m.closed_condors : 0}/${m.min_closed != null ? m.min_closed : "—"}</td>
+        <td><span class="${rcls}">${r != null ? (r >= 0 ? "+" : "") + fmtMoney(r) : "—"}</span></td>
+        <td>${m.win_rate_pct != null ? m.win_rate_pct + "%" : "—"}</td>
+        <td><span class="sub"><span class="badge ${measuring ? "open" : "neutral"}">${measuring ? "measuring" : "accumulating"}</span> ${m.verdict || ""}</span></td>
+      </tr>`;
+    }).join("");
+    body.innerHTML = rows;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="6"><span class="red">Condor shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshEdgeCourt() {
   const body = document.getElementById("edge_court_body");
   const summary = document.getElementById("ec_summary");
@@ -1413,6 +1458,7 @@ async function refreshAll() {
   refreshTransactions();    // fire-and-forget: rolling 2-day transaction ledger
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshMomentumShadow();  // zero-capital equity-factor shadow — open hypothetical positions
+  refreshCondorShadow();    // zero-capital short-premium shadow — VRP vs earnings edge, measured apart
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 
