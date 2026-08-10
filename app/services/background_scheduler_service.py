@@ -867,6 +867,16 @@ class BackgroundSchedulerService:
                 momentum_equity_shadow = MomentumReversalShadowEngine().mark()
         except Exception as exc:
             momentum_equity_shadow = {"error": repr(exc), "status": "MOM_SHADOW_DEGRADED"}
+        # LOW-VOL (BAB) EQUITY shadow — measure the parked low-vol basket's edge on paper (NO orders, NO
+        # budget), settled-bar daily marking with the sleeve's own inverse-vol weights. /low-volatility-shadow.
+        try:
+            if _heavy_blocked:
+                low_vol_shadow = {"status": "LOWVOL_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.low_volatility_shadow_engine import LowVolatilityShadowEngine
+                low_vol_shadow = LowVolatilityShadowEngine().mark()
+        except Exception as exc:
+            low_vol_shadow = {"error": repr(exc), "status": "LOWVOL_SHADOW_DEGRADED"}
         cls._ckpt("mf_shadow")
         cls._ckpt("trend_mf_carry")    # terminal marker kept (≈0 now) so existing consumers of the label still resolve
 

@@ -745,6 +745,19 @@ th {
         </div>
       </div>
 
+      <div class="card" id="low_vol_shadow_card" style="min-width:0;">
+        <div class="section-title">Low-Vol Shadow — BAB basket edge <span id="lvs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">ZERO-capital forward-test of the parked low-vol (betting-against-beta) sleeve — the inverse-vol-weighted USMV/SPLV/EFAV/XMLV basket marked daily on settled bars, <strong>no orders, no budget</strong>. The low-vol <em>thesis</em> is a smaller drawdown than the broad market, so the key read is drawdown vs SPY (ratio &lt;1 = thesis holds). Detail at <a href="/low-volatility-shadow" style="color:inherit;">/low-volatility-shadow</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Days</th><th>Cumulative</th><th>Sharpe (ann.)</th><th>Max DD</th><th>SPY Max DD</th><th>DD Ratio</th><th>Verdict</th></tr>
+            </thead>
+            <tbody id="low_vol_shadow_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="open_equity_positions_card" style="min-width:0;">
         <div class="section-title">Open Equity Positions <span id="oeq_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Every whole-share equity &amp; ETF holding across the sleeves — momentum-reversal names plus the trend / vol-carry / managed-futures / T-bill ETFs. Cost = what we paid (shares × entry); Market Value = shares × current price; P/L is live unrealized (P/L % = return on cost). Stop is the sleeve's dynamic exit; Take Profit is the momentum names' ATR ladder (TP1–3 bank tranches ✓ when reached, TP4 runner trails). Trend / vol-carry / T-bill ETFs exit on signal or rebalance, not a fixed stop/TP.</div>
@@ -1247,6 +1260,38 @@ async function refreshCondorShadow() {
   }
 }
 
+async function refreshLowVolShadow() {
+  const body = document.getElementById("low_vol_shadow_body");
+  const summary = document.getElementById("lvs_summary");
+  try {
+    const d = await getJSON("/low-volatility-shadow");
+    const measuring = d.status === "LOWVOL_SHADOW_MEASURING";
+    if (summary) {
+      summary.textContent = d.status === "LOWVOL_SHADOW_NO_DATA"
+        ? "no marks yet — starts on the next settled bar"
+        : `${d.days_tracked || 0}/${d.min_days} days · ${measuring ? "measuring" : "accumulating"} · thesis = draw down less than SPY`;
+    }
+    if (!d.days_tracked) {
+      body.innerHTML = `<tr><td colspan="7"><span class="sub">${d.verdict || "no data yet"}</span></td></tr>`;
+      return;
+    }
+    const dr = d.drawdown_ratio_vs_spy;
+    const drCls = dr == null ? "" : (dr < 1 ? "green" : "red");     // <1 = low-vol thesis holds
+    const cumCls = (d.cumulative_return_pct || 0) >= 0 ? "green" : "red";
+    body.innerHTML = `<tr>
+      <td>${d.days_tracked}/${d.min_days}</td>
+      <td><span class="${cumCls}">${d.cumulative_return_pct != null ? (d.cumulative_return_pct >= 0 ? "+" : "") + d.cumulative_return_pct + "%" : "—"}</span></td>
+      <td>${d.annualized_sharpe != null ? d.annualized_sharpe : "—"}</td>
+      <td><span class="red">${d.max_drawdown_pct != null ? d.max_drawdown_pct + "%" : "—"}</span></td>
+      <td><span class="sub">${d.benchmark_max_drawdown_pct != null ? d.benchmark_max_drawdown_pct + "%" : "—"}</span></td>
+      <td><span class="${drCls}">${dr != null ? dr : "—"}</span></td>
+      <td><span class="sub"><span class="badge ${measuring ? "open" : "neutral"}">${measuring ? "measuring" : "accumulating"}</span></span></td>
+    </tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7"><span class="red">Low-vol shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshEdgeCourt() {
   const body = document.getElementById("edge_court_body");
   const summary = document.getElementById("ec_summary");
@@ -1459,6 +1504,7 @@ async function refreshAll() {
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshMomentumShadow();  // zero-capital equity-factor shadow — open hypothetical positions
   refreshCondorShadow();    // zero-capital short-premium shadow — VRP vs earnings edge, measured apart
+  refreshLowVolShadow();    // zero-capital low-vol (BAB) basket shadow — drawdown vs SPY thesis check
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 

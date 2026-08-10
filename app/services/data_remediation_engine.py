@@ -63,6 +63,13 @@ class DataRemediationEngine:
             syms += list(ManagedFuturesEngine.BASKET)
         except Exception:
             pass
+        try:
+            # the low-vol basket is consumed by its zero-capital shadow every cycle, so it must stay fresh
+            # even while the sleeve is parked (otherwise the forward-test marks on week-old bars).
+            from app.services.low_volatility_engine import LowVolatilityEngine
+            syms += list(LowVolatilityEngine.BASKET)
+        except Exception:
+            pass
         syms += ["SVXY", "SGOV"]
         seen, out = set(), []
         for s in syms:
