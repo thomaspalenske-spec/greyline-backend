@@ -13,14 +13,16 @@ def _iso(monkeypatch, tmp_path):
     monkeypatch.setattr(M, "STATE", tmp_path)
     monkeypatch.setattr(M, "OPEN", tmp_path / "open.json")
     monkeypatch.setattr(M, "CLOSED", tmp_path / "closed.jsonl")
+    monkeypatch.setattr(M, "BENCH_CACHE", tmp_path / "top_candidates_cache.json")
     monkeypatch.setenv("GREYLINE_MOMENTUM_EQUITY_SHADOW", "true")
     monkeypatch.setenv("GREYLINE_COST_BPS_ROUND_TRIP", "10")   # 10bps round-trip
     yield
 
 
 def _stub_signal(monkeypatch, picks, asof="2026-08-10"):
+    # (top_n targets, full clean bench, as_of, top_n) — bench == picks for the tests
     monkeypatch.setattr(M, "_signal_targets",
-                        lambda self: ([dict(p) for p in picks], asof, len(picks)))
+                        lambda self: ([dict(p) for p in picks], [dict(p) for p in picks], asof, len(picks)))
 
 
 def _stub_bars(monkeypatch, bars):
@@ -80,6 +82,32 @@ def test_cohort_return_is_leg_mean(monkeypatch):
     closed = [json.loads(l) for l in M.CLOSED.read_text().splitlines() if l.strip()]
     assert closed[0]["gross_return"] == pytest.approx(0.05, abs=1e-6)          # mean(0.10, 0)
     assert closed[0]["net_return"] == pytest.approx(0.049, abs=1e-6)           # minus 10bps
+
+
+def test_open_positions_shows_unrealized_and_days_to_settle(monkeypatch):
+    _stub_signal(monkeypatch, [{"symbol": "AAA", "side": "BUY", "last_close": 100.0, "_entry_idx": 0,
+                                "conviction": 1.9}])
+    _stub_bars(monkeypatch, {"AAA": [100.0, 103.0]})    # 1 bar elapsed, price +3%, not yet matured
+    M().mark()
+    pos = M().open_positions()
+    assert len(pos) == 1
+    p = pos[0]
+    assert p["symbol"] == "AAA" and p["side"] == "BUY"
+    assert p["unrealized_pct"] == pytest.approx(3.0, abs=1e-6)
+    assert p["days_held"] == 1 and p["days_to_settle"] == M.HOLD_DAYS - 1
+    assert set(M().open_symbols()) == {"AAA"}
+
+
+def test_bench_cache_written_for_the_board(monkeypatch):
+    _stub_signal(monkeypatch, [{"symbol": "AAA", "side": "BUY", "last_close": 100.0, "_entry_idx": 0,
+                                "conviction": 1.9, "momentum_12_1_pct": 40.0, "reversal_5d_move_pct": -3.0,
+                                "directional_bias": "BULLISH", "momentum_rank": 0.9, "reversal_rank": 0.8}])
+    _stub_bars(monkeypatch, {"AAA": [100.0, 101.0]})
+    M().mark()
+    cache = json.loads(M.BENCH_CACHE.read_text())
+    assert cache["status"] == "TOP_CANDIDATES_READY" and cache["data_source"] == "TRADESTATION_SETTLED_SHADOW"
+    assert cache["candidates"][0]["symbol"] == "AAA" and cache["candidates"][0]["rank"] == 1
+    assert "computed_epoch" in cache          # freshness stamp the board/route read
 
 
 def test_report_gating_accumulating_then_measuring(monkeypatch):

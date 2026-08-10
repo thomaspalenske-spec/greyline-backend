@@ -24,6 +24,7 @@ import glob
 import json
 import math
 import os
+import time
 from datetime import datetime
 from os import getenv
 from pathlib import Path
@@ -35,6 +36,9 @@ class MomentumReversalShadowEngine:
     STATE = Path("app/data/momentum_reversal")
     OPEN = STATE / "shadow_open_cohorts.json"       # cohorts with legs still within their hold window
     CLOSED = STATE / "shadow_closed_cohorts.jsonl"  # realized period returns (one line per closed cohort)
+    BENCH_CACHE = STATE / "top_candidates_cache.json"  # the board reads this; refreshed here when stale
+    BENCH_N = 30                  # depth of the "next up" bench written for the Opportunity Board
+    BENCH_TTL_SECONDS = 900       # only refresh the board cache when it's older than this (15 min)
 
     HOLD_DAYS = 5                 # non-overlapping weekly hold — matches the reversal horizon + backtest
     MIN_COHORTS = 8               # ~2 months of weekly periods before the Sharpe verdict is trustworthy
@@ -75,13 +79,14 @@ class MomentumReversalShadowEngine:
         return out
 
     def _signal_targets(self):
-        """The real live signal on SETTLED bars: (top_n targets, as_of). Reuses the strategy engine's own
-        CSV universe (MIN_BARS + pre-listing exclusions) and pure select() — no reimplementation, no fetch."""
+        """The real live signal on SETTLED bars: (top_n targets, full clean bench, as_of, top_n). Reuses the
+        strategy engine's own CSV universe (MIN_BARS + pre-listing exclusions) and pure select() — no
+        reimplementation, no fetch."""
         from app.services.momentum_reversal_strategy_engine import MomentumReversalStrategyEngine
         eng = MomentumReversalStrategyEngine()
         series, asof, _src = eng.universe(prefer_live=False)   # settled CSVs only — deterministic, no network
         if not series:
-            return [], None, eng.top_n
+            return [], [], None, eng.top_n
         _top, confirmed = eng.select(series)
         # Apply the SAME trash-pick failsafe the live sleeve uses (penny/warrant/artifact-momentum/crash),
         # then take the top_n — so the shadow measures what the live EQUITY sleeve would ACTUALLY trade,
@@ -95,7 +100,87 @@ class MomentumReversalShadowEngine:
         # annotate each target with its entry index in its OWN series (len-1 = latest settled bar)
         for t in targets:
             t["_entry_idx"] = len(series.get(t["symbol"], [])) - 1
-        return targets, asof, eng.top_n
+        return targets, clean, asof, eng.top_n
+
+    def _refresh_bench_cache(self, clean, asof):
+        """Keep the Opportunity Board's momentum candidates CURRENT. The board reads top_candidates_cache.json,
+        which only the heavy live /top-candidates scan refreshes — so while the sleeve is parked it goes stale
+        (was 9 days old). The shadow already computed the fresh signal this cycle, so write the bench here (in
+        the exact schema _compute uses) — but only when the cache is stale, so a fresh LIVE compute is never
+        clobbered by settled-bar data."""
+        try:
+            if self.BENCH_CACHE.exists():
+                age = time.time() - float(json.loads(self.BENCH_CACHE.read_text()).get("computed_epoch") or 0)
+                if age < self.BENCH_TTL_SECONDS:
+                    return False
+        except Exception:
+            pass
+        candidates = []
+        for i, t in enumerate(clean[:self.BENCH_N], start=1):
+            candidates.append({
+                "rank": i, "symbol": t.get("symbol"), "side": t.get("side"),
+                "direction": "LONG" if t.get("side") == "BUY" else "SHORT",
+                "directional_bias": t.get("directional_bias"),
+                "conviction": t.get("conviction"),
+                "momentum_rank": t.get("momentum_rank"), "reversal_rank": t.get("reversal_rank"),
+                "momentum_12_1_pct": round(float(t.get("momentum_12_1_pct") or 0), 1),
+                "reversal_5d_move_pct": round(float(t.get("reversal_5d_move_pct") or 0), 1),
+                "last_close": t.get("last_close"),
+            })
+        payload = {
+            "computed_at": datetime.utcnow().isoformat(), "computed_epoch": time.time(),
+            "as_of": asof, "data_source": "TRADESTATION_SETTLED_SHADOW",
+            "confirmed_signals": len(clean), "clean_signals": len(clean),
+            "candidates": candidates, "trash_discarded": 0, "trash_discarded_names": [],
+            "contract_board": {"top_scoring_contract": None, "affordable_contracts": [],
+                               "status": "SHADOW_REFRESH_NO_CONTRACTS",
+                               "detail": "bench refreshed by the equity shadow (settled bars); option "
+                                         "contracts are scored only by the live /top-candidates scan"},
+            "engine": "MomentumReversalShadowEngine",
+            "signal": "12-1 momentum AND 5-day reversal must agree; conviction = percentile-rank blend",
+            "status": "TOP_CANDIDATES_READY",
+        }
+        try:
+            self.STATE.mkdir(parents=True, exist_ok=True)
+            self.BENCH_CACHE.write_text(json.dumps(payload))
+            return True
+        except Exception:
+            return False
+
+    def open_symbols(self):
+        """Symbols in the currently-open shadow cohort (for the board to exclude — they're 'held' by the
+        shadow and shown on the open-positions card, so the board stays a genuine 'not executed' bench)."""
+        out = set()
+        for co in self._load_open():
+            for leg in co.get("legs", []):
+                out.add(str(leg.get("symbol") or "").upper())
+        return out
+
+    def open_positions(self):
+        """The open shadow cohort as 'positions': entry, current settled price, unrealized shadow P&L, and
+        days-to-settle. Zero-capital — these are hypothetical holdings the forward-test is marking."""
+        rows = []
+        for co in self._load_open():
+            for leg in co.get("legs", []):
+                closes = self._closes(leg["symbol"])
+                ei = int(leg["entry_idx"])
+                ec = float(leg.get("entry_close") or 0)
+                cur = closes[-1] if closes else None
+                bars_elapsed = (len(closes) - 1 - ei) if closes else 0
+                unreal = None
+                if cur and ec > 0:
+                    unreal = (cur / ec - 1.0) if leg["side"] == "BUY" else (ec / cur - 1.0)
+                rows.append({
+                    "symbol": leg["symbol"], "side": leg["side"],
+                    "entry_date": co.get("opened"), "entry_close": round(ec, 4) if ec else None,
+                    "current_close": round(cur, 4) if cur else None,
+                    "unrealized_pct": round(100 * unreal, 2) if unreal is not None else None,
+                    "days_held": max(0, bars_elapsed),
+                    "days_to_settle": max(0, self.HOLD_DAYS - bars_elapsed),
+                    "conviction": leg.get("conviction"),
+                })
+        rows.sort(key=lambda r: (r.get("conviction") or 0), reverse=True)
+        return rows
 
     # ---- state ---------------------------------------------------------------------------------
 
@@ -180,8 +265,9 @@ class MomentumReversalShadowEngine:
         # 2) open a fresh NON-OVERLAPPING cohort — only if nothing is currently open (the prior basket has
         #    fully rolled). This spaces cohorts >= HOLD_DAYS apart exactly like the backtest's rebal points.
         opened = None
+        targets, clean_bench, asof, top_n = self._signal_targets()
+        self._refresh_bench_cache(clean_bench, asof)          # keep the Opportunity Board current (write-if-stale)
         if not still_open:
-            targets, asof, top_n = self._signal_targets()
             picks = [t for t in targets if t.get("_entry_idx", -1) >= 0 and t.get("last_close", 0) > 0]
             if picks:
                 opened = {
@@ -213,12 +299,14 @@ class MomentumReversalShadowEngine:
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]
         n = len(rets)
         open_cohorts = self._load_open()
+        positions = self.open_positions()
         base = {
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
             "engine": "MomentumReversalShadowEngine",
             "cohorts_closed": n, "min_cohorts": self.MIN_COHORTS,
             "open_cohorts": len(open_cohorts),
+            "open_positions": positions,
             "hold_days": self.HOLD_DAYS, "cost_roundtrip_bps": round(self._cost_roundtrip() * 10000, 2),
             "backtest_reference": {"oos_sharpe_gross": 0.42, "oos_sharpe_net_10bps": 0.08,
                                    "caveat": "backtest magnitude is survivorship-biased (CSV = today's "

@@ -719,6 +719,19 @@ th {
         </table>
       </div>
 
+      <div class="card" id="momentum_shadow_card" style="min-width:0;">
+        <div class="section-title">Momentum Shadow — Open Positions <span id="ms_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">A ZERO-capital forward-test of the equity momentum-reversal factor — a weekly long/short basket run on real settled bars, <strong>no orders, no budget</strong>, so we learn whether the factor survives live before committing capital. These are hypothetical holdings; unrealized P/L is marked on settled closes and each leg settles after a 5-day hold, net of cost. Verdict accrues in the <a href="/momentum-equity-shadow" style="color:inherit;">shadow report</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>Side</th><th>Entry Date</th><th>Entry</th><th>Current</th><th>Unrealized %</th><th>Days Held</th><th>Days to Settle</th></tr>
+            </thead>
+            <tbody id="momentum_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="open_equity_positions_card" style="min-width:0;">
         <div class="section-title">Open Equity Positions <span id="oeq_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Every whole-share equity &amp; ETF holding across the sleeves — momentum-reversal names plus the trend / vol-carry / managed-futures / T-bill ETFs. Cost = what we paid (shares × entry); Market Value = shares × current price; P/L is live unrealized (P/L % = return on cost). Stop is the sleeve's dynamic exit; Take Profit is the momentum names' ATR ladder (TP1–3 bank tranches ✓ when reached, TP4 runner trails). Trend / vol-carry / T-bill ETFs exit on signal or rebalance, not a fixed stop/TP.</div>
@@ -1128,7 +1141,7 @@ async function refreshOpportunityBoard() {
       html += `<tr><td colspan="7" style="padding-top:14px;">
         <strong>${g.strategy || ""}</strong> <span class="sub">· ${g.instrument || ""}</span><br>
         <span class="sub">${g.edge || ""}</span><br>
-        <span class="sub" style="opacity:.85;">${g.action || ""}${g.error ? " — <span class='red'>"+g.error+"</span>" : ""}</span>${g.held_note ? `<br><span class="sub" style="opacity:.7;font-style:italic;">${g.held_note}</span>` : ""}
+        <span class="sub" style="opacity:.85;">${g.action || ""}${g.error ? " — <span class='red'>"+g.error+"</span>" : ""}</span>${g.held_note ? `<br><span class="sub" style="opacity:.7;font-style:italic;">${g.held_note}</span>` : ""}${g.shadow_open_note ? `<br><span class="sub" style="opacity:.7;font-style:italic;">${g.shadow_open_note}</span>` : ""}
       </td></tr>`;
       if (!cands.length) {
         html += `<tr><td colspan="7"><span class="sub">${g.note || "no candidates right now"}</span></td></tr>`;
@@ -1150,6 +1163,42 @@ async function refreshOpportunityBoard() {
     body.innerHTML = html || `<tr><td colspan="7"><span class="sub">No candidates right now.</span></td></tr>`;
   } catch (e) {
     body.innerHTML = `<tr><td colspan="7"><span class="red">Opportunity board unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+async function refreshMomentumShadow() {
+  const body = document.getElementById("momentum_shadow_body");
+  const summary = document.getElementById("ms_summary");
+  try {
+    const d = await getJSON("/momentum-equity-shadow");
+    const pos = d.open_positions || [];
+    if (summary) {
+      const v = d.status === "MOM_SHADOW_NO_DATA"
+        ? `${pos.length} open · ${d.cohorts_closed || 0} weeks closed · first period settles ~1 week in`
+        : `${pos.length} open · ${d.cohorts_closed || 0}/${d.min_cohorts} weeks · ${d.status === "MOM_SHADOW_MEASURING" ? ("live Sharpe " + d.annualized_sharpe) : "accumulating"}`;
+      summary.textContent = v;
+    }
+    if (!pos.length) {
+      body.innerHTML = `<tr><td colspan="8"><span class="sub">${d.verdict || "no open shadow positions right now"}</span></td></tr>`;
+      return;
+    }
+    body.innerHTML = pos.map(p => {
+      const up = p.unrealized_pct;
+      const cls = up == null ? "" : (up >= 0 ? "green" : "red");
+      const sideBadge = p.side === "BUY" ? "open" : "neutral";
+      return `<tr>
+        <td><strong>${p.symbol}</strong></td>
+        <td><span class="badge ${sideBadge}">${p.side === "BUY" ? "LONG" : "SHORT"}</span></td>
+        <td><span class="sub">${p.entry_date || "—"}</span></td>
+        <td>${p.entry_close != null ? fmtMoney(p.entry_close) : "—"}</td>
+        <td>${p.current_close != null ? fmtMoney(p.current_close) : "—"}</td>
+        <td><span class="${cls}">${up != null ? (up >= 0 ? "+" : "") + up.toFixed(2) + "%" : "—"}</span></td>
+        <td>${p.days_held}</td>
+        <td>${p.days_to_settle}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8"><span class="red">Momentum shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
   }
 }
 
@@ -1363,6 +1412,7 @@ async function refreshAll() {
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
   refreshTransactions();    // fire-and-forget: rolling 2-day transaction ledger
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
+  refreshMomentumShadow();  // zero-capital equity-factor shadow — open hypothetical positions
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 

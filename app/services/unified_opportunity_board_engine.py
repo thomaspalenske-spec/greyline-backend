@@ -52,8 +52,19 @@ class UnifiedOpportunityBoardEngine:
         except Exception:
             exec_stat = {}
 
+        # Names the EQUITY shadow currently "holds" (its open weekly cohort) show on the Momentum Shadow
+        # Open Positions card — hide them here too, so the board stays a genuine "NOT executed / next up"
+        # bench rather than repeating the shadow's holdings. Fails open (no shadow -> hide nothing).
+        shadow_open = set()
+        try:
+            from app.services.momentum_reversal_shadow_engine import MomentumReversalShadowEngine
+            shadow_open = MomentumReversalShadowEngine().open_symbols()
+        except Exception:
+            shadow_open = set()
+
         rows = []
         held = 0
+        shadow_hidden = 0
         for c in cands:
             sym = str(c.get("symbol") or "").upper()
             w = exec_stat.get(sym) or {}
@@ -63,6 +74,9 @@ class UnifiedOpportunityBoardEngine:
             # what we already own).
             if str(status).upper() == "BOUGHT":
                 held += 1
+                continue
+            if sym in shadow_open:            # already "open" in the shadow -> on the shadow positions card
+                shadow_hidden += 1
                 continue
             rows.append({
                 "symbol": sym,
@@ -99,6 +113,10 @@ class UnifiedOpportunityBoardEngine:
             "held_hidden": held,
             "held_note": (f"{held} held name(s) hidden — they're in Open Positions. Still fully analyzed "
                           f"each rebalance (GreyLine can add to a position it already owns)." if held else ""),
+            "shadow_open_hidden": shadow_hidden,
+            "shadow_open_note": (f"{shadow_hidden} name(s) hidden — the equity shadow is currently 'holding' "
+                                 f"them (Momentum Shadow Open Positions). This board shows what's NOT yet "
+                                 f"executed." if shadow_hidden else ""),
             "candidates": rows,
         }
 
