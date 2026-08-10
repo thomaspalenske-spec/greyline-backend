@@ -78,6 +78,31 @@ class MomentumReversalShadowEngine:
             return []
         return out
 
+    def _last_bar_date(self, sym):
+        """Date string of the symbol's most recent settled bar, or None."""
+        last = None
+        try:
+            with open(self.HIST / f"{sym}_daily.csv") as f:
+                for r in csv.DictReader(f):
+                    d = str(r.get("date") or "")[:10]
+                    if d:
+                        last = d
+        except Exception:
+            return None
+        return last
+
+    def _staleness_days(self, sym):
+        """Trading-ish age of a symbol's newest settled bar. The broad equity universe is NOT refreshed
+        daily (only decision symbols are), so a momentum pick can carry a WEEKS-old close — which would
+        make its shadow entry and its 5-day settlement both fire on stale prices. Surfaced, never hidden."""
+        d = self._last_bar_date(sym)
+        if not d:
+            return None
+        try:
+            return (datetime.utcnow().date() - datetime.fromisoformat(d).date()).days
+        except (ValueError, TypeError):
+            return None
+
     def _signal_targets(self):
         """The real live signal on SETTLED bars: (top_n targets, full clean bench, as_of, top_n). Reuses the
         strategy engine's own CSV universe (MIN_BARS + pre-listing exclusions) and pure select() — no
@@ -181,6 +206,7 @@ class MomentumReversalShadowEngine:
                     "unrealized_pct": round(100 * unreal, 2) if unreal is not None else None,
                     "days_held": max(0, bars_elapsed),
                     "days_to_settle": max(0, self.HOLD_DAYS - bars_elapsed),
+                    "entry_stale_days": self._staleness_days(leg["symbol"]),   # bar age at entry (honesty)
                     "conviction": leg.get("conviction"),
                 })
         rows.sort(key=lambda r: (r.get("conviction") or 0), reverse=True)
@@ -342,6 +368,12 @@ class MomentumReversalShadowEngine:
         n = len(rets)
         open_cohorts = self._load_open()
         positions = self.open_positions()
+        # DATA-FRESHNESS HONESTY: the broad equity universe isn't refreshed daily, so a cohort can open on
+        # stale closes (entry + 5-day settlement both fire on old prices). Surface the worst staleness so the
+        # dashboard/verdict never presents stale-based numbers as a real edge read.
+        stale_days = [p["entry_stale_days"] for p in positions if p.get("entry_stale_days") is not None]
+        max_stale = max(stale_days) if stale_days else 0
+        data_stale = max_stale > 3          # > a long weekend ⇒ the entry basis is not "today"
         base = {
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
@@ -355,7 +387,21 @@ class MomentumReversalShadowEngine:
                                              "winners); THIS forward number is not"},
             "note": ("SHADOW forward-test of the EQUITY momentum-reversal factor — hypothetical weekly "
                      "long/short basket P&L, NO orders, NO budget. Accumulates forward from first run."),
+            "data_freshness": {
+                "max_entry_stale_days": max_stale,
+                "stale": data_stale,
+                "warning": ((f"open cohort entries are up to {max_stale} days stale — the broad equity "
+                             "universe isn't refreshed daily, so entry AND 5-day settlement fire on old "
+                             "closes. Numbers are NOT a trustworthy edge read until the universe is fed "
+                             "fresh (open on live prices / refresh the picks' bars).") if data_stale else ""),
+            },
         }
+        if data_stale:
+            # never present stale-basis numbers as a real edge read — the whole point of the shadow is honesty
+            return {**base, "status": "MOM_SHADOW_DATA_STALE",
+                    "verdict": (f"BLOCKED on data freshness: entries up to {max_stale} days stale. The "
+                                "forward-test can't measure the edge until the equity universe is refreshed "
+                                "(these picks' bars stopped days ago, so legs also can't settle).")}
         if n == 0:
             return {**base, "status": "MOM_SHADOW_NO_DATA",
                     "verdict": "no closed cohorts yet — first period settles ~1 week after the first mark"}
