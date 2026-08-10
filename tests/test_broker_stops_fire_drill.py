@@ -52,6 +52,7 @@ def _wire(monkeypatch, tmp_path, positions, orders, armed=True, vrp=frozenset())
     monkeypatch.setattr(B, "_booking", lambda self: _Book(positions, orders))
     monkeypatch.setattr(B, "_vrp_leg_symbols", staticmethod(lambda: set(vrp)))
     monkeypatch.setattr(B, "MARKER", tmp_path / "fire_drill.json")
+    monkeypatch.setattr(B, "COVERAGE_MARKER", tmp_path / "cov.json")   # isolate anti-stack marker
 
 
 def test_full_coverage_is_verified(monkeypatch, tmp_path):
@@ -89,6 +90,7 @@ def _wire_topup(monkeypatch, tmp_path, book, armed=True, topup=True):
     monkeypatch.setenv("GREYLINE_BROKER_STOP_TOPUP", "true" if topup else "false")
     monkeypatch.setattr(B, "_booking", lambda self: book)
     monkeypatch.setattr(B, "_vrp_leg_symbols", staticmethod(lambda: set()))
+    monkeypatch.setattr(B, "COVERAGE_MARKER", tmp_path / "cov.json")   # isolate anti-stack marker
 
 
 def test_partial_growth_adds_only_the_shortfall(monkeypatch, tmp_path):

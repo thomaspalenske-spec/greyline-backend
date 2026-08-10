@@ -5,7 +5,15 @@ defined-risk hedge; stopping it out strands the short leg NAKED (undefined risk)
 protection. This locks in the exclusion: VRP-ledger legs are skipped; ordinary longs still get a stop.
 """
 
+import pytest
+
 from app.services.broker_protective_stop_engine import BrokerProtectiveStopEngine as BPS
+
+
+@pytest.fixture(autouse=True)
+def _isolate_cov_marker(monkeypatch, tmp_path):
+    # isolate the anti-stack coverage marker so these tests don't read/write the shared real file
+    monkeypatch.setattr(BPS, "COVERAGE_MARKER", tmp_path / "cov.json")
 
 
 class FakeBook:
@@ -39,10 +47,13 @@ def test_vrp_condor_wing_is_not_stopped(monkeypatch):
 
 
 def test_ordinary_long_still_gets_a_stop(monkeypatch):
+    # An ordinary EQUITY long (not a VRP leg, not premium-bounded) still gets a disaster stop.
+    # (Long options are intentionally skipped elsewhere — loss is bounded by premium — so the
+    # honest contrast to a VRP condor leg is a plain equity, which carries unbounded downside.)
     monkeypatch.setenv("GREYLINE_BROKER_PROTECTIVE_STOPS", "true")
-    sym = "ALAB 260828C315"
+    sym = "GLW"
     eng = BPS()
-    monkeypatch.setattr(eng, "_booking", lambda: FakeBook([_pos(sym, 1, 65.0)]))
+    monkeypatch.setattr(eng, "_booking", lambda: FakeBook([_pos(sym, 10, 40.0)]))
     monkeypatch.setattr(BPS, "_vrp_leg_symbols", staticmethod(lambda: set()))   # not a VRP leg
     r = eng.ensure_stops(dry_run=True)
     assert r["placed"] == 1

@@ -108,6 +108,52 @@ class BrokerProtectiveStopEngine:
             out[sym] = out.get(sym, 0) + q
         return out
 
+    def _resting_stop_count(self, working):
+        """{SYMBOL: number of resting SELL StopMarket ORDERS}. One-per-symbol is the invariant; >1 means
+        the incremental-ADD path (or a flapping read) left several orders that must be consolidated to one
+        — otherwise a later position SHRINK leaves them over-covering and they oversell SHORT on a fire."""
+        out = {}
+        for o in working:
+            leg = (o.get("Legs") or [{}])[0]
+            sym = str(leg.get("Symbol") or "").upper()
+            if not str(leg.get("BuyOrSell") or "").lower().startswith("sell"):
+                continue
+            if "stop" not in str(o.get("OrderType") or "").lower():
+                continue
+            out[sym] = out.get(sym, 0) + 1
+        return out
+
+    # last CONFIRMED-good per-symbol stop coverage — so a flapping orders read that spuriously shows 0
+    # can't defeat the "already protected" check and stack a duplicate on an unseen resting stop.
+    COVERAGE_MARKER = None
+
+    def _cov_path(self):
+        from pathlib import Path
+        return self.COVERAGE_MARKER or Path("app/data/state/broker_stop_coverage_last_good.json")
+
+    def _load_cov(self):
+        import json
+        try:
+            return json.loads(self._cov_path().read_text())
+        except Exception:
+            return {}
+
+    def _save_cov(self, cov):
+        import json
+        try:
+            p = self._cov_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(cov))
+        except Exception:
+            pass
+
+    @staticmethod
+    def _recent(at, minutes):
+        try:
+            return (datetime.utcnow() - datetime.fromisoformat(str(at))).total_seconds() < minutes * 60
+        except Exception:
+            return False
+
     def fire_drill(self):
         """READ-ONLY rigorous verification that every open long has a resting broker stop COVERING ITS
         FULL quantity — the disaster backstop actually in place, not just 'we placed one once'. You can't
@@ -286,6 +332,9 @@ class BrokerProtectiveStopEngine:
                               "avoid stacking a duplicate stop; existing resting stops are untouched. Retries."}
         vrp_legs = self._vrp_leg_symbols()   # never stop a defined-risk condor's own legs
         stop_qty = self._resting_stop_qty(working)   # quantity-aware coverage, not the coarse 'has a stop'
+        stop_count = self._resting_stop_count(working)   # ORDER count — >1 means consolidate to one
+        cov = self._load_cov()                       # last CONFIRMED coverage, for the anti-stack guard
+        now_iso = datetime.utcnow().isoformat()
 
         placed, topped, skipped, errors = [], [], [], []
         for p in pos:
@@ -312,30 +361,59 @@ class BrokerProtectiveStopEngine:
                 skipped.append({"symbol": sym, "reason": "close already working — stop would risk a double sell"})
                 continue
 
-            have = stop_qty.get(sym.upper(), 0)
-            if have == qty:                                    # exactly covered — nothing to do
-                skipped.append({"symbol": sym, "reason": f"fully covered ({have}/{qty})"})
-                continue
-
             is_option = " " in sym
             stop_px = self._tick_round(entry * (1 - self.DISASTER_STOP_PCT), is_option)
             if stop_px <= 0:
                 skipped.append({"symbol": sym, "reason": "computed stop <= 0"})
                 continue
 
-            if have == 0:
-                # UNPROTECTED — place a full-qty stop (the base behaviour).
+            have = stop_qty.get(sym.upper(), 0)
+            count = stop_count.get(sym.upper(), 0)
+            if have > 0:
+                cov[sym.upper()] = {"qty": have, "at": now_iso}   # record CONFIRMED coverage (good read)
+
+            # CONSOLIDATE first: more than ONE resting stop for a symbol is the fragile multi-order state
+            # (incremental ADDs, or transient dupes from a flapping read). Collapse to a single full-qty stop
+            # so a later position SHRINK can't leave several over-covering and oversell SHORT on a fire.
+            if count > 1:
+                if self._topup_enabled():
+                    topped.append(self._reconcile_coverage(b, sym, qty, is_option, stop_px, dry_run=dry_run))
+                else:
+                    skipped.append({"symbol": sym,
+                                    "reason": f"{count} resting stops — consolidation needs GREYLINE_BROKER_STOP_TOPUP"})
+                continue
+
+            if count == 0:
+                # GENUINELY UNPROTECTED — no resting stop AT ALL (count, not qty: a stop whose qty this read
+                # can't parse still COUNTS as protection; placing on qty==0 while a stop exists is the exact
+                # double-sell/stacking bug). ANTI-STACK guard: if confirmed covered <45m ago but none seen
+                # now, the orders read is almost certainly degraded/partial — skip rather than stack.
+                prev = cov.get(sym.upper())
+                if prev and int(prev.get("qty", 0)) > 0 and self._recent(prev.get("at"), 45):
+                    skipped.append({"symbol": sym, "reason": "no stop seen but confirmed covered <45m ago — "
+                                    "suspect degraded orders read, NOT placing (anti-stack)"})
+                    continue
                 if dry_run:
                     placed.append({"symbol": sym, "qty": qty, "stop": stop_px, "action": "place", "dry_run": True})
                     continue
                 try:
                     r = b.place_order(sym, qty, action="SELLTOCLOSE" if is_option else "SELL",
                                       order_type="StopMarket", stop_price=stop_px, tif="GTC")
-                    (placed if r.get("ok") else errors).append(
-                        {"symbol": sym, "qty": qty, "stop": stop_px, "order_id": r.get("order_id")}
-                        if r.get("ok") else {"symbol": sym, "http": r.get("http_status")})
+                    if r.get("ok"):
+                        placed.append({"symbol": sym, "qty": qty, "stop": stop_px, "order_id": r.get("order_id")})
+                        cov[sym.upper()] = {"qty": qty, "at": now_iso}
+                    else:
+                        errors.append({"symbol": sym, "http": r.get("http_status")})
                 except Exception as e:
                     errors.append({"symbol": sym, "error": str(e)[:80]})
+                continue
+
+            # Exactly ONE resting stop exists — the symbol IS protected; never place a second. Only reconcile
+            # the QUANTITY, and only when it is BOTH readable AND wrong. A stop whose qty we can't read this
+            # cycle is treated as covered (never re-placed → no stack).
+            if have == qty or have <= 0:
+                skipped.append({"symbol": sym, "reason": (f"fully covered ({have}/{qty})" if have == qty
+                                else "already protected")})   # one stop exists, qty unreadable — never stack
                 continue
 
             # WRONG-QTY coverage. Only act when the top-up gate is armed (it places/cancels real orders).
@@ -366,6 +444,8 @@ class BrokerProtectiveStopEngine:
             res = self._reconcile_coverage(b, sym, qty, is_option, stop_px, dry_run=dry_run)
             (topped if res.get("action") in ("topup_replaced", "would_topup") else errors).append(res)
 
+        if not dry_run:                                  # persist confirmed coverage (pruned) for anti-stack
+            self._save_cov({k: v for k, v in cov.items() if self._recent((v or {}).get("at"), 120)})
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "disaster_stop_pct": self.DISASTER_STOP_PCT, "topup_armed": self._topup_enabled(),

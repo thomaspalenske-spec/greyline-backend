@@ -33,8 +33,10 @@ def _pos(sym, qty, avg, short=False):
 
 
 @pytest.fixture
-def armed(monkeypatch):
+def armed(monkeypatch, tmp_path):
     monkeypatch.setenv("GREYLINE_BROKER_PROTECTIVE_STOPS", "true")
+    # isolate the anti-stack coverage marker so tests don't read/write the shared real file
+    monkeypatch.setattr(BrokerProtectiveStopEngine, "COVERAGE_MARKER", tmp_path / "cov.json")
     return BrokerProtectiveStopEngine()
 
 
@@ -89,13 +91,23 @@ def test_short_positions_are_not_given_a_sell_stop(armed, monkeypatch):
     assert armed.ensure_stops()["placed"] == 0
 
 
-def test_option_stop_lands_on_the_valid_price_grid(armed, monkeypatch):
-    """Off-grid option prices are rejected outright by TradeStation."""
+def test_long_option_is_skipped_loss_bounded_by_premium(armed, monkeypatch):
+    """A long option's max loss IS the premium paid — a disaster stop adds nothing but churn
+    (this retired the NRG-residual stop-attempt loop). It must be skipped, never stopped."""
     fake = _FakeBooking([_pos("ALAB 260828C315", 1, 65.55)])
+    monkeypatch.setattr(armed, "_booking", lambda: fake)
+    r = armed.ensure_stops()
+    assert r["placed"] == 0 and fake.placed == []
+    assert any("premium" in s["reason"] for s in r["skipped"])
+
+
+def test_equity_stop_lands_on_the_valid_price_grid(armed, monkeypatch):
+    """Off-grid prices are rejected outright by TradeStation — equity stops round to $0.01."""
+    fake = _FakeBooking([_pos("GLW", 10, 41.11)])
     monkeypatch.setattr(armed, "_booking", lambda: fake)
     armed.ensure_stops()
     sp = fake.placed[0]["stop_price"]
-    assert abs(round(sp / 0.05) * 0.05 - sp) < 1e-9, f"{sp} off the $0.05 grid"
+    assert abs(round(sp / 0.01) * 0.01 - sp) < 1e-9, f"{sp} off the $0.01 grid"
 
 
 def test_working_close_order_never_gets_a_stop_stacked_on_it(monkeypatch):
