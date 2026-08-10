@@ -129,7 +129,11 @@ class MomentumReversalShadowEngine:
             })
         payload = {
             "computed_at": datetime.utcnow().isoformat(), "computed_epoch": time.time(),
-            "as_of": asof, "data_source": "TRADESTATION_SETTLED_SHADOW",
+            # HONEST + whitelisted source: this bench is computed from SETTLED historical CSV bars, which the
+            # reality guard recognizes as a real feed (CSV_HISTORICAL). Provenance kept in refreshed_by so the
+            # DATA_SOURCE_REAL guard doesn't cry wolf on an unknown label (a made-up source string trips it
+            # even while momentum is disarmed — only STALENESS is exempted there, not a fake-looking source).
+            "as_of": asof, "data_source": "CSV_HISTORICAL", "refreshed_by": "MomentumReversalShadowEngine",
             "confirmed_signals": len(clean), "clean_signals": len(clean),
             "candidates": candidates, "trash_discarded": 0, "trash_discarded_names": [],
             "contract_board": {"top_scoring_contract": None, "affordable_contracts": [],

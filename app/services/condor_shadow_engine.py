@@ -232,13 +232,14 @@ class CondorShadowEngine:
         return {"status": "CONDOR_SHADOW_RAN", "ran": True, "opened": len(opened), "closed": len(closed)}
 
     # ---- report --------------------------------------------------------------------------------
-    def report(self):
-        entries = self._entries()
+    def _slice_metrics(self, entries):
+        """The forward-test numbers for a subset of condors (all, or one sleeve): closed count, realized,
+        win rate, marked unrealized, and an accumulating/measuring verdict. One code path so the overall
+        and per-sleeve reads can never drift."""
         closed = [e for e in entries if e.get("status") == "CLOSED"]
         open_ = [e for e in entries if e.get("status") == "OPEN"]
         realized = round(sum(self._f(e.get("realized_pnl")) for e in closed), 2)
         wins = sum(1 for e in closed if self._f(e.get("realized_pnl")) > 0)
-        # unrealized on the open book
         unrealized, marked = 0.0, 0
         for e in open_:
             cv = self._current_value(e.get("legs") or {})
@@ -247,22 +248,36 @@ class CondorShadowEngine:
                 marked += 1
         n = len(closed)
         accumulating = n < self.MIN_DAYS
+        return {
+            "open_condors": len(open_), "closed_condors": n, "min_closed": self.MIN_DAYS,
+            "realized_pnl": realized, "unrealized_pnl": round(unrealized, 2), "open_marked": marked,
+            "win_rate_pct": round(100 * wins / n, 1) if n else None,
+            "status": ("CONDOR_SHADOW_ACCUMULATING" if accumulating else "CONDOR_SHADOW_MEASURING"),
+            "verdict": (f"accumulating ({n}/{self.MIN_DAYS} closed) — not enough to trust yet" if accumulating
+                        else f"measuring: {n} closed, realized ${realized}, win rate "
+                             f"{round(100*wins/n,1) if n else 0}%"),
+        }
+
+    def report(self):
+        entries = self._entries()
+        overall = self._slice_metrics(entries)
+        # PER-SLEEVE breakout — the whole point of two independent forward-tests: measure the EARNINGS-vol
+        # edge distinctly from VRP (they blended into one verdict before), mirroring the edge court's
+        # premium_vrp / premium_earnings split. A sleeve with no condors yet just reports 0 closed.
+        by_sleeve = {s: self._slice_metrics([e for e in entries if (e.get("sleeve") or "") == s])
+                     for s in ("vrp", "earnings")}
         # A sleeve that threw during candidate-generation is surfaced (not silently dropped) so the
         # operator knows the forward-test is running on partial input and its verdict may be biased.
         sleeve_errors = self._read_sleeve_errors()
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
-            "open_condors": len(open_), "closed_condors": n, "min_closed": self.MIN_DAYS,
-            "realized_pnl": realized, "unrealized_pnl": round(unrealized, 2), "open_marked": marked,
-            "win_rate_pct": round(100 * wins / n, 1) if n else None,
+            **overall,
+            "by_sleeve": by_sleeve,
             "sleeve_errors": sleeve_errors,
             "degraded": bool(sleeve_errors),
-            "status": ("CONDOR_SHADOW_DEGRADED" if sleeve_errors else
-                       "CONDOR_SHADOW_ACCUMULATING" if accumulating else "CONDOR_SHADOW_MEASURING"),
-            "verdict": (f"accumulating ({n}/{self.MIN_DAYS} closed) — not enough to trust yet" if accumulating
-                        else f"measuring: {n} closed, realized ${realized}, win rate "
-                             f"{round(100*wins/n,1) if n else 0}%"),
+            "status": ("CONDOR_SHADOW_DEGRADED" if sleeve_errors else overall["status"]),
             "note": ("Hypothetical short-premium condors built + priced off Unusual Whales (clean greeks "
-                     "+ NBBO), NO orders — the real VRP/earnings forward-test the SIM sandbox can't run."),
+                     "+ NBBO), NO orders — the real VRP/earnings forward-test the SIM sandbox can't run. "
+                     "by_sleeve measures the earnings-vol edge SEPARATELY from VRP."),
         }

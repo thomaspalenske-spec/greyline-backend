@@ -68,3 +68,22 @@ def test_report_shape(monkeypatch):
     r = e.report()
     assert r["open_condors"] == 1 and r["closed_condors"] == 0
     assert r["status"] == "CONDOR_SHADOW_ACCUMULATING"
+
+
+def test_report_splits_verdict_by_sleeve(monkeypatch):
+    # earnings-vol must be measurable SEPARATELY from VRP (the whole point of two forward-tests).
+    e = C()
+    rows = [
+        {"status": "CLOSED", "sleeve": "vrp", "realized_pnl": 275.0},
+        {"status": "CLOSED", "sleeve": "vrp", "realized_pnl": -100.0},
+        {"status": "CLOSED", "sleeve": "earnings", "realized_pnl": 50.0},
+        {"status": "OPEN", "sleeve": "earnings", "legs": {}, "quantity": 1, "entry_credit_mid": 0.5},
+    ]
+    from app.services import condor_shadow_engine as mod
+    mod.LEDGER.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    rep = e.report()
+    bs = rep["by_sleeve"]
+    assert bs["vrp"]["closed_condors"] == 2 and bs["vrp"]["realized_pnl"] == pytest.approx(175.0)
+    assert bs["vrp"]["win_rate_pct"] == pytest.approx(50.0)
+    assert bs["earnings"]["closed_condors"] == 1 and bs["earnings"]["open_condors"] == 1
+    assert bs["earnings"]["win_rate_pct"] == pytest.approx(100.0)

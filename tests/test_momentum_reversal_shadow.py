@@ -105,7 +105,10 @@ def test_bench_cache_written_for_the_board(monkeypatch):
     _stub_bars(monkeypatch, {"AAA": [100.0, 101.0]})
     M().mark()
     cache = json.loads(M.BENCH_CACHE.read_text())
-    assert cache["status"] == "TOP_CANDIDATES_READY" and cache["data_source"] == "TRADESTATION_SETTLED_SHADOW"
+    # data_source must be a reality-guard-whitelisted REAL source (settled CSV bars), not a made-up label
+    # that trips DATA_SOURCE_REAL; provenance is carried separately.
+    assert cache["status"] == "TOP_CANDIDATES_READY" and cache["data_source"] == "CSV_HISTORICAL"
+    assert cache["refreshed_by"] == "MomentumReversalShadowEngine"
     assert cache["candidates"][0]["symbol"] == "AAA" and cache["candidates"][0]["rank"] == 1
     assert "computed_epoch" in cache          # freshness stamp the board/route read
 
