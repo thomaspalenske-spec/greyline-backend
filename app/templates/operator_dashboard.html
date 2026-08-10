@@ -1199,13 +1199,16 @@ async function refreshMomentumShadow() {
     const d = await getJSON("/momentum-equity-shadow");   // positions marked at live quotes (60s-cached)
     const pos = d.open_positions || [];
     if (summary) {
-      summary.textContent = d.status === "MOM_SHADOW_NO_DATA"
-        ? `${pos.length} open · ${d.cohorts_closed || 0} weeks closed · live entry + settles in 5 business days`
-        : `${pos.length} open · ${d.cohorts_closed || 0}/${d.min_cohorts} weeks · ${d.status === "MOM_SHADOW_MEASURING" ? ("live Sharpe " + d.annualized_sharpe) : "accumulating"}`;
+      if (d.status === "MOM_SHADOW_WAITING_SCAN") {
+        summary.innerHTML = `<span class="sub">waiting for a fresh live universe scan — no cohort opens on stale data</span>`;
+      } else {
+        summary.textContent = d.status === "MOM_SHADOW_NO_DATA"
+          ? `${pos.length} open · ${d.cohorts_closed || 0} weeks closed · live entry + settles in 5 business days`
+          : `${pos.length} open · ${d.cohorts_closed || 0}/${d.min_cohorts} weeks · ${d.status === "MOM_SHADOW_MEASURING" ? ("live Sharpe " + d.annualized_sharpe) : "accumulating"}`;
+      }
     }
     if (!pos.length) {
-      const why = d.open_skipped ? (" — " + d.open_skipped) : "";
-      body.innerHTML = `<tr><td colspan="8"><span class="sub">${(d.verdict || "no open shadow positions right now") + why}</span></td></tr>`;
+      body.innerHTML = `<tr><td colspan="7"><span class="sub">${d.verdict || "no open shadow positions right now"}</span></td></tr>`;
       return;
     }
     body.innerHTML = pos.map(p => {

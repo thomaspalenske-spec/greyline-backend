@@ -125,7 +125,8 @@ def test_signal_targets_reads_scan_cache_fresh_vs_stale():
 
 def test_report_gating_accumulating_then_measuring(monkeypatch):
     _stub_prices(monkeypatch, {})
-    assert M().report()["status"] == "MOM_SHADOW_NO_DATA"
+    # no open cohort + no live scan cache -> honestly reports it is WAITING for a fresh scan
+    assert M().report()["status"] == "MOM_SHADOW_WAITING_SCAN"
     lines = [json.dumps({"net_return": 0.001, "n_legs": 1}) for _ in range(M.MIN_COHORTS - 1)]
     M.CLOSED.write_text("\n".join(lines) + "\n")
     assert M().report()["status"] == "MOM_SHADOW_ACCUMULATING"

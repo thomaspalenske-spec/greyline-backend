@@ -284,6 +284,14 @@ class MomentumReversalShadowEngine:
         open_cohorts = self._load_open()
         positions = self.open_positions()
         entry_source = (open_cohorts[0].get("source") if open_cohorts else None)
+        # explain an EMPTY book honestly: with nothing open, are we waiting on a fresh live scan?
+        open_wait = None
+        if not open_cohorts:
+            _p, _b, _a, _n, scan_src = self._signal_targets()
+            if scan_src not in self.LIVE_SOURCES:
+                open_wait = (f"waiting for a fresh LIVE universe scan before opening the first cohort "
+                             f"(current scan source={scan_src!r}). No cohort opens on stale/absent data — "
+                             "the scan is produced by the /top-candidates live fetch.")
         base = {
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
@@ -292,6 +300,7 @@ class MomentumReversalShadowEngine:
             "open_cohorts": len(open_cohorts),
             "open_positions": positions,
             "entry_source": entry_source,
+            "open_wait": open_wait,
             "hold_days": self.HOLD_DAYS, "cost_roundtrip_bps": round(self._cost_roundtrip() * 10000, 2),
             "backtest_reference": {"oos_sharpe_gross": 0.42, "oos_sharpe_net_10bps": 0.08,
                                    "caveat": "backtest magnitude is survivorship-biased (CSV = today's "
@@ -300,9 +309,12 @@ class MomentumReversalShadowEngine:
                      "long/short basket, LIVE entry + live settlement after 5 business days, NO orders/budget."),
         }
         if n == 0:
-            return {**base, "status": "MOM_SHADOW_NO_DATA",
-                    "verdict": ("no closed cohorts yet — the first weekly cohort settles ~5 business days "
-                                "after it opens on a live signal")}
+            return {**base,
+                    "status": "MOM_SHADOW_WAITING_SCAN" if open_wait else "MOM_SHADOW_NO_DATA",
+                    "verdict": (open_wait if open_wait else
+                                (f"{len(positions)} open — the first weekly cohort settles ~5 business days "
+                                 "after opening on a live signal" if positions else
+                                 "no closed cohorts yet — the first cohort settles ~5 business days after it opens"))}
 
         eq = 1.0
         for r in rets:
