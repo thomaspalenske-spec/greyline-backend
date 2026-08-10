@@ -186,6 +186,44 @@ class MomentumReversalShadowEngine:
         rows.sort(key=lambda r: (r.get("conviction") or 0), reverse=True)
         return rows
 
+    def attach_live(self, positions):
+        """Overlay a REAL-TIME direction on each open position: the live TradeStation Last quote and the
+        intraday % vs entry (signed by side). Batched (one request) and served off the quote engine's 60s
+        TTL cache, so the dashboard's 15s refresh can't over-poll TradeStation. Purely a VIEW layer — the
+        settled-bar marks that drive the forward-test verdict are untouched. Fails soft: no quote -> None."""
+        syms = sorted({str(p.get("symbol") or "").upper() for p in positions if p.get("symbol")})
+        if not syms:
+            return positions
+        quotes = {}
+        try:
+            from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+            quotes = TradeStationQuoteLiveEngine().get_quotes(syms) or {}
+        except Exception:
+            quotes = {}
+        for p in positions:
+            sym = str(p.get("symbol") or "").upper()
+            q = quotes.get(sym) or {}
+            row = (((q.get("response_json") or {}).get("Quotes") or [{}]) or [{}])[0]
+            last = self._f2(row.get("Last")) or self._f2(row.get("Close"))
+            ec = self._f2(p.get("entry_close"))
+            p["live_last"] = round(last, 4) if last else None
+            p["live_cache_hit"] = bool(q.get("cache_hit"))
+            if last and ec and ec > 0:
+                live = (last / ec - 1.0) if p.get("side") == "BUY" else (ec / last - 1.0)
+                p["live_pct"] = round(100 * live, 2)
+                p["live_dir"] = "up" if live > 0 else ("down" if live < 0 else "flat")
+            else:
+                p["live_pct"] = None
+                p["live_dir"] = None
+        return positions
+
+    @staticmethod
+    def _f2(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
     # ---- state ---------------------------------------------------------------------------------
 
     def _load_open(self):

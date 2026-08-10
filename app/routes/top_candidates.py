@@ -174,9 +174,16 @@ def top_candidates(force: bool = False, top_n: int = 5):
 
 
 @router.get("/momentum-equity-shadow")
-def momentum_equity_shadow():
+def momentum_equity_shadow(live: bool = False):
     """Zero-capital forward-test of the EQUITY momentum-reversal factor: a weekly long/short basket run
     on real settled bars (NO orders, NO budget), net of cost, so we learn whether the factor survives
-    live BEFORE committing capital. Verdict mirrors the edge court (accumulating -> measuring)."""
+    live BEFORE committing capital. Verdict mirrors the edge court (accumulating -> measuring).
+    ?live=true overlays a REAL-TIME direction (live TS Last + intraday % vs entry) on the open positions
+    — a VIEW layer only, throttled by the quote engine's 60s cache; the settled-bar verdict is untouched."""
     from app.services.momentum_reversal_shadow_engine import MomentumReversalShadowEngine
-    return MomentumReversalShadowEngine().report()
+    eng = MomentumReversalShadowEngine()
+    rep = eng.report()
+    if live and rep.get("open_positions"):
+        eng.attach_live(rep["open_positions"])
+        rep["live_overlay"] = True
+    return rep

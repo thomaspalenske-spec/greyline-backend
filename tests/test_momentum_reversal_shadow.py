@@ -113,6 +113,39 @@ def test_bench_cache_written_for_the_board(monkeypatch):
     assert "computed_epoch" in cache          # freshness stamp the board/route read
 
 
+def test_attach_live_overlays_direction_vs_entry(monkeypatch):
+    # real-time overlay: live Last vs entry, signed by side; no network (quote engine stubbed).
+    import app.services.tradestation_quote_live_engine as qmod
+
+    class _FakeQuotes:
+        def get_quotes(self, syms):
+            px = {"AAA": 110.0, "SSS": 90.0}   # AAA up 10%, SSS down 10% from 100 entry
+            return {s: {"cache_hit": True, "response_json": {"Quotes": [{"Symbol": s, "Last": px.get(s)}]}}
+                    for s in syms}
+    monkeypatch.setattr(qmod, "TradeStationQuoteLiveEngine", _FakeQuotes)
+    positions = [
+        {"symbol": "AAA", "side": "BUY", "entry_close": 100.0},
+        {"symbol": "SSS", "side": "SELL", "entry_close": 100.0},
+    ]
+    out = M().attach_live(positions)
+    a = next(p for p in out if p["symbol"] == "AAA")
+    s = next(p for p in out if p["symbol"] == "SSS")
+    assert a["live_last"] == 110.0 and a["live_pct"] == pytest.approx(10.0) and a["live_dir"] == "up"
+    # short: price fell 10% -> the short is UP 11.11% (100/90-1)
+    assert s["live_pct"] == pytest.approx(100 * (100/90 - 1), abs=1e-2) and s["live_dir"] == "up"
+
+
+def test_attach_live_fails_soft_without_quotes(monkeypatch):
+    import app.services.tradestation_quote_live_engine as qmod
+
+    class _Boom:
+        def get_quotes(self, syms):
+            raise RuntimeError("quote feed down")
+    monkeypatch.setattr(qmod, "TradeStationQuoteLiveEngine", _Boom)
+    out = M().attach_live([{"symbol": "AAA", "side": "BUY", "entry_close": 100.0}])
+    assert out[0]["live_last"] is None and out[0]["live_pct"] is None    # never throws, never fabricates
+
+
 def test_report_gating_accumulating_then_measuring(monkeypatch):
     _stub_signal(monkeypatch, [{"symbol": "AAA", "side": "BUY", "last_close": 100.0, "_entry_idx": 0}])
     r0 = M().report()
