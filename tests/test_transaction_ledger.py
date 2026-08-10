@@ -114,3 +114,26 @@ def test_empty_ledgers_are_safe(monkeypatch):
     r = T().rolling()
     assert r["today"]["count"] == 0 and r["yesterday"]["count"] == 0
     assert r["yesterday"]["date"] is None and r["status"] == "TRANSACTIONS_ROLLING_READY"
+
+
+def test_yesterday_held_rows_get_unrealized_and_phantoms_drop(monkeypatch):
+    """On a weekend/pre-open all held positions were opened in the PRIOR session, so the P&L column read
+    all '—' (unrealized enrich + phantom-drop only ran on 'today'). Enrichment now runs across BOTH days:
+    a held name shows its unrealized; a net-long name the broker does NOT hold (rejected/flattened) drops."""
+    from datetime import datetime, timedelta
+    from app.services.transaction_ledger_engine import TransactionLedgerEngine as T
+    import app.services.broker_account_view_engine as bmod
+
+    yday = datetime.now(T.MARKET_TZ).date() - timedelta(days=1)
+    ts = datetime(yday.year, yday.month, yday.day, 14, 0).isoformat()
+    events = [
+        {"ts": ts, "sleeve": "trend", "symbol": "IWM", "action": "BUY", "quantity": 15, "pnl": None},   # held
+        {"ts": ts, "sleeve": "trend", "symbol": "ZZZ", "action": "BUY", "quantity": 3, "pnl": None},    # phantom
+    ]
+    monkeypatch.setattr(T, "_events", lambda self: events)
+    monkeypatch.setattr(bmod.BrokerAccountViewEngine, "snapshot",
+                        lambda self: {"positions": [{"symbol": "IWM", "quantity": 4, "unrealized_pnl": 2.67}]})
+
+    bp = {p["symbol"]: p for p in T().rolling()["yesterday"]["by_position"]}
+    assert "ZZZ" not in bp                              # net-long, broker holds none, no realized -> dropped
+    assert bp["IWM"]["unrealized_pnl"] == 2.67          # held -> unrealized shown (no more "—")

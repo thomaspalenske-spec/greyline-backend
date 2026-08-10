@@ -371,9 +371,17 @@ class TransactionLedgerEngine:
                      "the prior session drops off. Source: GreyLine's own sleeve ledgers."),
             "status": "TRANSACTIONS_ROLLING_READY",
         }
-        # unrealized is a CURRENT-book snapshot -> enrich + drop rejected-order phantoms on today's rows
+        # unrealized + phantom-drop are a CURRENT-BOOK reconciliation — they apply to every net-long row in
+        # the 2-day window, NOT just today's. On a weekend / pre-open the held positions were all opened in
+        # the PRIOR session, so enriching only "today" left them ALL showing "—" (and left flattened/rejected
+        # names lingering as phantom rows). Enrich BOTH days as ONE set: each held name shows its unrealized
+        # exactly once (the broker's unrealized split across its net-long sleeve rows, no double-count) and a
+        # non-held phantom drops from whichever day it's in. Same dict objects -> identity filter keeps order.
         try:
-            out["today"]["by_position"] = self._enrich_unrealized(out["today"]["by_position"])
+            combined = out["today"]["by_position"] + out["yesterday"]["by_position"]
+            kept = {id(r) for r in self._enrich_unrealized(combined)}
+            out["today"]["by_position"] = [r for r in out["today"]["by_position"] if id(r) in kept]
+            out["yesterday"]["by_position"] = [r for r in out["yesterday"]["by_position"] if id(r) in kept]
         except Exception:
             pass
         return out
