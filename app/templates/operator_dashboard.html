@@ -721,13 +721,13 @@ th {
 
       <div class="card" id="momentum_shadow_card" style="min-width:0;">
         <div class="section-title">Momentum Shadow — Open Positions <span id="ms_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">A ZERO-capital forward-test of the equity momentum-reversal factor — a weekly long/short basket run on real settled bars, <strong>no orders, no budget</strong>, so we learn whether the factor survives live before committing capital. These are hypothetical holdings; unrealized P/L is marked on settled closes and each leg settles after a 5-day hold, net of cost. Verdict accrues in the <a href="/momentum-equity-shadow" style="color:inherit;">shadow report</a>.</div>
+        <div class="sub" style="margin-bottom:10px;">A ZERO-capital forward-test of the equity momentum-reversal factor — a weekly long/short basket opened on the <strong>live</strong> universe and settled after a 5-business-day hold at live quotes, <strong>no orders, no budget</strong>, so we learn whether the factor survives live before committing capital. These are hypothetical holdings; the direction column is the real-time move vs entry (updates ~every minute). Verdict accrues in the <a href="/momentum-equity-shadow" style="color:inherit;">shadow report</a>.</div>
         <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Settled</th><th>Live (now)</th><th>Live Δ vs entry</th><th>Unrealized % (settled)</th><th>Days to Settle</th></tr>
+              <tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Live (now)</th><th>Direction vs entry</th><th>Days Held</th><th>Days to Settle</th></tr>
             </thead>
-            <tbody id="momentum_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+            <tbody id="momentum_shadow_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1196,25 +1196,19 @@ async function refreshMomentumShadow() {
   const body = document.getElementById("momentum_shadow_body");
   const summary = document.getElementById("ms_summary");
   try {
-    const d = await getJSON("/momentum-equity-shadow?live=true");   // overlay real-time direction (60s-cached)
+    const d = await getJSON("/momentum-equity-shadow");   // positions marked at live quotes (60s-cached)
     const pos = d.open_positions || [];
     if (summary) {
-      const df = d.data_freshness || {};
-      if (df.stale) {
-        summary.innerHTML = `<span class="red">⚠ entries up to ${df.max_entry_stale_days}d stale — not a real edge read yet (equity universe needs fresh bars)</span>`;
-      } else {
-        summary.textContent = d.status === "MOM_SHADOW_NO_DATA"
-          ? `${pos.length} open · ${d.cohorts_closed || 0} weeks closed · live direction updates ~every minute`
-          : `${pos.length} open · ${d.cohorts_closed || 0}/${d.min_cohorts} weeks · ${d.status === "MOM_SHADOW_MEASURING" ? ("live Sharpe " + d.annualized_sharpe) : "accumulating"}`;
-      }
+      summary.textContent = d.status === "MOM_SHADOW_NO_DATA"
+        ? `${pos.length} open · ${d.cohorts_closed || 0} weeks closed · live entry + settles in 5 business days`
+        : `${pos.length} open · ${d.cohorts_closed || 0}/${d.min_cohorts} weeks · ${d.status === "MOM_SHADOW_MEASURING" ? ("live Sharpe " + d.annualized_sharpe) : "accumulating"}`;
     }
     if (!pos.length) {
-      body.innerHTML = `<tr><td colspan="8"><span class="sub">${d.verdict || "no open shadow positions right now"}</span></td></tr>`;
+      const why = d.open_skipped ? (" — " + d.open_skipped) : "";
+      body.innerHTML = `<tr><td colspan="8"><span class="sub">${(d.verdict || "no open shadow positions right now") + why}</span></td></tr>`;
       return;
     }
     body.innerHTML = pos.map(p => {
-      const up = p.unrealized_pct;
-      const cls = up == null ? "" : (up >= 0 ? "green" : "red");
       const sideBadge = p.side === "BUY" ? "open" : "neutral";
       const lv = p.live_pct;
       const arrow = p.live_dir === "up" ? "▲" : (p.live_dir === "down" ? "▼" : "▬");
@@ -1223,15 +1217,14 @@ async function refreshMomentumShadow() {
         <td><strong>${p.symbol}</strong></td>
         <td><span class="badge ${sideBadge}">${p.side === "BUY" ? "LONG" : "SHORT"}</span></td>
         <td>${p.entry_close != null ? fmtMoney(p.entry_close) : "—"} <span class="sub">${p.entry_date || ""}</span></td>
-        <td>${p.current_close != null ? fmtMoney(p.current_close) : "—"}</td>
         <td>${p.live_last != null ? fmtMoney(p.live_last) : "<span class='sub'>—</span>"}</td>
         <td><span class="${lvCls}">${lv != null ? arrow + " " + (lv > 0 ? "+" : "") + lv.toFixed(2) + "%" : "<span class='sub'>—</span>"}</span></td>
-        <td><span class="${cls}">${up != null ? (up >= 0 ? "+" : "") + up.toFixed(2) + "%" : "—"}</span></td>
+        <td>${p.days_held}</td>
         <td>${p.days_to_settle}</td>
       </tr>`;
     }).join("");
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="8"><span class="red">Momentum shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+    body.innerHTML = `<tr><td colspan="7"><span class="red">Momentum shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
   }
 }
 

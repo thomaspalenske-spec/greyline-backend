@@ -174,16 +174,11 @@ def top_candidates(force: bool = False, top_n: int = 5):
 
 
 @router.get("/momentum-equity-shadow")
-def momentum_equity_shadow(live: bool = False):
-    """Zero-capital forward-test of the EQUITY momentum-reversal factor: a weekly long/short basket run
-    on real settled bars (NO orders, NO budget), net of cost, so we learn whether the factor survives
-    live BEFORE committing capital. Verdict mirrors the edge court (accumulating -> measuring).
-    ?live=true overlays a REAL-TIME direction (live TS Last + intraday % vs entry) on the open positions
-    — a VIEW layer only, throttled by the quote engine's 60s cache; the settled-bar verdict is untouched."""
+def momentum_equity_shadow():
+    """Zero-capital forward-test of the EQUITY momentum-reversal factor: a weekly long/short basket opened
+    on the LIVE universe and settled after 5 business days at live quotes (NO orders, NO budget), net of
+    cost, so we learn whether the factor survives live BEFORE committing capital. Open positions carry a
+    real-time direction (live_last / live_pct / live_dir vs entry) off the quote engine's 60s cache; the
+    verdict mirrors the edge court (accumulating -> measuring)."""
     from app.services.momentum_reversal_shadow_engine import MomentumReversalShadowEngine
-    eng = MomentumReversalShadowEngine()
-    rep = eng.report()
-    if live and rep.get("open_positions"):
-        eng.attach_live(rep["open_positions"])
-        rep["live_overlay"] = True
-    return rep
+    return MomentumReversalShadowEngine().report()
