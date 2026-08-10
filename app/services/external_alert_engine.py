@@ -44,8 +44,23 @@ from pathlib import Path
 class ExternalAlertEngine:
 
     STATE = Path("app/data/notifications/external_alert_state.json")
-    COOLDOWN_MIN = 30          # one page per identical condition per 30 minutes
+    COOLDOWN_MIN = 30          # min spacing between the (few) pages of one condition
+    # HARD CAP: text the SAME alert at most this many times per episode, then go SILENT until it resolves.
+    # Without it a condition that re-asserts every cycle (e.g. "Mission book OVER-deployed") pages the
+    # operator indefinitely — 6 identical texts is noise, not signal. An episode ends when the condition
+    # stops firing (no dispatch attempts) for EPISODE_RESET_MIN, so a genuine recurrence still alerts.
+    MAX_SENDS_PER_FP = 2
+    EPISODE_RESET_MIN = 240    # 4h of quiet (no attempts) starts a fresh episode -> the cap resets
     TIMEOUT_S = 6
+
+    @classmethod
+    def _max_sends(cls):
+        from os import getenv
+        try:
+            v = getenv("GREYLINE_MAX_ALERT_SENDS", "")
+            return max(1, int(v)) if str(v).strip() else cls.MAX_SENDS_PER_FP
+        except (TypeError, ValueError):
+            return cls.MAX_SENDS_PER_FP
 
     # --------------------------------------------------------------- config
 
@@ -204,9 +219,34 @@ class ExternalAlertEngine:
         fp = fingerprint or f"{severity}:{title}"
         st = self._load_state()
 
+        # EPISODE tracking for the hard send cap. `sends[fp] = {count, last_attempt, last_sent}`.
+        sends = st.setdefault("sends", {})
+        rec = dict(sends.get(fp) or {"count": 0, "last_attempt": None, "last_sent": None})
+        # A quiet gap (no dispatch ATTEMPTS for EPISODE_RESET_MIN) means the previous burst is over —
+        # reset the counter so a genuine recurrence of the SAME condition can page again.
+        if rec.get("last_attempt"):
+            try:
+                if (now - datetime.fromisoformat(rec["last_attempt"])) > timedelta(minutes=self.EPISODE_RESET_MIN):
+                    rec = {"count": 0, "last_attempt": None, "last_sent": None}
+            except Exception:
+                pass
+        rec["last_attempt"] = now.isoformat()
+
+        def _persist(result):
+            sends[fp] = rec
+            self._save_state(st)
+            return result
+
+        # HARD CAP first: once the SAME alert has paged MAX_SENDS times this episode, stay silent (even on
+        # force — force bypasses the spacing cooldown, NOT the absolute cap). Prevents endless identical texts.
+        if rec.get("count", 0) >= self._max_sends():
+            return _persist({"status": "SUPPRESSED_MAX_SENDS", "fingerprint": fp,
+                             "detail": (f"already paged {rec['count']}x this episode (max {self._max_sends()}) — "
+                                        "silent until it resolves")})
+
         if not force and self._cooling_down(fp, st, now):
-            return {"status": "SUPPRESSED_COOLDOWN", "fingerprint": fp,
-                    "detail": f"identical alert sent within {self.COOLDOWN_MIN}m"}
+            return _persist({"status": "SUPPRESSED_COOLDOWN", "fingerprint": fp,
+                             "detail": f"identical alert sent within {self.COOLDOWN_MIN}m"})
 
         if dry_run:
             return {"status": "DRY_RUN",
@@ -222,12 +262,16 @@ class ExternalAlertEngine:
         external_ok = any(r.get("ok") and r["channel"] in ("imessage", "webhook", "ntfy")
                           for r in results)
         if external_ok:
-            st.setdefault("last_sent", {})[fp] = now.isoformat()
-            self._save_state(st)
+            st.setdefault("last_sent", {})[fp] = now.isoformat()   # cooldown spacing state
+            rec["count"] = rec.get("count", 0) + 1                  # count toward the per-episode cap
+            rec["last_sent"] = now.isoformat()
+        sends[fp] = rec
+        self._save_state(st)
 
         return {
             "timestamp": now.isoformat(),
             "title": title, "severity": severity, "fingerprint": fp,
+            "episode_send_count": rec.get("count", 0),
             "channels": results,
             "reached_off_machine": external_ok,
             "has_external_channel": self.has_external_channel(),
