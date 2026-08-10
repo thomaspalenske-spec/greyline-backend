@@ -1,0 +1,106 @@
+"""Index (XSP-first) defined-risk condor PLANNER — feeds the condor shadow, never books.
+
+Recommendation follow-through (2026-08-10): the deepest, most-persistent variance-risk premium lives in
+INDEX options, and their spreads are the tightest anywhere — the exact cost constraint that killed the
+single-name condor sleeves. XSP (mini-SPX, 1/10th SPX) is right-sized for the $10k book AND cash-settled
+(European, no assignment/pin) so it sidesteps the SIM atomic-condor-close break that RETIRED the VRP /
+earnings sleeves.
+
+This engine builds ONE defined-risk iron condor per index name off the SAME UW chain path the sleeves use
+(`UWOptionChainEngine.get_chain_snapshot` -> `ConditionalVRPShortPremiumEngine.build_condor`), producing the
+identical condor dict the condor shadow already consumes. It is MEASUREMENT-ONLY: the condor shadow records
+what this WOULD open (tagged sleeve 'index_vrp') and marks it to UW mid — NO orders, NO budget, no live
+sleeve. Gated OFF by default (GREYLINE_INDEX_CONDOR_SHADOW). XSP first; SPX/NDX/RUT are a trivial follow-on
+(UW serves all of them via the same /api/stock/{root} path — verified 2026-08-10).
+"""
+
+from os import getenv
+
+
+class IndexCondorPlanEngine:
+
+    NAMES = ["XSP"]                 # XSP-first; SPX/NDX/RUT proven-available, add when XSP is measuring
+    TARGET_DTE = 42
+    DTE_BAND = (28, 56)
+
+    @staticmethod
+    def enabled():
+        return (getenv("GREYLINE_INDEX_CONDOR_SHADOW", "false") or "false").strip().lower() == "true"
+
+    @staticmethod
+    def _max_loss_cap():
+        # XSP right-sizing for the $10k book (~one 10-wide condor ≈ $800-900). Own knob so it never rides
+        # the single-name cap. Default 1000 -> qty 1 at a 10-point width.
+        try:
+            return float(getenv("GREYLINE_INDEX_CONDOR_MAX_LOSS", "1000"))
+        except (TypeError, ValueError):
+            return 1000.0
+
+    @staticmethod
+    def _strike_grid():
+        # Index options list $1 strikes; the single-name build_condor picks the NARROWEST fitting wing, so on
+        # a $1 grid it builds a $1-wide condor whose ~$0.30 credit can't clear the 4-leg round-trip cost.
+        # Coarsen to a normal index wing width (10 pts) — exactly how XSP condors actually trade — so the
+        # wing has meaningful credit. Behaviour-preserving for coarse-strike names (they're already on it).
+        try:
+            return int(getenv("GREYLINE_INDEX_CONDOR_STRIKE_GRID", "10"))
+        except (TypeError, ValueError):
+            return 10
+
+    @staticmethod
+    def _coarsen(contracts, builder, grid):
+        """Keep only strikes on the `grid` (e.g. every 10 pts) so build_condor's wing selection yields a
+        tradeable width on a fine index strike ladder. Fails open: a parse miss keeps the contract."""
+        if grid <= 1:
+            return contracts
+        out = []
+        for c in contracts:
+            try:
+                k = (builder._leg(c) or {}).get("strike")
+                if k is None or round(float(k)) % grid == 0:
+                    out.append(c)
+            except Exception:
+                out.append(c)
+        return out
+
+    def plan(self):
+        """Build one defined-risk condor per index name (or a skip reason each). MEASUREMENT-ONLY — returns
+        {'planned': [condor,...], 'errors': {name: reason}, 'expiry': iso}. Never books, never sizes a real
+        order. A name that throws is recorded in `errors` (never silently dropped — that would bias the
+        forward-test toward the days it happened to work), mirroring the condor shadow's own discipline."""
+        from app.services.uw_option_chain_engine import UWOptionChainEngine
+        from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
+
+        expiry = UWOptionChainEngine.monthly_expiry(target_dte=self.TARGET_DTE, band=self.DTE_BAND)
+        chain = UWOptionChainEngine()
+        builder = ConditionalVRPShortPremiumEngine()
+        cap = self._max_loss_cap()
+        grid = self._strike_grid()
+        planned, errors = [], {}
+        for name in self.NAMES:
+            try:
+                snap = chain.get_chain_snapshot(name, expiry)
+                contracts = self._coarsen(snap.get("contracts") or [], builder, grid)
+                if not contracts:
+                    errors[name] = snap.get("status") or "no contracts"
+                    continue
+                con = builder.build_condor(name, contracts, max_loss_cap=cap)
+                if con.get("skip"):
+                    errors[name] = con["skip"]
+                    continue
+                # the shadow keys on (symbol, expiration) and stores iv_rank; build_condor sets symbol + legs.
+                con["expiration"] = expiry
+                con["iv_rank"] = None      # UNCONDITIONAL for now (measure baseline index VRP); conditional-
+                #                            on-rich-IV is a follow-on once we have the raw read.
+                planned.append(con)
+            except Exception as e:
+                errors[name] = repr(e)[:160]
+        return {"planned": planned, "errors": errors, "expiry": expiry,
+                "max_loss_cap": cap, "names": list(self.NAMES),
+                "status": "INDEX_CONDOR_PLAN_READY" if planned else "INDEX_CONDOR_PLAN_EMPTY"}
+
+    def status(self):
+        return {"enabled": self.enabled(), "names": list(self.NAMES), "target_dte": self.TARGET_DTE,
+                "max_loss_cap": self._max_loss_cap(),
+                "note": ("MEASUREMENT-ONLY index (XSP) condor planner feeding the condor shadow as sleeve "
+                         "'index_vrp'; NO orders, NO budget. Cash-settled so no SIM atomic-close break.")}

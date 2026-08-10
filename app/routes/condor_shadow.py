@@ -12,8 +12,18 @@ router = APIRouter()
 
 @router.get("/condor-shadow")
 def condor_shadow():
-    """Hypothetical short-premium condor P&L (realized/unrealized), priced off Unusual Whales."""
+    """Hypothetical short-premium condor P&L (realized/unrealized), priced off Unusual Whales.
+    by_sleeve splits the verdict: single-name VRP, earnings-vol, and index_vrp (XSP) — each measured apart."""
     return CondorShadowEngine().report()
+
+
+@router.get("/index-condor-plan")
+def index_condor_plan(build: bool = False):
+    """Status of the measurement-only index (XSP) condor planner that feeds the condor shadow as sleeve
+    index_vrp. ?build=true returns the current planned condor(s) off live UW (read-only, never books)."""
+    from app.services.index_condor_plan_engine import IndexCondorPlanEngine
+    eng = IndexCondorPlanEngine()
+    return eng.plan() if build else eng.status()
 
 
 @router.get("/best-condors")

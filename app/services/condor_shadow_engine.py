@@ -94,6 +94,17 @@ class CondorShadowEngine:
                 condors.append(con)
         except Exception as e:
             errors["earnings"] = repr(e)[:160]
+        # INDEX VRP (XSP-first): cash-settled index condors — the deepest, tightest-spread variance premium,
+        # and no SIM atomic-close break. Opt-in (GREYLINE_INDEX_CONDOR_SHADOW); measured as its own sleeve.
+        try:
+            from app.services.index_condor_plan_engine import IndexCondorPlanEngine
+            _ie = IndexCondorPlanEngine()
+            if _ie.enabled():
+                for con in (_ie.plan().get("planned") or []):
+                    con["_sleeve"] = "index_vrp"
+                    condors.append(con)
+        except Exception as e:
+            errors["index_vrp"] = repr(e)[:160]
         return condors, errors
 
     _LEGS = ("short_call", "wing_call", "short_put", "wing_put")
@@ -265,7 +276,7 @@ class CondorShadowEngine:
         # edge distinctly from VRP (they blended into one verdict before), mirroring the edge court's
         # premium_vrp / premium_earnings split. A sleeve with no condors yet just reports 0 closed.
         by_sleeve = {s: self._slice_metrics([e for e in entries if (e.get("sleeve") or "") == s])
-                     for s in ("vrp", "earnings")}
+                     for s in ("vrp", "earnings", "index_vrp")}
         # A sleeve that threw during candidate-generation is surfaced (not silently dropped) so the
         # operator knows the forward-test is running on partial input and its verdict may be biased.
         sleeve_errors = self._read_sleeve_errors()
