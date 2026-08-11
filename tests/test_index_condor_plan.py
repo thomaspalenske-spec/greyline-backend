@@ -76,6 +76,7 @@ def test_plan_iterates_every_configured_name(monkeypatch):
     assert {c["symbol"] for c in r["planned"]} == set(I.NAME_CONFIG)     # XSP, QQQ, IWM, GLD all iterated
     tag = {c["symbol"]: c["_sleeve"] for c in r["planned"]}
     assert tag["GLD"] == "commodity_vrp" and tag["USO"] == "energy_vrp" and tag["TLT"] == "rates_vrp"
+    assert tag["IBIT"] == "crypto_vrp"
     assert tag["XSP"] == "index_vrp" and tag["QQQ"] == "index_vrp"       # equity indices pool together
 
 

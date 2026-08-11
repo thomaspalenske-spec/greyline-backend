@@ -276,7 +276,8 @@ class CondorShadowEngine:
         # edge distinctly from VRP (they blended into one verdict before), mirroring the edge court's
         # premium_vrp / premium_earnings split. A sleeve with no condors yet just reports 0 closed.
         by_sleeve = {s: self._slice_metrics([e for e in entries if (e.get("sleeve") or "") == s])
-                     for s in ("vrp", "earnings", "index_vrp", "commodity_vrp", "energy_vrp", "rates_vrp")}
+                     for s in ("vrp", "earnings", "index_vrp", "commodity_vrp", "energy_vrp",
+                               "rates_vrp", "crypto_vrp")}
         # A sleeve that threw during candidate-generation is surfaced (not silently dropped) so the
         # operator knows the forward-test is running on partial input and its verdict may be biased.
         sleeve_errors = self._read_sleeve_errors()

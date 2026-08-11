@@ -39,6 +39,9 @@ class IndexCondorPlanEngine:
         "TLT": {"grid": 3,  "cap": 300.0,  "sleeve": "rates_vrp"},      # 20Y TREASURY — rates vol, another
         #   decorrelated factor (often NEGATIVELY corr to equity in risk-off). Low price (~$89) + low vol +
         #   sparse strikes -> finer $3 grid + smaller cap to stay qty 1 (condors are narrow in % terms).
+        "IBIT": {"grid": 2, "cap": 300.0,  "sleeve": "crypto_vrp"},     # BITCOIN — richest VRP of all, but
+        #   the MOST EXTREME tail of any asset (20-30% days, weekend gaps, 50%+ drawdowns). Deliberately the
+        #   SMALLEST cap ($300 -> ~$154 max loss) to bound per-position tail damage. Ultimate measure/never-arm.
     }
     NAMES = list(NAME_CONFIG)       # SPX/NDX too big for $10k; XND/MRUT cash-settled minis available (UW-probed)
     TARGET_DTE = 42
