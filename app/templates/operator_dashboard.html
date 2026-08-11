@@ -1243,8 +1243,9 @@ async function refreshCondorShadow() {
         : `${d.open_condors || 0} open · ${d.closed_condors || 0} closed · zero-capital, priced off Unusual Whales`;
     }
     const label = { vrp: "VRP (single-name)", earnings: "Earnings-vol",
-                    index_vrp: "Index VRP (XSP/QQQ/IWM)", commodity_vrp: "Commodity VRP (GLD)" };
-    const rows = ["vrp", "earnings", "index_vrp", "commodity_vrp"].map(k => {
+                    index_vrp: "Index VRP (XSP/QQQ/IWM)", commodity_vrp: "Commodity VRP (GLD)",
+                    energy_vrp: "Energy VRP (USO)" };
+    const rows = ["vrp", "earnings", "index_vrp", "commodity_vrp", "energy_vrp"].map(k => {
       const m = bs[k] || {};
       const r = m.realized_pnl;
       const rcls = r == null ? "" : (r >= 0 ? "green" : "red");

@@ -33,6 +33,9 @@ class IndexCondorPlanEngine:
         "QQQ": {"grid": 5,  "cap": 500.0,  "sleeve": "index_vrp"},   # Nasdaq-100 (ETF)
         "IWM": {"grid": 5,  "cap": 500.0,  "sleeve": "index_vrp"},   # Russell 2000 (ETF) — richest equity VRP
         "GLD": {"grid": 5,  "cap": 500.0,  "sleeve": "commodity_vrp"},  # GOLD — DECORRELATED from equity vol
+        "USO": {"grid": 5,  "cap": 500.0,  "sleeve": "energy_vrp"},     # OIL — new decorrelated factor, but
+        #   FAT-TAILED (OPEC/geopolitical/supply jumps): the shadow measures whether the rich energy VRP
+        #   survives its tail net of cost. Most interesting to MEASURE, most dangerous to ever ARM.
     }
     NAMES = list(NAME_CONFIG)       # SPX/NDX too big for $10k; XND/MRUT cash-settled minis available (UW-probed)
     TARGET_DTE = 42
