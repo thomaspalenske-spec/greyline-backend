@@ -53,12 +53,27 @@ def test_plan_emits_shadow_condor_dict(monkeypatch):
                         staticmethod(lambda **k: "2026-09-18"))
     r = I().plan()
     assert r["status"] == "INDEX_CONDOR_PLAN_READY", r.get("errors")
-    con = r["planned"][0]
+    con = next(c for c in r["planned"] if c["symbol"] == "XSP")
     # exactly the keys the condor shadow reads
     assert con["symbol"] == "XSP" and con["expiration"] == "2026-09-18"
     for leg in ("short_call", "wing_call", "short_put", "wing_put"):
         assert con["legs"][leg]["symbol"] and con["legs"][leg]["bid"] > 0
     assert con["credit_per_condor"] > 0 and con["max_loss_total"] > 0 and con["quantity"] >= 1
+
+
+def test_plan_iterates_every_configured_name(monkeypatch):
+    # each of XSP + QQQ + IWM gets its own condor (per-name grid/cap iteration), build stubbed to isolate
+    from app.services.uw_option_chain_engine import UWOptionChainEngine
+    from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
+    monkeypatch.setattr(UWOptionChainEngine, "get_chain_snapshot",
+                        lambda self, sym, exp, **k: {"contracts": [{"Side": "Call"}]})
+    monkeypatch.setattr(UWOptionChainEngine, "monthly_expiry", staticmethod(lambda **k: "2026-09-18"))
+    monkeypatch.setattr(I, "_coarsen", staticmethod(lambda cons, b, g: cons))
+    monkeypatch.setattr(ConditionalVRPShortPremiumEngine, "build_condor",
+                        lambda self, sym, cons, **k: {"symbol": sym, "quantity": 1, "legs": {},
+                                                      "credit_per_condor": 1.0, "max_loss_total": 400.0})
+    r = I().plan()
+    assert {c["symbol"] for c in r["planned"]} == set(I.NAME_CONFIG)     # XSP, QQQ, IWM all iterated
 
 
 def test_chain_error_is_surfaced_not_swallowed(monkeypatch):

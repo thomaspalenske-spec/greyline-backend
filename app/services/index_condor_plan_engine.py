@@ -19,7 +19,17 @@ from os import getenv
 
 class IndexCondorPlanEngine:
 
-    NAMES = ["XSP"]                 # XSP-first; SPX/NDX/RUT proven-available, add when XSP is measuring
+    # Per-name (strike_grid, max_loss_cap). Each index/ETF trades a different strike ladder and price, so
+    # the wing grid + $10k-right-sized cap are calibrated per name (all yield ~qty 1). XSP is cash-settled
+    # (European, no assignment); QQQ/IWM are American-style ETF options — identical for a UW-mid mark, but
+    # the ETFs carry short-leg early-assignment risk IF ever traded live (a cash-settled mini would be the
+    # live upgrade). Grouped under one 'index_vrp' verdict; each condor keeps its symbol for per-index split.
+    NAME_CONFIG = {
+        "XSP": {"grid": 10, "cap": 1000.0},   # S&P 500 (mini-SPX, cash-settled)
+        "QQQ": {"grid": 5,  "cap": 500.0},    # Nasdaq-100 (ETF)
+        "IWM": {"grid": 5,  "cap": 500.0},    # Russell 2000 (ETF) — small-cap vol, historically richest VRP
+    }
+    NAMES = list(NAME_CONFIG)       # SPX/NDX too big for $10k; XND (cash-settled Nasdaq mini) needs a UW probe
     TARGET_DTE = 42
     DTE_BAND = (28, 56)
 
@@ -74,10 +84,11 @@ class IndexCondorPlanEngine:
         expiry = UWOptionChainEngine.monthly_expiry(target_dte=self.TARGET_DTE, band=self.DTE_BAND)
         chain = UWOptionChainEngine()
         builder = ConditionalVRPShortPremiumEngine()
-        cap = self._max_loss_cap()
-        grid = self._strike_grid()
         planned, errors = [], {}
         for name in self.NAMES:
+            cfg = self.NAME_CONFIG.get(name, {})
+            grid = int(cfg.get("grid") or self._strike_grid())
+            cap = float(cfg.get("cap") or self._max_loss_cap())
             try:
                 snap = chain.get_chain_snapshot(name, expiry)
                 contracts = self._coarsen(snap.get("contracts") or [], builder, grid)
@@ -96,11 +107,12 @@ class IndexCondorPlanEngine:
             except Exception as e:
                 errors[name] = repr(e)[:160]
         return {"planned": planned, "errors": errors, "expiry": expiry,
-                "max_loss_cap": cap, "names": list(self.NAMES),
+                "names": list(self.NAMES), "config": self.NAME_CONFIG,
                 "status": "INDEX_CONDOR_PLAN_READY" if planned else "INDEX_CONDOR_PLAN_EMPTY"}
 
     def status(self):
-        return {"enabled": self.enabled(), "names": list(self.NAMES), "target_dte": self.TARGET_DTE,
-                "max_loss_cap": self._max_loss_cap(),
-                "note": ("MEASUREMENT-ONLY index (XSP) condor planner feeding the condor shadow as sleeve "
-                         "'index_vrp'; NO orders, NO budget. Cash-settled so no SIM atomic-close break.")}
+        return {"enabled": self.enabled(), "names": list(self.NAMES), "config": self.NAME_CONFIG,
+                "target_dte": self.TARGET_DTE,
+                "note": ("MEASUREMENT-ONLY index/ETF (XSP + QQQ + IWM) condor planner feeding the condor "
+                         "shadow as sleeve 'index_vrp'; NO orders, NO budget. Per-index premium comparison — "
+                         "does the index VRP generalize across S&P / Nasdaq / Russell?")}
