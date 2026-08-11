@@ -36,6 +36,9 @@ class IndexCondorPlanEngine:
         "USO": {"grid": 5,  "cap": 500.0,  "sleeve": "energy_vrp"},     # OIL — new decorrelated factor, but
         #   FAT-TAILED (OPEC/geopolitical/supply jumps): the shadow measures whether the rich energy VRP
         #   survives its tail net of cost. Most interesting to MEASURE, most dangerous to ever ARM.
+        "TLT": {"grid": 3,  "cap": 300.0,  "sleeve": "rates_vrp"},      # 20Y TREASURY — rates vol, another
+        #   decorrelated factor (often NEGATIVELY corr to equity in risk-off). Low price (~$89) + low vol +
+        #   sparse strikes -> finer $3 grid + smaller cap to stay qty 1 (condors are narrow in % terms).
     }
     NAMES = list(NAME_CONFIG)       # SPX/NDX too big for $10k; XND/MRUT cash-settled minis available (UW-probed)
     TARGET_DTE = 42
