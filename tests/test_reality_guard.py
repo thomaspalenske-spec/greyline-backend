@@ -141,7 +141,7 @@ def test_degraded_broker_read_does_not_fabricate_phantoms():
 
 def test_guard_check_returns_verdict_and_never_throws():
     from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine
-    out = GreyLineRealityGuardEngine().check()
+    out = GreyLineRealityGuardEngine().check(allow_cache=False)
     assert out["verdict"] in ("REAL_DATA_VERIFIED", "REAL_DATA_WITH_WARNINGS",
                               "BROKER_READ_DEGRADED", "FANTASY_DETECTED")
     assert isinstance(out["checks"], list) and len(out["checks"]) >= 4
@@ -163,7 +163,7 @@ def test_degraded_read_alone_is_not_fantasy(monkeypatch):
     monkeypatch.setattr(bmod, "BrokerAccountViewEngine",
                         lambda: type("V", (), {"snapshot": lambda s: degraded_view})())
 
-    out = guard.check()
+    out = guard.check(allow_cache=False)
     reads = next(c for c in out["checks"] if c["id"] == "BROKER_READS_OK")
     assert reads["ok"] is False and reads.get("degraded_class") is True
     # the DEGRADED read must NOT, by itself, produce the red fantasy alarm

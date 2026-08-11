@@ -1026,6 +1026,23 @@ class BackgroundSchedulerService:
         except Exception:
             pass
 
+        # Run the Reality Guard from INSIDE the scheduler (was previously evaluated only when a human opened
+        # the dashboard — so a fantasy state arising while the operator was away went undetected). Refresh
+        # its verdict when stale (warms the cache so the operator routes serve it instantly instead of a ~30s
+        # recompute) and PAGE off-machine on a true FANTASY_DETECTED. Best-effort, read-only, never breaks
+        # the cycle. Degraded-read (honest amber) never pages — the guard's own cry-wolf rule.
+        try:
+            from app.services.greyline_reality_guard_engine import (
+                GreyLineRealityGuardEngine, _GUARD_CACHE, _guard_ttl)
+            import time as _t2
+            _gage = _t2.monotonic() - _GUARD_CACHE["at"]
+            _rg = GreyLineRealityGuardEngine()
+            if _GUARD_CACHE["result"] is None or _gage >= _guard_ttl():
+                _rg.check(allow_cache=False)          # force fresh -> repopulates the cache
+            reality_guard_alert = _rg.fantasy_alert()  # deduped off-machine page on a true fantasy state
+        except Exception as exc:
+            reality_guard_alert = {"error": repr(exc), "status": "REALITY_GUARD_ALERT_DEGRADED"}
+
         try:
             from app.services.edge_persistence_engine import EdgePersistenceEngine
             _epe = EdgePersistenceEngine()

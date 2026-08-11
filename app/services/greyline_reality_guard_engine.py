@@ -24,11 +24,26 @@ Invariants (a CRITICAL failure means "fantasy detected", the dashboard must go r
 """
 
 import json
+import time as _clock
 from datetime import datetime, timedelta
 from os import getenv
 from pathlib import Path
 
 REAL_DATA_SOURCES = {"TRADESTATION_LIVE", "TRADESTATION_LIVE_CACHED", "CSV_HISTORICAL"}
+
+# READ-THROUGH CACHE for the guard verdict. check() runs a broker snapshot + ~30 disk/data invariant
+# reads (~30s on the live service). Every operator route (dashboard banner, open-positions, backend-admin)
+# recomputed it live → the safety banner was effectively unreadable. It's a DISPLAY of a verdict, so it
+# follows "engines decide (scheduler), displays render (serve cache)": the scheduler recomputes it fresh
+# and the routes serve the cached verdict with an age label. Only a real, fully-computed check is cached.
+_GUARD_CACHE = {"at": 0.0, "result": None}
+
+
+def _guard_ttl():
+    try:
+        return float(getenv("GREYLINE_REALITY_GUARD_CACHE_TTL_S", "150") or 150)
+    except (TypeError, ValueError):
+        return 150.0
 
 
 def _num(v):
@@ -1255,7 +1270,58 @@ class GreyLineRealityGuardEngine:
         return {"id": "ALLOC_OVERRIDE_COHERENT", "severity": "warning", "ok": True,
                 "detail": f"{len(overrides)} sleeve override(s) coherent (book {total}% <= 100%){note}"}
 
-    def check(self):
+    def check(self, allow_cache=True):
+        """Serve the cached guard verdict to operator routes; recompute fresh when stale or forced.
+
+        allow_cache=True (routes/dashboard): return the last computed verdict if younger than the TTL —
+        instant, not the ~30s live recompute. allow_cache=False (scheduler): always recompute + refresh the
+        cache so the routes stay warm. Only a real, fully-computed verdict is cached (never fabricated)."""
+        ttl = _guard_ttl()
+        if allow_cache and ttl > 0 and _GUARD_CACHE["result"] is not None:
+            age = _clock.monotonic() - _GUARD_CACHE["at"]
+            if age < ttl:
+                out = dict(_GUARD_CACHE["result"])
+                out["served_from_cache"] = True
+                out["cache_age_seconds"] = round(age, 1)
+                return out
+        result = self._compute_check()
+        if ttl > 0:
+            _GUARD_CACHE["at"] = _clock.monotonic()
+            _GUARD_CACHE["result"] = result
+        return result
+
+    def fantasy_alert(self, dispatch=True):
+        """Page (deduped, off-machine) the instant the guard detects a TRUE fantasy state — fake data shown
+        as real (verdict FANTASY_DETECTED). This ACTIVATES the anti-fantasy safety net: without it the
+        35-invariant guard only ran when a human opened the dashboard, so a fantasy state arising while the
+        operator was away went undetected. Deliberately does NOT page on BROKER_READ_DEGRADED (honest,
+        self-healing amber — the guard's own cry-wolf rule). Deduped by the stable set of failing fantasy
+        invariants → pages ONCE per new fantasy state, not every cycle. Read-only, best-effort, never raises."""
+        try:
+            res = self.check()          # serves the fresh verdict the scheduler just computed
+        except Exception as e:
+            return {"status": "REALITY_GUARD_ALERT_DEGRADED", "error": repr(e)[:100]}
+        fantasy = sorted(res.get("fantasy_failures") or [])
+        if not fantasy:
+            return {"status": "REALITY_GUARD_NO_FANTASY", "verdict": res.get("verdict"), "fantasy": []}
+        by_id = {c["id"]: c for c in (res.get("checks") or [])}
+        detail = "; ".join(f"{i}: {str(by_id.get(i, {}).get('detail') or '')[:120]}" for i in fantasy)
+        if dispatch:
+            try:
+                from app.services.external_alert_engine import ExternalAlertEngine
+                eng = ExternalAlertEngine()
+                if eng.has_external_channel():
+                    eng.dispatch(
+                        title="GreyLine FANTASY DETECTED — displayed state is not broker-real",
+                        message=(f"The Reality Guard flags {len(fantasy)} CRITICAL fantasy invariant(s) "
+                                 f"(fabricated/mismatched state shown as real): {detail}. The dashboard is "
+                                 "RED. Do not trust the book until resolved. See /reality-guard."),
+                        severity="CRITICAL", fingerprint=f"REALITY_FANTASY:{','.join(fantasy)}")
+            except Exception:
+                pass
+        return {"status": "REALITY_GUARD_FANTASY_FLAGGED", "fantasy": fantasy, "detail": detail}
+
+    def _compute_check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
             view = BrokerAccountViewEngine().snapshot()
