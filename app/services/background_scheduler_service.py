@@ -1011,6 +1011,21 @@ class BackgroundSchedulerService:
         except Exception as exc:
             sleeve_fill_confirm = {"error": repr(exc), "status": "SLEEVE_FILLS_DEGRADED"}
 
+        # Keep the pre-open readiness audit WARM in the cache from inside the scheduler (where its ~20
+        # TS/UW reads run as one sequential step, not contending with an operator request), so the
+        # /pre-open-readiness route serves it instantly instead of paying a 30-50s contended recompute.
+        # Refresh only when the cache is already stale (at most once per TTL window) — best-effort, never
+        # blocks or fails the cycle.
+        try:
+            from app.services.pre_open_readiness_engine import (
+                PreOpenReadinessEngine, _AUDIT_CACHE, _audit_ttl)
+            import time as _t
+            _age = _t.monotonic() - _AUDIT_CACHE["at"]
+            if _AUDIT_CACHE["result"] is None or _age >= _audit_ttl():
+                PreOpenReadinessEngine().audit(allow_cache=False)   # force fresh -> repopulates the cache
+        except Exception:
+            pass
+
         try:
             from app.services.edge_persistence_engine import EdgePersistenceEngine
             _epe = EdgePersistenceEngine()

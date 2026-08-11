@@ -7,9 +7,27 @@ clean — and returns a PASS/WARN/FAIL per check. It never trades and never chan
 looks, so it is safe to run as many times as wanted before the open.
 """
 
+import time as _clock
 from datetime import datetime, timedelta
 from os import getenv
 from pathlib import Path
+
+
+# READ-THROUGH CACHE for the readiness audit. The audit walks ~20 live TS/UW reads; computed in
+# isolation it's ~3s, but when the OPERATOR ROUTE runs it synchronously it contends with the scheduler's
+# own TS/UW reads → throttling + retry-backoff → 30-50s (the GO/NO-GO gate effectively times out). This is
+# a DISPLAY of a decision, so it follows the house rule "engines decide (in the scheduler), displays render
+# (serve cache)". The scheduler recomputes it fresh each cycle; the route serves the cached result with an
+# age label. Config/flag/data-freshness readiness doesn't change second-to-second, so a ≤TTL-old read is
+# fine for the gate — and it's never fabricated (only a real prior compute is cached).
+_AUDIT_CACHE = {"at": 0.0, "result": None}
+
+
+def _audit_ttl():
+    try:
+        return float(getenv("GREYLINE_READINESS_CACHE_TTL_S", "150") or 150)
+    except (TypeError, ValueError):
+        return 150.0
 
 
 class PreOpenReadinessEngine:
@@ -33,7 +51,28 @@ class PreOpenReadinessEngine:
         except Exception:
             return None
 
-    def audit(self):
+    def audit(self, allow_cache=True):
+        """Serve a recent cached audit to operator routes; recompute fresh when stale or forced.
+
+        allow_cache=True (routes): return the last computed audit if younger than the TTL — instant, never
+        the 30-50s live recompute under scheduler contention. allow_cache=False (scheduler/reports): always
+        recompute and refresh the cache, so the route's cached value stays warm. Only a real, fully-computed
+        audit is ever cached (no fabrication)."""
+        ttl = _audit_ttl()
+        if allow_cache and ttl > 0 and _AUDIT_CACHE["result"] is not None:
+            age = _clock.monotonic() - _AUDIT_CACHE["at"]
+            if age < ttl:
+                out = dict(_AUDIT_CACHE["result"])
+                out["served_from_cache"] = True
+                out["cache_age_seconds"] = round(age, 1)
+                return out
+        result = self._compute_audit()
+        if ttl > 0:
+            _AUDIT_CACHE["at"] = _clock.monotonic()
+            _AUDIT_CACHE["result"] = result
+        return result
+
+    def _compute_audit(self):
         # Load .env FIRST so every check reads the real configured flags/capital base. Without this a
         # fresh-process caller (a CLI run, a test, a cron) reads the strategy/capital env as unset until
         # some engine happens to reload it mid-audit — making the early flag/capital checks disagree with
