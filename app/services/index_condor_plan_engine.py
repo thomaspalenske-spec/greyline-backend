@@ -64,6 +64,52 @@ class IndexCondorPlanEngine:
         # unconditionally (the pre-2026-08-10 behaviour), e.g. to A/B the conditional lift.
         return (getenv("GREYLINE_CONDOR_CONDITIONAL", "true") or "true").strip().lower() == "true"
 
+    @staticmethod
+    def _gex_filter():
+        # default ON — a SECOND conditioning layer: only sell premium when dealers are NET LONG gamma
+        # (spot above UW's gamma_flip), the vol-SUPPRESSING regime where short-vol condors keep their
+        # premium. Below the flip = dealers short gamma = vol AMPLIFIES = condor-hostile. Independent flag
+        # so the shadow can A/B unconditional / IV-only / GEX-only / IV+GEX.
+        return (getenv("GREYLINE_CONDOR_GEX_FILTER", "true") or "true").strip().lower() == "true"
+
+    @staticmethod
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    def _gex_map(self):
+        """{proxy: {gamma_flip, spot, long_gamma}} for the index names' proxies. long_gamma = spot > flip
+        (dealers long gamma -> vol suppressed -> condor-friendly). Empty entry on any miss -> fail-closed."""
+        proxies = sorted({self.IV_PROXY.get(n, n) for n in self.NAMES})
+        spots = {}
+        try:
+            from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+            q = TradeStationQuoteLiveEngine().get_quotes(proxies) or {}
+            for s in proxies:
+                row = (((q.get(s) or {}).get("response_json") or {}).get("Quotes") or [{}])[0]
+                spots[s] = self._f(row.get("Last")) or self._f(row.get("Close"))
+        except Exception:
+            pass
+        out = {}
+        try:
+            from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
+            uw = UnusualWhalesProvider()
+        except Exception:
+            return out
+        for s in proxies:
+            try:
+                r = uw.gex_levels(s) or {}
+                d = r.get("data") if isinstance(r.get("data"), dict) else r
+                flip = self._f((d or {}).get("gamma_flip"))
+                spot = spots.get(s)
+                if flip and spot:
+                    out[s] = {"gamma_flip": round(flip, 2), "spot": round(spot, 2), "long_gamma": spot > flip}
+            except Exception:
+                continue
+        return out
+
     def _rich_iv(self):
         """{proxy_ticker: iv_rank} for the index names' IV proxies that pass the rich-IV gate today. Empty
         on any screen failure -> fail-closed (nothing opens). Reuses the proven conditional-VRP panel."""
@@ -122,18 +168,26 @@ class IndexCondorPlanEngine:
         chain = UWOptionChainEngine()
         builder = ConditionalVRPShortPremiumEngine()
         conditional = self._conditional()
+        gex_on = self._gex_filter()
         rich = self._rich_iv() if conditional else {}   # {proxy: iv_rank} passing the top-tercile gate
+        gex = self._gex_map() if gex_on else {}         # {proxy: {gamma_flip, spot, long_gamma}}
         planned, errors, skipped = [], {}, {}
         for name in self.NAMES:
             cfg = self.NAME_CONFIG.get(name, {})
             grid = int(cfg.get("grid") or self._strike_grid())
             cap = float(cfg.get("cap") or self._max_loss_cap())
             proxy = self.IV_PROXY.get(name, name)
-            # CONDITIONAL GATE: only harvest when IV is rich (the ~9.6x lever). Fail-closed — no confirmed
-            # richness -> skip (never sell un-conditioned premium). Skips are a legitimate "no trade today",
-            # kept separate from errors so a quiet-vol day doesn't read as a broken sleeve.
+            # GATE 1 — CONDITIONAL VRP: only harvest when IV is rich (the ~9.6x lever). Fail-closed.
             if conditional and proxy not in rich:
                 skipped[name] = f"IV not rich — {proxy} below top-tercile (no harvest; conditional VRP gate)"
+                continue
+            # GATE 2 — GAMMA REGIME: only harvest when dealers are LONG gamma (spot > gamma_flip = vol
+            # suppressed). Below the flip = short gamma = vol amplifies = condor-hostile. Fail-closed.
+            g = gex.get(proxy)
+            if gex_on and (not g or not g.get("long_gamma")):
+                skipped[name] = (f"below gamma-flip — {proxy} spot {g['spot']} < flip {g['gamma_flip']} "
+                                 "(dealers short gamma, vol-amplifying — condor-hostile)" if g else
+                                 f"no GEX read for {proxy} — fail-closed (gamma regime unconfirmed)")
                 continue
             try:
                 snap = chain.get_chain_snapshot(name, expiry)
@@ -150,20 +204,25 @@ class IndexCondorPlanEngine:
                 # stores it so a closed condor's realized P&L can be read against the richness it was sold into.
                 con["iv_rank"] = rich.get(proxy) if conditional else None
                 con["iv_proxy"] = proxy if proxy != name else None
+                # record the entry gamma regime so a closed condor's P&L reads against the regime sold into
+                con["entry_gamma_flip"] = g.get("gamma_flip") if g else None
+                con["entry_spot"] = g.get("spot") if g else None
+                con["long_gamma"] = g.get("long_gamma") if g else None
                 con["_sleeve"] = cfg.get("sleeve") or "index_vrp"   # per-factor tag (index_vrp / commodity_vrp)
                 planned.append(con)
             except Exception as e:
                 errors[name] = repr(e)[:160]
         return {"planned": planned, "errors": errors, "skipped": skipped, "expiry": expiry,
                 "names": list(self.NAMES), "config": self.NAME_CONFIG,
-                "conditional": conditional, "rich_iv": rich,
+                "conditional": conditional, "rich_iv": rich, "gex_filter": gex_on, "gex": gex,
                 "status": "INDEX_CONDOR_PLAN_READY" if planned else "INDEX_CONDOR_PLAN_EMPTY"}
 
     def status(self):
-        return {"enabled": self.enabled(), "conditional": self._conditional(),
+        return {"enabled": self.enabled(), "conditional": self._conditional(), "gex_filter": self._gex_filter(),
                 "names": list(self.NAMES), "config": self.NAME_CONFIG,
                 "iv_proxy": self.IV_PROXY, "target_dte": self.TARGET_DTE,
                 "rich_iv_now": self._rich_iv() if self._conditional() else "unconditional",
+                "gex_now": self._gex_map() if self._gex_filter() else "gex-filter off",
                 "note": ("MEASUREMENT-ONLY condor planner across 5 decorrelated factors (index/commodity/"
                          "energy/rates/crypto VRP), NO orders/budget. CONDITIONAL harvest: opens only when IV "
                          "is rich (top-tercile trailing rank — the ~9.6x VRP lever), fail-closed; entry IV-rank "

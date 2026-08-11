@@ -28,6 +28,7 @@ def _fine_chain():
 def _on(monkeypatch):
     monkeypatch.setenv("GREYLINE_INDEX_CONDOR_SHADOW", "true")
     monkeypatch.setenv("GREYLINE_CONDOR_CONDITIONAL", "false")   # build/iteration tests exercise the BUILD path
+    monkeypatch.setenv("GREYLINE_CONDOR_GEX_FILTER", "false")    # each gate is enabled per-test in isolation
     yield
 
 
@@ -114,6 +115,37 @@ def test_xsp_richness_proxies_off_spy(monkeypatch):
     xsp = next(c for c in r["planned"] if c["symbol"] == "XSP")
     assert xsp["iv_rank"] == 0.80 and xsp["iv_proxy"] == "SPY"
     assert I.IV_PROXY["XSP"] == "SPY"
+
+
+def test_gex_gate_opens_only_long_gamma(monkeypatch):
+    # GAMMA-REGIME gate: with IV-gate off, only names whose proxy is LONG gamma (spot > flip) harvest;
+    # short-gamma names are SKIPPED (condor-hostile). Records the entry gamma regime on the condor.
+    monkeypatch.setenv("GREYLINE_CONDOR_GEX_FILTER", "true")
+    _stub_build(monkeypatch)
+    monkeypatch.setattr(I, "_gex_map", lambda self: {
+        "GLD": {"gamma_flip": 399.78, "spot": 403.8, "long_gamma": True},    # long gamma -> harvest
+        "SPY": {"gamma_flip": 779.51, "spot": 772.35, "long_gamma": False},  # short gamma -> skip (XSP proxy)
+        "QQQ": {"gamma_flip": 749.0, "spot": 720.0, "long_gamma": False},
+        "IWM": {"gamma_flip": 250.0, "spot": 245.0, "long_gamma": False},
+        "USO": {"gamma_flip": 139.0, "spot": 125.0, "long_gamma": False},
+        "TLT": {"gamma_flip": 90.0, "spot": 88.0, "long_gamma": False},
+        "IBIT": {"gamma_flip": 38.8, "spot": 36.0, "long_gamma": False}})
+    r = I().plan()
+    assert [c["symbol"] for c in r["planned"]] == ["GLD"]
+    con = r["planned"][0]
+    assert con["long_gamma"] is True and con["entry_gamma_flip"] == 399.78 and con["entry_spot"] == 403.8
+    assert set(r["skipped"]) == set(I.NAME_CONFIG) - {"GLD"}
+    assert "gamma-flip" in r["skipped"]["USO"]      # names skipped for the GEX reason, not IV
+
+
+def test_gex_fail_closed_without_read(monkeypatch):
+    # no GEX data for a name -> do NOT open (fail-closed, gamma regime unconfirmed)
+    monkeypatch.setenv("GREYLINE_CONDOR_GEX_FILTER", "true")
+    _stub_build(monkeypatch)
+    monkeypatch.setattr(I, "_gex_map", lambda self: {})    # total GEX read failure
+    r = I().plan()
+    assert r["planned"] == [] and set(r["skipped"]) == set(I.NAME_CONFIG)
+    assert "fail-closed" in r["skipped"]["GLD"]
 
 
 def test_chain_error_is_surfaced_not_swallowed(monkeypatch):
