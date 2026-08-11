@@ -17,6 +17,16 @@ def condor_shadow():
     return CondorShadowEngine().report()
 
 
+@router.get("/gex-strategy")
+def gex_strategy(signals: bool = False):
+    """GEX mean-reversion SHADOW forward-test (a NEW strategy, not the condor filter): fade the walls toward
+    the gamma-magnet in long-gamma pinning regimes. ?signals=true returns the live per-name signal.
+    MEASUREMENT-ONLY — trades the underlying on paper, NO orders/budget."""
+    from app.services.gex_mean_reversion_shadow_engine import GexMeanReversionShadowEngine
+    eng = GexMeanReversionShadowEngine()
+    return {"signals": eng.signals()} if signals else eng.report()
+
+
 @router.get("/index-condor-plan")
 def index_condor_plan(build: bool = False):
     """Status of the measurement-only index (XSP) condor planner that feeds the condor shadow as sleeve

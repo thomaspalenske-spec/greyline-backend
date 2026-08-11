@@ -786,6 +786,18 @@ class BackgroundSchedulerService:
             condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
         cls._ckpt("condor_shadow")
 
+        # GEX MEAN-REVERSION shadow — a NEW strategy (fade the walls toward the gamma-magnet in long-gamma
+        # pinning regimes), forward-tested on the underlying with NO orders. Same heavy-window gate.
+        try:
+            if _heavy_blocked:
+                gex_strategy_shadow = {"status": "GEX_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.gex_mean_reversion_shadow_engine import GexMeanReversionShadowEngine
+                gex_strategy_shadow = GexMeanReversionShadowEngine().mark()
+        except Exception as exc:
+            gex_strategy_shadow = {"error": repr(exc), "status": "GEX_SHADOW_DEGRADED"}
+        cls._ckpt("gex_strategy_shadow")
+
         # OPTIONABLE UNIVERSE: derive the VRP/condor candidate universe from live option open interest
         # (UW /screener/stocks) instead of a hand-typed list. Re-screens ONCE PER TRADING DAY at the
         # 16:00 ET close (settled data) so it never goes stale; bootstraps immediately if unset. Fail-safe
