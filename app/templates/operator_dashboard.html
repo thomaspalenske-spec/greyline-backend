@@ -1242,8 +1242,9 @@ async function refreshCondorShadow() {
         ? "degraded — a sleeve threw during candidate generation (verdict may be biased)"
         : `${d.open_condors || 0} open · ${d.closed_condors || 0} closed · zero-capital, priced off Unusual Whales`;
     }
-    const label = { vrp: "VRP (single-name)", earnings: "Earnings-vol", index_vrp: "Index VRP (XSP)" };
-    const rows = ["vrp", "earnings", "index_vrp"].map(k => {
+    const label = { vrp: "VRP (single-name)", earnings: "Earnings-vol",
+                    index_vrp: "Index VRP (XSP/QQQ/IWM)", commodity_vrp: "Commodity VRP (GLD)" };
+    const rows = ["vrp", "earnings", "index_vrp", "commodity_vrp"].map(k => {
       const m = bs[k] || {};
       const r = m.realized_pnl;
       const rcls = r == null ? "" : (r >= 0 ? "green" : "red");

@@ -24,12 +24,17 @@ class IndexCondorPlanEngine:
     # (European, no assignment); QQQ/IWM are American-style ETF options — identical for a UW-mid mark, but
     # the ETFs carry short-leg early-assignment risk IF ever traded live (a cash-settled mini would be the
     # live upgrade). Grouped under one 'index_vrp' verdict; each condor keeps its symbol for per-index split.
+    # Per-name (strike_grid, max_loss_cap, sleeve). The SLEEVE tag is how the condor shadow's by_sleeve
+    # verdict separates the risk factors — the equity indices pool as index_vrp, but GOLD is measured on its
+    # OWN (commodity_vrp) because the whole reason to add it is the DECORRELATION test: pooling gold with
+    # equities would blend the exact two things we're comparing (is VRP universal, or just equity beta?).
     NAME_CONFIG = {
-        "XSP": {"grid": 10, "cap": 1000.0},   # S&P 500 (mini-SPX, cash-settled)
-        "QQQ": {"grid": 5,  "cap": 500.0},    # Nasdaq-100 (ETF)
-        "IWM": {"grid": 5,  "cap": 500.0},    # Russell 2000 (ETF) — small-cap vol, historically richest VRP
+        "XSP": {"grid": 10, "cap": 1000.0, "sleeve": "index_vrp"},   # S&P 500 (mini-SPX, cash-settled)
+        "QQQ": {"grid": 5,  "cap": 500.0,  "sleeve": "index_vrp"},   # Nasdaq-100 (ETF)
+        "IWM": {"grid": 5,  "cap": 500.0,  "sleeve": "index_vrp"},   # Russell 2000 (ETF) — richest equity VRP
+        "GLD": {"grid": 5,  "cap": 500.0,  "sleeve": "commodity_vrp"},  # GOLD — DECORRELATED from equity vol
     }
-    NAMES = list(NAME_CONFIG)       # SPX/NDX too big for $10k; XND (cash-settled Nasdaq mini) needs a UW probe
+    NAMES = list(NAME_CONFIG)       # SPX/NDX too big for $10k; XND/MRUT cash-settled minis available (UW-probed)
     TARGET_DTE = 42
     DTE_BAND = (28, 56)
 
@@ -101,8 +106,9 @@ class IndexCondorPlanEngine:
                     continue
                 # the shadow keys on (symbol, expiration) and stores iv_rank; build_condor sets symbol + legs.
                 con["expiration"] = expiry
-                con["iv_rank"] = None      # UNCONDITIONAL for now (measure baseline index VRP); conditional-
-                #                            on-rich-IV is a follow-on once we have the raw read.
+                con["iv_rank"] = None      # UNCONDITIONAL for now (measure baseline VRP); conditional-on-
+                #                            rich-IV is a follow-on once we have the raw read.
+                con["_sleeve"] = cfg.get("sleeve") or "index_vrp"   # per-factor tag (index_vrp / commodity_vrp)
                 planned.append(con)
             except Exception as e:
                 errors[name] = repr(e)[:160]

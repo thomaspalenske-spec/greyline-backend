@@ -73,7 +73,10 @@ def test_plan_iterates_every_configured_name(monkeypatch):
                         lambda self, sym, cons, **k: {"symbol": sym, "quantity": 1, "legs": {},
                                                       "credit_per_condor": 1.0, "max_loss_total": 400.0})
     r = I().plan()
-    assert {c["symbol"] for c in r["planned"]} == set(I.NAME_CONFIG)     # XSP, QQQ, IWM all iterated
+    assert {c["symbol"] for c in r["planned"]} == set(I.NAME_CONFIG)     # XSP, QQQ, IWM, GLD all iterated
+    tag = {c["symbol"]: c["_sleeve"] for c in r["planned"]}
+    assert tag["GLD"] == "commodity_vrp"                                 # gold measured on its OWN factor
+    assert tag["XSP"] == "index_vrp" and tag["QQQ"] == "index_vrp"       # equity indices pool together
 
 
 def test_chain_error_is_surfaced_not_swallowed(monkeypatch):
