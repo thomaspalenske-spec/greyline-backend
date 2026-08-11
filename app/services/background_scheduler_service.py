@@ -491,7 +491,14 @@ class BackgroundSchedulerService:
                     # institutional-flow collection. No key -> stays off (no wasted budget). Resolve via
                     # the shared .env/.env.local resolver so a bare getenv can't read False (key lives in
                     # .env.local) and silently skip the mission's institutional-flow data collection.
-                    collect_unusual_whales=bool(uw_api_key()),
+                    # Gated OFF via GREYLINE_INSTITUTIONAL_SWEEP_ENABLED (2026-08-11 incident): this UW
+                    # flow-alerts sweep (10 names) hung the cycle on a trickling chunked response body —
+                    # the UW _get read-timeout is between-bytes so a stall never trips it, and the fetch
+                    # isn't single-flighted (same thundering-herd class as the broker read). It's the
+                    # UNPROVEN institutional-flow path, not trade-firing, so disabling it keeps the cycle
+                    # alive. Re-enable once the UW provider has single-flight + a total-deadline.
+                    collect_unusual_whales=bool(uw_api_key())
+                    and (getenv("GREYLINE_INSTITUTIONAL_SWEEP_ENABLED", "true") or "true").strip().lower() == "true",
                     collect_tradestation=False,
                     include_tradestation_option_chain=False,
                     deduplicate=True,
