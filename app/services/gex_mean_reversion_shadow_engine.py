@@ -122,9 +122,19 @@ class GexMeanReversionShadowEngine:
         return {**base, "action": "FLAT", "regime": "long_gamma",
                 "reason": "long-gamma but price is between the walls — no edge, wait for an extreme"}
 
+    _signals_cache = {"at": 0.0, "data": None}
+    SIGNALS_TTL = 300               # cache the live signals ~5min so the 15s dashboard can't over-poll UW
+
     def signals(self):
+        import time
+        now = time.time()
+        c = type(self)._signals_cache
+        if c.get("data") is not None and (now - c.get("at", 0)) < self.SIGNALS_TTL:
+            return c["data"]
         spots = self._spots(self.NAMES)
-        return [self.signal(n, spots.get(n)) for n in self.NAMES]
+        data = [self.signal(n, spots.get(n)) for n in self.NAMES]
+        type(self)._signals_cache = {"at": now, "data": data}
+        return data
 
     # ---- state ---------------------------------------------------------------------------------
 
@@ -243,6 +253,7 @@ class GexMeanReversionShadowEngine:
             "engine": "GexMeanReversionShadowEngine",
             "names": list(self.NAMES),
             "open_positions": [{"name": k, **v} for k, v in openp.items()],
+            "signals": self.signals(),        # cached live per-name signal (drives the dashboard card)
             "closed_trades": n, "min_closed": self.MIN_CLOSED,
             "params": {"wall_buffer": self.WALL_BUFFER, "stop_buffer": self.STOP_BUFFER,
                        "max_hold_days": self.MAX_HOLD_DAYS, "cost_roundtrip_bps": round(self.COST_ROUNDTRIP * 1e4, 1)},

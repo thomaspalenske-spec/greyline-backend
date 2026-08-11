@@ -745,6 +745,19 @@ th {
         </div>
       </div>
 
+      <div class="card" id="gex_strategy_card" style="min-width:0;">
+        <div class="section-title">GEX Mean-Reversion — dealer-gamma pins <span id="gex_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">A NEW strategy (not the condor filter): when dealers are <strong>long gamma</strong> (spot above the gamma-flip) they fade moves and pin price toward the gamma-magnet — so this FADES the extremes (short at the call-wall, long at the put-wall) toward the magnet, and stands aside in short-gamma (dealers amplify). ZERO-capital forward-test on the underlying, <strong>no orders</strong>. Live signal + P&L at <a href="/gex-strategy" style="color:inherit;">/gex-strategy</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Regime</th><th>Signal</th><th>Spot</th><th>Flip</th><th>Magnet</th><th>Put/Call Wall</th></tr>
+            </thead>
+            <tbody id="gex_strategy_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="low_vol_shadow_card" style="min-width:0;">
         <div class="section-title">Low-Vol Shadow — BAB basket edge <span id="lvs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">ZERO-capital forward-test of the parked low-vol (betting-against-beta) sleeve — the inverse-vol-weighted USMV/SPLV/EFAV/XMLV basket marked daily on settled bars, <strong>no orders, no budget</strong>. The low-vol <em>thesis</em> is a smaller drawdown than the broad market, so the key read is drawdown vs SPY (ratio &lt;1 = thesis holds). Detail at <a href="/low-volatility-shadow" style="color:inherit;">/low-volatility-shadow</a>.</div>
@@ -1231,6 +1244,42 @@ async function refreshMomentumShadow() {
   }
 }
 
+async function refreshGexStrategy() {
+  const body = document.getElementById("gex_strategy_body");
+  const summary = document.getElementById("gex_summary");
+  try {
+    const d = await getJSON("/gex-strategy");
+    const sigs = d.signals || [];
+    const open = (d.open_positions || []).length;
+    if (summary) {
+      const measuring = d.status === "GEX_SHADOW_MEASURING";
+      const active = sigs.filter(s => s.action === "LONG" || s.action === "SHORT").length;
+      summary.textContent = `${open} open · ${active} live signal(s) · ${d.closed_trades || 0}/${d.min_closed} closed · ${measuring ? ("win " + d.win_rate_pct + "%") : "accumulating"}`;
+    }
+    if (!sigs.length) {
+      body.innerHTML = `<tr><td colspan="7"><span class="sub">${d.verdict || "no signal"}</span></td></tr>`;
+      return;
+    }
+    body.innerHTML = sigs.map(s => {
+      const act = s.action || "FLAT";
+      const badge = act === "LONG" ? "open" : (act === "SHORT" ? "unmanaged" : "neutral");
+      const longG = s.regime === "long_gamma";
+      const regCls = longG ? "green" : "";
+      return `<tr>
+        <td><strong>${s.name}</strong></td>
+        <td><span class="${regCls}">${s.regime || "—"}</span></td>
+        <td><span class="badge ${badge}">${act}</span></td>
+        <td>${s.spot != null ? fmtMoney(s.spot) : "<span class='sub'>—</span>"}</td>
+        <td>${s.gamma_flip != null ? fmtMoney(s.gamma_flip) : "—"}</td>
+        <td>${s.gamma_magnet != null ? fmtMoney(s.gamma_magnet) : "—"}</td>
+        <td><span class="sub">${s.put_wall != null ? fmtMoney(s.put_wall) : "—"} / ${s.call_wall != null ? fmtMoney(s.call_wall) : "—"}</span></td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7"><span class="red">GEX strategy unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshCondorShadow() {
   const body = document.getElementById("condor_shadow_body");
   const summary = document.getElementById("cs_summary");
@@ -1510,6 +1559,7 @@ async function refreshAll() {
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshMomentumShadow();  // zero-capital equity-factor shadow — open hypothetical positions
   refreshCondorShadow();    // zero-capital short-premium shadow — VRP vs earnings edge, measured apart
+  refreshGexStrategy();     // GEX mean-reversion — dealer-gamma pin signals + forward-test
   refreshLowVolShadow();    // zero-capital low-vol (BAB) basket shadow — drawdown vs SPY thesis check
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls

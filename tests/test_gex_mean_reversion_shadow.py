@@ -14,6 +14,7 @@ def _iso(monkeypatch, tmp_path):
     monkeypatch.setattr(G, "OPEN", tmp_path / "open.json")
     monkeypatch.setattr(G, "CLOSED", tmp_path / "closed.jsonl")
     monkeypatch.setattr(G, "NAMES", ["SPY"])
+    monkeypatch.setattr(G, "_signals_cache", {"at": 0.0, "data": None})   # isolate the live-signal cache
     monkeypatch.setenv("GREYLINE_GEX_STRATEGY_SHADOW", "true")
     yield
 
