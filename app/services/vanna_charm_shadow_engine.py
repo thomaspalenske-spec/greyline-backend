@@ -166,9 +166,30 @@ class VannaCharmShadowEngine:
 
     # ---- forward-test step ---------------------------------------------------------------------
 
+    MARK_MARKER = STATE / "last_mark.json"
+    MARK_INTERVAL_MIN = 60          # OPEX-horizon — mark hourly, not every scheduler cycle (spares UW/TS)
+
+    def _mark_due(self):
+        import time
+        try:
+            return (time.time() - float(json.loads(self.MARK_MARKER.read_text()).get("at", 0))) >= self.MARK_INTERVAL_MIN * 60
+        except Exception:
+            return True
+
+    def _stamp_mark(self):
+        import time
+        try:
+            self.STATE.mkdir(parents=True, exist_ok=True)
+            self.MARK_MARKER.write_text(json.dumps({"at": time.time()}))
+        except Exception:
+            pass
+
     def mark(self):
         if not self.enabled():
             return {"status": "VANNA_SHADOW_DISABLED", "acted": False}
+        if not self._mark_due():
+            return {"status": "VANNA_SHADOW_NOT_DUE", "acted": False}
+        self._stamp_mark()
         spots = self._spots(self.NAMES)
         if not spots:
             return {"status": "VANNA_SHADOW_NO_SPOT", "acted": False}

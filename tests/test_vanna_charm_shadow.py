@@ -15,6 +15,8 @@ def _iso(monkeypatch, tmp_path):
     monkeypatch.setattr(V, "OPEN", tmp_path / "open.json")
     monkeypatch.setattr(V, "CLOSED", tmp_path / "closed.jsonl")
     monkeypatch.setattr(V, "NAMES", ["SPY"])
+    monkeypatch.setattr(V, "MARK_MARKER", tmp_path / "last_mark.json")
+    monkeypatch.setattr(V, "MARK_INTERVAL_MIN", 0)                                # no rate-gate in tests
     monkeypatch.setattr(V, "_today", staticmethod(lambda: date(2026, 8, 13)))     # 6 biz days before 08-21 OPEX
     monkeypatch.setenv("GREYLINE_VANNA_CHARM_SHADOW", "true")
     yield

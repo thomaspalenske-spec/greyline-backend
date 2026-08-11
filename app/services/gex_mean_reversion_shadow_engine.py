@@ -168,10 +168,33 @@ class GexMeanReversionShadowEngine:
 
     # ---- forward-test step ---------------------------------------------------------------------
 
+    MARK_MARKER = STATE / "last_mark.json"
+    MARK_INTERVAL_MIN = 60          # daily/swing horizon — mark hourly, not every scheduler cycle (spares UW/TS)
+
+    def _mark_due(self):
+        import time
+        try:
+            return (time.time() - float(json.loads(self.MARK_MARKER.read_text()).get("at", 0))) >= self.MARK_INTERVAL_MIN * 60
+        except Exception:
+            return True
+
+    def _stamp_mark(self):
+        import time
+        try:
+            self.STATE.mkdir(parents=True, exist_ok=True)
+            self.MARK_MARKER.write_text(json.dumps({"at": time.time()}))
+        except Exception:
+            pass
+
     def mark(self):
-        """Advance the shadow: mark/close open fades, then open new ones on a fresh signal. NO orders."""
+        """Advance the shadow: mark/close open fades, then open new ones on a fresh signal. NO orders.
+        Self-gated to once per MARK_INTERVAL_MIN — the signal is daily, so marking every scheduler cycle
+        just hammers UW/TS (contributed to broker-read throttle 2026-08-10)."""
         if not self.enabled():
             return {"status": "GEX_SHADOW_DISABLED", "acted": False}
+        if not self._mark_due():
+            return {"status": "GEX_SHADOW_NOT_DUE", "acted": False}
+        self._stamp_mark()
         spots = self._spots(self.NAMES)
         if not spots:
             return {"status": "GEX_SHADOW_NO_SPOT", "acted": False}
