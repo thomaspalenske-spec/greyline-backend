@@ -78,6 +78,44 @@ def test_court_ingests_sleeve_closes_attributed(monkeypatch, tmp_path):
     trades, excluded = EdgePersistenceEngine()._closed_trades()
     lv = [t for t in trades if t["sleeve"] == "low_vol"]
     assert len(lv) == 1 and lv[0]["net"] == 20.0 and lv[0]["risk"] > 0
+    # hybrid read-map: a sleeve-ledger close is broker-confirmed-qty by construction, so a legacy
+    # 'quote_estimate' tag reads back as the confirmation FLOOR 'mark_at_confirm', not a loose estimate.
+    assert lv[0]["basis"] == "mark_at_confirm"
+
+
+def test_reconcile_close_tags_mark_at_confirm(monkeypatch, tmp_path):
+    # a fresh close from reconcile (broker qty dropped) is tagged mark_at_confirm, not quote_estimate
+    e = _engine(monkeypatch, tmp_path)
+    e.reconcile("low_vol", "USMV", 3, 100.0)              # open 3 @ 100
+    e.reconcile("low_vol", "USMV", 1, 110.0)              # broker now 1 → sold 2 @ 110
+    rows = [json.loads(x) for x in (tmp_path / "sleeve_trade_ledger.jsonl").read_text().splitlines()]
+    closes = [r for r in rows if r.get("kind") == "close"]
+    assert closes and all(r["realized_pnl_basis"] == "mark_at_confirm" for r in closes)
+
+
+def test_upgrade_promotes_mark_at_confirm_to_real_fill(monkeypatch, tmp_path):
+    # when a real executed SELL fill IS captured, the floor upgrades to 'fills' at the executed price
+    e = _engine(monkeypatch, tmp_path)
+    e.reconcile("low_vol", "USMV", 3, 100.0)
+    e.reconcile("low_vol", "USMV", 1, 110.0)             # close 2 @ mark 110 (mark_at_confirm)
+    close = [r for r in [json.loads(x) for x in (tmp_path / "sleeve_trade_ledger.jsonl").read_text().splitlines()]
+             if r.get("kind") == "close"][0]
+    csecs = L()._ts_secs(close["closed_at"])
+    import app.services.execution_log_engine as elmod
+
+    class _XE:
+        def _intents(self):
+            return [{"strategy": "low_vol", "symbol": "USMV", "action": "SELL", "qty": 2,
+                     "order_id": "OID1", "ts": close["closed_at"]}]
+        def _broker_fills(self):
+            return {"OID1": 109.5}                        # the ACTUAL executed price
+
+    monkeypatch.setattr(elmod, "ExecutionLogEngine", _XE)
+    r = e.upgrade_close_fills()
+    assert r["upgraded"] == 1
+    up = [x for x in [json.loads(y) for y in (tmp_path / "sleeve_trade_ledger.jsonl").read_text().splitlines()]
+          if x.get("kind") == "close"][0]
+    assert up["realized_pnl_basis"] == "fills" and up["exit_price"] == 109.5
 
 
 def test_court_excludes_forced_sleeve_close(monkeypatch, tmp_path):

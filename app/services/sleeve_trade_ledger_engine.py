@@ -111,7 +111,12 @@ class SleeveTradeLedgerEngine:
                          "entry_price": entry, "exit_price": price, "realized_pnl": realized,
                          "opened_at": lot.get("opened_at"), "closed_at": ts,
                          "close_reason": reason or "REBALANCE", "status": "CLOSED",
-                         "realized_pnl_basis": "quote_estimate"})
+                         # MARK-AT-CONFIRM: this close fires only when the broker CONFIRMS the quantity drop
+                         # (reconcile observed broker_qty fall), priced at the mark at that instant. That is a
+                         # real fill in quantity, mark-priced (not a loose later estimate) — the hybrid
+                         # confirmation floor. upgrade_close_fills() promotes it to 'fills' if the actual
+                         # executed price is ever captured; until then the court counts it as confirmed.
+                         "realized_pnl_basis": "mark_at_confirm"})
             closed.append({"qty": take, "realized_pnl": realized})
             to_close -= take
         self._write(rows)
@@ -141,8 +146,12 @@ class SleeveTradeLedgerEngine:
         already aged out stays honestly 'quote_estimate' (NEVER fabricated). Idempotent (only touches
         quote_estimate rows), best-effort, and never places or cancels an order."""
         rows = self._read()
+        # Upgrade the confirmation FLOOR (mark_at_confirm — broker-confirmed qty, mark-priced) OR any legacy
+        # quote_estimate row to a REAL executed 'fills' price when one is captured. Rows already at 'fills'
+        # are permanent and skipped.
+        _upgradable = ("mark_at_confirm", "quote_estimate")
         pending = [r for r in rows if r.get("kind") == "close"
-                   and str(r.get("realized_pnl_basis") or "quote_estimate") == "quote_estimate"]
+                   and str(r.get("realized_pnl_basis") or "mark_at_confirm") in _upgradable]
         if not pending:
             return {"status": "SLEEVE_FILLS_NO_PENDING", "upgraded": 0}
         try:

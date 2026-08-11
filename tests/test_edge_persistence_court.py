@@ -18,6 +18,49 @@ def _verdict(monkeypatch, trades):
     return out["sleeves"].get("premium", {}), out
 
 
+# --- fill-confirmation hybrid (2026-08-11): mark-at-confirm counts as confirmed; genuine estimates don't ---
+
+def test_mark_at_confirm_is_confirmed_not_provisional(monkeypatch):
+    # broker-confirmed quantity, mark-priced — the hybrid floor. A consistent winner must reach PROVEN,
+    # NOT be blocked as provisional (the bug: every sleeve stuck PROVISIONAL forever).
+    trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
+               "closed_at": "x", "basis": "mark_at_confirm"} for v in ([9.0, 11.0] * 12)]
+    stat, _ = _verdict(monkeypatch, trades)
+    assert stat["mark_confirmed_trades"] == 24 and stat["estimated_trades"] == 0
+    assert stat["fill_confirmed_trades"] == 24              # confirmed-enough
+    assert "PROVISIONAL" not in stat["verdict"]
+    assert stat["verdict"].startswith("PROVEN")
+    assert "MARK-AT-CONFIRM" in stat["fill_confirmation"]
+
+
+def test_genuine_estimates_stay_provisional(monkeypatch):
+    # condor mid-estimates are NOT tied to a confirmed-quantity instant — a verdict on them stays provisional
+    trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
+               "closed_at": "x", "basis": "mid_estimate"} for v in ([9.0, 11.0] * 12)]
+    stat, _ = _verdict(monkeypatch, trades)
+    assert stat["estimated_trades"] == 24 and stat["mark_confirmed_trades"] == 0
+    assert "PROVISIONAL" in stat["verdict"]
+
+
+def test_executed_fills_are_top_of_ladder(monkeypatch):
+    trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
+               "closed_at": "x", "basis": "fills"} for v in ([9.0, 11.0] * 12)]
+    stat, _ = _verdict(monkeypatch, trades)
+    assert stat["executed_fill_trades"] == 24 and stat["estimated_trades"] == 0
+    assert "PROVISIONAL" not in stat["verdict"]
+
+
+def test_mixed_majority_estimate_is_provisional(monkeypatch):
+    # 5 mark-confirmed + 20 genuine estimates -> estimates dominate -> provisional
+    conf = [{"sleeve": "premium", "gross": 10.0, "net": 10.0, "risk": 100.0,
+             "closed_at": "x", "basis": "mark_at_confirm"} for _ in range(5)]
+    est = [{"sleeve": "premium", "gross": 10.0, "net": 10.0, "risk": 100.0,
+            "closed_at": "x", "basis": "mid_estimate"} for _ in range(20)]
+    stat, _ = _verdict(monkeypatch, conf + est)
+    assert stat["estimated_trades"] == 20 and stat["mark_confirmed_trades"] == 5
+    assert "PROVISIONAL" in stat["verdict"]
+
+
 def test_too_few_trades_is_accumulating(monkeypatch):
     stat, _ = _verdict(monkeypatch, _trades(5, 10.0))
     assert stat["trades"] == 5 and "ACCUMULATING" in stat["verdict"]
