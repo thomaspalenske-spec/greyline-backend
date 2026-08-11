@@ -2,6 +2,10 @@
 # execution-governance flags (GREYLINE_*) and broker credentials are file-controlled.
 # override=False keeps standard precedence: a real shell `export` still wins over .env.
 import app.services.env_reload  # noqa: F401 — snapshots the real process env; MUST precede any .env load
+# faulthandler on SIGUSR1: `kill -USR1 <pid>` dumps ALL thread stacks to stderr (logs/launchd.err.log).
+# Harmless + always-on so a frozen scheduler cycle (or any hang) can be diagnosed live without py-spy.
+import faulthandler as _fh, signal as _sig
+_fh.register(_sig.SIGUSR1, all_threads=True)
 from dotenv import load_dotenv
 load_dotenv(override=False)
 

@@ -28,7 +28,9 @@ from app.services.tradestation_orders_live_engine import TradeStationOrdersLiveE
 # reads_ok=True snapshot — so a cache hit is always real broker data, just up to TTL seconds old (age is
 # labelled). TTL is short by default so a just-filled position surfaces fast at the open; the hard
 # BookDeploymentCap remains the real over-deployment backstop regardless.
+import threading as _threading
 _SNAPSHOT_CACHE = {}          # account_id -> (monotonic_at, snapshot_dict)
+_SNAPSHOT_LOCK = _threading.Lock()   # single-flight: at most ONE TradeStation broker fetch in flight
 
 
 def _cache_ttl():
@@ -63,15 +65,44 @@ class BrokerAccountViewEngine:
         # allow_cache=False forces a fresh read for any caller that must not tolerate even TTL-seconds of lag.
         _acct = src.get("account_id")
         _ttl = _cache_ttl()
-        if allow_cache and _ttl > 0 and _acct in _SNAPSHOT_CACHE:
-            _at, _cached = _SNAPSHOT_CACHE[_acct]
-            _age = _clock.monotonic() - _at
-            if _age < _ttl and _cached.get("reads_ok"):
-                out = dict(_cached)
-                out["served_from_cache"] = True
-                out["cache_age_seconds"] = round(_age, 1)
-                return out
 
+        def _fresh_cached():
+            if _ttl > 0 and _acct in _SNAPSHOT_CACHE:
+                _at, _cached = _SNAPSHOT_CACHE[_acct]
+                _age = _clock.monotonic() - _at
+                if _age < _ttl and _cached.get("reads_ok"):
+                    out = dict(_cached)
+                    out["served_from_cache"] = True
+                    out["cache_age_seconds"] = round(_age, 1)
+                    return out
+            return None
+
+        # FAST PATH: a fresh cached read needs no lock and no TS call.
+        if allow_cache:
+            hit = _fresh_cached()
+            if hit is not None:
+                return hit
+
+        # SINGLE-FLIGHT: only ONE thread hits TradeStation at a time. Without this, a burst of concurrent
+        # callers (the dashboard polls ~30 broker-backed routes, each -> snapshot() -> 3 TS reads) all miss
+        # the cache together and STAMPEDE TS with simultaneous TLS handshakes. That thundering herd exhausts
+        # the process's connections, so new handshakes block and the scheduler cycle FREEZES (2026-08-11
+        # incident, confirmed via faulthandler: every thread stuck in get_orders SSL). Waiters block briefly
+        # on the lock, then take the one fresh result the single in-flight fetch produced.
+        if _ttl > 0:
+            with _SNAPSHOT_LOCK:
+                # double-check: another thread may have just fetched (only serve it when caching is allowed;
+                # allow_cache=False still single-flights to avoid the herd, but always takes a fresh read).
+                if allow_cache:
+                    hit = _fresh_cached()
+                    if hit is not None:
+                        return hit
+                return self._fetch_and_build(src)
+        return self._fetch_and_build(src)
+
+    def _fetch_and_build(self, src):
+        _acct = src.get("account_id")
+        _ttl = _cache_ttl()
         # BOUNDED RETRY: the account read intermittently gets STARVED (non-200 timeout) when the scheduler
         # cycle is saturating TradeStation — but it genuinely succeeds within a window. Without a retry a
         # single starved read fails-closed the whole view, which blocks trading (the exposure breaker) at
@@ -91,9 +122,11 @@ class BrokerAccountViewEngine:
         def _ok(r):
             return bool(r) and r.get("http_status") == 200
         try:
-            _attempts = max(1, int(getenv("GREYLINE_BROKER_READ_ATTEMPTS", "6")))
+            # 3 attempts (was 6): under single-flight a failing fetch holds the lock and blocks every
+            # waiter, so keep the worst-case lock-hold short — a fresh 200 succeeds on attempt 1 anyway.
+            _attempts = max(1, int(getenv("GREYLINE_BROKER_READ_ATTEMPTS", "3")))
         except (TypeError, ValueError):
-            _attempts = 6
+            _attempts = 3
         bal = pos = ords = None
         for _attempt in range(_attempts):
             if not _bal_good(bal):
@@ -239,6 +272,6 @@ class BrokerAccountViewEngine:
             "status": "BROKER_ACCOUNT_VIEW_READY" if reads_ok else "BROKER_ACCOUNT_READ_DEGRADED",
         }
         # cache only a fully-good read — a degraded/fabricated view must never be served from cache
-        if allow_cache and reads_ok and _ttl > 0:
+        if reads_ok and _ttl > 0:
             _SNAPSHOT_CACHE[_acct] = (_clock.monotonic(), result)
         return result

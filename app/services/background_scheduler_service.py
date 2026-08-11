@@ -1011,37 +1011,33 @@ class BackgroundSchedulerService:
         except Exception as exc:
             sleeve_fill_confirm = {"error": repr(exc), "status": "SLEEVE_FILLS_DEGRADED"}
 
-        # Keep the pre-open readiness audit WARM in the cache from inside the scheduler (where its ~20
-        # TS/UW reads run as one sequential step, not contending with an operator request), so the
-        # /pre-open-readiness route serves it instantly instead of paying a 30-50s contended recompute.
-        # Refresh only when the cache is already stale (at most once per TTL window) — best-effort, never
-        # blocks or fails the cycle.
-        try:
-            from app.services.pre_open_readiness_engine import (
-                PreOpenReadinessEngine, _AUDIT_CACHE, _audit_ttl)
-            import time as _t
-            _age = _t.monotonic() - _AUDIT_CACHE["at"]
-            if _AUDIT_CACHE["result"] is None or _age >= _audit_ttl():
-                PreOpenReadinessEngine().audit(allow_cache=False)   # force fresh -> repopulates the cache
-        except Exception:
-            pass
-
-        # Run the Reality Guard from INSIDE the scheduler (was previously evaluated only when a human opened
-        # the dashboard — so a fantasy state arising while the operator was away went undetected). Refresh
-        # its verdict when stale (warms the cache so the operator routes serve it instantly instead of a ~30s
-        # recompute) and PAGE off-machine on a true FANTASY_DETECTED. Best-effort, read-only, never breaks
-        # the cycle. Degraded-read (honest amber) never pages — the guard's own cry-wolf rule.
-        try:
-            from app.services.greyline_reality_guard_engine import (
-                GreyLineRealityGuardEngine, _GUARD_CACHE, _guard_ttl)
-            import time as _t2
-            _gage = _t2.monotonic() - _GUARD_CACHE["at"]
-            _rg = GreyLineRealityGuardEngine()
-            if _GUARD_CACHE["result"] is None or _gage >= _guard_ttl():
-                _rg.check(allow_cache=False)          # force fresh -> repopulates the cache
-            reality_guard_alert = _rg.fantasy_alert()  # deduped off-machine page on a true fantasy state
-        except Exception as exc:
-            reality_guard_alert = {"error": repr(exc), "status": "REALITY_GUARD_ALERT_DEGRADED"}
+        # In-cycle readiness + reality-guard force-refresh. GATED OFF by default (2026-08-11): these add
+        # ~50 TS/UW SSL reads to the cycle, and under concurrent dashboard-poll load one can HANG on a
+        # socket read with no effective timeout and FREEZE the whole cycle (confirmed via process sampling
+        # — cycle_count stuck; the routes still serve their lazily-populated caches, so trading loses nothing
+        # by skipping this). Re-enable only once every TS/UW call on this path is hard-timeout-bounded so a
+        # hung read cannot block the cycle. Flag: GREYLINE_SCHEDULER_INLINE_GUARDS.
+        if (getenv("GREYLINE_SCHEDULER_INLINE_GUARDS", "false") or "false").strip().lower() == "true":
+            try:
+                from app.services.pre_open_readiness_engine import (
+                    PreOpenReadinessEngine, _AUDIT_CACHE, _audit_ttl)
+                import time as _t
+                _age = _t.monotonic() - _AUDIT_CACHE["at"]
+                if _AUDIT_CACHE["result"] is None or _age >= _audit_ttl():
+                    PreOpenReadinessEngine().audit(allow_cache=False)
+            except Exception:
+                pass
+            try:
+                from app.services.greyline_reality_guard_engine import (
+                    GreyLineRealityGuardEngine, _GUARD_CACHE, _guard_ttl)
+                import time as _t2
+                _gage = _t2.monotonic() - _GUARD_CACHE["at"]
+                _rg = GreyLineRealityGuardEngine()
+                if _GUARD_CACHE["result"] is None or _gage >= _guard_ttl():
+                    _rg.check(allow_cache=False)
+                reality_guard_alert = _rg.fantasy_alert()
+            except Exception as exc:
+                reality_guard_alert = {"error": repr(exc), "status": "REALITY_GUARD_ALERT_DEGRADED"}
 
         try:
             from app.services.edge_persistence_engine import EdgePersistenceEngine
