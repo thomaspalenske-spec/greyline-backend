@@ -58,6 +58,50 @@ class EdgePersistenceEngine:
         df = max(1, int(n) - 1)
         z = cls.Z95
         return z + (z ** 3 + z) / (4.0 * df)
+
+    @classmethod
+    def verdict_from_returns(cls, returns, min_n=None, min_edge=0.0):
+        """The court's RIGOROUS verdict, reusable on ANY cost-net return series — so a zero-capital SHADOW
+        is judged on the SAME bar as a live sleeve (small-sample-t 95% CI, cost-net, min-N gate), not a
+        softer raw-Sharpe/win-rate summary that could lure a re-arm on a not-actually-significant edge.
+
+        returns: cost-net per-observation returns (fractions). min_n: samples required before any verdict
+        (defaults to MIN_TRADES). min_edge: optional action floor on the mean (0 = pure significance).
+        Returns n / mean / CI / t-stat / significance and a PROVEN|DECAYED|UNPROVEN|ACCUMULATING verdict."""
+        import math
+        min_n = cls.MIN_TRADES if min_n is None else int(min_n)
+        rets = [cls._f(r) for r in returns if r is not None]
+        n = len(rets)
+        if n == 0:
+            return {"n": 0, "verdict": f"ACCUMULATING (0/{min_n} — no closed observations yet)",
+                    "significant": False, "min_n": min_n}
+        mean = sum(rets) / n
+        out = {"n": n, "min_n": min_n, "mean_pct": round(mean * 100, 4)}
+        if n < 2:
+            out.update({"verdict": f"ACCUMULATING ({n}/{min_n} — too few to judge)", "significant": False})
+            return out
+        var = sum((r - mean) ** 2 for r in rets) / (n - 1)
+        sd = math.sqrt(var)
+        se = sd / math.sqrt(n) if n else 0.0
+        t_stat = mean / se if se > 0 else 0.0
+        tc = cls._t_crit(n)
+        lo, hi = mean - tc * se, mean + tc * se
+        out.update({"std_pct": round(sd * 100, 4), "t_stat": round(t_stat, 2), "t_crit": round(tc, 3),
+                    "ci95_pct": [round(lo * 100, 4), round(hi * 100, 4)],
+                    "significant": bool(lo > 0 or hi < 0)})
+        if n < min_n:
+            out["verdict"] = f"ACCUMULATING ({n}/{min_n} — too few to judge)"
+        elif lo > 0 and mean >= min_edge:
+            out["verdict"] = ("PROVEN — cost-net edge > 0 at 95% (small-sample t)"
+                              + (f" and ≥ {round(min_edge * 100, 2)}% floor" if min_edge > 0 else ""))
+        elif hi < 0:
+            out["verdict"] = "DECAYED — cost-net edge < 0 at 95% (small-sample t); retire"
+        elif lo > 0:
+            out["verdict"] = (f"UNPROVEN — statistically positive but mean {round(mean * 100, 3)}% "
+                              f"< {round(min_edge * 100, 2)}% action floor")
+        else:
+            out["verdict"] = "UNPROVEN — edge indistinguishable from zero net of cost"
+        return out
     CONDOR_CLOSE_HAIRCUT_FRAC = 0.03    # condor closes are marked at MID; haircut this frac of max-loss
                                         # as a conservative round-trip close-spread proxy (see cost_note)
     # forced/administrative closes are NOT strategy outcomes — exclude from the edge stats

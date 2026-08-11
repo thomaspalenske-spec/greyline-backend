@@ -21,6 +21,17 @@ from os import getenv
 from pathlib import Path
 
 
+def _rigorous_verdict(rets, min_n):
+    """Judge this shadow's cost-net returns on the SAME rigorous bar the live edge court uses
+    (small-sample-t 95% CI + min-N), so a shadow 'proving' an edge means what a live sleeve does.
+    Best-effort — a soft summary still ships if the court import ever fails."""
+    try:
+        from app.services.edge_persistence_engine import EdgePersistenceEngine
+        return EdgePersistenceEngine.verdict_from_returns(rets, min_n=min_n)
+    except Exception:
+        return None
+
+
 class GexMeanReversionShadowEngine:
 
     NAMES = ["SPY", "QQQ", "DIA", "IWM"]   # deepest-gamma index ETFs — where dealer positioning dominates
@@ -269,6 +280,7 @@ class GexMeanReversionShadowEngine:
         closed = self._closed()
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]
         n = len(rets)
+        rigorous = _rigorous_verdict(rets, self.MIN_CLOSED)   # SAME bar the live court uses
         openp = self._load_open()
         base = {
             "timestamp": datetime.utcnow().isoformat(),
@@ -278,6 +290,7 @@ class GexMeanReversionShadowEngine:
             "open_positions": [{"name": k, **v} for k, v in openp.items()],
             "signals": self.signals(),        # cached live per-name signal (drives the dashboard card)
             "closed_trades": n, "min_closed": self.MIN_CLOSED,
+            "rigorous_verdict": rigorous,
             "params": {"wall_buffer": self.WALL_BUFFER, "stop_buffer": self.STOP_BUFFER,
                        "max_hold_days": self.MAX_HOLD_DAYS, "cost_roundtrip_bps": round(self.COST_ROUNDTRIP * 1e4, 1)},
             "note": ("SHADOW forward-test of GEX mean-reversion — fade the walls toward the gamma-magnet in "

@@ -25,6 +25,17 @@ from os import getenv
 from pathlib import Path
 
 
+def _rigorous_verdict(rets, min_n):
+    """Judge this shadow's cost-net returns on the SAME rigorous bar the live edge court uses
+    (small-sample-t 95% CI + min-N), so a shadow 'proving' an edge means what a live sleeve does.
+    Best-effort — a soft summary still ships if the court import ever fails."""
+    try:
+        from app.services.edge_persistence_engine import EdgePersistenceEngine
+        return EdgePersistenceEngine.verdict_from_returns(rets, min_n=min_n)
+    except Exception:
+        return None
+
+
 class MomentumReversalShadowEngine:
 
     STATE = Path("app/data/momentum_reversal")
@@ -289,6 +300,7 @@ class MomentumReversalShadowEngine:
         closed = self._closed()
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]
         n = len(rets)
+        rigorous = _rigorous_verdict(rets, self.MIN_COHORTS)   # SAME bar the live court uses
         open_cohorts = self._load_open()
         positions = self.open_positions()
         entry_source = (open_cohorts[0].get("source") if open_cohorts else None)
@@ -305,6 +317,7 @@ class MomentumReversalShadowEngine:
             "shadow_enabled": self.enabled(),
             "engine": "MomentumReversalShadowEngine",
             "cohorts_closed": n, "min_cohorts": self.MIN_COHORTS,
+            "rigorous_verdict": rigorous,
             "open_cohorts": len(open_cohorts),
             "open_positions": positions,
             "entry_source": entry_source,

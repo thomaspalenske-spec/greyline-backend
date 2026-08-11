@@ -20,6 +20,17 @@ from os import getenv
 from pathlib import Path
 
 
+def _rigorous_verdict(rets, min_n):
+    """Judge this shadow's cost-net returns on the SAME rigorous bar the live edge court uses
+    (small-sample-t 95% CI + min-N), so a shadow 'proving' an edge means what a live sleeve does.
+    Best-effort — a soft summary still ships if the court import ever fails."""
+    try:
+        from app.services.edge_persistence_engine import EdgePersistenceEngine
+        return EdgePersistenceEngine.verdict_from_returns(rets, min_n=min_n)
+    except Exception:
+        return None
+
+
 class VannaCharmShadowEngine:
 
     NAMES = ["SPY", "QQQ"]           # deepest index options — where dealer vanna/charm flows dominate
@@ -251,6 +262,7 @@ class VannaCharmShadowEngine:
         closed = self._closed()
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]
         n = len(rets)
+        rigorous = _rigorous_verdict(rets, self.MIN_CLOSED)   # SAME bar the live court uses
         openp = self._load_open()
         base = {
             "timestamp": datetime.utcnow().isoformat(),
@@ -260,6 +272,7 @@ class VannaCharmShadowEngine:
             "open_positions": [{"name": k, **v} for k, v in openp.items()],
             "signals": self.signals(),
             "closed_trades": n, "min_closed": self.MIN_CLOSED,
+            "rigorous_verdict": rigorous,
             "next_opex": (self._next_opex().isoformat() if self._next_opex() else None),
             "params": {"opex_window_days": self.OPEX_WINDOW_DAYS, "stop_pct": self.STOP_PCT,
                        "cost_roundtrip_bps": round(self.COST_ROUNDTRIP * 1e4, 1)},
