@@ -798,6 +798,18 @@ class BackgroundSchedulerService:
             gex_strategy_shadow = {"error": repr(exc), "status": "GEX_SHADOW_DEGRADED"}
         cls._ckpt("gex_strategy_shadow")
 
+        # VANNA/CHARM shadow — the 'vanna rally into OPEX' (2nd-order dealer flow), forward-tested LONG the
+        # index in the OPEX window on a negative-vanna setup. NO orders. Same heavy-window gate.
+        try:
+            if _heavy_blocked:
+                vanna_charm_shadow = {"status": "VANNA_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
+            else:
+                from app.services.vanna_charm_shadow_engine import VannaCharmShadowEngine
+                vanna_charm_shadow = VannaCharmShadowEngine().mark()
+        except Exception as exc:
+            vanna_charm_shadow = {"error": repr(exc), "status": "VANNA_SHADOW_DEGRADED"}
+        cls._ckpt("vanna_charm_shadow")
+
         # OPTIONABLE UNIVERSE: derive the VRP/condor candidate universe from live option open interest
         # (UW /screener/stocks) instead of a hand-typed list. Re-screens ONCE PER TRADING DAY at the
         # 16:00 ET close (settled data) so it never goes stale; bootstraps immediately if unset. Fail-safe

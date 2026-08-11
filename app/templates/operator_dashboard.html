@@ -758,6 +758,19 @@ th {
         </div>
       </div>
 
+      <div class="card" id="vanna_charm_card" style="min-width:0;">
+        <div class="section-title">Vanna/Charm — the OPEX rally <span id="vc_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">A second-order dealer-flow strategy (distinct from gamma): dealers are net-short <strong>vanna</strong>, so as vol and time decay <em>into monthly OPEX</em> they mechanically buy the index — the "vanna rally." This goes <strong>LONG SPY/QQQ in the OPEX window when net vanna is negative</strong>, holding to the 3rd-Friday expiry. ZERO-capital forward-test on the underlying, <strong>no orders</strong>. Live signal + P&L at <a href="/vanna-charm" style="color:inherit;">/vanna-charm</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Signal</th><th>Days→OPEX</th><th>Net Vanna</th><th>Net Charm</th><th>Spot</th><th>Reason</th></tr>
+            </thead>
+            <tbody id="vanna_charm_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="low_vol_shadow_card" style="min-width:0;">
         <div class="section-title">Low-Vol Shadow — BAB basket edge <span id="lvs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">ZERO-capital forward-test of the parked low-vol (betting-against-beta) sleeve — the inverse-vol-weighted USMV/SPLV/EFAV/XMLV basket marked daily on settled bars, <strong>no orders, no budget</strong>. The low-vol <em>thesis</em> is a smaller drawdown than the broad market, so the key read is drawdown vs SPY (ratio &lt;1 = thesis holds). Detail at <a href="/low-volatility-shadow" style="color:inherit;">/low-volatility-shadow</a>.</div>
@@ -1244,6 +1257,38 @@ async function refreshMomentumShadow() {
   }
 }
 
+async function refreshVannaCharm() {
+  const body = document.getElementById("vanna_charm_body");
+  const summary = document.getElementById("vc_summary");
+  const fmtB = (v) => v == null ? "—" : (v/1e6).toFixed(0) + "M";
+  try {
+    const d = await getJSON("/vanna-charm");
+    const sigs = d.signals || [];
+    const open = (d.open_positions || []).length;
+    if (summary) {
+      const measuring = d.status === "VANNA_SHADOW_MEASURING";
+      summary.textContent = `${open} open · next OPEX ${d.next_opex || "—"} · ${d.closed_trades || 0}/${d.min_closed} closed · ${measuring ? ("win " + d.win_rate_pct + "%") : "accumulating"}`;
+    }
+    if (!sigs.length) { body.innerHTML = `<tr><td colspan="7"><span class="sub">${d.verdict || "no signal"}</span></td></tr>`; return; }
+    body.innerHTML = sigs.map(s => {
+      const act = s.action || "FLAT";
+      const badge = act === "LONG" ? "open" : "neutral";
+      const vCls = s.net_vanna == null ? "" : (s.net_vanna < 0 ? "green" : "red");
+      return `<tr>
+        <td><strong>${s.name}</strong></td>
+        <td><span class="badge ${badge}">${act}</span></td>
+        <td>${s.biz_days_to_opex != null ? s.biz_days_to_opex : "—"}</td>
+        <td><span class="${vCls}">${fmtB(s.net_vanna)}</span></td>
+        <td>${fmtB(s.net_charm)}</td>
+        <td>${s.spot != null ? fmtMoney(s.spot) : "<span class='sub'>—</span>"}</td>
+        <td><span class="sub">${(s.reason || "").slice(0, 46)}</span></td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7"><span class="red">Vanna/charm unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
 async function refreshGexStrategy() {
   const body = document.getElementById("gex_strategy_body");
   const summary = document.getElementById("gex_summary");
@@ -1560,6 +1605,7 @@ async function refreshAll() {
   refreshMomentumShadow();  // zero-capital equity-factor shadow — open hypothetical positions
   refreshCondorShadow();    // zero-capital short-premium shadow — VRP vs earnings edge, measured apart
   refreshGexStrategy();     // GEX mean-reversion — dealer-gamma pin signals + forward-test
+  refreshVannaCharm();      // vanna/charm — the OPEX rally (2nd-order dealer flow)
   refreshLowVolShadow();    // zero-capital low-vol (BAB) basket shadow — drawdown vs SPY thesis check
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls

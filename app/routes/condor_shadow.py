@@ -17,6 +17,16 @@ def condor_shadow():
     return CondorShadowEngine().report()
 
 
+@router.get("/vanna-charm")
+def vanna_charm(signals: bool = False):
+    """Vanna/charm SHADOW forward-test (the 'vanna rally into OPEX'): LONG the index in the OPEX window when
+    net vanna is negative (dealers buy as vol/time decays). ?signals=true = live per-name signal.
+    MEASUREMENT-ONLY — trades the underlying on paper, NO orders/budget."""
+    from app.services.vanna_charm_shadow_engine import VannaCharmShadowEngine
+    eng = VannaCharmShadowEngine()
+    return {"signals": eng.signals()} if signals else eng.report()
+
+
 @router.get("/gex-strategy")
 def gex_strategy(signals: bool = False):
     """GEX mean-reversion SHADOW forward-test (a NEW strategy, not the condor filter): fade the walls toward
