@@ -85,6 +85,11 @@ def account_summary():
             "tbill_sweep_value": None, "cash_on_hand": None, "buying_power": None,
             "unrealized_pnl": None, "total_equity": None, "total_return_pct": None,
             "open_position_count": None,
+            # surface WHY the read failed so the operator (and diagnostics) see the real cause — a 429
+            # throttle vs a broker-side 5xx vs a transient timeout are very different situations.
+            "read_detail": view.get("read_detail"),
+            "read_broker_side": view.get("read_broker_side"),
+            "read_rate_limited": view.get("read_rate_limited"),
             # last confirmed reading (clearly aged) so the dashboard shows real stale numbers, not blank "—"
             "last_good": _load_last_good(),
             "status": "ACCOUNT_SUMMARY_BROKER_READ_DEGRADED",

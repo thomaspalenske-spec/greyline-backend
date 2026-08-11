@@ -9,12 +9,33 @@ appear. That is the whole point: the dashboard can only ever show broker truth.
 Read-only. Selecting the live account here shows real holdings; it cannot place an order.
 """
 
+import time as _clock
 from datetime import datetime
+from os import getenv
 
 from app.services.tradestation_account_source_engine import TradeStationAccountSourceEngine
 from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
 from app.services.tradestation_balance_live_engine import TradeStationBalanceLiveEngine
 from app.services.tradestation_orders_live_engine import TradeStationOrdersLiveEngine
+
+
+# SHARED READ-THROUGH CACHE (only-200-cached). Every snapshot() is 3 TradeStation HTTP calls
+# (balance/positions/orders), and MANY consumers call snapshot() within the same scheduler cycle
+# (exposure gate, reality guard, account-summary, dashboard tiles, sleeve sizing). Un-cached, those
+# overlapping reads stack TS calls until the 3rd (orders) trips a 429 rate-limit — the observed flap.
+# A short cache collapses the burst into ONE real read per window, which is what actually stops the 429
+# (a retry can't: 429 means "call less"). It NEVER caches a degraded/fabricated read — only a fully-good
+# reads_ok=True snapshot — so a cache hit is always real broker data, just up to TTL seconds old (age is
+# labelled). TTL is short by default so a just-filled position surfaces fast at the open; the hard
+# BookDeploymentCap remains the real over-deployment backstop regardless.
+_SNAPSHOT_CACHE = {}          # account_id -> (monotonic_at, snapshot_dict)
+
+
+def _cache_ttl():
+    try:
+        return float(getenv("GREYLINE_POSITIONS_CACHE_TTL_S", "10") or 10)
+    except (TypeError, ValueError):
+        return 10.0
 
 
 def _f(v):
@@ -28,7 +49,7 @@ class BrokerAccountViewEngine:
 
     WORKING = ("received", "open", "queued", "sent", "partiallyfilled")
 
-    def snapshot(self):
+    def snapshot(self, allow_cache=True):
         src = TradeStationAccountSourceEngine().resolve()
         if not src.get("ok"):
             return {"timestamp": datetime.utcnow().isoformat(), "reads_ok": False,
@@ -37,29 +58,58 @@ class BrokerAccountViewEngine:
                     "equity": 0.0, "cash_balance": 0.0, "buying_power": 0.0,
                     "status": "BROKER_ACCOUNT_SOURCE_UNRESOLVED"}
 
+        # READ-THROUGH CACHE: serve a very-recent, fully-good read instead of firing 3 more TS calls.
+        # Only a reads_ok=True snapshot is ever cached, so a hit is always REAL broker data (age labelled).
+        # allow_cache=False forces a fresh read for any caller that must not tolerate even TTL-seconds of lag.
+        _acct = src.get("account_id")
+        _ttl = _cache_ttl()
+        if allow_cache and _ttl > 0 and _acct in _SNAPSHOT_CACHE:
+            _at, _cached = _SNAPSHOT_CACHE[_acct]
+            _age = _clock.monotonic() - _at
+            if _age < _ttl and _cached.get("reads_ok"):
+                out = dict(_cached)
+                out["served_from_cache"] = True
+                out["cache_age_seconds"] = round(_age, 1)
+                return out
+
         # BOUNDED RETRY: the account read intermittently gets STARVED (non-200 timeout) when the scheduler
         # cycle is saturating TradeStation — but it genuinely succeeds within a window. Without a retry a
         # single starved read fails-closed the whole view, which blocks trading (the exposure breaker) at
         # the open. This does NOT weaken safety: it still requires a REAL, fully-parsed 200 read (no stale
         # data, no fabrication) — it just tries a few times to catch a success instead of giving up on one.
         import time as _t
+        # Only-refetch-the-FAILED-sub-read retry. The three reads (balance/positions/orders) are independent;
+        # under load one intermittently STARVES (transient non-200 timeout, NOT a 429 — verified 2026-08-11).
+        # Re-fetching all three every attempt (a) triples the load and (b) needs all three to land clean in
+        # the SAME attempt, which a flapping read rarely does. Instead, keep each sub-read once it returns a
+        # good 200 and retry ONLY the one still failing — fewer calls, and the combined read converges. Still
+        # requires a REAL fully-parsed 200 (no stale data, no fabrication); still respects 429 (never retry
+        # into the throttle). Attempts/backoff tunable.
+        def _bal_good(r):
+            return bool(r) and r.get("http_status") == 200 and bool(r.get("response_json")) \
+                and bool((r.get("response_json") or {}).get("Balances"))
+        def _ok(r):
+            return bool(r) and r.get("http_status") == 200
+        try:
+            _attempts = max(1, int(getenv("GREYLINE_BROKER_READ_ATTEMPTS", "6")))
+        except (TypeError, ValueError):
+            _attempts = 6
         bal = pos = ords = None
-        for _attempt in range(4):
-            bal = TradeStationBalanceLiveEngine().get_balance()
-            pos = TradeStationPositionsLiveEngine().get_positions()
-            ords = TradeStationOrdersLiveEngine().get_orders()
-            _b = ((bal.get("response_json") or {}).get("Balances") or [])
-            if (bal.get("http_status") == 200 and pos.get("http_status") == 200
-                    and ords.get("http_status") == 200 and bal.get("response_json") and _b):
-                break                                     # got a real read — stop retrying
-            # A 429 means "you are calling too often" — RETRYING AMPLIFIES it: 4 rapid calls into a rate
-            # limit make it worse and hold the throttle open longer (and TradeStation has flagged us for
-            # excessive calls before). Respect it: stop immediately and let the window reset. The read
-            # fails-closed this cycle (honest last-known-good, not fabricated); the next cycle retries fresh.
+        for _attempt in range(_attempts):
+            if not _bal_good(bal):
+                bal = TradeStationBalanceLiveEngine().get_balance()
+            if not _ok(pos):
+                pos = TradeStationPositionsLiveEngine().get_positions()
+            if not _ok(ords):
+                ords = TradeStationOrdersLiveEngine().get_orders()
+            if _bal_good(bal) and _ok(pos) and _ok(ords):
+                break                                     # got a real read on every leg — stop retrying
+            # 429 = "you are calling too often"; RETRYING AMPLIFIES it. Respect it: stop, fail-closed this
+            # cycle (honest, not fabricated), let the window reset. Only the STILL-failing legs can 429.
             if any((r or {}).get("http_status") == 429 for r in (bal, pos, ords)):
                 break
-            if _attempt < 3:
-                _t.sleep(1.5)                             # brief backoff, then try to catch a clear window
+            if _attempt < _attempts - 1:
+                _t.sleep(1.0 + 0.5 * _attempt)            # growing backoff — span a longer starvation pulse
 
         balances = ((bal.get("response_json") or {}).get("Balances") or [])
         b = balances[0] if balances else {}
@@ -167,7 +217,7 @@ class BrokerAccountViewEngine:
                 parts.append("balances body empty/unparseable")
             read_detail = (", ".join(parts) or "unknown") + (" (rate-limited — backing off)" if rate_limited else "")
 
-        return {
+        result = {
             "timestamp": datetime.utcnow().isoformat(),
             "reads_ok": reads_ok,
             "read_detail": read_detail,          # e.g. "positions HTTP 500, balances HTTP 500" when degraded
@@ -188,3 +238,7 @@ class BrokerAccountViewEngine:
             "pending_stops": pending_stops,
             "status": "BROKER_ACCOUNT_VIEW_READY" if reads_ok else "BROKER_ACCOUNT_READ_DEGRADED",
         }
+        # cache only a fully-good read — a degraded/fabricated view must never be served from cache
+        if allow_cache and reads_ok and _ttl > 0:
+            _SNAPSHOT_CACHE[_acct] = (_clock.monotonic(), result)
+        return result
