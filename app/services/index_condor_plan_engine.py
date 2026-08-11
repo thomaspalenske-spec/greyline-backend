@@ -110,15 +110,46 @@ class IndexCondorPlanEngine:
                 continue
         return out
 
-    def _rich_iv(self):
-        """{proxy_ticker: iv_rank} for the index names' IV proxies that pass the rich-IV gate today. Empty
-        on any screen failure -> fail-closed (nothing opens). Reuses the proven conditional-VRP panel."""
+    @staticmethod
+    def _vrp_min():
+        # require the actual variance risk premium (IV - realized) to exceed this to harvest. Default 0.0 =
+        # premium must be POSITIVE. IV-rank alone can't see this: a high IV that's JUSTIFIED by high realized
+        # vol carries NO premium (e.g. GLD 2026-08-10: IV-rank 0.74 "rich" but actual VRP -0.006 -> bad sell).
         try:
-            from app.services.conditional_vrp_forward_panel_engine import ConditionalVRPForwardPanelEngine
-            proxies = sorted({self.IV_PROXY.get(n, n) for n in self.NAMES})
-            return {c["ticker"]: c["iv_rank"] for c in ConditionalVRPForwardPanelEngine().rich_iv_candidates(proxies)}
+            return float(getenv("GREYLINE_CONDOR_VRP_MIN", "0.0"))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _vrp_metric(self, proxy):
+        """Latest {risk_premium, rank, date} from UW's variance-risk-premium endpoint for one ticker, or None.
+        risk_premium = IV - realized vol (the ACTUAL harvestable premium); ~1-month lagged (RV must resolve),
+        so it's a regime read ('has this name genuinely carried premium lately?'), not a same-day trigger."""
+        try:
+            from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
+            r = UnusualWhalesProvider().variance_risk_premium(proxy) or {}
+            rows = r.get("data") if isinstance(r.get("data"), list) else (r if isinstance(r, list) else [])
+            rows = [x for x in rows if x.get("date")]
+            if not rows:
+                return None
+            latest = max(rows, key=lambda x: str(x.get("date"))[:10])
+            rp, rk = self._f(latest.get("risk_premium")), self._f(latest.get("rank"))
+            if rp is None:
+                return None
+            return {"risk_premium": round(rp, 5), "rank": round(rk, 3) if rk is not None else None,
+                    "date": str(latest.get("date"))[:10]}
         except Exception:
-            return {}
+            return None
+
+    def _vrp_rich(self):
+        """{proxy: {risk_premium, rank, date}} for the proxies whose ACTUAL VRP is positive/rich (> _vrp_min).
+        This REPLACES the old IV-rank gate — it conditions on the real premium, not just high implied vol.
+        Empty on failure -> fail-closed (nothing opens)."""
+        out, floor = {}, self._vrp_min()
+        for proxy in sorted({self.IV_PROXY.get(n, n) for n in self.NAMES}):
+            m = self._vrp_metric(proxy)
+            if m and m["risk_premium"] > floor:
+                out[proxy] = m
+        return out
 
     @staticmethod
     def _max_loss_cap():
@@ -169,17 +200,21 @@ class IndexCondorPlanEngine:
         builder = ConditionalVRPShortPremiumEngine()
         conditional = self._conditional()
         gex_on = self._gex_filter()
-        rich = self._rich_iv() if conditional else {}   # {proxy: iv_rank} passing the top-tercile gate
-        gex = self._gex_map() if gex_on else {}         # {proxy: {gamma_flip, spot, long_gamma}}
+        rich = self._vrp_rich() if conditional else {}   # {proxy: {risk_premium, rank, date}} w/ positive VRP
+        gex = self._gex_map() if gex_on else {}          # {proxy: {gamma_flip, spot, long_gamma}}
         planned, errors, skipped = [], {}, {}
         for name in self.NAMES:
             cfg = self.NAME_CONFIG.get(name, {})
             grid = int(cfg.get("grid") or self._strike_grid())
             cap = float(cfg.get("cap") or self._max_loss_cap())
             proxy = self.IV_PROXY.get(name, name)
-            # GATE 1 — CONDITIONAL VRP: only harvest when IV is rich (the ~9.6x lever). Fail-closed.
-            if conditional and proxy not in rich:
-                skipped[name] = f"IV not rich — {proxy} below top-tercile (no harvest; conditional VRP gate)"
+            # GATE 1 — CONDITIONAL VRP (direct metric): only harvest when the ACTUAL variance premium (IV -
+            # realized) is positive/rich — not just when IV-rank is high (that missed GLD's negative VRP).
+            # Fail-closed.
+            m = rich.get(proxy)
+            if conditional and not m:
+                skipped[name] = (f"VRP not positive — {proxy} actual variance premium <= {self._vrp_min()} "
+                                 "(high IV without real premium; no harvest)")
                 continue
             # GATE 2 — GAMMA REGIME: only harvest when dealers are LONG gamma (spot > gamma_flip = vol
             # suppressed). Below the flip = short gamma = vol amplifies = condor-hostile. Fail-closed.
@@ -202,7 +237,10 @@ class IndexCondorPlanEngine:
                 con["expiration"] = expiry
                 # RECORD the entry IV-rank that IS the edge (VRP ~9.6x conditional on rich IV) — the shadow
                 # stores it so a closed condor's realized P&L can be read against the richness it was sold into.
-                con["iv_rank"] = rich.get(proxy) if conditional else None
+                # record the ACTUAL VRP sold into (risk_premium = IV-RV) + its rank; iv_rank kept = VRP rank
+                con["entry_vrp"] = m.get("risk_premium") if (conditional and m) else None
+                con["entry_vrp_date"] = m.get("date") if (conditional and m) else None
+                con["iv_rank"] = m.get("rank") if (conditional and m) else None
                 con["iv_proxy"] = proxy if proxy != name else None
                 # record the entry gamma regime so a closed condor's P&L reads against the regime sold into
                 con["entry_gamma_flip"] = g.get("gamma_flip") if g else None
@@ -214,14 +252,15 @@ class IndexCondorPlanEngine:
                 errors[name] = repr(e)[:160]
         return {"planned": planned, "errors": errors, "skipped": skipped, "expiry": expiry,
                 "names": list(self.NAMES), "config": self.NAME_CONFIG,
-                "conditional": conditional, "rich_iv": rich, "gex_filter": gex_on, "gex": gex,
+                "conditional": conditional, "vrp_rich": rich, "gex_filter": gex_on, "gex": gex,
                 "status": "INDEX_CONDOR_PLAN_READY" if planned else "INDEX_CONDOR_PLAN_EMPTY"}
 
     def status(self):
         return {"enabled": self.enabled(), "conditional": self._conditional(), "gex_filter": self._gex_filter(),
                 "names": list(self.NAMES), "config": self.NAME_CONFIG,
                 "iv_proxy": self.IV_PROXY, "target_dte": self.TARGET_DTE,
-                "rich_iv_now": self._rich_iv() if self._conditional() else "unconditional",
+                "vrp_min": self._vrp_min(),
+                "vrp_rich_now": self._vrp_rich() if self._conditional() else "unconditional",
                 "gex_now": self._gex_map() if self._gex_filter() else "gex-filter off",
                 "note": ("MEASUREMENT-ONLY condor planner across 5 decorrelated factors (index/commodity/"
                          "energy/rates/crypto VRP), NO orders/budget. CONDITIONAL harvest: opens only when IV "

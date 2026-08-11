@@ -94,27 +94,38 @@ def _stub_build(monkeypatch):
                                                       "credit_per_condor": 1.0, "max_loss_total": 400.0})
 
 
-def test_conditional_gate_opens_only_rich_iv(monkeypatch):
-    # CONDITIONAL harvest: only names whose IV-proxy passes the rich-IV gate get a condor; rest SKIPPED (not errored)
+def test_conditional_gate_opens_only_positive_vrp(monkeypatch):
+    # CONDITIONAL harvest on the DIRECT VRP metric: only names with positive actual VRP harvest; rest SKIPPED.
     monkeypatch.setenv("GREYLINE_CONDOR_CONDITIONAL", "true")
     _stub_build(monkeypatch)
-    monkeypatch.setattr(I, "_rich_iv", lambda self: {"GLD": 0.74})     # only gold rich today
+    monkeypatch.setattr(I, "_vrp_rich", lambda self: {"GLD": {"risk_premium": 0.02, "rank": 0.7, "date": "2026-07-13"}})
     r = I().plan()
-    assert [c["symbol"] for c in r["planned"]] == ["GLD"]              # only the rich name harvested
-    assert r["planned"][0]["iv_rank"] == 0.74                          # entry richness recorded
+    assert [c["symbol"] for c in r["planned"]] == ["GLD"]              # only the positive-VRP name harvested
+    assert r["planned"][0]["entry_vrp"] == 0.02 and r["planned"][0]["iv_rank"] == 0.7
     assert set(r["skipped"]) == set(I.NAME_CONFIG) - {"GLD"}           # the rest skipped, not errored
+    assert "VRP not positive" in r["skipped"]["USO"]
     assert not r["errors"]
 
 
-def test_xsp_richness_proxies_off_spy(monkeypatch):
-    # XSP has no UW IV series (cash-settled index) -> its richness is read off SPY
+def test_xsp_vrp_proxies_off_spy(monkeypatch):
+    # XSP has no UW data (cash-settled index) -> its VRP is read off SPY
     monkeypatch.setenv("GREYLINE_CONDOR_CONDITIONAL", "true")
     _stub_build(monkeypatch)
-    monkeypatch.setattr(I, "_rich_iv", lambda self: {"SPY": 0.80})     # SPY rich -> XSP should harvest
+    monkeypatch.setattr(I, "_vrp_rich", lambda self: {"SPY": {"risk_premium": 0.01, "rank": 0.6, "date": "2026-07-13"}})
     r = I().plan()
     xsp = next(c for c in r["planned"] if c["symbol"] == "XSP")
-    assert xsp["iv_rank"] == 0.80 and xsp["iv_proxy"] == "SPY"
+    assert xsp["entry_vrp"] == 0.01 and xsp["iv_proxy"] == "SPY"
     assert I.IV_PROXY["XSP"] == "SPY"
+
+
+def test_negative_vrp_is_skipped_not_harvested(monkeypatch):
+    # THE fix: a name with high IV but NEGATIVE actual VRP (e.g. GLD) must NOT harvest
+    monkeypatch.setenv("GREYLINE_CONDOR_CONDITIONAL", "true")
+    _stub_build(monkeypatch)
+    # _vrp_rich only returns names ABOVE the floor; a negative-VRP name is simply absent -> skipped
+    monkeypatch.setattr(I, "_vrp_rich", lambda self: {})     # nothing has positive VRP today
+    r = I().plan()
+    assert r["planned"] == [] and set(r["skipped"]) == set(I.NAME_CONFIG)
 
 
 def test_gex_gate_opens_only_long_gamma(monkeypatch):
