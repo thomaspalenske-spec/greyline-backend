@@ -47,9 +47,32 @@ class IndexCondorPlanEngine:
     TARGET_DTE = 42
     DTE_BAND = (28, 56)
 
+    # CONDITIONAL harvest: only sell premium when IV is RICH (trailing rank >= top tercile) — GreyLine's own
+    # research found the VRP is ~9.6x conditional on rich IV. Reuses the PROVEN gate the retired VRP sleeve
+    # used (ConditionalVRPForwardPanelEngine.rich_iv_candidates). XSP has NO UW IV series (cash-settled index)
+    # so its richness is read off SPY (identical S&P 500 implied vol). Fail-CLOSED: no confirmed richness -> no
+    # condor (never sell un-conditioned premium mislabeled as conditional).
+    IV_PROXY = {"XSP": "SPY"}       # name -> the ticker whose UW IV-rank stands in for it (default: itself)
+
     @staticmethod
     def enabled():
         return (getenv("GREYLINE_INDEX_CONDOR_SHADOW", "false") or "false").strip().lower() == "true"
+
+    @staticmethod
+    def _conditional():
+        # default ON — the whole point of this change is to harvest ONLY rich IV. Set false to open
+        # unconditionally (the pre-2026-08-10 behaviour), e.g. to A/B the conditional lift.
+        return (getenv("GREYLINE_CONDOR_CONDITIONAL", "true") or "true").strip().lower() == "true"
+
+    def _rich_iv(self):
+        """{proxy_ticker: iv_rank} for the index names' IV proxies that pass the rich-IV gate today. Empty
+        on any screen failure -> fail-closed (nothing opens). Reuses the proven conditional-VRP panel."""
+        try:
+            from app.services.conditional_vrp_forward_panel_engine import ConditionalVRPForwardPanelEngine
+            proxies = sorted({self.IV_PROXY.get(n, n) for n in self.NAMES})
+            return {c["ticker"]: c["iv_rank"] for c in ConditionalVRPForwardPanelEngine().rich_iv_candidates(proxies)}
+        except Exception:
+            return {}
 
     @staticmethod
     def _max_loss_cap():
@@ -98,11 +121,20 @@ class IndexCondorPlanEngine:
         expiry = UWOptionChainEngine.monthly_expiry(target_dte=self.TARGET_DTE, band=self.DTE_BAND)
         chain = UWOptionChainEngine()
         builder = ConditionalVRPShortPremiumEngine()
-        planned, errors = [], {}
+        conditional = self._conditional()
+        rich = self._rich_iv() if conditional else {}   # {proxy: iv_rank} passing the top-tercile gate
+        planned, errors, skipped = [], {}, {}
         for name in self.NAMES:
             cfg = self.NAME_CONFIG.get(name, {})
             grid = int(cfg.get("grid") or self._strike_grid())
             cap = float(cfg.get("cap") or self._max_loss_cap())
+            proxy = self.IV_PROXY.get(name, name)
+            # CONDITIONAL GATE: only harvest when IV is rich (the ~9.6x lever). Fail-closed — no confirmed
+            # richness -> skip (never sell un-conditioned premium). Skips are a legitimate "no trade today",
+            # kept separate from errors so a quiet-vol day doesn't read as a broken sleeve.
+            if conditional and proxy not in rich:
+                skipped[name] = f"IV not rich — {proxy} below top-tercile (no harvest; conditional VRP gate)"
+                continue
             try:
                 snap = chain.get_chain_snapshot(name, expiry)
                 contracts = self._coarsen(snap.get("contracts") or [], builder, grid)
@@ -113,21 +145,26 @@ class IndexCondorPlanEngine:
                 if con.get("skip"):
                     errors[name] = con["skip"]
                     continue
-                # the shadow keys on (symbol, expiration) and stores iv_rank; build_condor sets symbol + legs.
                 con["expiration"] = expiry
-                con["iv_rank"] = None      # UNCONDITIONAL for now (measure baseline VRP); conditional-on-
-                #                            rich-IV is a follow-on once we have the raw read.
+                # RECORD the entry IV-rank that IS the edge (VRP ~9.6x conditional on rich IV) — the shadow
+                # stores it so a closed condor's realized P&L can be read against the richness it was sold into.
+                con["iv_rank"] = rich.get(proxy) if conditional else None
+                con["iv_proxy"] = proxy if proxy != name else None
                 con["_sleeve"] = cfg.get("sleeve") or "index_vrp"   # per-factor tag (index_vrp / commodity_vrp)
                 planned.append(con)
             except Exception as e:
                 errors[name] = repr(e)[:160]
-        return {"planned": planned, "errors": errors, "expiry": expiry,
+        return {"planned": planned, "errors": errors, "skipped": skipped, "expiry": expiry,
                 "names": list(self.NAMES), "config": self.NAME_CONFIG,
+                "conditional": conditional, "rich_iv": rich,
                 "status": "INDEX_CONDOR_PLAN_READY" if planned else "INDEX_CONDOR_PLAN_EMPTY"}
 
     def status(self):
-        return {"enabled": self.enabled(), "names": list(self.NAMES), "config": self.NAME_CONFIG,
-                "target_dte": self.TARGET_DTE,
-                "note": ("MEASUREMENT-ONLY index/ETF (XSP + QQQ + IWM) condor planner feeding the condor "
-                         "shadow as sleeve 'index_vrp'; NO orders, NO budget. Per-index premium comparison — "
-                         "does the index VRP generalize across S&P / Nasdaq / Russell?")}
+        return {"enabled": self.enabled(), "conditional": self._conditional(),
+                "names": list(self.NAMES), "config": self.NAME_CONFIG,
+                "iv_proxy": self.IV_PROXY, "target_dte": self.TARGET_DTE,
+                "rich_iv_now": self._rich_iv() if self._conditional() else "unconditional",
+                "note": ("MEASUREMENT-ONLY condor planner across 5 decorrelated factors (index/commodity/"
+                         "energy/rates/crypto VRP), NO orders/budget. CONDITIONAL harvest: opens only when IV "
+                         "is rich (top-tercile trailing rank — the ~9.6x VRP lever), fail-closed; entry IV-rank "
+                         "recorded per condor. XSP richness proxied off SPY (no UW IV series for the index).")}

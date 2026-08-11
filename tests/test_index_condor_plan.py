@@ -27,6 +27,7 @@ def _fine_chain():
 @pytest.fixture(autouse=True)
 def _on(monkeypatch):
     monkeypatch.setenv("GREYLINE_INDEX_CONDOR_SHADOW", "true")
+    monkeypatch.setenv("GREYLINE_CONDOR_CONDITIONAL", "false")   # build/iteration tests exercise the BUILD path
     yield
 
 
@@ -78,6 +79,41 @@ def test_plan_iterates_every_configured_name(monkeypatch):
     assert tag["GLD"] == "commodity_vrp" and tag["USO"] == "energy_vrp" and tag["TLT"] == "rates_vrp"
     assert tag["IBIT"] == "crypto_vrp"
     assert tag["XSP"] == "index_vrp" and tag["QQQ"] == "index_vrp"       # equity indices pool together
+
+
+def _stub_build(monkeypatch):
+    # isolate the GATE from the build: chain + coarsen + build_condor all succeed trivially
+    from app.services.uw_option_chain_engine import UWOptionChainEngine
+    from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine
+    monkeypatch.setattr(UWOptionChainEngine, "get_chain_snapshot", lambda self, sym, exp, **k: {"contracts": [{"Side": "Call"}]})
+    monkeypatch.setattr(UWOptionChainEngine, "monthly_expiry", staticmethod(lambda **k: "2026-09-18"))
+    monkeypatch.setattr(I, "_coarsen", staticmethod(lambda cons, b, g: cons))
+    monkeypatch.setattr(ConditionalVRPShortPremiumEngine, "build_condor",
+                        lambda self, sym, cons, **k: {"symbol": sym, "quantity": 1, "legs": {},
+                                                      "credit_per_condor": 1.0, "max_loss_total": 400.0})
+
+
+def test_conditional_gate_opens_only_rich_iv(monkeypatch):
+    # CONDITIONAL harvest: only names whose IV-proxy passes the rich-IV gate get a condor; rest SKIPPED (not errored)
+    monkeypatch.setenv("GREYLINE_CONDOR_CONDITIONAL", "true")
+    _stub_build(monkeypatch)
+    monkeypatch.setattr(I, "_rich_iv", lambda self: {"GLD": 0.74})     # only gold rich today
+    r = I().plan()
+    assert [c["symbol"] for c in r["planned"]] == ["GLD"]              # only the rich name harvested
+    assert r["planned"][0]["iv_rank"] == 0.74                          # entry richness recorded
+    assert set(r["skipped"]) == set(I.NAME_CONFIG) - {"GLD"}           # the rest skipped, not errored
+    assert not r["errors"]
+
+
+def test_xsp_richness_proxies_off_spy(monkeypatch):
+    # XSP has no UW IV series (cash-settled index) -> its richness is read off SPY
+    monkeypatch.setenv("GREYLINE_CONDOR_CONDITIONAL", "true")
+    _stub_build(monkeypatch)
+    monkeypatch.setattr(I, "_rich_iv", lambda self: {"SPY": 0.80})     # SPY rich -> XSP should harvest
+    r = I().plan()
+    xsp = next(c for c in r["planned"] if c["symbol"] == "XSP")
+    assert xsp["iv_rank"] == 0.80 and xsp["iv_proxy"] == "SPY"
+    assert I.IV_PROXY["XSP"] == "SPY"
 
 
 def test_chain_error_is_surfaced_not_swallowed(monkeypatch):
