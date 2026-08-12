@@ -800,11 +800,11 @@ th {
 
       <div class="card" id="edge_court_card" style="min-width:0;">
         <div class="section-title">Edge Court — live per-sleeve verdict <span id="ec_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20-trade minimum. Realized P&amp;L is fill-reconciled on every sleeve — condor closes, momentum equity exits, AND long-option exits: a close priced from an estimate/quote is upgraded to the actual broker fill (never fabricated when unconfirmed), and a CLOSED position the broker still holds is reverted to OPEN (never counted as a realized win). Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
+        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20 <strong>independent-trading-day</strong> minimum. The sample is <strong>day-clustered</strong>: multiple lots closed in the same instant, and multiple names closed by one same-day rebalance, are ONE correlated observation — not many — so a single close can't masquerade as a proven track record (counting rows independently inflated the t-stat by ~√(fake n)). Realized P&amp;L is fill-reconciled on every sleeve — condor closes, momentum equity exits, AND long-option exits: a close priced from an estimate/quote is upgraded to the actual broker fill (never fabricated when unconfirmed), and a CLOSED position the broker still holds is reverted to OPEN (never counted as a realized win). Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
         <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>Sleeve</th><th>Verdict</th><th>Trades</th><th>Edge (return on risk · 95% CI)</th><th>Execution (slippage · fill)</th></tr>
+              <tr><th>Sleeve</th><th>Verdict</th><th title="independent trading days (day-clustered) · raw close-rows">Days · closes</th><th>Edge (return on risk · 95% CI)</th><th>Execution (slippage · fill)</th></tr>
             </thead>
             <tbody id="edge_court_body"><tr><td colspan="5"><span class="sub">Loading…</span></td></tr></tbody>
           </table>
@@ -1403,15 +1403,16 @@ async function refreshEdgeCourt() {
     const ec = re.execution_cost || {};
     const gate = re.min_trades_gate || 20;
     const closest = (re.closest_to_proven || [])[0];
-    if (summary) summary.textContent = `gate ${gate} trades · ${re.excluded_forced_closes || 0} admin close(s) excluded`
-      + (closest && closest.trades ? ` · closest: ${closest.sleeve} (t=${closest.t_stat ?? "—"}, n=${closest.trades})` : "");
+    if (summary) summary.textContent = `gate ${gate} independent days · ${re.excluded_forced_closes || 0} admin close(s) excluded`
+      + (closest && closest.trades ? ` · closest: ${closest.sleeve} (t=${closest.t_stat ?? "—"}, ${closest.trades}d/${closest.closes ?? "—"} closes)` : "");
     // union of instrumented + traded sleeves, condors first
     const order = ["premium_vrp", "premium_earnings", "momentum", "carry", "trend", "tbill", "managed_futures"];
     const names = order.filter(s => (s in ec) || (s in sleeves));
     body.innerHTML = names.map(s => {
       const v = sleeves[s];
       const trades = v ? v.trades : 0;
-      const verdict = v ? v.verdict : `ACCUMULATING (0/${gate} trades)`;
+      const closes = v ? (v.closes ?? v.trades) : 0;
+      const verdict = v ? v.verdict : `ACCUMULATING (0/${gate} independent trading days)`;
       const vcls = verdict.startsWith("PROVEN") ? "green" : verdict.startsWith("DECAYED") ? "red"
         : verdict.startsWith("UNPROVEN") ? "yellow" : "";
       // return-on-risk is only comparable across sleeves if you can see its DENOMINATOR — surface the
@@ -1435,7 +1436,7 @@ async function refreshEdgeCourt() {
       return `<tr>
         <td><strong>${s}</strong></td>
         <td class="${vcls}">${verdict}</td>
-        <td>${trades}</td>
+        <td>${trades}<span class="sub">${closes !== trades ? ` · ${closes} closes` : ""}</span></td>
         <td>${edge}</td>
         <td>${exec}</td>
       </tr>`;

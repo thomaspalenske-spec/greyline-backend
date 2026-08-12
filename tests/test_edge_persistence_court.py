@@ -3,13 +3,21 @@ cost-net, with a 95% CI and a minimum-sample gate. Forced/administrative closes 
 autocorrelated daily open-marks are NEVER used for a verdict. Fully hermetic — no broker, no orders."""
 
 import json
+from datetime import date, timedelta
 
 from app.services.edge_persistence_engine import EdgePersistenceEngine as E
 
 
+def _day(i):
+    """Distinct calendar day per index — the court clusters by TRADING DAY, so an N-independent-sample
+    test must spread its rows across N days (one row/day => the daily series equals the per-row series,
+    preserving every legacy statistic while making the independence explicit)."""
+    return (date(2026, 1, 1) + timedelta(days=int(i))).isoformat() + "T14:30:00"
+
+
 def _trades(n, net, risk=100.0, sleeve="premium", basis="fill_net"):
     return [{"sleeve": sleeve, "gross": net, "net": net, "risk": risk,
-             "closed_at": "2026-07-31T00:00:00", "basis": basis} for _ in range(n)]
+             "closed_at": _day(i), "basis": basis} for i in range(n)]
 
 
 def _verdict(monkeypatch, trades):
@@ -24,7 +32,7 @@ def test_mark_at_confirm_is_confirmed_not_provisional(monkeypatch):
     # broker-confirmed quantity, mark-priced — the hybrid floor. A consistent winner must reach PROVEN,
     # NOT be blocked as provisional (the bug: every sleeve stuck PROVISIONAL forever).
     trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
-               "closed_at": "x", "basis": "mark_at_confirm"} for v in ([9.0, 11.0] * 12)]
+               "closed_at": _day(i), "basis": "mark_at_confirm"} for i, v in enumerate([9.0, 11.0] * 12)]
     stat, _ = _verdict(monkeypatch, trades)
     assert stat["mark_confirmed_trades"] == 24 and stat["estimated_trades"] == 0
     assert stat["fill_confirmed_trades"] == 24              # confirmed-enough
@@ -36,7 +44,7 @@ def test_mark_at_confirm_is_confirmed_not_provisional(monkeypatch):
 def test_genuine_estimates_stay_provisional(monkeypatch):
     # condor mid-estimates are NOT tied to a confirmed-quantity instant — a verdict on them stays provisional
     trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
-               "closed_at": "x", "basis": "mid_estimate"} for v in ([9.0, 11.0] * 12)]
+               "closed_at": _day(i), "basis": "mid_estimate"} for i, v in enumerate([9.0, 11.0] * 12)]
     stat, _ = _verdict(monkeypatch, trades)
     assert stat["estimated_trades"] == 24 and stat["mark_confirmed_trades"] == 0
     assert "PROVISIONAL" in stat["verdict"]
@@ -44,7 +52,7 @@ def test_genuine_estimates_stay_provisional(monkeypatch):
 
 def test_executed_fills_are_top_of_ladder(monkeypatch):
     trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
-               "closed_at": "x", "basis": "fills"} for v in ([9.0, 11.0] * 12)]
+               "closed_at": _day(i), "basis": "fills"} for i, v in enumerate([9.0, 11.0] * 12)]
     stat, _ = _verdict(monkeypatch, trades)
     assert stat["executed_fill_trades"] == 24 and stat["estimated_trades"] == 0
     assert "PROVISIONAL" not in stat["verdict"]
@@ -53,9 +61,9 @@ def test_executed_fills_are_top_of_ladder(monkeypatch):
 def test_mixed_majority_estimate_is_provisional(monkeypatch):
     # 5 mark-confirmed + 20 genuine estimates -> estimates dominate -> provisional
     conf = [{"sleeve": "premium", "gross": 10.0, "net": 10.0, "risk": 100.0,
-             "closed_at": "x", "basis": "mark_at_confirm"} for _ in range(5)]
+             "closed_at": _day(i), "basis": "mark_at_confirm"} for i in range(5)]
     est = [{"sleeve": "premium", "gross": 10.0, "net": 10.0, "risk": 100.0,
-            "closed_at": "x", "basis": "mid_estimate"} for _ in range(20)]
+            "closed_at": _day(5 + i), "basis": "mid_estimate"} for i in range(20)]
     stat, _ = _verdict(monkeypatch, conf + est)
     assert stat["estimated_trades"] == 20 and stat["mark_confirmed_trades"] == 5
     assert "PROVISIONAL" in stat["verdict"]
@@ -63,13 +71,37 @@ def test_mixed_majority_estimate_is_provisional(monkeypatch):
 
 def test_too_few_trades_is_accumulating(monkeypatch):
     stat, _ = _verdict(monkeypatch, _trades(5, 10.0))
-    assert stat["trades"] == 5 and "ACCUMULATING" in stat["verdict"]
+    assert stat["trades"] == 5 and stat["independent_days"] == 5 and "ACCUMULATING" in stat["verdict"]
+
+
+def test_same_instant_tranches_are_one_independent_trade(monkeypatch):
+    """CORE independence fix: 5 lots of ONE position closed in the SAME instant are ONE correlated
+    observation, not 5 — the old row-count made a single close look like a proven track record
+    (vol_carry's fake t=10.8). They must collapse to independent_days=1, no t-stat, ACCUMULATING."""
+    same = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
+             "closed_at": "2026-08-10T14:33:41.061997", "basis": "mark_at_confirm"}
+            for v in (5.44, 4.50, 3.60, 6.15, 2.80)]
+    stat, _ = _verdict(monkeypatch, same)
+    assert stat["closes"] == 5 and stat["independent_days"] == 1     # 5 rows, ONE independent day
+    assert stat.get("t_stat") is None                                # n=1 => no CI/t-stat manufactured
+    assert stat["trades"] == 1 and "ACCUMULATING" in stat["verdict"]
+
+
+def test_same_day_multi_name_closes_cluster_to_one_day(monkeypatch):
+    """A single rebalance closing several names on ONE day is ONE correlated observation (same-day factor
+    move), so 10 rows across 2 days => independent_days=2, not 10 (xs_momentum's real state)."""
+    rows = ([{"sleeve": "premium", "gross": 1.0, "net": 1.0, "risk": 100.0,
+              "closed_at": "2026-08-07T15:00:00", "basis": "mark_at_confirm"} for _ in range(6)]
+            + [{"sleeve": "premium", "gross": 1.0, "net": 1.0, "risk": 100.0,
+               "closed_at": "2026-08-10T15:00:00", "basis": "mark_at_confirm"} for _ in range(4)])
+    stat, _ = _verdict(monkeypatch, rows)
+    assert stat["closes"] == 10 and stat["independent_days"] == 2 and stat["trades"] == 2
 
 
 def test_consistent_winners_prove_the_edge(monkeypatch):
     # 24 trades, small spread around +$10 on $100 risk -> tight CI well above 0
     trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
-               "closed_at": "x", "basis": "fill_net"} for v in ([9.0, 11.0] * 12)]
+               "closed_at": _day(i), "basis": "fill_net"} for i, v in enumerate([9.0, 11.0] * 12)]
     stat, _ = _verdict(monkeypatch, trades)
     assert "PROVEN" in stat["verdict"]
     assert stat["ci95_return_on_risk_pct"][0] > 0        # CI lower bound above zero
@@ -78,14 +110,14 @@ def test_consistent_winners_prove_the_edge(monkeypatch):
 
 def test_consistent_losers_are_decayed(monkeypatch):
     trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
-               "closed_at": "x", "basis": "fill_net"} for v in ([-9.0, -11.0] * 12)]
+               "closed_at": _day(i), "basis": "fill_net"} for i, v in enumerate([-9.0, -11.0] * 12)]
     stat, _ = _verdict(monkeypatch, trades)
     assert "DECAYED" in stat["verdict"] and stat["ci95_return_on_risk_pct"][1] < 0
 
 
 def test_noisy_zero_mean_is_unproven(monkeypatch):
     trades = [{"sleeve": "premium", "gross": v, "net": v, "risk": 100.0,
-               "closed_at": "x", "basis": "fill_net"} for v in ([50.0, -50.0] * 12)]
+               "closed_at": _day(i), "basis": "fill_net"} for i, v in enumerate([50.0, -50.0] * 12)]
     stat, _ = _verdict(monkeypatch, trades)
     assert "UNPROVEN" in stat["verdict"]
     lo, hi = stat["ci95_return_on_risk_pct"]
@@ -94,8 +126,8 @@ def test_noisy_zero_mean_is_unproven(monkeypatch):
 
 def test_closest_to_proven_ranks_by_t_stat(monkeypatch):
     strong = _trades(24, 10.0, sleeve="premium")
-    weak = [{"sleeve": "momentum", "gross": v, "net": v, "risk": 100.0, "closed_at": "x",
-             "basis": "fill_net"} for v in ([1.0, -1.0] * 12)]
+    weak = [{"sleeve": "momentum", "gross": v, "net": v, "risk": 100.0, "closed_at": _day(i),
+             "basis": "fill_net"} for i, v in enumerate([1.0, -1.0] * 12)]
     monkeypatch.setattr(E, "_closed_trades", lambda self: (strong + weak, 0))
     out = E().realized_edge()
     assert out["closest_to_proven"][0]["sleeve"] == "premium"   # higher t-stat ranked first
@@ -181,8 +213,8 @@ def test_thin_lucky_sample_not_proven_under_small_sample_t(monkeypatch):
     """A 20-trade sample with t_stat ~1.98 clears the FLAT 1.96 CI but NOT the small-sample-t CI (df=19
     ~2.09) — so the harder gate correctly withholds PROVEN where the naive normal would have granted it."""
     # net=[6.4,-2.4]*10 on risk 100 -> mean ROR 2% (above the floor), t_stat ~1.98
-    trades = [{"sleeve": "premium_vrp", "gross": v, "net": v, "risk": 100.0, "closed_at": "x",
-               "basis": "fills"} for v in ([6.4, -2.4] * 10)]
+    trades = [{"sleeve": "premium_vrp", "gross": v, "net": v, "risk": 100.0, "closed_at": _day(i),
+               "basis": "fills"} for i, v in enumerate([6.4, -2.4] * 10)]
     monkeypatch.setattr(E, "_closed_trades", lambda self: (trades, 0))
     stat = E().realized_edge()["sleeves"]["premium_vrp"]
     assert 1.96 < stat["t_stat"] < E._t_crit(20)     # in the band the flat-z would have called significant
@@ -194,8 +226,8 @@ def test_significant_but_trivial_edge_is_not_proven(monkeypatch):
     """A tight, clearly-significant edge that is below the action floor must not fire PROVEN (which would
     move capital) — it's flagged UNPROVEN 'below the action floor' instead."""
     # net alternating 0.25/0.35 on risk 100 -> mean ROR 0.3% (< 0.5% floor), tiny variance -> lo > 0
-    trades = [{"sleeve": "premium_vrp", "gross": v, "net": v, "risk": 100.0, "closed_at": "x",
-               "basis": "fills"} for v in ([0.25, 0.35] * 12)]
+    trades = [{"sleeve": "premium_vrp", "gross": v, "net": v, "risk": 100.0, "closed_at": _day(i),
+               "basis": "fills"} for i, v in enumerate([0.25, 0.35] * 12)]
     monkeypatch.setattr(E, "_closed_trades", lambda self: (trades, 0))
     stat = E().realized_edge()["sleeves"]["premium_vrp"]
     assert stat["ci95_return_on_risk_pct"][0] > 0    # statistically positive

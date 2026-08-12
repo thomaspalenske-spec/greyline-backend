@@ -310,6 +310,38 @@ class EdgePersistenceEngine:
             return kinds[0]
         return "mixed (" + ", ".join(kinds) + ")"
 
+    @staticmethod
+    def _trade_day(closed_at):
+        """The trading-day key for correlation clustering: the YYYY-MM-DD date of the close. Rows without a
+        parseable date collapse into a single 'unknown' bucket (conservative — never SPLIT a fuzzy row into
+        multiple independent samples)."""
+        s = str(closed_at or "")
+        return s[:10] if (len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-") else "unknown"
+
+    @classmethod
+    def _daily_returns(cls, ts):
+        """INDEPENDENCE by day-clustering. Multiple lots/tranches closed in the same instant, and multiple
+        names closed by one same-day rebalance, are ONE correlated observation — not many independent
+        samples. Counting each row independently inflated the t-stat by ~sqrt(fake n) and let a single
+        close masquerade as a proven track record (vol_carry: 5 same-instant SVXY lots → a fake t=10.8).
+        The statistical unit is the TRADING DAY: each day contributes one risk-weighted return
+        (sum net / sum risk over that day's closes). Returns a sorted list of per-day observations."""
+        by_day = {}
+        for t in ts:
+            r = t.get("risk")
+            if not (r and r > 0):
+                continue
+            d = by_day.setdefault(cls._trade_day(t.get("closed_at")), {"net": 0.0, "risk": 0.0, "closes": 0})
+            d["net"] += t["net"]
+            d["risk"] += r
+            d["closes"] += 1
+        out = []
+        for day, agg in sorted(by_day.items()):
+            if agg["risk"] > 0:
+                out.append({"day": day, "net": agg["net"], "risk": agg["risk"],
+                            "closes": agg["closes"], "ror": agg["net"] / agg["risk"]})
+        return out
+
     def realized_edge(self):
         trades, excluded = self._closed_trades()
         by = {}
@@ -318,13 +350,18 @@ class EdgePersistenceEngine:
 
         sleeves = {}
         for sleeve, ts in by.items():
-            rets = [t["net"] / t["risk"] for t in ts if t["risk"] > 0]
-            n = len(rets)
+            # Day-clustered: the sample is DISTINCT TRADING DAYS, not raw close-rows (tranches/legs of one
+            # close are correlated, not independent). Each day = one risk-weighted return.
+            daily = self._daily_returns(ts)
+            rets = [d["ror"] for d in daily]
+            n = len(rets)                                    # independent trading days — the real sample size
+            n_closes = len(ts)                               # raw close rows (lots/legs), for context only
             mean = sum(rets) / n if n else 0.0
-            wins = sum(1 for t in ts if t["net"] > 0)
+            wins = sum(1 for d in daily if d["net"] > 0)     # winning DAYS, not winning tranches
             lo = hi = None
             t_stat = 0.0
-            stat = {"trades": n, "wins": wins, "win_rate": round(wins / n, 2) if n else None,
+            stat = {"trades": n, "independent_days": n, "closes": n_closes,
+                    "wins": wins, "win_rate": round(wins / n, 2) if n else None,
                     "mean_return_on_risk_pct": round(mean * 100, 2) if n else None,
                     "total_net_pnl": round(sum(t["net"] for t in ts), 2),
                     "risk_basis": self._risk_basis_label(ts)}   # instrument-aware denominator (honest if mixed)
@@ -339,7 +376,8 @@ class EdgePersistenceEngine:
                              "t_crit": round(tc, 3), "ci95_return_on_risk_pct": [round(lo * 100, 2), round(hi * 100, 2)]})
 
             if n < self.MIN_TRADES:
-                verdict = f"ACCUMULATING ({n}/{self.MIN_TRADES} trades — too few to judge)"
+                verdict = (f"ACCUMULATING ({n}/{self.MIN_TRADES} independent trading days — too few to judge"
+                           + (f"; {n_closes} close-rows" if n_closes != n else "") + ")")
             elif lo is not None and lo > 0 and mean >= self.MIN_EDGE_ROR:
                 verdict = "PROVEN — cost-net edge > 0 at 95% (small-sample t) and above the action floor"
             elif hi is not None and hi < 0:
@@ -378,7 +416,8 @@ class EdgePersistenceEngine:
 
         # closest-to-proven: the sleeve to push resources at first (highest t-stat among the unproven)
         ranked = sorted(sleeves.items(), key=lambda kv: kv[1].get("_t", 0.0), reverse=True)
-        closest = [{"sleeve": k, "trades": v["trades"], "t_stat": v.get("t_stat"),
+        closest = [{"sleeve": k, "trades": v["trades"], "independent_days": v.get("independent_days"),
+                    "closes": v.get("closes"), "t_stat": v.get("t_stat"),
                     "mean_return_on_risk_pct": v["mean_return_on_risk_pct"], "verdict": v["verdict"]}
                    for k, v in ranked]
         for v in sleeves.values():
@@ -393,14 +432,19 @@ class EdgePersistenceEngine:
                                     "sleeve whose measured cost exceeds its edge is a retire candidate."),
             "excluded_forced_closes": excluded,
             "min_trades_gate": self.MIN_TRADES,
+            "min_trades_gate_unit": "independent trading days (day-clustered, not raw close-rows)",
             "cost_note": ("cost-net: equity/option closes use real SIM fills; condor closes are priced from "
                           "actual close fills or the marketable close-order debit (basis fills/close_order) — "
                           f"already honest, no haircut. Only LEGACY mid-marked condor rows are haircut "
                           f"{self.CONDOR_CLOSE_HAIRCUT_FRAC*100:.0f}% of max-loss as a conservative proxy."),
-            "method": ("per-trade return on risk; PROVEN needs the SMALL-SAMPLE-t 95% CI above 0 AND a mean "
-                       f">= {self.MIN_EDGE_ROR * 100:.1f}% action floor (a significant-but-trivial edge won't "
-                       "fire capital moves); DECAYED needs the CI below 0. Realized CLOSED trades only, forced "
-                       "flattens excluded. Daily open-marks are autocorrelated and are NEVER used."),
+            "method": ("day-clustered return on risk: the sample is DISTINCT TRADING DAYS (each day = one "
+                       "risk-weighted return), NOT raw close-rows — same-instant tranches and same-day "
+                       "rebalance legs are correlated, so counting them independently would inflate the "
+                       "t-stat by ~sqrt(fake n). 'trades' = independent days; 'closes' = raw rows. PROVEN "
+                       f"needs the SMALL-SAMPLE-t 95% CI above 0 AND a mean >= {self.MIN_EDGE_ROR * 100:.1f}% "
+                       "action floor (a significant-but-trivial edge won't fire capital moves); DECAYED needs "
+                       "the CI below 0. Realized CLOSED trades only, forced flattens excluded. Daily "
+                       "open-marks are autocorrelated and are NEVER used."),
             "multiple_comparison_note": (f"{len(sleeves)} sleeve(s) verdicted; each uses a per-sleeve test on "
                                          "PRE-SPECIFIED strategies (not a search), so no Bonferroni — but treat a "
                                          "lone borderline PROVEN with caution and prefer more trades."),
