@@ -15,6 +15,15 @@ class _Resp:
         self.status_code = status
         self._j = json_body
         self.text = text
+        self.headers = {}
+        self.closed = False
+
+    def iter_content(self, chunk_size=65536):        # engine now streams the body under a total deadline
+        import json as _j
+        yield (_j.dumps(self._j).encode() if self._j is not None else b"")
+
+    def close(self):
+        self.closed = True
 
     def json(self):
         if self._j is None:

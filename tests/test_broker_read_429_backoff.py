@@ -43,6 +43,7 @@ def test_429_is_not_retried_no_amplification(monkeypatch):
 
 def test_non_429_failure_still_uses_bounded_retry(monkeypatch):
     _patch_source(monkeypatch)
+    monkeypatch.setenv("GREYLINE_BROKER_READ_ATTEMPTS", "4")     # pin attempts (default is tuned separately)
     calls = {"n": 0}
 
     def _bal(self):
