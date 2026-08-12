@@ -62,6 +62,9 @@ def test_symbols_cap_and_env_extend(monkeypatch):
 
 
 def test_disabled_does_not_start(monkeypatch):
+    # neutralize reload_env so the .env value (which may be 'true' in a live session) can't clobber the flag
+    import app.services.tradestation_quote_stream_engine as smod
+    monkeypatch.setattr(smod, "reload_env", lambda *a, **k: None)
     monkeypatch.setenv("GREYLINE_TS_QUOTE_STREAM_ENABLED", "false")
     r = S.start_if_enabled()
     assert r["status"] == "STREAM_DISABLED"

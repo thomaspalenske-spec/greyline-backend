@@ -51,14 +51,23 @@ class TradeStationQuoteStreamEngine:
     @classmethod
     def _symbols(cls):
         syms = list(cls.DEFAULT_CORE)
+        # operator-specified symbols come BEFORE the auto universe so an explicit pin is never crowded out
         for s in (getenv("GREYLINE_TS_STREAM_SYMBOLS", "") or "").replace(",", " ").split():
             u = s.upper().strip()
             if u and u not in syms:
                 syms.append(u)
+        # the extended ETF universe (2026-08-12 scan) — live-track its non-caution names too
         try:
-            cap = int(getenv("GREYLINE_TS_STREAM_MAX", "40") or 40)
+            from app.services.extended_etf_universe_engine import ExtendedEtfUniverseEngine
+            for u in ExtendedEtfUniverseEngine.symbols(include_caution=False):
+                if u not in syms:
+                    syms.append(u)
+        except Exception:
+            pass
+        try:
+            cap = int(getenv("GREYLINE_TS_STREAM_MAX", "96") or 96)
         except ValueError:
-            cap = 40
+            cap = 96
         return syms[:max(1, cap)]
 
     @staticmethod

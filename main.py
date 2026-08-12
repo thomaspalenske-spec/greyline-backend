@@ -176,6 +176,10 @@ from app.routes import gamma_flip_history
 
 app.include_router(gamma_flip_history.router)
 
+from app.routes import extended_etf_universe
+
+app.include_router(extended_etf_universe.router)
+
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)
