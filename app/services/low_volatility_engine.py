@@ -30,6 +30,12 @@ class LowVolatilityEngine:
     VOL_LOOKBACK = 60           # trailing trading days for realized-vol weighting
     REBALANCE_MIN_USD = 150.0   # don't churn on tiny drifts (same threshold as the trend sleeve)
     MAX_STALE_DAYS = 4          # a stalled daily refresh must not be traded on
+    # DIVERSIFICATION FLOOR (2026-08-11): a diversified low-vol BASKET must never dump the whole budget into
+    # whichever names happen to have fresh data. Require >=MIN_USABLE_NAMES with usable vol before trading
+    # (else skip — don't concentrate), and hard-cap any single name's weight. Without this, a cycle where 3
+    # of the 4 names had unusable/stale vol put ~100% of the budget into XMLV (20 shares vs a 3-share target).
+    MIN_USABLE_NAMES = 3
+    MAX_NAME_WEIGHT = 0.40
 
     @staticmethod
     def enabled():
@@ -100,15 +106,19 @@ class LowVolatilityEngine:
         return round(sd * (252 ** 0.5), 4) if sd > 0 else None
 
     def _weights(self):
-        """Inverse-volatility weights over the names with usable vol; equal-weight fallback if none have it.
-        Returns ({sym: weight}, {sym: vol|None})."""
+        """Inverse-volatility weights over the names with usable vol, WITH a diversification floor.
+
+        A diversified low-vol basket must never concentrate the budget into whichever names happen to have
+        fresh data: if fewer than MIN_USABLE_NAMES have usable vol this cycle, SKIP (return {} -> no trade,
+        wait for the daily refresh), and hard-cap any single name at MAX_NAME_WEIGHT (a capped set may sum
+        to <1 -> deploy less, which is the safe direction). Returns ({sym: weight}, {sym: vol|None})."""
         vols = {s: self._realized_vol(s) for s in self.BASKET}
         usable = {s: v for s, v in vols.items() if v and v > 0}
-        if not usable:
-            return {}, vols
+        if len(usable) < self.MIN_USABLE_NAMES:
+            return {}, vols                                # too few fresh names to run a DIVERSIFIED basket
         inv = {s: 1.0 / v for s, v in usable.items()}
         tot = sum(inv.values())
-        return {s: inv[s] / tot for s in inv}, vols
+        return {s: min(inv[s] / tot, self.MAX_NAME_WEIGHT) for s in inv}, vols
 
     def plan(self):
         from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
@@ -157,6 +167,19 @@ class LowVolatilityEngine:
         book = TradeStationSimBookingEngine()
         # PER-SLEEVE DEPLOYMENT CAP: this sleeve's own value can't exceed its budget (x buffer).
         _deployed = sum(max(0, int(lg.get("held") or 0)) * (lg.get("last") or 0) for lg in p["legs"])
+        # ALSO count RESTING (unfilled) BUY orders, or consecutive cycles stack on top of a patient limit
+        # that hasn't filled yet — the 2026-08-11 XMLV over-buy (bought 8 then 12 before the first filled).
+        # Fail-safe: a degraded orders read returns ok=False -> add 0 (held + the hard book cap still bound).
+        try:
+            from app.services.in_flight_orders_engine import InFlightOrdersEngine
+            _inflight = InFlightOrdersEngine.snapshot()
+            if _inflight.get("ok"):
+                _net = _inflight.get("net") or {}
+                for lg in p["legs"]:
+                    _resting_buy = max(0, int(_net.get(str(lg["symbol"]).upper(), 0)))   # +qty = unfilled BUY
+                    _deployed += _resting_buy * (lg.get("last") or 0)
+        except Exception:
+            pass
         buy_headroom = SleeveCapitalBudgetEngine.deployment_headroom_usd("low_vol", _deployed)
         acts, skipped = [], []
         for leg in p["legs"]:
