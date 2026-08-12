@@ -824,6 +824,18 @@ class BackgroundSchedulerService:
             extended_etf_shadow = {"error": repr(exc), "status": "ETF_SHADOW_DEGRADED"}
         cls._ckpt("extended_etf_shadow")
 
+        # Long-vol ETP SHADOW — the regime-conditioned long-vol leg (long VXX only in backwardation),
+        # complements the SVXY short-vol carry sleeve. Zero capital, NO orders.
+        try:
+            if _heavy_blocked:
+                vol_etp_shadow = {"status": "VOL_ETP_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
+            else:
+                from app.services.vol_etp_shadow_engine import VolEtpShadowEngine
+                vol_etp_shadow = VolEtpShadowEngine().mark()
+        except Exception as exc:
+            vol_etp_shadow = {"error": repr(exc), "status": "VOL_ETP_SHADOW_DEGRADED"}
+        cls._ckpt("vol_etp_shadow")
+
         # GEX MEAN-REVERSION shadow — a NEW strategy (fade the walls toward the gamma-magnet in long-gamma
         # pinning regimes), forward-tested on the underlying with NO orders. Same heavy-window gate.
         try:

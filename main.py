@@ -188,6 +188,10 @@ from app.routes import alt_asset_universe
 
 app.include_router(alt_asset_universe.router)
 
+from app.routes import vol_etp_shadow
+
+app.include_router(vol_etp_shadow.router)
+
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)
