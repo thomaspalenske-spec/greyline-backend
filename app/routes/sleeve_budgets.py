@@ -10,5 +10,6 @@ router = APIRouter()
 @router.get("/sleeve-budgets")
 def sleeve_budgets():
     """Live per-sleeve dollar budgets derived from %-of-equity, plus the deployable-cash clamp.
-    Confirms the book can deploy up to ~100% of available cash when sleeves have opportunities."""
+    Sleeve targets currently sum to 97% of equity (deliberate ~3% headroom), each further clamped
+    to live deployable cash."""
     return SleeveCapitalBudgetEngine.snapshot()
