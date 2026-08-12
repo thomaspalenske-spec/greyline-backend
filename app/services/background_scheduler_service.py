@@ -802,6 +802,16 @@ class BackgroundSchedulerService:
             condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
         cls._ckpt("condor_shadow")
 
+        # Record the daily gamma_flip-vs-spot gap for the condor proxies (UW serves flip live-only) so GATE 2's
+        # regime can be TRENDED — CONVERGING (warming) vs DIVERGING. Reuses the same 900s-cached _gex_map the
+        # shadow just read; one row/symbol/day; read-only, isolated so it can't disturb the cycle.
+        try:
+            from app.services.gamma_flip_history_engine import GammaFlipHistoryEngine
+            gamma_flip_history = GammaFlipHistoryEngine().record()
+        except Exception as exc:
+            gamma_flip_history = {"error": repr(exc), "status": "GAMMA_FLIP_HISTORY_DEGRADED"}
+        cls._ckpt("gamma_flip_history")
+
         # GEX MEAN-REVERSION shadow — a NEW strategy (fade the walls toward the gamma-magnet in long-gamma
         # pinning regimes), forward-tested on the underlying with NO orders. Same heavy-window gate.
         try:
