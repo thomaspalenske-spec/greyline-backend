@@ -28,6 +28,9 @@ class EdgePersistenceEngine:
 
     DIR = Path("app/data/edge_persistence")
     LEDGER = DIR / "daily_marks.jsonl"
+    # SLEEVE-ATTRIBUTED book marks for the PERIODIC-return track (low-turnover sleeves). Distinct from
+    # daily_marks.jsonl, which attributes by symbol (contaminated when trend ∩ xs_momentum share an ETF).
+    BOOK_MARKS = DIR / "sleeve_book_marks.jsonl"
     VRP_LEDGER = Path("app/data/options_paper_trading/vrp_short_premium_ledger.jsonl")
     OPT_LEDGER = Path("app/data/options_paper_trading/options_paper_trade_ledger.jsonl")
     EQ_LEDGER = Path("app/data/paper_trading/paper_trade_ledger.jsonl")
@@ -48,6 +51,17 @@ class EdgePersistenceEngine:
     # Equity stops aren't recorded in the ledger, so use a volatility proxy: the momentum doctrine stop is
     # ~2.5 ATR, typically ~8-20% of price -> 12% central. Makes momentum's ROR comparable to a condor's.
     EQUITY_STOP_PCT = 0.12
+
+    # PERIODIC-RETURN track: low-turnover sleeves (long/flat trend, monthly TSMOM) close ~quarterly, so a
+    # close-based 20-day gate is STRUCTURALLY unreachable — they'd read ACCUMULATING forever. Measure them
+    # instead on NON-OVERLAPPING periodic book returns (return-on-deployed), which accrue ~weekly/monthly and
+    # reach the SAME rigorous verdict_from_returns bar. Sleeve → period length in days.
+    PERIODIC_SLEEVES = {"trend": 7, "managed_futures": 28}
+    PERIODIC_MIN_PERIODS = 20           # ~20 independent weeks (trend) before any verdict — honest, not 5yr of closes
+    PERIODIC_MIN_EDGE = 0.001           # 0.1%/period floor: don't crown a trivially-positive drift as PROVEN
+    PERIODIC_FLOW_TOL = 0.05            # a period whose deployed capital moved >5% had a rebalance FLOW — its
+                                        # return is contaminated by the cash flow, so it's EXCLUDED (a no-flow
+                                        # period has stable deployed ⇒ no opens/closes ⇒ pure mark-to-market)
 
     @classmethod
     def _t_crit(cls, n):
@@ -342,6 +356,112 @@ class EdgePersistenceEngine:
                             "closes": agg["closes"], "ror": agg["net"] / agg["risk"]})
         return out
 
+    # ---------------------------------------------------------------- periodic-return track (low-turnover)
+    def _read_book_marks(self):
+        return self._read(self.BOOK_MARKS)
+
+    def record_sleeve_book_marks(self, positions):
+        """Record today's SLEEVE-ATTRIBUTED book value for each low-turnover sleeve (one row/sleeve/UTC day,
+        last wins) — the input series for the periodic-return verdict. Uses the sleeve ledger's OWN open lots
+        (not symbol attribution) priced at the broker snapshot's current_price, so a shared ETF is split by
+        whose lot it is. Skips a sleeve if any held symbol lacks a live price (never fabricates a book)."""
+        try:
+            from app.services.sleeve_trade_ledger_engine import SleeveTradeLedgerEngine
+            led = SleeveTradeLedgerEngine()
+        except Exception as e:
+            return {"status": "BOOK_MARKS_DEGRADED", "error": repr(e)[:100]}
+        pm = {}
+        for p in positions or []:
+            sym = str(p.get("symbol") or "").upper()
+            px = self._f(p.get("current_price"))
+            if sym and px > 0:
+                pm[sym] = px
+        today = datetime.utcnow().date().isoformat()
+        rows = [r for r in self._read_book_marks() if r.get("date") != today]
+        recorded = {}
+        for sleeve in self.PERIODIC_SLEEVES:
+            pos = led.open_positions(sleeve)
+            if not pos or any(sym not in pm for sym in pos):
+                continue                                   # no holdings, or a price missing -> skip honestly
+            deployed = sum(v["cost"] for v in pos.values())
+            book = sum(v["qty"] * pm[sym] for sym, v in pos.items())
+            if deployed <= 0:
+                continue
+            rows.append({"date": today, "sleeve": sleeve, "deployed": round(deployed, 2),
+                         "book_value": round(book, 2), "unrealized": round(book - deployed, 2),
+                         "ts": datetime.utcnow().isoformat()})
+            recorded[sleeve] = round(book - deployed, 2)
+        try:
+            self.DIR.mkdir(parents=True, exist_ok=True)
+            with open(self.BOOK_MARKS, "w") as f:
+                for r in rows:
+                    f.write(json.dumps(r) + "\n")
+        except Exception as e:
+            return {"status": "BOOK_MARKS_WRITE_FAILED", "error": repr(e)[:100]}
+        return {"status": "BOOK_MARKS_RECORDED", "date": today, "sleeves": recorded}
+
+    def _periodic_returns(self, sleeve, period_days):
+        """Non-overlapping periodic returns for a low-turnover sleeve from its book marks: bucket marks into
+        fixed period_days windows (last mark = the period endpoint), then return = Δunrealized / deployed_start
+        for consecutive endpoints whose deployed is STABLE (no rebalance flow; a flow period is excluded)."""
+        rows = [r for r in self._read_book_marks() if r.get("sleeve") == sleeve and r.get("date")]
+        rows.sort(key=lambda r: r["date"])
+        meta = {"periods": 0, "flow_skipped": 0, "marks": len(rows)}
+        if len(rows) < 2:
+            return [], meta
+        try:
+            d0 = datetime.fromisoformat(rows[0]["date"])
+        except Exception:
+            return [], meta
+        buckets = {}
+        for r in rows:
+            try:
+                idx = (datetime.fromisoformat(r["date"]) - d0).days // period_days
+            except Exception:
+                continue
+            buckets[idx] = r                               # sorted asc -> last mark in the window wins
+        keys = sorted(buckets)
+        rets = []
+        for a, b in zip(keys, keys[1:]):
+            ra, rb = buckets[a], buckets[b]
+            dep0 = self._f(ra.get("deployed"))
+            if dep0 <= 0:
+                continue
+            if abs(self._f(rb.get("deployed")) - dep0) / dep0 > self.PERIODIC_FLOW_TOL:
+                meta["flow_skipped"] += 1                  # rebalance flow contaminates this period -> exclude
+                continue
+            rets.append((self._f(rb.get("unrealized")) - self._f(ra.get("unrealized"))) / dep0)
+        meta["periods"] = len(rets)
+        return rets, meta
+
+    def _periodic_stat(self, sleeve, period_days):
+        label = "weekly" if period_days <= 10 else "monthly"
+        rets, meta = self._periodic_returns(sleeve, period_days)
+        v = self.verdict_from_returns(rets, min_n=self.PERIODIC_MIN_PERIODS, min_edge=self.PERIODIC_MIN_EDGE)
+        wins = sum(1 for r in rets if r > 0)
+        stat = {
+            "trades": v["n"], "independent_days": v["n"], "closes": meta["marks"],
+            "measurement": "periodic_return_on_deployed", "period": label,
+            "periods_flow_excluded": meta["flow_skipped"],
+            "wins": wins, "win_rate": round(wins / v["n"], 2) if v["n"] else None,
+            "mean_return_on_risk_pct": v.get("mean_pct"), "total_net_pnl": None,
+            "risk_basis": "return_on_deployed",
+            "_t": self._f(v.get("t_stat")) if v.get("t_stat") is not None else 0.0,
+            "verdict": v["verdict"] + (" · PERIODIC (%s return on deployed capital, non-overlapping" % label
+                       + ("; %d rebalance-flow period(s) excluded" % meta["flow_skipped"] if meta["flow_skipped"] else "")
+                       + ")"),
+            "fill_confirmation": ("measured on NON-OVERLAPPING periodic book returns (return-on-capital, not "
+                                  "per-trade risk); market beta is NOT netted out — this proves the sleeve's live "
+                                  "earning power on held capital, not market-neutral alpha"),
+        }
+        if v.get("t_stat") is not None:
+            stat["t_stat"] = v["t_stat"]; stat["t_crit"] = v.get("t_crit")
+        if v.get("ci95_pct") is not None:
+            stat["ci95_return_on_risk_pct"] = v["ci95_pct"]
+        if v.get("std_pct") is not None:
+            stat["std_return_on_risk_pct"] = v["std_pct"]
+        return stat
+
     def realized_edge(self):
         trades, excluded = self._closed_trades()
         by = {}
@@ -414,6 +534,17 @@ class EdgePersistenceEngine:
             stat["_t"] = t_stat
             sleeves[sleeve] = stat
 
+        # LOW-TURNOVER sleeves (trend long/flat, managed_futures monthly) close ~quarterly, so the close-based
+        # day-clustered gate is STRUCTURALLY unreachable — they'd read ACCUMULATING forever. Measure them on
+        # NON-OVERLAPPING periodic book returns instead (return-on-deployed), same verdict_from_returns bar.
+        # This OVERRIDES any (near-empty) close-based entry: for these sleeves the periodic track IS the verdict.
+        # Only surfaced once the sleeve is actually being tracked (has ≥1 book mark) — a sleeve with no book
+        # marks stays absent, exactly like a close-based sleeve with no trades.
+        for _sleeve, _pdays in self.PERIODIC_SLEEVES.items():
+            _pstat = self._periodic_stat(_sleeve, _pdays)
+            if _pstat.get("closes"):
+                sleeves[_sleeve] = _pstat
+
         # closest-to-proven: the sleeve to push resources at first (highest t-stat among the unproven)
         ranked = sorted(sleeves.items(), key=lambda kv: kv[1].get("_t", 0.0), reverse=True)
         closest = [{"sleeve": k, "trades": v["trades"], "independent_days": v.get("independent_days"),
@@ -433,6 +564,11 @@ class EdgePersistenceEngine:
             "excluded_forced_closes": excluded,
             "min_trades_gate": self.MIN_TRADES,
             "min_trades_gate_unit": "independent trading days (day-clustered, not raw close-rows)",
+            "periodic_gate": self.PERIODIC_MIN_PERIODS,
+            "periodic_note": ("low-turnover sleeves (%s) can't reach a close-based gate (they close ~quarterly), "
+                              "so they're verdicted on NON-OVERLAPPING periodic book returns (return-on-deployed) "
+                              "— rebalance-flow periods excluded; proves live earning power on held capital, not "
+                              "market-neutral alpha." % ", ".join(sorted(self.PERIODIC_SLEEVES))),
             "cost_note": ("cost-net: equity/option closes use real SIM fills; condor closes are priced from "
                           "actual close fills or the marketable close-order debit (basis fills/close_order) — "
                           f"already honest, no haircut. Only LEGACY mid-marked condor rows are haircut "
@@ -521,8 +657,15 @@ class EdgePersistenceEngine:
                     f.write(json.dumps(r) + "\n")
         except Exception as e:
             return {"status": "EDGE_PERSISTENCE_WRITE_FAILED", "error": repr(e)[:100]}
+        # also record SLEEVE-ATTRIBUTED book marks for the low-turnover periodic-return track (reuses the
+        # broker positions we already fetched; never fails the daily-marks write if it degrades)
+        try:
+            book = self.record_sleeve_book_marks(positions)
+        except Exception as e:
+            book = {"status": "BOOK_MARKS_ERROR", "error": repr(e)[:100]}
         return {"status": "EDGE_PERSISTENCE_RECORDED", "date": today,
-                "sleeves": {s: round(a["unrealized"], 2) for s, a in agg.items()}}
+                "sleeves": {s: round(a["unrealized"], 2) for s, a in agg.items()},
+                "book_marks": book}
 
     def _open_drift(self):
         by = {}

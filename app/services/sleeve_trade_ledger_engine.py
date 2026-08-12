@@ -67,6 +67,21 @@ class SleeveTradeLedgerEngine:
                        if r.get("kind") == "lot" and str(r.get("symbol")).upper() == sym
                        and r.get("sleeve") != exclude_sleeve and self._f(r.get("remaining")) > 0))
 
+    def open_positions(self, sleeve, rows=None):
+        """All OPEN lots for a sleeve aggregated per symbol → {SYMBOL: {qty, cost}}. SLEEVE-attributed by
+        construction (a lot carries its owning sleeve), so a shared ETF held by both trend and xs_momentum
+        is split correctly by whose lot it is — never the contaminated symbol→one-sleeve guess."""
+        rows = self._read() if rows is None else rows
+        out = {}
+        for r in rows:
+            if r.get("kind") == "lot" and r.get("sleeve") == sleeve and self._f(r.get("remaining")) > 0:
+                sym = str(r.get("symbol")).upper()
+                q = self._f(r.get("remaining"))
+                o = out.setdefault(sym, {"qty": 0.0, "cost": 0.0})
+                o["qty"] += q
+                o["cost"] += q * self._f(r.get("entry_price"))
+        return out
+
     def reconcile(self, sleeve, symbol, broker_qty, price, reason=None, now=None):
         """Reconcile the ledger's lot quantity for (sleeve, symbol) to the CONFIRMED broker quantity.
         broker_qty > ledger -> a buy filled (open a lot at `price`). broker_qty < ledger -> a sell filled

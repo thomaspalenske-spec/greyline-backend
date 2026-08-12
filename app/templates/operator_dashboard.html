@@ -800,7 +800,7 @@ th {
 
       <div class="card" id="edge_court_card" style="min-width:0;">
         <div class="section-title">Edge Court — live per-sleeve verdict <span id="ec_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20 <strong>independent-trading-day</strong> minimum. The sample is <strong>day-clustered</strong>: multiple lots closed in the same instant, and multiple names closed by one same-day rebalance, are ONE correlated observation — not many — so a single close can't masquerade as a proven track record (counting rows independently inflated the t-stat by ~√(fake n)). Realized P&amp;L is fill-reconciled on every sleeve — condor closes, momentum equity exits, AND long-option exits: a close priced from an estimate/quote is upgraded to the actual broker fill (never fabricated when unconfirmed), and a CLOSED position the broker still holds is reverted to OPEN (never counted as a realized win). Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
+        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20 <strong>independent-trading-day</strong> minimum. The sample is <strong>day-clustered</strong>: multiple lots closed in the same instant, and multiple names closed by one same-day rebalance, are ONE correlated observation — not many — so a single close can't masquerade as a proven track record (counting rows independently inflated the t-stat by ~√(fake n)). <b>Low-turnover sleeves</b> (trend, managed_futures) close ~quarterly, so a close-based gate is unreachable — they're verdicted instead on <b>non-overlapping periodic book returns</b> (return-on-deployed capital, rebalance-flow periods excluded), which proves live earning power on held capital, not market-neutral alpha. Realized P&amp;L is fill-reconciled on every sleeve — condor closes, momentum equity exits, AND long-option exits: a close priced from an estimate/quote is upgraded to the actual broker fill (never fabricated when unconfirmed), and a CLOSED position the broker still holds is reverted to OPEN (never counted as a realized win). Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
         <div style="overflow-x:auto;">
           <table>
             <thead>
@@ -1418,7 +1418,8 @@ async function refreshEdgeCourt() {
       // return-on-risk is only comparable across sleeves if you can see its DENOMINATOR — surface the
       // instrument-aware basis (honest "mixed (...)" when a sleeve blends exact stops + vol proxies).
       const BASIS = {defined_max_loss: "÷ max loss", premium_at_risk: "÷ premium",
-                     stop_atr_doctrine: "÷ ATR stop", stop_proxy_12pct: "÷ 12% stop proxy"};
+                     stop_atr_doctrine: "÷ ATR stop", stop_proxy_12pct: "÷ 12% stop proxy",
+                     return_on_deployed: "÷ deployed cap"};
       const rbRaw = v && v.risk_basis ? String(v.risk_basis) : "";
       const rb = rbRaw.startsWith("mixed") ? "÷ mixed basis" : (BASIS[rbRaw] || (rbRaw ? "÷ " + rbRaw : ""));
       const edge = (v && v.mean_return_on_risk_pct != null)
