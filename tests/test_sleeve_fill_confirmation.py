@@ -93,9 +93,15 @@ def test_upgrade_does_not_match_wrong_symbol_or_stale_sell(tmp_path, monkeypatch
 
 
 def test_court_flags_estimate_verdict_provisional(tmp_path, monkeypatch):
-    """All-estimate exits -> the verdict carries PROVISIONAL and the estimate/confirmed split is exposed."""
+    """Genuine-ESTIMATE exits -> the verdict carries PROVISIONAL and the estimate/confirmed split is exposed.
+
+    Hybrid model (2026-08-11): a sleeve-ledger close is broker-confirmed-QUANTITY by construction, so a
+    'quote_estimate' tag now reads back as the confirmation floor 'mark_at_confirm' (counts as confirmed).
+    Only a genuine price estimate NOT tied to a confirmed-quantity instant (e.g. a condor 'mid_estimate')
+    makes a verdict PROVISIONAL — so that is what this exercises."""
     ledger = tmp_path / "sleeve_trade_ledger.jsonl"
-    rows = [_close_row("low_vol", "USMV", 3, 80.0, f"2026-08-0{d}T14:30:05") for d in range(1, 6)]
+    rows = [_close_row("low_vol", "USMV", 3, 80.0, f"2026-08-0{d}T14:30:05", basis="mid_estimate")
+            for d in range(1, 6)]
     _write(ledger, rows)
     monkeypatch.setattr(EdgePersistenceEngine, "SLEEVE_LEDGER", ledger)
     # isolate: point the other ledgers at empty temp files so only low_vol trades exist

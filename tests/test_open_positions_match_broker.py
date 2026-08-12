@@ -8,7 +8,9 @@ from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngin
 
 
 def _ts(positions):
-    return lambda self: {"response_json": {"Positions": positions}}
+    # http_status:200 is REQUIRED — the method skips the comparison (degraded) on any non-200, so a mock
+    # without it made every mismatch test hollow-pass on the skip branch (636b8b5 gate, never re-mocked).
+    return lambda self: {"http_status": 200, "response_json": {"Positions": positions}}
 
 
 def _view(*pairs):
@@ -44,5 +46,7 @@ def test_wrong_quantity_is_critical(monkeypatch):
 
 
 def test_degraded_read_is_skipped_not_failed():
+    # A degraded broker read is SKIPPED, not FAILED: ok:True + degraded_class:True (BROKER_READS_OK owns the
+    # degraded signal). Severity stays "critical" as the check's class; degraded_class is what keeps it dark.
     r = G()._check_open_positions_match_broker({"reads_ok": False, "positions": []})
-    assert r["ok"] is True and r["severity"] == "warning"
+    assert r["ok"] is True and r["degraded_class"] is True

@@ -11,12 +11,20 @@ from app.services.tradestation_positions_live_engine import TradeStationPosition
 
 
 class _Resp:
+    """Streaming shape: the engine now reads the body via http_bounded.bounded_get (iter_content + close),
+    not .json()/.text — a trickling body degrades instead of hanging."""
     def __init__(self, status):
         self.status_code = status
-        self.text = "{}"
+        self.headers = {}
+        self.closed = False
 
-    def json(self):
-        return {"Positions": [{"Symbol": "USMV", "Quantity": 3}]} if self.status_code == 200 else {}
+    def iter_content(self, chunk_size=65536):
+        import json as _j
+        body = {"Positions": [{"Symbol": "USMV", "Quantity": 3}]} if self.status_code == 200 else {}
+        yield _j.dumps(body).encode()
+
+    def close(self):
+        self.closed = True
 
 
 def _setup(monkeypatch, statuses):
