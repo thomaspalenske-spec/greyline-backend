@@ -45,3 +45,11 @@ def test_stream_tracks_extended_universe_but_not_caution(monkeypatch):
     assert "SPY" in syms                                           # core still there
     assert CAUTION.isdisjoint(syms)                                # leveraged NOT streamed
     assert len(S._symbols()) <= 96                                 # capped
+
+
+def test_momentum_factor_excludes_the_extended_etfs():
+    # the ETF bars live in the same directory as the single-stock universe (so ETF sleeves can read them),
+    # but the momentum-reversal FACTOR must exclude them — diversified funds would muddy a single-stock signal
+    from app.services.momentum_reversal_strategy_engine import MomentumReversalStrategyEngine as M
+    excluded = M()._excluded_symbols()
+    assert set(E.symbols(include_caution=True)) <= excluded

@@ -123,12 +123,24 @@ class MomentumReversalStrategyEngine:
         16 years of ~$180/day prints) can satisfy 253 bars while offering almost no real
         history. Momentum computed across that boundary is measured against prices that
         never transacted. Fails open: no scan -> nothing excluded.
+
+        Also excludes the EXTENDED ETF UNIVERSE: those funds live in the SAME bar directory (so the ETF
+        sleeves can read them) but are diversified baskets, not single names — they'd muddy a single-stock
+        momentum-reversal factor, so they're kept out of THIS universe while staying on disk for the ETF
+        sleeves that read bars by explicit ticker.
         """
+        excluded = set()
         try:
             from app.services.price_bar_tradability_engine import PriceBarTradabilityEngine
-            return PriceBarTradabilityEngine().contaminated_symbols()
+            excluded |= set(PriceBarTradabilityEngine().contaminated_symbols() or [])
         except Exception:
-            return set()
+            pass
+        try:
+            from app.services.extended_etf_universe_engine import ExtendedEtfUniverseEngine
+            excluded |= set(ExtendedEtfUniverseEngine.symbols(include_caution=True))
+        except Exception:
+            pass
+        return excluded
 
     def _symbols(self):
         excluded = self._excluded_symbols()
