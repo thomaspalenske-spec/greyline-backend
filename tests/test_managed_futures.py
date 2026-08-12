@@ -86,3 +86,37 @@ def test_signal_is_blended_sign_and_bounded():
     assert -1.0 <= sig["blend"] <= 1.0
     assert sig["blend"] in (-1.0, -1 / 3, 1 / 3, 1.0)  # 3-horizon sign blend
     assert sig["vol"] >= 0.05                           # vol floor honored
+
+
+def test_inflight_orders_counted_in_effective_held(monkeypatch):
+    # MF sizes delta = target - held; resting (unfilled) BUYs must count as held so a rebalance can't
+    # re-order on top of them (the low_vol/carry/trend stacking class). 5 filled + 3 resting -> held 8.
+    from app.services.managed_futures_engine import ManagedFuturesEngine as M
+    import app.services.in_flight_orders_engine as ifo
+    monkeypatch.setattr(M, "_budget", lambda self: 10000.0)
+    monkeypatch.setattr(M, "allow_shorts", staticmethod(lambda: False))
+    monkeypatch.setattr(M, "_quote", lambda self, q, s: (100.0, 100.1, 100.0) if s == "QQQM" else (0, 0, 0))
+    monkeypatch.setattr(M, "_signal",
+                        lambda self, s, px: ({"blend": 1.0, "vol": 0.10, "stale": False, "last": 100.0}
+                                             if s == "QQQM" else None))
+    monkeypatch.setattr(M, "_held", lambda self, pos, s: 5 if s == "QQQM" else 0)
+    monkeypatch.setattr(ifo.InFlightOrdersEngine, "snapshot",
+                        classmethod(lambda cls, *a, **k: {"ok": True, "net": {"QQQM": 3}}))
+    qq = [l for l in M().plan()["legs"] if l["symbol"] == "QQQM"][0]
+    assert qq["held"] == 8                                  # 5 filled + 3 resting, not just 5
+
+
+def test_inflight_degraded_read_adds_zero(monkeypatch):
+    from app.services.managed_futures_engine import ManagedFuturesEngine as M
+    import app.services.in_flight_orders_engine as ifo
+    monkeypatch.setattr(M, "_budget", lambda self: 10000.0)
+    monkeypatch.setattr(M, "allow_shorts", staticmethod(lambda: False))
+    monkeypatch.setattr(M, "_quote", lambda self, q, s: (100.0, 100.1, 100.0) if s == "QQQM" else (0, 0, 0))
+    monkeypatch.setattr(M, "_signal",
+                        lambda self, s, px: ({"blend": 1.0, "vol": 0.10, "stale": False, "last": 100.0}
+                                             if s == "QQQM" else None))
+    monkeypatch.setattr(M, "_held", lambda self, pos, s: 5 if s == "QQQM" else 0)
+    monkeypatch.setattr(ifo.InFlightOrdersEngine, "snapshot",
+                        classmethod(lambda cls, *a, **k: {"ok": False, "net": {}}))   # degraded
+    qq = [l for l in M().plan()["legs"] if l["symbol"] == "QQQM"][0]
+    assert qq["held"] == 5                                  # fail-safe: add 0, don't fabricate

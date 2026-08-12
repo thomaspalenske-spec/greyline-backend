@@ -152,6 +152,18 @@ class ManagedFuturesEngine:
             sigs[sym] = {**sig, "bid": bid, "ask": ask, "px": px}
             pxs[sym] = px
 
+        # Count IN-FLIGHT (unfilled) orders as part of held so a rebalance can't re-order on top of a
+        # resting order that hasn't filled yet — the stacking class fixed for carry/trend/low_vol. The
+        # monthly cadence already makes cross-cycle stacking unlikely here, but this makes it robust
+        # regardless of cadence and BEFORE this sleeve ever arms. Fail-safe: a degraded orders read ->
+        # net {} -> add 0 (held + the hard book cap still bound). Signed: +buy / -sell unfilled.
+        try:
+            from app.services.in_flight_orders_engine import InFlightOrdersEngine
+            _snap = InFlightOrdersEngine.snapshot()
+            _inflight = (_snap.get("net") or {}) if _snap.get("ok") else {}
+        except Exception:
+            _inflight = {}
+
         # inverse-vol raw weights; normalize so gross exposure == budget
         raw = {s: sigs[s]["blend"] / sigs[s]["vol"] for s in sigs}
         gross = sum(abs(w) for w in raw.values()) or 1.0
@@ -166,7 +178,9 @@ class ManagedFuturesEngine:
             notional_exec = notional_signed if shorts else max(0.0, notional_signed)  # long/flat unless armed
             tgt_signed = int(notional_signed / s["px"]) if s["px"] else 0
             tgt_exec = int(notional_exec / s["px"]) if s["px"] else 0
-            held = self._held(pos, sym)
+            # effective held = filled broker shares + signed unfilled (in-flight) orders -> the delta can't
+            # re-order what's already resting.
+            held = self._held(pos, sym) + int(_inflight.get(str(sym).upper(), 0))
             deployed += abs(tgt_exec) * s["px"]
             legs.append({
                 "symbol": sym, "blend": s["blend"], "vol": s["vol"], "last": s["last"],
