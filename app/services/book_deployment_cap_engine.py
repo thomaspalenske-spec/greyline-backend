@@ -58,11 +58,28 @@ class BookDeploymentCapEngine:
                     continue
         return 0.0
 
+    @staticmethod
+    def _tbill_symbol():
+        """The T-bill cash-sweep symbol (SGOV), resolved not hardcoded. Empty on any failure -> nothing is
+        excluded (conservative: the old over-counting behavior, never a silent under-count)."""
+        try:
+            from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+            return str(TbillCashSweepEngine.symbol() or "").upper()
+        except Exception:
+            return ""
+
     @classmethod
     def committed_long_equity_usd(cls, booking):
-        """FILLED long-equity market value + resting working BUY notional. Returns (usd, ok). ok=False on
+        """AT-RISK long-equity market value + resting working BUY notional. Returns (usd, ok). ok=False on
         any degraded read — callers must fail closed. Resting buys are included so multiple orders placed
-        within one cycle (before any fills) still accumulate against the cap."""
+        within one cycle (before any fills) still accumulate against the cap.
+
+        EXCLUDES the T-bill cash sweep (SGOV): it is a ~0-duration cash-EQUIVALENT parking lot the sweep
+        sells back on demand, NOT risk deployment — counting it made the cap bind on cash and starve real
+        deployment (and it disagreed with /account-summary, which already nets SGOV out of 'deployed'). This
+        does NOT reopen the 12x over-deployment hole: that was EQUITY sleeves (trend/xs) stacking, which are
+        still fully counted; SGOV can't stack into risk, and total book size is still cash/buying-power bound."""
+        tbill = cls._tbill_symbol()
         # filled positions
         try:
             pos = booking.positions()
@@ -77,6 +94,8 @@ class BookDeploymentCapEngine:
         for p in positions:
             if str(p.get("AssetType")) != "STOCK":
                 continue
+            if tbill and str(p.get("Symbol") or "").upper() == tbill:
+                continue                                   # SGOV cash-park — not at-risk deployment
             qty = cls._f(p.get("Quantity"))
             if qty > 0:                                    # long only; shorts don't consume buy capital here
                 deployed += qty * cls._pos_price(p)
@@ -97,6 +116,8 @@ class BookDeploymentCapEngine:
                 sym = str(leg.get("Symbol") or "")
                 if " " in sym:                             # option leg — not equity
                     continue
+                if tbill and sym.upper() == tbill:         # SGOV cash-park buy — not at-risk deployment
+                    continue
                 if str(leg.get("BuyOrSell") or "").lower().startswith("buy"):
                     qty = cls._f(leg.get("QuantityRemaining")) or cls._f(leg.get("Quantity"))
                     deployed += qty * limit
@@ -108,6 +129,11 @@ class BookDeploymentCapEngine:
         unverifiable input (degraded read, or a buy with no usable price)."""
         if not cls.enabled():
             return {"allowed": True, "reason": "cap disabled"}
+        # a T-bill cash-sweep (SGOV) BUY is cash-parking, not risk deployment — exempt it, consistent with
+        # excluding held SGOV from committed. (Sells/options/stops are already never gated upstream.)
+        _tb = cls._tbill_symbol()
+        if _tb and str(symbol or "").upper() == _tb:
+            return {"allowed": True, "reason": "T-bill cash sweep — not risk deployment"}
         order_val = abs(cls._f(quantity)) * cls._f(price)
         if order_val <= 0:
             # a BUY with no usable price can't be size-checked -> block (fail closed). The rebalance

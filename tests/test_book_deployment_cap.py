@@ -109,3 +109,38 @@ def test_place_order_gates_only_equity_buys(monkeypatch):
     assert gated("DBC", "SELL") is False                    # unwind never blocked
     assert gated("NRG 260807C152.5", "BUYTOOPEN") is False  # option premium never blocked
     assert gated("DBC", "BUY", order_type="StopMarket") is False  # protective stop never blocked
+
+
+# --- SGOV cash-sweep is NOT risk deployment: net it out of the cap (2026-08-11) ---
+
+def _sgov(monkeypatch):
+    monkeypatch.setattr(CAP, "_tbill_symbol", staticmethod(lambda: "SGOV"))
+
+
+def test_sgov_held_excluded_from_committed(monkeypatch):
+    _env(monkeypatch); _sgov(monkeypatch)
+    book = _Book([_pos("SGOV", 30, 100.0), _pos("USMV", 30, 100.0)])   # $3k SGOV + $3k USMV
+    dep, ok = CAP.committed_long_equity_usd(book)
+    assert ok and abs(dep - 3000.0) < 1e-6                              # only the at-risk USMV counts
+
+
+def test_sgov_resting_buy_excluded_from_committed(monkeypatch):
+    _env(monkeypatch); _sgov(monkeypatch)
+    book = _Book([_pos("USMV", 30, 100.0)], orders=[_working_buy("SGOV", 50, 100.0)])
+    dep, ok = CAP.committed_long_equity_usd(book)
+    assert ok and abs(dep - 3000.0) < 1e-6                              # SGOV resting buy not counted
+
+
+def test_sgov_buy_is_exempt_even_near_cap(monkeypatch):
+    _env(monkeypatch); _sgov(monkeypatch)
+    book = _Book([_pos("USMV", 110, 100.0)])                            # $11k risk, near the $11.5k cap
+    chk = CAP.check_equity_buy("SGOV", 20, 100.0, book)                 # a cash-park buy
+    assert chk["allowed"] is True and "cash sweep" in chk["reason"]
+
+
+def test_risk_buy_still_gated_and_sgov_not_in_committed(monkeypatch):
+    _env(monkeypatch); _sgov(monkeypatch)
+    # $3k SGOV (excluded) + $9k USMV risk; a +$3k risk buy would breach $11.5k -> still blocked
+    book = _Book([_pos("SGOV", 30, 100.0), _pos("USMV", 90, 100.0)])
+    chk = CAP.check_equity_buy("SPLV", 30, 100.0, book)
+    assert chk["allowed"] is False and chk["deployed_usd"] == 9000.0    # SGOV out of the reported committed
