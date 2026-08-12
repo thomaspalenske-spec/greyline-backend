@@ -98,6 +98,28 @@ def _kill_switch_reject(request_desc):
             "execution_blocked": True, "request": request_desc}
 
 
+def _daily_loss_halted():
+    """True once the mission book breaches its daily-loss HALT limit today — the MissionRiskGovernor writes
+    the opens_halted marker on that breach. This is the automated gate the governor deferred ("a future
+    gate"); enforcing it HERE at the choke point auto-halts new opens across EVERY sleeve, no per-engine
+    change. Fail-OPEN (False) on any error: a rare backstop must not freeze normal trading on a transient
+    read glitch, and the operator also gets a CRITICAL page independently. Clears at the next start-of-day."""
+    try:
+        from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
+        return bool(MissionRiskGovernorEngine().opens_halted())
+    except Exception:
+        return False
+
+
+def _daily_loss_reject(request_desc):
+    return {"timestamp": datetime.utcnow().isoformat(), "environment": "SANDBOX",
+            "http_status": None, "ok": False, "order_id": None,
+            "reject_reason": ("opens halted — mission book past its daily-loss HALT limit today "
+                              "(GREYLINE_DAILY_LOSS_HALT_PCT): new opens blocked, exits still allowed; "
+                              "clears at the next start-of-day."),
+            "execution_blocked": True, "daily_loss_halted": True, "request": request_desc}
+
+
 class TradeStationSimBookingEngine:
 
     def __init__(self):
@@ -208,6 +230,13 @@ class TradeStationSimBookingEngine:
         if _is_opening_order(action, order_type) and not _master_execution_on():
             return _kill_switch_reject({"Symbol": symbol, "Quantity": quantity,
                                         "action": str(action or "").upper()})
+        # DAILY-LOSS HALT: once the book breaches its daily HALT limit, new opens are AUTO-blocked (exits
+        # still pass so it can de-risk). Same choke-point pattern as the master switch → applies to every
+        # sleeve without per-engine changes; clears at the next start-of-day. Makes the governor's -7% halt
+        # a REAL halt, not just a page.
+        if _is_opening_order(action, order_type) and _daily_loss_halted():
+            return _daily_loss_reject({"Symbol": symbol, "Quantity": quantity,
+                                       "action": str(action or "").upper()})
         # HARD BOOK-DEPLOYMENT CAP: no EQUITY BUY may push the book's committed long-equity value past
         # MAX_DEPLOY_FRAC x the mission base — the bulletproof backstop against the 12x over-deployment
         # fault (a stale-`held` delta stacking orders). Independent of any sizing engine; fail-closed on a
@@ -280,6 +309,10 @@ class TradeStationSimBookingEngine:
         # condors can always be unwound.
         if any(_is_opening_order(l.get("action")) for l in (legs or [])) and not _master_execution_on():
             return {**_kill_switch_reject({"legs": legs}), "legs": legs, "limit_price": limit_price}
+        # DAILY-LOSS HALT (same as place_order): an opening spread is blocked once the book breaches the
+        # daily HALT limit; a closing spread still passes so open condors can always be unwound.
+        if any(_is_opening_order(l.get("action")) for l in (legs or [])) and _daily_loss_halted():
+            return {**_daily_loss_reject({"legs": legs}), "legs": legs, "limit_price": limit_price}
         body = self._build_multileg_order(legs, order_type, limit_price, tif)
         resp = self._request("POST", f"{SIM_HOST}/v3/orderexecution/orders", json_body=body)
         payload = _safe_json(resp)

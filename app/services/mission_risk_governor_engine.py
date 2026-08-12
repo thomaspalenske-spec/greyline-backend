@@ -7,10 +7,13 @@ day are (1) the book bleeding past a daily loss limit while everything looks ind
 SCREAMS (CRITICAL -> iMessage) the moment either is breached — so a bad day is caught in seconds, on
 the phone, not discovered after the close.
 
-Deliberately MONITOR + ALERT, not auto-halt: halting safely means blocking NEW opens while still
-allowing EXITS, which needs per-engine changes I will not rush the night before an open. On a HALT
-breach it writes a halt marker (for a future gate / manual use) and alerts CRITICAL; the operator
-response is to flip the kill flags (seconds). Everything here is read-only on the trading path.
+On a HALT breach it (1) writes the `opens_halted` marker, (2) alerts CRITICAL -> iMessage. This engine
+itself stays read-only on the trading path; the AUTO-HALT is enforced downstream at the single order
+choke point — `TradeStationSimBookingEngine.place_order`/`place_multileg` read `opens_halted()` and refuse
+OPENING orders while it's set (exits/covers/stops still pass so the book can de-risk), the same
+choke-point pattern as the master kill switch. So a -7% day now auto-blocks new opens across EVERY sleeve
+without per-engine changes (2026-08-11); it was previously alert-only (the operator had to flip flags by
+hand). The marker clears at the next start-of-day baseline.
 """
 
 import json
