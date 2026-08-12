@@ -812,6 +812,18 @@ class BackgroundSchedulerService:
             gamma_flip_history = {"error": repr(exc), "status": "GAMMA_FLIP_HISTORY_DEGRADED"}
         cls._ckpt("gamma_flip_history")
 
+        # Extended-ETF SHADOW — zero-capital cross-sectional-momentum forward-test on the 52-ETF universe
+        # (the measurement layer that lets a scanned ETF earn its way toward a verdict). NO orders/budget.
+        try:
+            if _heavy_blocked:
+                extended_etf_shadow = {"status": "ETF_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
+            else:
+                from app.services.extended_etf_shadow_engine import ExtendedEtfShadowEngine
+                extended_etf_shadow = ExtendedEtfShadowEngine().mark()
+        except Exception as exc:
+            extended_etf_shadow = {"error": repr(exc), "status": "ETF_SHADOW_DEGRADED"}
+        cls._ckpt("extended_etf_shadow")
+
         # GEX MEAN-REVERSION shadow — a NEW strategy (fade the walls toward the gamma-magnet in long-gamma
         # pinning regimes), forward-tested on the underlying with NO orders. Same heavy-window gate.
         try:

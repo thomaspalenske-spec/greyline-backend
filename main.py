@@ -180,6 +180,10 @@ from app.routes import extended_etf_universe
 
 app.include_router(extended_etf_universe.router)
 
+from app.routes import extended_etf_shadow
+
+app.include_router(extended_etf_shadow.router)
+
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)
