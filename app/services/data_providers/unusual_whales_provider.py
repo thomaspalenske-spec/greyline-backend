@@ -73,11 +73,15 @@ class UnusualWhalesProvider:
             "/oi-change",
             "/oi-per-strike",
             "/oi-per-expiry",
-            "/variance-risk-premium",
+            "/volatility/",         # realized + variance-risk-premium: daily, ~1-month-lagged — the
+                                    # highest-volume per-ticker endpoint (~200-250/day); no need to re-fetch
+                                    # a name more than once/day (was falling through to the 900s default)
             "/ownership",
             "/volume-and-ratio",
             "/insider/",
             "/congress/",
+            "/economic-calendar",   # market-wide, updates daily — was re-fetched every catalyst cycle at 900s
+            "/fda-calendar",
         )
 
         if any(token in path for token in fast_paths):

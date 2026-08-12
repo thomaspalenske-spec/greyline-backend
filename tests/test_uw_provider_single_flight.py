@@ -116,3 +116,15 @@ def test_allow_forbidden_403_returns_none_and_caches(monkeypatch):
     assert uw._get("/f", {"t": "A"}, allow_forbidden=True) is None
     assert uw._get("/f", {"t": "A"}, allow_forbidden=True) is None
     assert count["n"] == 1                          # the None (403) is cached, not re-fetched
+
+
+def test_slow_ttl_covers_volatility_and_calendars():
+    """Efficiency: the highest-volume per-ticker endpoint (/volatility/*, ~200-250 fetches/day, daily
+    ~1-month-lagged data) and the market-wide calendars are DAILY data — they belong in the 6h SLOW
+    bucket, not the 900s default that let them re-fetch every cycle. Intraday greek/chain data unchanged."""
+    for p in ("/api/stock/AAPL/volatility/realized",
+              "/api/stock/SPY/volatility/variance-risk-premium",
+              "/api/economic-calendar", "/api/fda-calendar"):
+        assert UW._ttl_for_path(p) == 21600, p
+    assert UW._ttl_for_path("/api/stock/AAPL/greek-exposure") == 900        # intraday, unchanged
+    assert UW._ttl_for_path("/api/stock/AAPL/option-chains") == 900
