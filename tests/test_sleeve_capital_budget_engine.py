@@ -19,8 +19,12 @@ def _stub_live(monkeypatch, equity, cash):
     monkeypatch.setattr(B, "_read_deployable_cash", classmethod(lambda cls, eq: cash))
 
 
-def test_default_pcts_sum_to_100():
-    assert B.total_pct() == pytest.approx(100.0)
+def test_default_pcts_sum_to_target_with_headroom():
+    # The active sleeves target 97% of equity (momentum 25 + trend 28 + vol_carry 20 + low_vol 12 +
+    # xs_momentum 12), leaving a deliberate ~3% unallocated headroom (operator elected 2026-08-11 to
+    # keep it, not redeploy to 100%). vrp/earnings/managed_futures are 0.
+    assert B.total_pct() == pytest.approx(97.0)
+    assert round(100.0 - B.total_pct(), 4) == pytest.approx(3.0)   # the headroom, made explicit
 
 
 def test_budget_is_pct_of_equity(monkeypatch):
@@ -91,7 +95,8 @@ def test_snapshot_shape(monkeypatch):
     snap = B.snapshot()
     assert snap["mission_equity"] == 12000.0
     assert snap["deployable_cash"] == 9000.0
-    assert snap["deployable_100pct"] is True
+    assert snap["targets_full_deployment"] is False       # 97% target, not 100%
+    assert snap["cash_buffer_pct"] == pytest.approx(3.0)   # deliberate headroom surfaced
     assert set(snap["sleeves"]) == set(B.DEFAULT_PCT)
     for s, row in snap["sleeves"].items():
         assert row["budget_usd"] >= 0

@@ -13,13 +13,21 @@ THIS ENGINE is the single resolver every sleeve now asks for its dollar budget:
     budget = pct_of_equity(sleeve) * current_mission_equity      (scales with the account)
     ... clamped to live DEPLOYABLE CASH so no single sleeve can over-commit the book.
 
-Default percentages preserve the operator's existing RELATIVE balance (trend heaviest, earnings
-lightest) but scale the SUM from 79% to 100% so the whole book is deployable. They are
+Default percentages preserve the operator's existing RELATIVE balance (trend heaviest). They are
 env-overridable (GREYLINE_<SLEEVE>_ALLOC_PCT) — this engine only reads knobs, it never trades.
 
-SAFETY POSTURE: 100%-deployable REMOVES the old "keep ~21% safe in T-bills" buffer. The remaining
-book-level backstop is the daily-loss governor (warn -4% / halt -7%), which is MONITOR+ALERT, not
-an auto-flatten. Deploying more concentrates the unproven-edge risk — a deliberate operator choice.
+CURRENT TARGET SUM: 97% of equity (momentum 25 + trend 28 + vol_carry 20 + low_vol 12 +
+xs_momentum 12; vrp/earnings/managed_futures 0). This is NOT a full-100% deployment: ~3%
+(~$300 on a $10k book) is left as deliberate unallocated headroom. That 3% is the residue of the
+2026-08-04 VRP+earnings retirement (−27%) partly backfilled by low_vol (+12%) and xs_momentum
+(+12%); the operator elected (2026-08-11) to KEEP the small buffer rather than redeploy it to 100%,
+prudent while every sleeve's edge is still unproven and one over-deployment incident (2026-08-06)
+is on the record.
+
+SAFETY POSTURE: the sleeve sum is a SOFT target — the hard limiter is the per-sleeve clamp to live
+DEPLOYABLE CASH (a sleeve never claims more than the book actually has free), backstopped by the
+BookDeploymentCap (1.15× base) and the daily-loss governor (warn -4% / halt -7%, MONITOR+ALERT).
+So the 3% headroom is a target ceiling, not a reserved cash lockbox.
 """
 
 import json
@@ -31,10 +39,12 @@ from time import time
 
 class SleeveCapitalBudgetEngine:
 
-    # Default targets as PERCENT of live mission equity. The 5 core sleeves sum to 100 -> the whole
-    # book is deployable. managed_futures is a tracked sleeve too but defaults to 0 (funded via
-    # GREYLINE_MANAGED_FUTURES_ALLOC_PCT when armed); when it's funded, another sleeve is reduced to
-    # keep the live sum <= 100 (2026-07-30: it REPLACED trend — trend set to 0% + disabled).
+    # Default targets as PERCENT of live mission equity. The 8 tracked sleeves are momentum 25,
+    # trend 28, vol_carry 20, vrp 0, earnings 0, low_vol 12, xs_momentum 12, managed_futures 0 ->
+    # they sum to 97, leaving a deliberate ~3% unallocated cash buffer (not fully deployed).
+    # managed_futures defaults to 0 (funded via GREYLINE_MANAGED_FUTURES_ALLOC_PCT when armed);
+    # when it's funded, another sleeve is reduced to keep the live sum <= 100 (2026-07-30: it
+    # REPLACED trend — trend set to 0% + disabled).
     DEFAULT_PCT = {
         "momentum": 25.0,
         "trend": 28.0,
@@ -238,14 +248,16 @@ class SleeveCapitalBudgetEngine:
             "deployable_cash": cash,
             "degraded": degraded,
             "total_target_pct": cls.total_pct(),
-            "deployable_100pct": cls.total_pct() >= 99.5,   # can the sleeves collectively use ~all cash
+            "targets_full_deployment": cls.total_pct() >= 99.5,   # False at the current 97% target
+            "cash_buffer_pct": round(max(0.0, 100.0 - cls.total_pct()), 4),   # deliberate unallocated headroom
             "sleeves": {
                 s: {"pct_of_equity": table[s], "budget_usd": budgets[s]}
                 for s in table
             },
             "note": ("Budgets are %%-of-equity, clamped to live deployable cash. Sum of targets is "
-                     "%.1f%% of equity — the book can deploy up to ~100%% of cash when sleeves have "
-                     "opportunities. Book-level backstop is the daily-loss governor (-4%%/-7%%)."
-                     % cls.total_pct()),
+                     "%.1f%% of equity — the remaining %.1f%% is deliberate unallocated headroom (not "
+                     "fully deployed). Sleeves are further clamped to live deployable cash. Book-level "
+                     "backstop is the daily-loss governor (-4%%/-7%%)."
+                     % (cls.total_pct(), max(0.0, 100.0 - cls.total_pct()))),
             "status": "SLEEVE_BUDGET_DEGRADED" if degraded else "SLEEVE_BUDGET_OK",
         }
