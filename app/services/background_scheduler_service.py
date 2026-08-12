@@ -323,6 +323,15 @@ class BackgroundSchedulerService:
         )
         cls._thread.start()
 
+        # Gated-OFF quote STREAM cache-warmer (its own daemon thread; no-op unless
+        # GREYLINE_TS_QUOTE_STREAM_ENABLED). Pure optimization — REST is the fallback, so a failure here
+        # never touches the cycle. Isolated in try/except so it can't block the scheduler from starting.
+        try:
+            from app.services.tradestation_quote_stream_engine import TradeStationQuoteStreamEngine
+            TradeStationQuoteStreamEngine.start_if_enabled()
+        except Exception:
+            pass
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "scheduler_enabled": True,

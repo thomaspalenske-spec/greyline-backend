@@ -168,6 +168,10 @@ from app.routes import background_scheduler
 
 app.include_router(background_scheduler.router)
 
+from app.routes import ts_quote_stream
+
+app.include_router(ts_quote_stream.router)
+
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)
