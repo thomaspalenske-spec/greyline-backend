@@ -140,6 +140,11 @@ class MomentumReversalStrategyEngine:
             excluded |= set(ExtendedEtfUniverseEngine.symbols(include_caution=True))
         except Exception:
             pass
+        try:
+            from app.services.alt_asset_universe_engine import AltAssetUniverseEngine
+            excluded |= set(AltAssetUniverseEngine.vol_etp_symbols())   # VXX/VIXY/UVXY/... are vol ETPs, not single stocks
+        except Exception:
+            pass
         return excluded
 
     def _symbols(self):

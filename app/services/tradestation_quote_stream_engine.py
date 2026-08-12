@@ -64,6 +64,14 @@ class TradeStationQuoteStreamEngine:
                     syms.append(u)
         except Exception:
             pass
+        # long-vol ETPs (VXX/VIXY) — tradeable equities, live-track them too
+        try:
+            from app.services.alt_asset_universe_engine import AltAssetUniverseEngine
+            for u in AltAssetUniverseEngine.vol_etp_symbols(include_caution=False):
+                if u not in syms:
+                    syms.append(u)
+        except Exception:
+            pass
         try:
             cap = int(getenv("GREYLINE_TS_STREAM_MAX", "96") or 96)
         except ValueError:
