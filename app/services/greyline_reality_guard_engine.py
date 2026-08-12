@@ -153,6 +153,39 @@ class GreyLineRealityGuardEngine:
             "pending_fill": pending_open,
         }
 
+    # CANONICAL map of every direct-to-broker sleeve -> the instruments it manages while armed. ONE source
+    # of truth: managed_symbols() (untracked-risk guard + dashboard labels) AND _active_universe() (price-bar
+    # scope) both read it, so they can never disagree and no sleeve can be forgotten. (flag, module, class,
+    # attr) — attr is a str symbol, a list/tuple basket, or a 0-arg method (tbill .symbol()).
+    _DIRECT_BROKER_SLEEVES = (
+        ("GREYLINE_VOL_CARRY_ENABLED", "vol_term_structure_carry_engine", "VolTermStructureCarryEngine", "SYMBOL"),
+        ("GREYLINE_TREND_ENABLED", "trend_following_engine", "TrendFollowingEngine", "BASKET"),
+        ("GREYLINE_LOW_VOL_ENABLED", "low_volatility_engine", "LowVolatilityEngine", "BASKET"),
+        ("GREYLINE_XSMOM_ENABLED", "cross_sectional_momentum_engine", "CrossSectionalMomentumEngine", "UNIVERSE"),
+        ("GREYLINE_MANAGED_FUTURES_ENABLED", "managed_futures_engine", "ManagedFuturesEngine", "BASKET"),
+        ("GREYLINE_TBILL_SWEEP_ENABLED", "tbill_cash_sweep_engine", "TbillCashSweepEngine", "symbol"),
+    )
+
+    @classmethod
+    def _armed_sleeve_symbols(cls):
+        """Symbols managed by the ARMED direct-to-broker sleeves (empty for any that's off/unreadable)."""
+        from os import getenv
+        import importlib
+        out = set()
+        for flag, module, klass, attr in cls._DIRECT_BROKER_SLEEVES:
+            if (getenv(flag, "") or "").strip().lower() != "true":
+                continue
+            try:
+                val = getattr(getattr(importlib.import_module("app.services." + module), klass), attr)
+                val = val() if callable(val) else val      # tbill .symbol() is a method; the rest are attrs
+                if isinstance(val, str):
+                    out.add(val.upper())
+                else:
+                    out.update(str(s).upper() for s in val)
+            except Exception:
+                pass
+        return out
+
     def managed_symbols(self):
         """The single definition of what GreyLine actually opened and is managing.
 
@@ -200,25 +233,12 @@ class GreyLineRealityGuardEngine:
                                 syms.add(s)
         except Exception:
             pass
-        # New equity/ETF sleeves (carry/trend/T-bill) book straight to the broker, not a paper
-        # ledger — so register their instruments as managed while their sleeve is armed. Without
-        # this they mislabel as UNMANAGED on the dashboard and read as untracked risk to the guard.
-        try:
-            from os import getenv
-
-            def _on(flag):
-                return (getenv(flag, "") or "").strip().lower() == "true"
-            if _on("GREYLINE_VOL_CARRY_ENABLED"):
-                from app.services.vol_term_structure_carry_engine import VolTermStructureCarryEngine
-                syms.add(VolTermStructureCarryEngine.SYMBOL)
-            if _on("GREYLINE_TREND_ENABLED"):
-                from app.services.trend_following_engine import TrendFollowingEngine
-                syms.update(TrendFollowingEngine.BASKET)
-            if _on("GREYLINE_TBILL_SWEEP_ENABLED"):
-                from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
-                syms.add(TbillCashSweepEngine.symbol())
-        except Exception:
-            pass
+        # Direct-to-broker equity/ETF sleeves (carry/trend/low_vol/xs_momentum/managed_futures/T-bill) book
+        # straight to the broker, not a paper ledger — register each armed sleeve's instruments as managed,
+        # or they mislabel UNMANAGED on the dashboard and read as untracked risk to the guard. ONE canonical
+        # list (was carry/trend/tbill only here — low_vol + xs were armed but never added, so low_vol's held
+        # basket read as untracked; fixed 2026-08-11).
+        syms |= self._armed_sleeve_symbols()
         return syms
 
     def _check_untracked_broker_positions(self, view):
@@ -305,19 +325,9 @@ class GreyLineRealityGuardEngine:
         from os import getenv
         if (getenv("GREYLINE_MOMENTUM_ENABLED", "true") or "").strip().lower() == "true":
             return None
-        active = {str(s).upper() for s in self.managed_symbols()}
-        for flag, module, cls, attr in (
-                ("GREYLINE_TREND_ENABLED", "trend_following_engine", "TrendFollowingEngine", "BASKET"),
-                ("GREYLINE_LOW_VOL_ENABLED", "low_volatility_engine", "LowVolatilityEngine", "BASKET"),
-                ("XSMOM_ENABLED", "cross_sectional_momentum_engine", "CrossSectionalMomentumEngine", "UNIVERSE")):
-            if (getenv(flag, "") or "").strip().lower() == "true":
-                try:
-                    import importlib
-                    m = importlib.import_module("app.services." + module)
-                    active |= {str(s).upper() for s in getattr(getattr(m, cls), attr)}
-                except Exception:
-                    pass
-        return active
+        # managed_symbols() already folds in the armed direct-to-broker baskets via the canonical list
+        # (which also fixes the old XSMOM_ENABLED flag-name typo that silently dropped xs_momentum here).
+        return {str(s).upper() for s in self.managed_symbols()}
 
     @staticmethod
     def _scope_symbols(raw):

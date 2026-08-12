@@ -390,3 +390,29 @@ def test_open_positions_match_broker_empty_reread_is_not_fantasy(monkeypatch):
                         lambda self: {"http_status": 200, "response_json": {"Positions": [{"Symbol": "IWM", "Quantity": 999}]}})
     res3 = guard._check_open_positions_match_broker(view)
     assert res3["ok"] is False and not res3.get("degraded_class")   # genuine mismatch surfaces
+
+
+# --- armed direct-to-broker sleeves must be in managed_symbols (2026-08-11: low_vol/xs were missing,
+#     so low_vol's held basket read as UNTRACKED broker risk; XSMOM_ENABLED flag typo dropped xs too) ---
+
+def test_armed_direct_broker_sleeves_are_managed(monkeypatch):
+    from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine as G
+    monkeypatch.setenv("GREYLINE_LOW_VOL_ENABLED", "true")
+    monkeypatch.setenv("GREYLINE_XSMOM_ENABLED", "true")
+    for f in ("GREYLINE_VOL_CARRY_ENABLED", "GREYLINE_TREND_ENABLED",
+              "GREYLINE_MANAGED_FUTURES_ENABLED", "GREYLINE_TBILL_SWEEP_ENABLED"):
+        monkeypatch.setenv(f, "false")
+    armed = G._armed_sleeve_symbols()
+    assert {"USMV", "SPLV", "EFAV", "XMLV"} <= armed                  # low_vol basket
+    assert {"EEM", "HYG", "IEF", "VNQ"} <= armed                      # xs non-overlap names
+    # a held low_vol name must read MANAGED, not untracked
+    r = G()._check_untracked_broker_positions({"positions": [{"symbol": "USMV"}, {"symbol": "ZZZZ"}]})
+    assert "USMV" not in r["untracked"] and "ZZZZ" in r["untracked"]
+
+
+def test_disarmed_direct_broker_sleeves_not_managed(monkeypatch):
+    from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine as G
+    for f in ("GREYLINE_LOW_VOL_ENABLED", "GREYLINE_XSMOM_ENABLED", "GREYLINE_VOL_CARRY_ENABLED",
+              "GREYLINE_TREND_ENABLED", "GREYLINE_MANAGED_FUTURES_ENABLED", "GREYLINE_TBILL_SWEEP_ENABLED"):
+        monkeypatch.setenv(f, "false")
+    assert G._armed_sleeve_symbols() == set()
