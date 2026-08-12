@@ -48,6 +48,27 @@ class ExecutionPricingEngine:
         return round(round(px / t) * t, 2)
 
     @classmethod
+    def marketable_limit(cls, bid, ask, is_buy, cross_bps=0.0, tick=0.01):
+        """A limit that CROSSES the spread for a guaranteed fill: BUY at the ask, SELL at the bid, plus an
+        optional `cross_bps` buffer PAST the touch so it still fills if the touch ticks against us in the
+        first volatile seconds of the open. Rounds to the price grid. Falls back to whatever side exists on
+        a one-sided quote; None if no usable price. This is the opposite of patient_limit — pay the whole
+        spread to be sure of the fill, when certainty matters more than capturing the half-spread."""
+        try:
+            bid = float(bid); ask = float(ask)
+        except (TypeError, ValueError):
+            bid, ask = 0.0, 0.0
+        touch = (ask if is_buy else bid)
+        if not touch or touch <= 0:
+            touch = (bid if is_buy else ask)          # one-sided quote: use whatever we have
+        if not touch or touch <= 0:
+            return None
+        frac = max(0.0, float(cross_bps)) / 1e4
+        px = touch * (1.0 + frac) if is_buy else touch * (1.0 - frac)
+        t = tick if tick and tick > 0 else 0.01
+        return round(round(px / t) * t, 2)
+
+    @classmethod
     def spread_saved_bps(cls, bid, ask, aggressiveness=None):
         """How much of the round-trip spread this pricing captures vs. always crossing (for logging)."""
         try:

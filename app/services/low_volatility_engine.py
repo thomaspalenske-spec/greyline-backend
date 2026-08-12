@@ -169,7 +169,15 @@ class LowVolatilityEngine:
             action = "BUY" if d > 0 else "SELL"
             qty = abs(d)
             from app.services.execution_pricing_engine import ExecutionPricingEngine
-            limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
+            # MARKETABLE by default: CROSS the spread for a guaranteed fill (BUY at ask, SELL at bid, plus a
+            # small cross buffer so it still fills if the quote ticks in the first seconds of the open) —
+            # operator directive 2026-08-11. Set GREYLINE_LOW_VOL_MARKETABLE=false to revert to patient pricing.
+            if (getenv("GREYLINE_LOW_VOL_MARKETABLE", "true") or "true").strip().lower() == "true":
+                limit = ExecutionPricingEngine.marketable_limit(
+                    leg["bid"], leg["ask"], d > 0,
+                    cross_bps=self._f(getenv("GREYLINE_LOW_VOL_CROSS_BPS", "10")))
+            else:
+                limit = ExecutionPricingEngine.patient_limit(leg["bid"], leg["ask"], d > 0)
             if not limit or limit <= 0:
                 continue
             if action == "BUY":                              # cap the buy at the sleeve's remaining budget
