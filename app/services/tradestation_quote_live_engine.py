@@ -1,15 +1,25 @@
 from datetime import datetime
+import json
 import time
 from os import getenv
 import requests
 
 from app.services.env_reload import reload_env
+from app.services.http_bounded import bounded_get, envf, KeyedSingleFlight
 from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
+
+
+def _quote_timeouts():
+    # total wall-clock deadline so a trickling TS quote read can't hang the scheduler cycle
+    return (envf("GREYLINE_TS_QUOTE_CONNECT_TIMEOUT", 5.0),
+            envf("GREYLINE_TS_QUOTE_READ_TIMEOUT", 8.0),
+            envf("GREYLINE_TS_QUOTE_DEADLINE", 15.0))
 
 
 class TradeStationQuoteLiveEngine:
     _quote_cache = {}
     CACHE_TTL_SECONDS = 60
+    _SF = KeyedSingleFlight()          # single-flight: concurrent identical quote fetches coalesce
 
     @classmethod
     def clear_cache(cls):
@@ -44,29 +54,48 @@ class TradeStationQuoteLiveEngine:
             for s in to_fetch:
                 out[s] = {"symbol": s, "status": "ACCESS_TOKEN_OR_SYMBOL_REQUIRED", "response_json": None}
             return out
-        url = base_url.rstrip("/") + "/v3/marketdata/quotes/" + ",".join(to_fetch)
-        try:
-            resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}",
-                                              "Accept": "application/json"}, timeout=20)
-            rj = resp.json()
-        except Exception as error:
+        # SINGLE-FLIGHT + TOTAL DEADLINE: coalesce concurrent identical batches, and bound the whole read so
+        # a trickling TS response can't hang the cycle (requests' timeout is only between-bytes).
+        with self._SF.lock(("quotes", tuple(to_fetch))):
+            # re-check the cache under the lock — another thread may have just fetched these
+            now2 = time.time()
+            still = []
             for s in to_fetch:
-                out[s] = {"symbol": s, "status": "QUOTE_READ_FAILED", "error": str(error)[:120],
-                          "response_json": None}
-            return out
-        by_sym = {str(row.get("Symbol") or "").upper(): row
-                  for row in ((rj or {}).get("Quotes") or [])}
-        ts = time.time()
-        for s in to_fetch:
-            row = by_sym.get(s)
-            res = {"timestamp": datetime.utcnow().isoformat(), "broker": "TradeStation", "symbol": s,
-                   "http_status": resp.status_code, "cache_hit": False,
-                   "status": "QUOTE_READ_SUCCESS" if row else "QUOTE_READ_FAILED",
-                   "response_json": {"Quotes": [row]} if row else None}
-            if row:
-                res["_cache_timestamp"] = ts
-                self._quote_cache[s] = dict(res)
-            out[s] = res
+                c = self._quote_cache.get(s)
+                if c and (now2 - c.get("_cache_timestamp", 0)) <= self.CACHE_TTL_SECONDS:
+                    hit = dict(c); hit["cache_hit"] = True
+                    hit["cache_age_seconds"] = round(now2 - c.get("_cache_timestamp", 0), 2)
+                    out[s] = hit
+                else:
+                    still.append(s)
+            if not still:
+                return out
+            url = base_url.rstrip("/") + "/v3/marketdata/quotes/" + ",".join(still)
+            _ct, _rt, _dl = _quote_timeouts()
+            try:
+                resp, body = bounded_get(requests, url,
+                                         headers={"Authorization": f"Bearer {access_token}",
+                                                  "Accept": "application/json"},
+                                         connect_timeout=_ct, read_timeout=_rt, total_deadline=_dl)
+                rj = json.loads(body) if body else None
+            except Exception as error:
+                for s in still:
+                    out[s] = {"symbol": s, "status": "QUOTE_READ_FAILED", "error": str(error)[:120],
+                              "response_json": None}
+                return out
+            by_sym = {str(row.get("Symbol") or "").upper(): row
+                      for row in ((rj or {}).get("Quotes") or [])}
+            ts = time.time()
+            for s in still:
+                row = by_sym.get(s)
+                res = {"timestamp": datetime.utcnow().isoformat(), "broker": "TradeStation", "symbol": s,
+                       "http_status": resp.status_code, "cache_hit": False,
+                       "status": "QUOTE_READ_SUCCESS" if row else "QUOTE_READ_FAILED",
+                       "response_json": {"Quotes": [row]} if row else None}
+                if row:
+                    res["_cache_timestamp"] = ts
+                    self._quote_cache[s] = dict(res)
+                out[s] = res
         return out
 
     def get_quote(self, symbol):
@@ -99,49 +128,55 @@ class TradeStationQuoteLiveEngine:
             }
 
         url = base_url.rstrip("/") + f"/v3/marketdata/quotes/{symbol}"
+        _ct, _rt, _dl = _quote_timeouts()
 
-        try:
-            response = requests.get(
-                url,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json"
-                },
-                timeout=20
-            )
-        except requests.RequestException as error:
-            return {
+        # SINGLE-FLIGHT + TOTAL DEADLINE (same as the batch path): coalesce concurrent same-symbol fetches
+        # and bound the whole read so a trickling TS response can't hang the cycle.
+        with self._SF.lock(("quote", symbol)):
+            c = self._quote_cache.get(symbol)                    # re-check under the lock
+            if c and (time.time() - c.get("_cache_timestamp", 0)) <= self.CACHE_TTL_SECONDS:
+                hit = dict(c); hit["cache_hit"] = True
+                hit["cache_age_seconds"] = round(time.time() - c.get("_cache_timestamp", 0), 2)
+                return hit
+
+            try:
+                response, body = bounded_get(
+                    requests, url,
+                    headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+                    connect_timeout=_ct, read_timeout=_rt, total_deadline=_dl)
+            except Exception as error:
+                return {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "broker": "TradeStation",
+                    "symbol": symbol,
+                    "quote_attempted": True,
+                    "http_status": None,
+                    "execution_enabled": False,
+                    "status": "QUOTE_READ_FAILED",
+                    "error": str(error)
+                }
+
+            try:
+                response_json = json.loads(body) if body else None
+            except Exception:
+                response_json = None
+
+            result = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "broker": "TradeStation",
                 "symbol": symbol,
                 "quote_attempted": True,
-                "http_status": None,
+                "http_status": response.status_code,
                 "execution_enabled": False,
-                "status": "QUOTE_READ_FAILED",
-                "error": str(error)
+                "status": "QUOTE_READ_SUCCESS" if response.status_code == 200 else "QUOTE_READ_FAILED",
+                "response_json": response_json,
+                "response_preview": (body[:500].decode("utf-8", "replace") if body else ""),
+                "cache_hit": False,
             }
 
-        try:
-            response_json = response.json()
-        except Exception:
-            response_json = None
+            if response.status_code == 200:
+                result["_cache_timestamp"] = time.time()
+                result["cache_age_seconds"] = 0
+                self._quote_cache[symbol] = dict(result)
 
-        result = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "broker": "TradeStation",
-            "symbol": symbol,
-            "quote_attempted": True,
-            "http_status": response.status_code,
-            "execution_enabled": False,
-            "status": "QUOTE_READ_SUCCESS" if response.status_code == 200 else "QUOTE_READ_FAILED",
-            "response_json": response_json,
-            "response_preview": response.text[:500],
-            "cache_hit": False,
-        }
-
-        if response.status_code == 200:
-            result["_cache_timestamp"] = time.time()
-            result["cache_age_seconds"] = 0
-            self._quote_cache[symbol] = dict(result)
-
-        return result
+            return result

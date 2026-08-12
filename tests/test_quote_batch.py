@@ -9,19 +9,25 @@ from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShor
 
 class _Resp:
     status_code = 200
+    headers = {}
 
     def __init__(self, quotes):
         self._q = quotes
+        self.closed = False
 
-    def json(self):
-        return {"Quotes": self._q}
+    def iter_content(self, chunk_size=65536):        # engine now streams the body under a total deadline
+        import json as _j
+        yield _j.dumps({"Quotes": self._q}).encode()
+
+    def close(self):
+        self.closed = True
 
 
 def test_get_quotes_batches_one_request(monkeypatch):
     Q.clear_cache()
     calls = {"n": 0, "urls": []}
 
-    def _get(url, headers=None, timeout=None):
+    def _get(url, params=None, headers=None, timeout=None, stream=False):
         calls["n"] += 1
         calls["urls"].append(url)
         return _Resp([{"Symbol": "AAA", "Bid": 1.0, "Ask": 1.2},
@@ -41,7 +47,7 @@ def test_get_quotes_serves_cache_without_network(monkeypatch):
     Q.clear_cache()
     n = {"c": 0}
 
-    def _get(url, headers=None, timeout=None):
+    def _get(url, params=None, headers=None, timeout=None, stream=False):
         n["c"] += 1
         return _Resp([{"Symbol": "AAA", "Bid": 1.0, "Ask": 1.2}])
     monkeypatch.setattr(qmod.requests, "get", _get)
