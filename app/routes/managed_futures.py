@@ -15,6 +15,14 @@ def managed_futures_research():
     return ManagedFuturesResearchEngine().run()
 
 
+@router.get("/managed-futures-research-real")
+def managed_futures_research_real():
+    """The SAME TSMOM backtest on the real continuous-futures bars (vs the ETF proxies), with an
+    auto-attached same-window ETF control so a window effect is distinguishable from an instrument gap.
+    Verdict is data-driven — the futures universe earns its own, it does NOT inherit the proxy GO."""
+    return ManagedFuturesResearchEngine.futures().run()
+
+
 @router.get("/managed-futures")
 def managed_futures():
     """Live sleeve status + plan (armed flag, budget, per-asset long/short signal, execution plan)."""

@@ -113,6 +113,22 @@ def _neutralize_external_alerts(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GREYLINE_ALERT_MACOS_LOCAL", "false")
 
+    # No test may spawn a LIVE streaming daemon. The app's startup event calls
+    # BackgroundSchedulerService.start(), so any test that drives a TestClient (route/schema audits)
+    # fires it — and with GREYLINE_TS_*_STREAM_ENABLED='true' in the operator's .env, start_if_enabled()
+    # opens a real TS socket in a background thread that then leaks across the session (it was breaking
+    # test_ts_quote_stream::test_disabled_does_not_start, which sees the class-level _thread still alive).
+    # Force both stream engines dormant. enabled() is patched (not just the env var) because start_if_enabled
+    # calls reload_env() first, which would reload the 'true' from .env and clobber a mere setenv (the
+    # .env-precedence trap). The engines' own logic is still exercised — the disabled-path unit tests set
+    # their flag false and expect DISABLED, which this preserves; no test needs the live-thread path.
+    from app.services.tradestation_quote_stream_engine import TradeStationQuoteStreamEngine
+    from app.services.tradestation_broker_stream_engine import TradeStationBrokerStreamEngine
+    monkeypatch.setenv("GREYLINE_TS_QUOTE_STREAM_ENABLED", "false")
+    monkeypatch.setenv("GREYLINE_TS_BROKER_STREAM_ENABLED", "false")
+    monkeypatch.setattr(TradeStationQuoteStreamEngine, "enabled", classmethod(lambda cls: False))
+    monkeypatch.setattr(TradeStationBrokerStreamEngine, "enabled", classmethod(lambda cls: False))
+
 
 @pytest.fixture(autouse=True)
 def _isolate_app_data(request, _data_sandbox):

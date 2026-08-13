@@ -46,7 +46,10 @@ class TradeStationPositionsLiveEngine:
         else:
             cls._CACHE.pop(account_id, None)
 
-    def get_positions(self):
+    def get_positions(self, bypass_cache=False):
+        # bypass_cache: read REST directly, ignoring AND not writing the shared cache. Used by the broker
+        # stream engine's cross-check so it can compare its mirror against ground-truth REST without
+        # reading back its own stream-warmed cache entry (which would make the check circular).
         from app.services.tradestation_account_source_engine import TradeStationAccountSourceEngine
         access_token = getenv("TRADESTATION_ACCESS_TOKEN", "")
         # WHICH account (paper vs live) is decided by the one selector, not here.
@@ -67,7 +70,7 @@ class TradeStationPositionsLiveEngine:
         # serve a recent SUCCESSFUL read from the shared cache — avoids the 429-triggering read storm.
         ttl = self._ttl()
         hit = self._CACHE.get(account_id)
-        if ttl > 0 and hit and (time.monotonic() - hit[0]) < ttl:
+        if not bypass_cache and ttl > 0 and hit and (time.monotonic() - hit[0]) < ttl:
             cached = dict(hit[1])                       # shallow copy so a caller can't corrupt the cache
             cached["served_from_cache"] = True
             cached["cache_age_s"] = round(time.monotonic() - hit[0], 2)
@@ -108,6 +111,6 @@ class TradeStationPositionsLiveEngine:
         }
         # cache ONLY a confirmed-good read. A 429/failure is never cached (so it can't mask a real
         # degraded state) and the next success refreshes the entry.
-        if ttl > 0 and response.status_code == 200:
+        if not bypass_cache and ttl > 0 and response.status_code == 200:
             self._CACHE[account_id] = (time.monotonic(), result)
         return result

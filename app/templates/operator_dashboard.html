@@ -798,6 +798,10 @@ th {
             <div id="altuni_stream" style="font-weight:600;margin-top:4px;">—</div>
           </div>
           <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">POSITIONS STREAM (cross-check)</div>
+            <div id="altuni_broker" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
             <div class="sub" style="letter-spacing:.08em;">GAMMA-FLIP (condor GATE 2)</div>
             <div id="altuni_gamma" style="font-weight:600;margin-top:4px;">—</div>
           </div>
@@ -946,9 +950,36 @@ const fmtMoney = n => Number(n || 0).toLocaleString("en-US", {style:"currency", 
 const fmtPct = n => `${Number(n || 0).toFixed(2)}%`;
 
 async function getJSON(url) {
-  const res = await fetch(url + "?refresh=" + Date.now());
-  if (!res.ok) throw new Error(url);
-  return await res.json();
+  // Resilient fetch: the heavy live-data cards (opportunity-board, condor/momentum shadows) fire together
+  // on the 15s refresh, and a slow response occasionally arrives truncated/interrupted — res.json() then
+  // throws WebKit's cryptic "SyntaxError: The string did not match the expected pattern" on a body that is
+  // actually fine server-side. Read as text + parse ourselves, retry ONCE on a transient network / gateway /
+  // parse failure, and surface a clean, legible message instead of the raw parser error. Success path
+  // unchanged (returns parsed JSON) — a strict superset of the old one-shot behavior.
+  const label = url.replace(/^\//, "");
+  let lastMsg = label + " — unavailable";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res;
+    try {
+      res = await fetch(url + "?refresh=" + Date.now(), { credentials: "same-origin", cache: "no-store" });
+    } catch (netErr) {
+      lastMsg = label + " — network error";
+      continue;                                   // transient blip → one retry, then surface cleanly
+    }
+    if (!res.ok) {
+      lastMsg = label + " — HTTP " + res.status;
+      if (res.status >= 500 && attempt === 0) continue;   // gateway/5xx → retry once
+      throw new Error(lastMsg);                    // 4xx (e.g. auth) won't fix on retry
+    }
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      lastMsg = label + " — slow/partial response (retries next cycle)";
+      continue;                                   // truncated/interrupted body → one retry
+    }
+  }
+  throw new Error(lastMsg);
 }
 
 // SELF-RELOAD ON DEPLOY: the page auto-refreshes DATA every 15s but never reloads its own JS, so a
@@ -1365,6 +1396,18 @@ async function refreshAltUniverseInfra() {
       el.innerHTML = `<span class="${on ? 'green' : (s.enabled ? 'yellow' : '')}">${s.status || '—'}</span> <span class="sub">${s.enabled ? ((s.frames || 0) + " frames" + (s.stale_seconds != null ? " · " + s.stale_seconds + "s" : "")) : "off"}</span>`;
     }
   } catch (e) { const el = document.getElementById("altuni_stream"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const b = await getJSON("/ts-broker-stream");
+    const el = document.getElementById("altuni_broker");
+    if (el) {
+      // green only when it's actually agreeing with REST (synced); yellow when enabled-but-unverified.
+      const cls = b.synced ? 'green' : (b.enabled ? 'yellow' : '');
+      const detail = b.enabled
+        ? (b.synced ? ("synced · " + (b.mirror_positions || 0) + " pos") : (b.snapshot_complete ? "desynced → REST" : "syncing"))
+        : "off · REST";
+      el.innerHTML = `<span class="${cls}">${b.status || '—'}</span> <span class="sub">${detail}</span>`;
+    }
+  } catch (e) { const el = document.getElementById("altuni_broker"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
   try {
     const g = await getJSON("/gamma-flip-history");
     const el = document.getElementById("altuni_gamma");

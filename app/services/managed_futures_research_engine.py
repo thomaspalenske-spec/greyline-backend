@@ -34,6 +34,23 @@ CRISIS = {"2008": "GFC", "2011": "EU/US downgrade", "2015": "China/oil", "2018":
 
 
 class ManagedFuturesResearchEngine:
+    """Parameterized so the SAME TSMOM backtest runs on either the ETF proxy basket (default) or the
+    real continuous-futures bars (`.futures()`), rather than forking a second engine. Reference series
+    (SPY equity beta, SVXY carry-corr) always read from the ETF store regardless of the universe."""
+
+    def __init__(self, assets=None, hist_dir=None, label="etf_proxy", since=None):
+        self.assets = list(assets) if assets else list(ASSETS)
+        self.hist_dir = Path(hist_dir) if hist_dir else HIST
+        self.label = label
+        self.since = since  # ISO date floor — for like-for-like window comparison vs a shorter universe
+
+    @classmethod
+    def futures(cls):
+        """Real managed-futures test: TSMOM on the 19 continuous @ROOT futures (roll-inclusive bars →
+        tradeable % returns), vs the ETF-proxy default. Same params, no look-ahead."""
+        from app.services.alt_asset_universe_engine import AltAssetUniverseEngine as A
+        keys = A.symbols(asset_class="futures")
+        return cls(assets=keys, hist_dir=A.ALT_STORE, label="real_futures")
 
     @staticmethod
     def _f(v):
@@ -42,10 +59,10 @@ class ManagedFuturesResearchEngine:
         except (TypeError, ValueError):
             return None
 
-    def _closes(self, sym):
+    def _closes_dir(self, base, sym):
         out = {}
         try:
-            with open(HIST / f"{sym}_daily.csv") as f:
+            with open(Path(base) / f"{sym}_daily.csv") as f:
                 for r in csv.DictReader(f):
                     c = self._f(r.get("close"))
                     if c and c > 0:
@@ -53,6 +70,13 @@ class ManagedFuturesResearchEngine:
         except Exception:
             return {}
         return out
+
+    def _closes(self, sym):
+        return self._closes_dir(self.hist_dir, sym)
+
+    def _ref_closes(self, sym):
+        """Reference series (SPY/SVXY) — always the ETF store, independent of the backtest universe."""
+        return self._closes_dir(HIST, sym)
 
     @staticmethod
     def _stdev(xs):
@@ -94,10 +118,12 @@ class ManagedFuturesResearchEngine:
     # ---- core backtest -------------------------------------------------------------------------
 
     def _load(self):
-        data = {s: self._closes(s) for s in ASSETS}
-        have = [s for s in ASSETS if len(data[s]) > max(LOOKBACKS) + VOL_WIN]
+        data = {s: self._closes(s) for s in self.assets}
+        have = [s for s in self.assets if len(data[s]) > max(LOOKBACKS) + VOL_WIN]
         common = set.intersection(*[set(data[s].keys()) for s in have])
         dates = sorted(common)
+        if self.since:
+            dates = [d for d in dates if d >= self.since]
         px = {s: [data[s][d] for d in dates] for s in have}
         ret = {s: [0.0] + [px[s][i] / px[s][i - 1] - 1 for i in range(1, len(dates))] for s in have}
         return have, dates, px, ret
@@ -153,6 +179,22 @@ class ManagedFuturesResearchEngine:
             yr[d[:4]] = yr.get(d[:4], 1.0) * (1 + r)
         return {y: round(100 * (v - 1), 1) for y, v in sorted(yr.items())}
 
+    def _verdict(self, variants, control):
+        """Data-driven — the ETF-proxy GO was established 2026-07-30; a shorter/real universe earns its
+        OWN verdict from its OWN numbers rather than inheriting that GO."""
+        ls = variants["long_short_monthly"]["net"].get("sharpe", 0.0)
+        lf = variants["long_flat_monthly"]["net"].get("sharpe", 0.0)
+        if self.label == "etf_proxy" and not self.since:
+            return "GO (diversifier, not a return-chaser) — forward-test gated"
+        if ls >= 0.3:
+            return "GO — L/S confirms on this universe/window (net Sharpe %+.2f)" % ls
+        if lf >= 0.3 > ls:
+            return ("MIXED — long/flat holds (%+.2f) but the SHORT side drags (L/S %+.2f). Do NOT arm "
+                    "L/S here; the shorts underperform in this window's V-shaped reversals." % (lf, ls))
+        return ("NO-GO on available data — L/S net Sharpe %+.2f. For real futures this is the ONLY window "
+                "on disk (2021+), which excludes every crisis (2008/2020) the diversifier thesis needs, so "
+                "the ETF-proxy edge stays UNCONFIRMED on real instruments — do not arm off the proxy." % ls)
+
     def run(self):
         assets, dates, px, ret = self._load()
         if len(dates) < max(LOOKBACKS) + 60:
@@ -177,21 +219,46 @@ class ManagedFuturesResearchEngine:
             if sub:
                 decay[lbl] = self._perf([r for _, r in sub])["sharpe"]
 
-        # correlation: the diversification thesis
+        # correlation: the diversification thesis (reference series always from the ETF store, so this
+        # works identically for the ETF-proxy universe and the real-futures universe)
         mf_map = dict(zip(d, n))
-        spy_ret = dict(zip(dates, ret["SPY"])) if "SPY" in ret else {}
+
+        def _ret_series(closes):
+            ks = sorted(closes)
+            return {ks[i]: closes[ks[i]] / closes[ks[i - 1]] - 1 for i in range(1, len(ks))}
+
+        spy_ret = _ret_series(self._ref_closes("SPY"))
         c_spy = self._pearson([mf_map[x] for x in d if x in spy_ret],
                               [spy_ret[x] for x in d if x in spy_ret])
-        svxy = self._closes("SVXY")
-        sd = sorted(svxy)
-        svxy_ret = {sd[i]: svxy[sd[i]] / svxy[sd[i - 1]] - 1 for i in range(1, len(sd))}
+        svxy_ret = _ret_series(self._ref_closes("SVXY"))
         common_svxy = [x for x in d if x in svxy_ret]
         c_svxy = self._pearson([mf_map[x] for x in common_svxy], [svxy_ret[x] for x in common_svxy])
+
+        # For the real-futures universe, auto-run the ETF-proxy on the IDENTICAL window so the comparison
+        # is baked in, not computed on the side — this is what separates a window effect from an
+        # instrument/implementation gap.
+        control = None
+        if self.label == "real_futures":
+            try:
+                cr = ManagedFuturesResearchEngine(since=dates[0]).run()
+                if cr.get("status") == "MF_RESEARCH_READY":
+                    control = {
+                        "universe": "etf_proxy_same_window",
+                        "span": cr["span"],
+                        "long_short_monthly_net_sharpe": cr["variants"]["long_short_monthly"]["net"]["sharpe"],
+                        "long_flat_monthly_net_sharpe": cr["variants"]["long_flat_monthly"]["net"]["sharpe"],
+                        "note": ("Fair control: same window, proxy basket. If the proxy is ALSO weak here the "
+                                 "gap is the WINDOW (no 2008/2020); residual gap vs futures is instrument/roll."),
+                    }
+            except Exception:
+                control = None
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "status": "MF_RESEARCH_READY",
-            "verdict": "GO (diversifier, not a return-chaser) — forward-test gated",
+            "universe_label": self.label,
+            "verdict": self._verdict(variants, control),
+            "fair_window_control": control,
             "universe": assets, "span": [dates[0], dates[-1]], "days": len(dates),
             "variants": variants,
             "primary": "long_short_monthly",

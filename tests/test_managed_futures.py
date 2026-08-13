@@ -10,12 +10,16 @@ from app.services.managed_futures_research_engine import ManagedFuturesResearchE
 # conftest chdirs each test into a data sandbox, so point the historical-bar reads (read-only) at
 # the real on-disk data dir — these tests specifically validate signal math over real history.
 _REAL_HIST = Path(__file__).resolve().parents[1] / "app" / "data" / "historical"
+_REAL_ALT = Path(__file__).resolve().parents[1] / "app" / "data" / "alt_assets"
 
 
 @pytest.fixture(autouse=True)
 def _real_history(monkeypatch):
     monkeypatch.setattr("app.services.managed_futures_research_engine.HIST", _REAL_HIST)
     monkeypatch.setattr(ManagedFuturesEngine, "HIST", _REAL_HIST)
+    # real-futures backtest reads the continuous-futures bars from the alt-asset store
+    from app.services.alt_asset_universe_engine import AltAssetUniverseEngine
+    monkeypatch.setattr(AltAssetUniverseEngine, "ALT_STORE", _REAL_ALT)
     yield
 
 
@@ -41,6 +45,50 @@ def test_research_monthly_beats_weekly_after_cost():
     m = r["variants"]["long_short_monthly"]["net"]["sharpe"]
     w = r["variants"]["long_short_weekly"]["net"]["sharpe"]
     assert m > w                                       # weekly turnover destroys the edge on cost
+
+
+# ---- real-futures backtest (parameterized universe, not a fork) ----------------------------
+
+def test_since_filter_restricts_window():
+    full = ManagedFuturesResearchEngine().run()
+    cut = ManagedFuturesResearchEngine(since="2021-07-30").run()
+    assert cut["span"][0] >= "2021-07-30"
+    assert cut["days"] < full["days"]                  # the floor drops earlier history
+
+
+def test_futures_constructor_targets_alt_store():
+    e = ManagedFuturesResearchEngine.futures()
+    assert e.label == "real_futures"
+    assert e.hist_dir == _REAL_ALT                     # reads continuous-futures bars, not ETF proxies
+    assert len(e.assets) == 19 and "VX" in e.assets and "SPY" not in e.assets
+
+
+def test_futures_run_attaches_same_window_control_and_earns_own_verdict():
+    r = ManagedFuturesResearchEngine.futures().run()
+    assert r["status"] == "MF_RESEARCH_READY"
+    assert r["universe_label"] == "real_futures"
+    # the fair control is baked in: the ETF proxy on the IDENTICAL window
+    ctl = r["fair_window_control"]
+    assert ctl is not None and ctl["span"][0] == r["span"][0]
+    assert isinstance(ctl["long_short_monthly_net_sharpe"], float)
+    # verdict is DATA-DRIVEN, never the inherited static-proxy GO
+    assert r["verdict"] != "GO (diversifier, not a return-chaser) — forward-test gated"
+
+
+def test_verdict_is_data_driven_not_inherited():
+    e = ManagedFuturesResearchEngine.futures()   # label != etf_proxy -> earns its own verdict
+
+    def _v(ls, lf):
+        return e._verdict({"long_short_monthly": {"net": {"sharpe": ls}},
+                           "long_flat_monthly": {"net": {"sharpe": lf}}}, control=None)
+
+    assert _v(0.5, 0.5).startswith("GO")                       # L/S confirms
+    assert _v(-0.4, 0.5).startswith("MIXED")                   # long/flat holds, shorts drag
+    assert _v(-0.4, 0.1).startswith("NO-GO")                   # nothing works on-window
+    # a genuine etf_proxy full-history run keeps the established GO
+    assert ManagedFuturesResearchEngine()._verdict(
+        {"long_short_monthly": {"net": {"sharpe": 0.41}},
+         "long_flat_monthly": {"net": {"sharpe": 0.5}}}, control=None).startswith("GO (diversifier")
 
 
 # ---- live sleeve gating (no broker) --------------------------------------------------------

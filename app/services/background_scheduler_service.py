@@ -332,6 +332,15 @@ class BackgroundSchedulerService:
         except Exception:
             pass
 
+        # Positions stream cache-warmer (gated GREYLINE_TS_BROKER_STREAM_ENABLED). Warms the positions
+        # cache ONLY while a REST cross-check agrees; any doubt -> REST fallback, so a failure here never
+        # touches the cycle. Isolated so it can't block the scheduler from starting.
+        try:
+            from app.services.tradestation_broker_stream_engine import TradeStationBrokerStreamEngine
+            TradeStationBrokerStreamEngine.start_if_enabled()
+        except Exception:
+            pass
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "scheduler_enabled": True,
