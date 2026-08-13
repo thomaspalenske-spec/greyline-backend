@@ -196,6 +196,10 @@ from app.routes import futures_tsmom_shadow
 
 app.include_router(futures_tsmom_shadow.router)
 
+from app.routes import fx_trend_shadow
+
+app.include_router(fx_trend_shadow.router)
+
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)

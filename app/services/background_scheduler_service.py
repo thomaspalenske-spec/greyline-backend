@@ -850,6 +850,17 @@ class BackgroundSchedulerService:
             futures_tsmom_shadow = {"error": repr(exc), "status": "FUT_TSMOM_SHADOW_DEGRADED"}
         cls._ckpt("futures_tsmom_shadow")
 
+        # FX trend shadow — completes the alt-asset measurement trio (spot FX). NO orders/budget.
+        try:
+            if _heavy_blocked:
+                fx_trend_shadow = {"status": "FX_TREND_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
+            else:
+                from app.services.fx_trend_shadow_engine import FxTrendShadowEngine
+                fx_trend_shadow = FxTrendShadowEngine().mark()
+        except Exception as exc:
+            fx_trend_shadow = {"error": repr(exc), "status": "FX_TREND_SHADOW_DEGRADED"}
+        cls._ckpt("fx_trend_shadow")
+
         # GEX MEAN-REVERSION shadow — a NEW strategy (fade the walls toward the gamma-magnet in long-gamma
         # pinning regimes), forward-tested on the underlying with NO orders. Same heavy-window gate.
         try:
