@@ -784,6 +784,62 @@ th {
         </div>
       </div>
 
+      <!-- ===== Universe Expansion — zero-capital forward-tests of the 2026-08-12 UW/TS scan adds ===== -->
+      <div class="card" id="alt_universe_card" style="min-width:0;">
+        <div class="section-title">Universe Expansion — Infra <span id="altuni_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">The scan added new instruments as <strong>tracked candidates</strong> (52 ETFs · 5 vol ETPs · 19 futures · 6 FX · 80 large-cap single names) — each measured ZERO-capital on the edge court's bar before any capital. <strong>Nothing here is armed.</strong> Infra status below; the four forward-tests follow.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">TRACKED CANDIDATES</div>
+            <div id="altuni_counts" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">QUOTE STREAM</div>
+            <div id="altuni_stream" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">GAMMA-FLIP (condor GATE 2)</div>
+            <div id="altuni_gamma" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="ext_etf_shadow_card" style="min-width:0;">
+        <div class="section-title">Extended-ETF Shadow — cross-sectional momentum <span id="eets_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">The 52 scanned ETFs, ZERO-capital: rank by 3-month trailing return, hold the top-6 a week, settle at live quotes, judged on the court's bar. <a href="/extended-etf-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Live (now)</th><th>Move vs entry</th><th>Days→Settle</th></tr></thead>
+          <tbody id="ext_etf_shadow_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="fut_tsmom_shadow_card" style="min-width:0;">
+        <div class="section-title">Futures TSMOM Shadow — the REAL managed-futures test <span id="futs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Time-series momentum on the 19 continuous futures (vs today's ETF proxies): long positive 12-month trend, short negative, monthly, ZERO-capital. Long/short diversifier, judged on the court's bar. <a href="/futures-tsmom-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Future</th><th>Side</th><th>Entry</th><th>Live (now)</th><th>Move vs entry</th><th>Days→Settle</th></tr></thead>
+          <tbody id="fut_tsmom_shadow_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="vol_etp_shadow_card" style="min-width:0;">
+        <div class="section-title">Long-Vol Leg Shadow — regime-conditioned <span id="vets_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">The long-vol leg that complements the SVXY carry sleeve: long VXX <strong>only in backwardation</strong> (VIX≥VIX3M), flat in contango (so it never bleeds). ZERO-capital, judged on the court's bar. <a href="/vol-etp-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Live (now)</th><th>Move vs entry</th><th>Days→Settle</th></tr></thead>
+          <tbody id="vol_etp_shadow_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="fx_trend_shadow_card" style="min-width:0;">
+        <div class="section-title">FX Trend Shadow — long/short spot FX <span id="fxts_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">3-month trend on the 6 spot-FX pairs: long positive trend, short negative, weekly, ZERO-capital. Watch USD concentration (vs-USD vs USD-vs pairs). <a href="/fx-trend-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Pair</th><th>Side</th><th>Entry</th><th>Live (now)</th><th>Move vs entry</th><th>Days→Settle</th></tr></thead>
+          <tbody id="fx_trend_shadow_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
       <div class="card" id="open_equity_positions_card" style="min-width:0;">
         <div class="section-title">Open Equity Positions <span id="oeq_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Every whole-share equity &amp; ETF holding across the sleeves — momentum-reversal names plus the trend / vol-carry / managed-futures / T-bill ETFs. Cost = what we paid (shares × entry); Market Value = shares × current price; P/L is live unrealized (P/L % = return on cost). Stop is the sleeve's dynamic exit; Take Profit is the momentum names' ATR ladder (TP1–3 bank tranches ✓ when reached, TP4 runner trails). Trend / vol-carry / T-bill ETFs exit on signal or rebalance, not a fixed stop/TP.</div>
@@ -1257,6 +1313,67 @@ async function refreshMomentumShadow() {
   }
 }
 
+// Generic renderer for the 4 alt-universe forward-tests — they share one report shape (open_positions +
+// cohorts_closed/min_cohorts + verdict + status). Zero-capital; entry/live shown as raw numbers (mixed
+// asset classes: ETFs $, futures points, FX rates — no $ prefix).
+async function refreshAltShadow(route, bodyId, sumId) {
+  const body = document.getElementById(bodyId), summary = document.getElementById(sumId);
+  if (!body) return;
+  const numf = (v) => v == null ? "—" : (Math.abs(v) >= 1 ? Number(v).toFixed(2) : Number(v).toFixed(5));
+  try {
+    const d = await getJSON(route);
+    const pos = d.open_positions || [];
+    const measuring = String(d.status || "").endsWith("MEASURING");
+    if (summary) {
+      const nL = pos.filter(p => p.side === "BUY").length, nS = pos.length - nL;
+      summary.textContent = `${pos.length} open${pos.length ? " (" + nL + "L/" + nS + "S)" : ""} · ${d.cohorts_closed || 0}/${d.min_cohorts} cohorts · ${measuring ? ("Sharpe " + d.annualized_sharpe) : "accumulating"}`;
+    }
+    if (!pos.length) { body.innerHTML = `<tr><td colspan="6"><span class="sub">${d.verdict || "—"}</span></td></tr>`; return; }
+    body.innerHTML = pos.map(p => {
+      const lv = p.unrealized_pct;
+      const lvCls = lv == null ? "" : (lv > 0 ? "green" : (lv < 0 ? "red" : ""));
+      const arrow = lv == null ? "" : (lv > 0 ? "▲" : (lv < 0 ? "▼" : "▬"));
+      return `<tr>
+        <td><strong>${p.symbol}</strong></td>
+        <td><span class="badge ${p.side === "BUY" ? "open" : "neutral"}">${p.side === "BUY" ? "LONG" : "SHORT"}</span></td>
+        <td>${numf(p.entry_close)} <span class="sub">${p.entry_date || ""}</span></td>
+        <td>${p.live_last != null ? numf(p.live_last) : "<span class='sub'>—</span>"}</td>
+        <td><span class="${lvCls}">${lv != null ? arrow + " " + (lv > 0 ? "+" : "") + lv.toFixed(2) + "%" : "<span class='sub'>—</span>"}</span></td>
+        <td>${p.days_to_settle != null ? p.days_to_settle : "—"}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="6"><span class="red">unavailable — ${String(e).slice(0, 60)}</span></td></tr>`;
+  }
+}
+
+// The three infra tiles: tracked-candidate counts, quote-stream health, gamma-flip closest-to-cross.
+async function refreshAltUniverseInfra() {
+  try {
+    const [ext, alt] = await Promise.all([getJSON("/extended-etf-universe"), getJSON("/alt-asset-universe")]);
+    const by = alt.by_class || {};
+    const el = document.getElementById("altuni_counts");
+    if (el) el.innerHTML = `${ext.count || 0} ETFs · ${(by.vol_etp || []).length} vol · ${(by.futures || []).length} fut · ${(by.fx || []).length} FX <span class="sub">· not armed</span>`;
+    const sm = document.getElementById("altuni_summary");
+    if (sm) sm.textContent = `${(ext.count || 0) + (alt.count || 0)} tracked candidates · all zero-capital`;
+  } catch (e) { const el = document.getElementById("altuni_counts"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const s = await getJSON("/ts-quote-stream");
+    const el = document.getElementById("altuni_stream");
+    if (el) {
+      const on = s.enabled && s.connected;
+      el.innerHTML = `<span class="${on ? 'green' : (s.enabled ? 'yellow' : '')}">${s.status || '—'}</span> <span class="sub">${s.enabled ? ((s.frames || 0) + " frames" + (s.stale_seconds != null ? " · " + s.stale_seconds + "s" : "")) : "off"}</span>`;
+    }
+  } catch (e) { const el = document.getElementById("altuni_stream"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const g = await getJSON("/gamma-flip-history");
+    const el = document.getElementById("altuni_gamma");
+    const arr = Object.entries(g.symbols || {}).map(([k, v]) => ({ k, gap: v.last_gap_pct }))
+      .filter(x => x.gap != null).sort((a, b) => a.gap - b.gap);
+    if (el) el.innerHTML = arr.length ? `${arr[0].k} ${arr[0].gap > 0 ? "+" : ""}${arr[0].gap}% <span class="sub">closest to flip</span>` : `<span class="sub">accruing</span>`;
+  } catch (e) { const el = document.getElementById("altuni_gamma"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+}
+
 async function refreshVannaCharm() {
   const body = document.getElementById("vanna_charm_body");
   const summary = document.getElementById("vc_summary");
@@ -1609,6 +1726,11 @@ async function refreshAll() {
   refreshGexStrategy();     // GEX mean-reversion — dealer-gamma pin signals + forward-test
   refreshVannaCharm();      // vanna/charm — the OPEX rally (2nd-order dealer flow)
   refreshLowVolShadow();    // zero-capital low-vol (BAB) basket shadow — drawdown vs SPY thesis check
+  refreshAltUniverseInfra();// universe-expansion infra: tracked-candidate counts + quote-stream + gamma-flip
+  refreshAltShadow("/extended-etf-shadow", "ext_etf_shadow_body", "eets_summary");     // 52 ETFs, xs-momentum
+  refreshAltShadow("/futures-tsmom-shadow", "fut_tsmom_shadow_body", "futs_summary");  // 19 futures, TSMOM long/short
+  refreshAltShadow("/vol-etp-shadow", "vol_etp_shadow_body", "vets_summary");          // regime-conditioned long-vol
+  refreshAltShadow("/fx-trend-shadow", "fx_trend_shadow_body", "fxts_summary");        // 6 FX pairs, trend
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 
