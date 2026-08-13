@@ -192,6 +192,10 @@ from app.routes import vol_etp_shadow
 
 app.include_router(vol_etp_shadow.router)
 
+from app.routes import futures_tsmom_shadow
+
+app.include_router(futures_tsmom_shadow.router)
+
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)

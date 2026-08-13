@@ -24,6 +24,7 @@ class AltAssetUniverseEngine:
 
     EQUITY_STORE = Path("app/data/historical")            # vol ETPs live here (they're equities)
     ALT_STORE = Path("app/data/alt_assets")               # futures + FX live here (NOT the equity universe)
+    REFRESH_MARK = ALT_STORE / ".last_refresh"            # once/UTC-day append-only refresh marker
 
     # symbol -> (asset_class, ts_symbol, tradeable_now, caution)
     UNIVERSE = {
@@ -157,3 +158,77 @@ class AltAssetUniverseEngine:
             _t.sleep(0.35)
         return {"status": "ALT_BACKFILL_DONE", "wrote": len(ok), "skipped": len(skipped),
                 "failed": failed, "written": ok}
+
+    @classmethod
+    def refresh_if_due(cls):
+        """Append-only refresh of the alt-asset bars, at most ONCE per UTC day (so the futures/FX signal
+        stays current — the app/data/historical daily remediation doesn't touch this store)."""
+        today = datetime.utcnow().date().isoformat()
+        try:
+            if cls.REFRESH_MARK.exists() and cls.REFRESH_MARK.read_text().strip() == today:
+                return {"status": "ALT_REFRESH_NOT_DUE", "date": today}
+        except Exception:
+            pass
+        r = cls.refresh()
+        try:
+            cls.ALT_STORE.mkdir(parents=True, exist_ok=True)
+            cls.REFRESH_MARK.write_text(today)
+        except Exception:
+            pass
+        return r
+
+    @classmethod
+    def refresh(cls, recent_bars=15):
+        """Append-only: fetch the last `recent_bars` daily bars per instrument and MERGE by date into the
+        existing CSV (new dates appended, recent few refreshed) — never removes settled history. Only
+        refreshes instruments already backfilled. Best-effort per symbol."""
+        import requests
+        from app.services.env_reload import reload_env
+        from app.services.tradestation_token_maintenance_engine import TradeStationTokenMaintenanceEngine
+        import time as _t
+        reload_env()
+        TradeStationTokenMaintenanceEngine().evaluate()
+        tok = getenv("TRADESTATION_ACCESS_TOKEN", "")
+        base = getenv("TRADESTATION_SANDBOX_URL", "https://sim-api.tradestation.com").rstrip("/")
+        if not tok:
+            return {"status": "ALT_REFRESH_NO_TOKEN"}
+        updated = 0
+        for key, (a, ts_sym, tn, c) in cls.UNIVERSE.items():
+            path = cls.bar_path(key)
+            if not path.exists():
+                continue
+            try:
+                r = requests.get(f"{base}/v3/marketdata/barcharts/{ts_sym}",
+                                 params={"unit": "Daily", "barsback": recent_bars},
+                                 headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"},
+                                 timeout=(5, 20))
+                if r.status_code != 200:
+                    _t.sleep(0.25); continue
+                new = {}
+                for b in (r.json() or {}).get("Bars", []) or []:
+                    tsx = b.get("TimeStamp") or b.get("Timestamp")
+                    try:
+                        row = (str(tsx)[:10], float(b.get("Open")), float(b.get("High")), float(b.get("Low")),
+                               float(b.get("Close")), int(float(b.get("TotalVolume") or b.get("Volume") or 0)))
+                    except (TypeError, ValueError):
+                        continue
+                    if row[0] and row[4] > 0:
+                        new[row[0]] = row
+                if not new:
+                    _t.sleep(0.25); continue
+                existing = {}
+                for rr in csv.reader(open(path)):
+                    if rr and rr[0] != "date":
+                        try:
+                            existing[rr[0]] = (rr[0], float(rr[1]), float(rr[2]), float(rr[3]), float(rr[4]), int(float(rr[5])))
+                        except (ValueError, IndexError):
+                            pass
+                existing.update(new)
+                with open(path, "w", newline="") as f:
+                    w = csv.writer(f); w.writerow(["date", "open", "high", "low", "close", "volume"])
+                    w.writerows(existing[d] for d in sorted(existing))
+                updated += 1
+            except Exception:
+                pass
+            _t.sleep(0.25)
+        return {"status": "ALT_REFRESH_DONE", "updated": updated}

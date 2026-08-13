@@ -836,6 +836,20 @@ class BackgroundSchedulerService:
             vol_etp_shadow = {"error": repr(exc), "status": "VOL_ETP_SHADOW_DEGRADED"}
         cls._ckpt("vol_etp_shadow")
 
+        # Futures TSMOM shadow — the REAL managed-futures test (vs ETF proxies). Keep the alt-asset bars
+        # fresh (once/day, append-only) so the 12-month signal stays current, then mark the shadow. NO orders.
+        try:
+            if _heavy_blocked:
+                futures_tsmom_shadow = {"status": "FUT_TSMOM_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
+            else:
+                from app.services.alt_asset_universe_engine import AltAssetUniverseEngine
+                AltAssetUniverseEngine.refresh_if_due()
+                from app.services.futures_tsmom_shadow_engine import FuturesTsmomShadowEngine
+                futures_tsmom_shadow = FuturesTsmomShadowEngine().mark()
+        except Exception as exc:
+            futures_tsmom_shadow = {"error": repr(exc), "status": "FUT_TSMOM_SHADOW_DEGRADED"}
+        cls._ckpt("futures_tsmom_shadow")
+
         # GEX MEAN-REVERSION shadow — a NEW strategy (fade the walls toward the gamma-magnet in long-gamma
         # pinning regimes), forward-tested on the underlying with NO orders. Same heavy-window gate.
         try:
