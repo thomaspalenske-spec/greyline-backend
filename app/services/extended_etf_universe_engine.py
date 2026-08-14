@@ -56,6 +56,14 @@ class ExtendedEtfUniverseEngine:
         "VT":   ("global_broad", "diversifier", False),
         "ACWI": ("global_broad", "diversifier", False),
         "IWV":  ("us_broad", "diversifier", False),
+        # international large-cap ADRs (Tier 3, 2026-08-14) -> single-name momentum/xs breadth. TRACKED ONLY:
+        # single-name LIVE selection stays gated on re-opening the single-name VRP/optionable plumbing (the
+        # ADRs' own tier note) — registering them here makes them candidates the court can measure, not armed.
+        "SHEL": ("intl_adr", "momentum,xs_momentum", False),
+        "NVO":  ("intl_adr", "momentum,xs_momentum", False),
+        "TEVA": ("intl_adr", "momentum,xs_momentum", False),
+        "VOD":  ("intl_adr", "momentum,xs_momentum", False),
+        "JD":   ("intl_adr", "momentum,xs_momentum", False),
         # thematic / industry -> momentum, sector
         "JETS": ("thematic_industry", "momentum", False),
         "IYR":  ("sector_reit", "sector", False),

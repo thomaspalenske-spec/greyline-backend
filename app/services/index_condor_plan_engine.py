@@ -32,6 +32,10 @@ class IndexCondorPlanEngine:
         "XSP": {"grid": 10, "cap": 1000.0, "sleeve": "index_vrp"},   # S&P 500 (mini-SPX, cash-settled)
         "QQQ": {"grid": 5,  "cap": 500.0,  "sleeve": "index_vrp"},   # Nasdaq-100 (ETF)
         "IWM": {"grid": 5,  "cap": 500.0,  "sleeve": "index_vrp"},   # Russell 2000 (ETF) — richest equity VRP
+        "MRUT": {"grid": 5, "cap": 500.0,  "sleeve": "index_vrp"},   # Russell 2000 CASH-SETTLED mini (1/10th RUT,
+        #   ~$220 level) — the right-sized small-cap INDEX VRP alongside XSP: cash-settled/European (no assignment)
+        #   vs IWM's American ETF options, so it MEASURES the pure index variance premium. Full-size RUT/RUTW are
+        #   ~10x too big for the $10k book; MRUT is to RUT what XSP is to SPX. (added 2026-08-14, Tier 2 universe)
         "GLD": {"grid": 5,  "cap": 500.0,  "sleeve": "commodity_vrp"},  # GOLD — DECORRELATED from equity vol
         "USO": {"grid": 5,  "cap": 500.0,  "sleeve": "energy_vrp"},     # OIL — new decorrelated factor, but
         #   FAT-TAILED (OPEC/geopolitical/supply jumps): the shadow measures whether the rich energy VRP
@@ -52,7 +56,8 @@ class IndexCondorPlanEngine:
     # used (ConditionalVRPForwardPanelEngine.rich_iv_candidates). XSP has NO UW IV series (cash-settled index)
     # so its richness is read off SPY (identical S&P 500 implied vol). Fail-CLOSED: no confirmed richness -> no
     # condor (never sell un-conditioned premium mislabeled as conditional).
-    IV_PROXY = {"XSP": "SPY"}       # name -> the ticker whose UW IV-rank stands in for it (default: itself)
+    IV_PROXY = {"XSP": "SPY", "MRUT": "IWM"}   # name -> ticker whose UW IV-rank stands in (cash-settled index
+    #   has no own UW IV series): XSP off SPY (S&P 500 IV), MRUT off IWM (Russell 2000 IV). Default: itself.
 
     @staticmethod
     def enabled():
