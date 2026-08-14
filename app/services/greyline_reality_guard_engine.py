@@ -1065,11 +1065,14 @@ class GreyLineRealityGuardEngine:
         from pathlib import Path
 
         caches = [("optionable-universe", "app/data/research/optionable_universe.json", 4 * 86400)]
-        # The best-condors cache only drives LIVE decisions while the condor/VRP sleeve is active. It was
-        # RETIRED 2026-08-04 (GREYLINE_VRP_SHORT_PREMIUM_ENABLED=false), so nothing refreshes it and its
-        # staleness is EXPECTED — not a wedged scheduler. Only check it when the sleeve is actually on, else
-        # it cries wolf ("scheduler may be wedged") on a cache no live path reads.
-        if (getenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "") or "").strip().lower() == "true":
+        # The best-condors cache is refreshed by the scheduler's best-condors phase, which has its OWN gate
+        # GREYLINE_BEST_CONDORS_ENABLED (the condor dashboard card was retired, so the per-cycle UW recompute
+        # is dead work and gated OFF by default). Its freshness therefore tracks THAT flag — NOT whether the
+        # VRP sleeve is armed. The VRP sleeve books condors from its own plan()/ledger and never reads this
+        # cache, so arming VRP must not resume a freshness check on a cache nothing is refreshing (that was
+        # the 2026-08-14 false "scheduler may be wedged" alarm: VRP got armed while the recompute stayed off).
+        # Only check freshness when the producer that fills it is actually enabled.
+        if (getenv("GREYLINE_BEST_CONDORS_ENABLED", "") or "").strip().lower() == "true":
             caches.insert(0, ("best-condors", "app/data/condor_shadow/best_condors.json", 24 * 3600))
 
         stale = []

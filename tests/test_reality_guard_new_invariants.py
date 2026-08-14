@@ -65,19 +65,22 @@ def _write_cache(rel, epoch):
 
 
 def test_stale_condor_cache_trips_the_warning(tmp_path, monkeypatch):
+    # freshness tracks the RECOMPUTE flag (GREYLINE_BEST_CONDORS_ENABLED), not the VRP sleeve arm state
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "true")   # condor sleeve ACTIVE -> cache matters
+    monkeypatch.setenv("GREYLINE_BEST_CONDORS_ENABLED", "true")   # producer ON -> cache should be fresh
     _write_cache("app/data/condor_shadow/best_condors.json", time.time() - 48 * 3600)   # 2 days old
     _write_cache("app/data/research/optionable_universe.json", time.time())
     r = G()._check_decision_caches_fresh()
     assert r["ok"] is False and "best-condors" in r["detail"]
 
 
-def test_stale_condor_cache_ignored_when_sleeve_retired(tmp_path, monkeypatch):
-    # condor/VRP sleeve RETIRED -> nothing refreshes best-condors, so its staleness is EXPECTED, not a wedge
+def test_stale_condor_cache_ignored_when_recompute_disabled(tmp_path, monkeypatch):
+    # recompute gated OFF (card retired) -> nothing refreshes best-condors, so its staleness is EXPECTED.
+    # Regression guard for the 2026-08-14 false alarm: arming VRP must NOT resume this check.
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "false")
-    _write_cache("app/data/condor_shadow/best_condors.json", time.time() - 105 * 3600)  # very stale
+    monkeypatch.setenv("GREYLINE_BEST_CONDORS_ENABLED", "false")
+    monkeypatch.setenv("GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "true")   # VRP armed, but it doesn't feed this cache
+    _write_cache("app/data/condor_shadow/best_condors.json", time.time() - 224 * 3600)  # the real stale age
     _write_cache("app/data/research/optionable_universe.json", time.time())
     r = G()._check_decision_caches_fresh()
     assert r["ok"] is True and "best-condors" not in r["detail"]
