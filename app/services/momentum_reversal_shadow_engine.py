@@ -159,6 +159,38 @@ class MomentumReversalShadowEngine:
         with open(self.CLOSED, "a") as f:
             f.write(json.dumps(cohort) + "\n")
 
+    def _report_settled(self, rec):
+        """Message the operator the settled $/% P/L of a just-closed cohort. The cohort is ZERO-capital,
+        so % (net/gross) is the real metric; the $ is on a STATED hypothetical notional so a dollar figure
+        exists. Fingerprinted by the cohort's open date so it fires ONCE. Gated
+        GREYLINE_MOMENTUM_SHADOW_SETTLE_ALERT (default on); never raises, never blocks mark()."""
+        if (getenv("GREYLINE_MOMENTUM_SHADOW_SETTLE_ALERT", "true") or "").strip().lower() == "false":
+            return
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            try:
+                notional = float(getenv("GREYLINE_MOMENTUM_SHADOW_NOTIONAL_USD", "10000") or 10000)
+            except (TypeError, ValueError):
+                notional = 10000.0
+            net, gross = float(rec.get("net_return") or 0.0), float(rec.get("gross_return") or 0.0)
+            legs = rec.get("legs") or []
+            n_long = sum(1 for l in legs if str(l.get("side")).upper() == "BUY")
+            n_short = len(legs) - n_long
+            msg = (
+                f"Momentum-reversal SHADOW cohort (opened {rec.get('opened')}) settled after the "
+                f"{int(self.HOLD_DAYS)}-business-day hold.\n"
+                f"% P/L: net {net * 100:+.2f}%  (gross {gross * 100:+.2f}%, after "
+                f"{rec.get('cost_roundtrip_bps')} bps round-trip cost)\n"
+                f"$ P/L: ${net * notional:+,.2f}  (on a hypothetical ${notional:,.0f} equal-weight long/short "
+                f"basket — the shadow is ZERO-capital, so this dollar figure is notional, not a real fill)\n"
+                f"{len(legs)} legs: {n_long}L / {n_short}S. This is a forward-test data point "
+                f"({self.MIN_COHORTS} needed for a trustworthy verdict); no real orders or P&L.")
+            eng.dispatch(title="GreyLine momentum-shadow cohort settled", message=msg, severity="INFO",
+                         fingerprint="MOMENTUM_SHADOW_SETTLED:%s" % rec.get("opened"))
+        except Exception:
+            pass
+
     def _closed(self):
         out = []
         try:
@@ -219,6 +251,7 @@ class MomentumReversalShadowEngine:
             }
             self._append_closed(rec)
             closed_now.append(rec)
+            self._report_settled(rec)   # iMessage the operator the settled $/% P/L (gated, once per cohort)
 
         # 2) open a fresh NON-OVERLAPPING cohort on the LIVE signal — only when nothing is open, and only
         #    on a REAL live feed (never on a stale CSV fallback: that was the whole bug).
