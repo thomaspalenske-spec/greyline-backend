@@ -124,10 +124,13 @@ def _neutralize_external_alerts(monkeypatch):
     # their flag false and expect DISABLED, which this preserves; no test needs the live-thread path.
     from app.services.tradestation_quote_stream_engine import TradeStationQuoteStreamEngine
     from app.services.tradestation_broker_stream_engine import TradeStationBrokerStreamEngine
+    from app.services.uw_stream_engine import UWStreamEngine
     monkeypatch.setenv("GREYLINE_TS_QUOTE_STREAM_ENABLED", "false")
     monkeypatch.setenv("GREYLINE_TS_BROKER_STREAM_ENABLED", "false")
+    monkeypatch.setenv("GREYLINE_UW_STREAM_ENABLED", "false")
     monkeypatch.setattr(TradeStationQuoteStreamEngine, "enabled", classmethod(lambda cls: False))
     monkeypatch.setattr(TradeStationBrokerStreamEngine, "enabled", classmethod(lambda cls: False))
+    monkeypatch.setattr(UWStreamEngine, "enabled", classmethod(lambda cls: False))   # UW WS: same guard
 
 
 @pytest.fixture(autouse=True)
