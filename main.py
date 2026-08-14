@@ -176,6 +176,10 @@ from app.routes import ts_broker_stream
 
 app.include_router(ts_broker_stream.router)
 
+from app.routes import uw_stream
+
+app.include_router(uw_stream.router)
+
 from app.routes import gamma_flip_history
 
 app.include_router(gamma_flip_history.router)

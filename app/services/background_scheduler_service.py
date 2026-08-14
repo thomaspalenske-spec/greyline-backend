@@ -341,6 +341,15 @@ class BackgroundSchedulerService:
         except Exception:
             pass
 
+        # UW WebSocket push-feed cache-warmer (gated GREYLINE_UW_STREAM_ENABLED). Additive — warms its own
+        # UW cache; no read path depends on it, so a failure here never touches the cycle. Isolated so it
+        # can't block the scheduler from starting.
+        try:
+            from app.services.uw_stream_engine import UWStreamEngine
+            UWStreamEngine.start_if_enabled()
+        except Exception:
+            pass
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "scheduler_enabled": True,
