@@ -40,8 +40,19 @@ from pathlib import Path
 class PriceBarLineageEngine:
 
     HIST_DIR = Path("app/data/historical")
+    ALT_DIR = Path("app/data/alt_assets")          # futures/FX bars (added 2026-08-12) — also guard these
     MANIFEST = Path("app/data/data_quality/price_bar_lineage_manifest.json")
     REPORT = Path("app/data/data_quality/price_bar_lineage_report.json")
+
+    @classmethod
+    def _bar_files(cls):
+        """(manifest_key, path) over BOTH bar stores. Historical keys stay BARE (backward-compatible with
+        an existing baseline); alt_assets keys are prefixed 'alt_assets/' so a symbol that exists in both
+        stores (e.g. C = Citigroup vs corn @C) can't collide in the manifest."""
+        out = [(p.name.replace("_daily.csv", ""), p) for p in sorted(cls.HIST_DIR.glob("*_daily.csv"))]
+        out += [("alt_assets/" + p.name.replace("_daily.csv", ""), p)
+                for p in sorted(cls.ALT_DIR.glob("*_daily.csv"))]
+        return out
 
     SETTLED_LAG_DAYS = 5          # bars at least this old are "settled" and must not change
     VERIFY_INTERVAL_HOURS = 24
@@ -109,10 +120,10 @@ class PriceBarLineageEngine:
 
         through = (datetime.utcnow().date() - timedelta(days=self.SETTLED_LAG_DAYS)).isoformat()
         symbols = {}
-        for p in sorted(self.HIST_DIR.glob("*_daily.csv")):
+        for key, p in self._bar_files():
             fp = self._fingerprint(p, through)
             if fp:
-                symbols[p.name.replace("_daily.csv", "")] = fp
+                symbols[key] = fp
 
         manifest = {
             "created_at": datetime.utcnow().isoformat(),
@@ -141,8 +152,7 @@ class PriceBarLineageEngine:
 
         through = manifest["settled_through"]
         base = manifest.get("symbols") or {}
-        current_files = {p.name.replace("_daily.csv", ""): p
-                         for p in self.HIST_DIR.glob("*_daily.csv")}
+        current_files = {key: p for key, p in self._bar_files()}
 
         changed, removed = [], []
         for sym, prior in base.items():
