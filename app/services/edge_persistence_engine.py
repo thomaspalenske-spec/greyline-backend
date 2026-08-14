@@ -175,10 +175,15 @@ class EdgePersistenceEngine:
             if rp is None or risk <= 0:
                 continue
             # Closes priced from actual fills or the marketable close-order debit are already honest —
-            # no haircut. Only legacy rows marked at MID (basis 'mid'/absent) get the conservative haircut.
+            # no haircut. A UW-priced fair-value close ('uw_mid' — the honest source the SIM lacks) is
+            # trustworthy but is a MID, so it takes the SAME conservative close-spread haircut as any mid
+            # (you cross the spread to actually transact) while keeping its own provenance tag. Only
+            # legacy rows marked at loose MID (basis 'mid'/absent) get the haircut under 'mid_estimate'.
             basis = str(r.get("realized_pnl_basis") or "mid").lower()
             if basis in ("fills", "close_order"):
                 net, tag = self._f(rp), basis
+            elif basis == "uw_mid":
+                net, tag = self._f(rp) - self.CONDOR_CLOSE_HAIRCUT_FRAC * risk, "uw_mid"
             else:
                 net, tag = self._f(rp) - self.CONDOR_CLOSE_HAIRCUT_FRAC * risk, "mid_estimate"
             # earnings-vol (event-driven IV crush) and VRP (unconditional variance premium) are DISTINCT

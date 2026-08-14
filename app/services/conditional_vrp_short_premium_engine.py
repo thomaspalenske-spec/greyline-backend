@@ -642,6 +642,37 @@ class ConditionalVRPShortPremiumEngine:
                 "changes": changed, "naked": nakeds, "negative_credit": bad_credit,
                 "status": "VRP_FILLS_RECONCILED" if not dry_run else "VRP_FILLS_RECONCILE_DRYRUN"}
 
+    @classmethod
+    def _uw_close_pricing_on(cls):
+        """UW-priced condor closes ON by default: the SIM can't price atomic condor closes, so UW
+        greeks+NBBO is the honest close valuation (the same source the condor shadow marks to). Set
+        GREYLINE_VRP_UW_CLOSE_PRICING=false to fall back to the TS/fill path only."""
+        return (getenv("GREYLINE_VRP_UW_CLOSE_PRICING", "true") or "").strip().lower() != "false"
+
+    def _uw_close_value(self, row):
+        """Cost to close the condor valued at UW MID (buy back shorts, sell wings) = Σ(mid) over shorts −
+        Σ(mid) over wings, per share. This is the honest close mark the SIM can't produce. None if UW is
+        disabled or ANY leg is unquotable — the caller then keeps the existing TS/fill realized path."""
+        try:
+            from app.services.uw_option_quote_engine import UWOptionQuoteEngine
+            q = UWOptionQuoteEngine()
+            if not q.enabled():
+                return None
+            cost = 0.0
+            for leg in (row.get("legs") or []):
+                sym = leg.get("symbol")
+                if not sym:
+                    return None
+                b, a = q.quote(sym)
+                b, a = self._f(b), self._f(a)
+                if not b or not a or b <= 0 or a <= 0:
+                    return None
+                mid = (b + a) / 2.0
+                cost += mid if leg.get("action") == "SELLTOOPEN" else -mid   # pay to buy shorts, receive to sell wings
+            return cost
+        except Exception:
+            return None
+
     def reconcile_closes(self, dry_run=False):
         """Close-side mirror of reconcile_fills. A condor is marked CLOSED the moment its close order is
         ACCEPTED — priced from the marketable-limit ESTIMATE (basis 'close_order'/'mid'), before the fill
@@ -673,8 +704,8 @@ class ConditionalVRPShortPremiumEngine:
             if r.get("status") != "CLOSED":
                 continue
             basis = str(r.get("realized_pnl_basis") or "")
-            if basis == "fills" or r.get("close_reconciled"):
-                continue                            # already fill-truthful — nothing to resolve
+            if basis in ("fills", "uw_mid") or r.get("close_reconciled"):
+                continue                            # already trustworthy (real fills or UW-priced) — nothing to resolve
             qty = int(r.get("quantity") or 0)
             credit = self._f(r.get("credit_per_condor"))
             attempts = r.get("close_attempts") or []
@@ -688,12 +719,21 @@ class ConditionalVRPShortPremiumEngine:
                 if new_basis == "fills" and not self._realized_in_defined_risk_bounds(
                         _fills_realized, r.get("credit_total"), r.get("max_loss_total")):
                     # GARBAGE FILL READ (outside the condor's defined-risk band) — a SIM atomic-order
-                    # ExecutionPrice quirk. Do NOT bank it. Fall back to the BOUNDED close-mid estimate and
-                    # flag it, so fantasy realized P&L can never enter the ledger / mission P&L / edge court.
-                    mid = self._f(r.get("close_mid"))
-                    r["realized_pnl"] = (round((credit - mid) * 100 * qty, 2) if mid is not None
-                                         else self._f(r.get("realized_pnl")))
-                    r["realized_pnl_basis"] = "close_mid_sanity_fallback"
+                    # ExecutionPrice quirk. Do NOT bank it. Prefer the UW-priced close (the honest source the
+                    # SIM lacks); else fall back to the BOUNDED close-mid estimate — so fantasy realized P&L
+                    # can never enter the ledger / mission P&L / edge court.
+                    uw_cv = self._uw_close_value(r) if self._uw_close_pricing_on() else None
+                    uw_realized = (round((credit - uw_cv) * 100 * qty, 2) if uw_cv is not None else None)
+                    if uw_realized is not None and self._realized_in_defined_risk_bounds(
+                            uw_realized, r.get("credit_total"), r.get("max_loss_total")):
+                        r["realized_pnl"] = uw_realized
+                        r["realized_pnl_basis"] = "uw_mid"
+                        r["close_uw_value"] = round(uw_cv, 4)
+                    else:
+                        mid = self._f(r.get("close_mid"))
+                        r["realized_pnl"] = (round((credit - mid) * 100 * qty, 2) if mid is not None
+                                             else self._f(r.get("realized_pnl")))
+                        r["realized_pnl_basis"] = "close_mid_sanity_fallback"
                     r["realized_fills_rejected"] = _fills_realized
                     r["close_reconciled"] = True
                     upgraded.append({"symbol": r.get("symbol"), "realized_pnl": r["realized_pnl"],
@@ -1544,6 +1584,19 @@ class ConditionalVRPShortPremiumEngine:
                                                                  r.get("max_loss_total")):
                         _init_realized = round((credit - cost_to_close) * 100 * r["quantity"], 2)
                         basis = "close_mid_sanity_fallback"
+                    # UW-PRICED CLOSE (highest precedence): the SIM can't price atomic condor closes, so its
+                    # fill debit / TS mid are untrustworthy. When UW greeks+NBBO can value the close and the
+                    # result is inside the defined-risk band, it IS the realized P&L basis — this is what makes
+                    # an armed harvest's realized number court-worthy. Gated; TS/fill remains the fallback.
+                    if self._uw_close_pricing_on():
+                        uw_cv = self._uw_close_value(r)
+                        if uw_cv is not None:
+                            _uw_realized = round((credit - uw_cv) * 100 * r["quantity"], 2)
+                            if self._realized_in_defined_risk_bounds(_uw_realized, r.get("credit_total"),
+                                                                     r.get("max_loss_total")):
+                                _init_realized = _uw_realized
+                                basis = "uw_mid"
+                                r["close_uw_value"] = round(uw_cv, 4)
                     r["status"] = "CLOSED"; r["closed_at"] = datetime.utcnow().isoformat()
                     r["close_reason"] = reason
                     r["realized_pnl"] = _init_realized
