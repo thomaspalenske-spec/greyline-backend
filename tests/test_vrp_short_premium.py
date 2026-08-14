@@ -127,7 +127,7 @@ def test_plan_falls_back_to_symmetric_when_tilt_exceeds_the_cap(monkeypatch):
     symmetric condor (capture the premium) rather than skip the name entirely."""
     e = ConditionalVRPShortPremiumEngine()
     monkeypatch.setattr("app.services.conditional_vrp_forward_panel_engine."
-                        "ConditionalVRPForwardPanelEngine.rich_iv_candidates",
+                        "ConditionalVRPForwardPanelEngine.harvest_candidates",
                         lambda self, names=None: [{"ticker": "XYZ", "iv_rank": 0.9, "iv": 0.3}])
     monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", _full_chain()))
     monkeypatch.setattr(e, "_open_symbols", lambda: set())
@@ -152,7 +152,7 @@ def test_plan_harvests_richest_skew_first(monkeypatch):
     e = ConditionalVRPShortPremiumEngine()
     pool = [{"ticker": t, "iv_rank": 0.9, "iv": 0.3} for t in ("LOWSK", "HIGHSK", "MIDSK")]
     monkeypatch.setattr("app.services.conditional_vrp_forward_panel_engine."
-                        "ConditionalVRPForwardPanelEngine.rich_iv_candidates",
+                        "ConditionalVRPForwardPanelEngine.harvest_candidates",
                         lambda self, names=None: pool)
     monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", []))
     monkeypatch.setattr(e, "_open_symbols", lambda: set())
@@ -177,7 +177,7 @@ def test_plan_stops_at_the_vega_budget(monkeypatch):
     monkeypatch.setattr(e, "_current_book_vega", lambda: 0.0)
     pool = [{"ticker": t, "iv_rank": 0.9, "iv": 0.3} for t in ("A", "B", "C")]
     monkeypatch.setattr("app.services.conditional_vrp_forward_panel_engine."
-                        "ConditionalVRPForwardPanelEngine.rich_iv_candidates",
+                        "ConditionalVRPForwardPanelEngine.harvest_candidates",
                         lambda self, names=None: pool)
     monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", []))
     monkeypatch.setattr(e, "_open_symbols", lambda: set())

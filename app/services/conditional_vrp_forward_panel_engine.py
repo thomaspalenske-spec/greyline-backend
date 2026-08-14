@@ -137,10 +137,12 @@ class ConditionalVRPForwardPanelEngine:
         return {"status": "VRP_SIGNALS_RECORDED", "recorded": len(new),
                 "as_of": today, "names_scanned": len(names)}
 
-    def rich_iv_candidates(self, names=None):
-        """Today's tickers that pass the conditional-VRP signal: rich IV (causal trailing rank
-        >= threshold) and NO earnings inside the ~30d window. Shared by the short-premium strategy
-        so the traded signal is identical to the one being forward-tracked."""
+    def _candidates(self, names=None, apply_rich_gate=True, sort_by_rank=True):
+        """Today's tradeable tickers: valid IV, a completed forward window, and NO earnings inside the
+        ~30d window (the tail always excluded). `apply_rich_gate` additionally keeps only rich-IV
+        (causal trailing rank >= threshold) names; iv_rank is COMPUTED and recorded either way for
+        provenance. `sort_by_rank` orders by richness (rich-IV mode) vs the input/universe order
+        (unconditional harvest — so the downstream build-pool cap is NOT re-biased toward rich IV)."""
         names = names or self.vrp.DEFAULT_NAMES
         # PARALLEL PREFETCH the whole universe's vol series so the screen below hits cache instead of a
         # serial UW round-trip per name (measured ~57s serial). The screen stays deterministic.
@@ -160,14 +162,34 @@ class ConditionalVRPForwardPanelEngine:
             if iv is None or iv <= 0:
                 continue
             rank = self.cvrp._trailing_rank([v for v in ivs if v is not None], i, self.IVRANK_LOOKBACK)
-            if rank is None or rank < self.THRESHOLD:
+            if rank is None:
+                continue
+            if apply_rich_gate and rank < self.THRESHOLD:
                 continue
             if any(d < e <= urv for e in self.cvrp._earnings_dates(t)):
                 continue
             out.append({"ticker": t, "iv": round(iv, 4), "iv_rank": round(rank, 3),
                         "entry_date": d, "forward_end": urv})
-        out.sort(key=lambda x: x["iv_rank"], reverse=True)
+        if sort_by_rank:
+            out.sort(key=lambda x: x["iv_rank"], reverse=True)
         return out
+
+    def rich_iv_candidates(self, names=None):
+        """Rich-IV (top-tercile causal rank), non-earnings names. This is the CONDITIONAL-VRP signal the
+        forward PANEL tracks out-of-sample — kept rich-IV because the panel exists to test that specific
+        hypothesis. The HARVEST strategy uses harvest_candidates() instead (see below)."""
+        return self._candidates(names, apply_rich_gate=True, sort_by_rank=True)
+
+    def harvest_candidates(self, names=None):
+        """Candidate set for the LIVE short-premium harvest. Default UNCONDITIONAL: the 24-year index VRP
+        backtest ([[greyline-vrp-edge]], IndexVRPHistoryResearchEngine) showed conditioning on rich IV
+        LOWERS the index edge (-211/-650bps) and worsens the tail — rich IV is usually rich because a
+        shock is underway. So harvest every eligible name, not just rich-IV ones; the downstream plan()
+        still ranks by return-on-risk + skew and respects the defined-risk caps. GREYLINE_VRP_HARVEST_MODE
+        =rich_iv reverts to the (falsified-for-index) legacy gate. Earnings windows stay excluded (tail);
+        iv_rank is still recorded on every candidate."""
+        rich = (getenv("GREYLINE_VRP_HARVEST_MODE", "unconditional") or "").strip().lower() == "rich_iv"
+        return self._candidates(names, apply_rich_gate=rich, sort_by_rank=rich)
 
     # ------------------------------------------------------------ resolve side
 

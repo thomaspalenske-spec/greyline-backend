@@ -1,8 +1,14 @@
-"""Harvest the conditional VRP as a DEFINED-RISK short-premium paper strategy.
+"""Harvest the index variance risk premium as a DEFINED-RISK short-premium paper strategy.
 
-The signal is the conditional-VRP one being forward-tracked: sell premium on rich-IV (causal
-trailing rank), non-earnings, liquid names. The EXPRESSION is deliberately a defined-risk IRON
-CONDOR, never a naked short strangle, for one reason that overrides everything else here:
+The candidate set is UNCONDITIONAL by default (harvest_candidates): the 24-year index VRP backtest
+([[greyline-vrp-edge]], IndexVRPHistoryResearchEngine) showed that conditioning on rich IV LOWERS the
+index edge (-211/-650bps) and worsens the tail — a rich IV is usually rich because a shock is already
+underway. The engine was originally built around the rich-IV "conditional VRP" signal (that ~9.6x lift
+was a no-crash-year single-name artifact); the harvest now sells premium on every eligible non-earnings
+liquid ETF, and plan() ranks by return-on-risk + skew within the defined-risk caps. iv_rank is still
+recorded at entry for provenance (GREYLINE_VRP_HARVEST_MODE=rich_iv reverts to the legacy gate).
+The EXPRESSION is deliberately a defined-risk IRON CONDOR, never a naked short strangle, for one reason
+that overrides everything else here:
 
     the VRP is a RISK premium — its whole character is a fat LEFT TAIL. Selling naked vol earns a
     little most months and occasionally loses a multiple of the account in a single vol spike.
@@ -855,7 +861,7 @@ class ConditionalVRPShortPremiumEngine:
         etf_only = (names is None and self._vrp_etf_only())
         if etf_only:
             names = self.LIQUID_ETFS
-        cands = ConditionalVRPForwardPanelEngine().rich_iv_candidates(names)
+        cands = ConditionalVRPForwardPanelEngine().harvest_candidates(names)
         open_syms = self._open_symbols()
         slots = max(0, self.MAX_CONCURRENT - len(open_syms))
         open_risk = self._open_risk()
@@ -1111,9 +1117,10 @@ class ConditionalVRPShortPremiumEngine:
                 errors.append(err)
                 continue
             # PROVENANCE for later PROOF: an edge can only be validated if the conditions it was
-            # sold under are recorded at entry. entry_iv_rank is the richness that IS the edge
-            # (registry: VRP ~9.6x conditional on rich IV); dte_selection_mode + entry_dte let the
-            # adaptive-vs-static tenor hypothesis be measured out-of-sample; skew ties to skew-timing.
+            # sold under are recorded at entry. entry_iv_rank is recorded for analysis (NOT as the edge —
+            # the 24yr index backtest falsified rich-IV conditioning; harvest is unconditional); it lets
+            # the court check ex-post whether any IV-rank dependence exists. dte_selection_mode + entry_dte
+            # let the adaptive-vs-static tenor hypothesis be measured out-of-sample; skew ties to skew-timing.
             from app.services.adaptive_dte_selection_engine import AdaptiveDTESelectionEngine
             rec = {
                 "symbol": con["symbol"], "quantity": qty, "expiration": con["expiration"],
@@ -1259,7 +1266,7 @@ class ConditionalVRPShortPremiumEngine:
         BIG = 1e9
         open_syms = self._open_symbols()
         names, untradeable = [], []
-        for c in ConditionalVRPForwardPanelEngine().rich_iv_candidates(None)[:max_names]:
+        for c in ConditionalVRPForwardPanelEngine().harvest_candidates(None)[:max_names]:
             if c["ticker"] in open_syms:
                 continue
             try:
