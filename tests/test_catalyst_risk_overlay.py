@@ -35,6 +35,33 @@ def test_low_impact_event_does_not_defer(monkeypatch):
     assert e.defer_new_premium()["defer"] is False
 
 
+def test_second_tier_prints_do_not_defer_by_default(monkeypatch):
+    # NARROWED 2026-08-14: retail sales / PPI / GDP no longer defer — they rarely gap the index and the
+    # VRP condor wings cap the tail. Deferring on them had starved the Edge-proof clock.
+    e = CatalystRiskOverlayEngine()
+    monkeypatch.delenv("GREYLINE_CATALYST_BROAD_DEFER", raising=False)
+    monkeypatch.setattr(e, "_fda", lambda: [])
+    for ev in ("U.S. retail sales", "PPI (producer price index)", "GDP (advance)"):
+        monkeypatch.setattr(e, "_economic", lambda ev=ev: [{"event": ev, "time": _soon(0)}])
+        assert e.defer_new_premium(tickers=["SPY"])["defer"] is False, ev
+
+
+def test_top_tier_prints_still_defer(monkeypatch):
+    e = CatalystRiskOverlayEngine()
+    monkeypatch.setattr(e, "_fda", lambda: [])
+    for ev in ("CPI report", "FOMC rate decision", "Nonfarm payrolls"):
+        monkeypatch.setattr(e, "_economic", lambda ev=ev: [{"event": ev, "time": _soon(0)}])
+        assert e.defer_new_premium(tickers=["SPY"])["defer"] is True, ev
+
+
+def test_broad_env_flag_restores_second_tier_defer(monkeypatch):
+    e = CatalystRiskOverlayEngine()
+    monkeypatch.setenv("GREYLINE_CATALYST_BROAD_DEFER", "true")
+    monkeypatch.setattr(e, "_fda", lambda: [])
+    monkeypatch.setattr(e, "_economic", lambda: [{"event": "U.S. retail sales", "time": _soon(0)}])
+    assert e.defer_new_premium(tickers=["SPY"])["defer"] is True
+
+
 def test_fda_catalyst_defers_only_the_named_ticker(monkeypatch):
     e = CatalystRiskOverlayEngine()
     monkeypatch.setattr(e, "_economic", lambda: [])

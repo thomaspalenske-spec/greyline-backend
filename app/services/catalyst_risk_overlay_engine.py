@@ -25,11 +25,29 @@ from os import getenv
 class CatalystRiskOverlayEngine:
 
     # Top-tier macro events whose print reliably moves the whole index vol surface.
+    # TOP-TIER index-movers only (default). These are the prints that genuinely gap the index, where
+    # selling FRESH premium into them is a real risk. NARROWED 2026-08-14: retail sales, PPI and GDP were
+    # dropped — they rarely gap the index >1%, AND the VRP sleeve sells DEFINED-RISK condors whose wings
+    # already cap the tail, so deferring on them was pure throttle. The broad set had starved the VRP
+    # Edge-proof clock (0 lifetime opens). GREYLINE_CATALYST_BROAD_DEFER=true restores the broad set.
     HIGH_IMPACT = re.compile(
+        r"\b(fomc|fed(eral)? (funds|reserve)|rate decision|interest rate|"
+        r"cpi|consumer price|core pce|pce index|"
+        r"nonfarm|non-farm|payroll|jobs report|unemployment rate)\b", re.I)
+
+    HIGH_IMPACT_BROAD = re.compile(
         r"\b(fomc|fed(eral)? (funds|reserve)|rate decision|interest rate|"
         r"cpi|consumer price|core pce|pce index|"
         r"nonfarm|non-farm|payroll|jobs report|unemployment rate|"
         r"gdp|retail sales|ppi|producer price)\b", re.I)
+
+    @classmethod
+    def _high_impact_re(cls):
+        """The event set that triggers a premium-defer. Narrow top-tier by default; broad if the operator
+        opts back in via GREYLINE_CATALYST_BROAD_DEFER=true."""
+        if (getenv("GREYLINE_CATALYST_BROAD_DEFER", "") or "").strip().lower() == "true":
+            return cls.HIGH_IMPACT_BROAD
+        return cls.HIGH_IMPACT
 
     @staticmethod
     def _defer_days():
@@ -66,7 +84,7 @@ class CatalystRiskOverlayEngine:
         hits = []
         for x in rows:
             ev = str(x.get("event") or "")
-            if self.HIGH_IMPACT.search(ev) and self._within(x.get("time"), today, end):
+            if self._high_impact_re().search(ev) and self._within(x.get("time"), today, end):
                 hits.append({"event": ev, "time": x.get("time")})
         return hits, None
 
