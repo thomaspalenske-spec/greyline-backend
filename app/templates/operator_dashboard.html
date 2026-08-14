@@ -784,6 +784,26 @@ th {
         </div>
       </div>
 
+      <!-- ===== VRP Edge — the 2026-08-13 24yr confirmation + operationalization ===== -->
+      <div class="card" id="vrp_edge_card" style="min-width:0;">
+        <div class="section-title">VRP Edge — Confirmed <span id="vrpedge_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">GreyLine's one edge that clears significance is the <strong>index variance risk premium</strong>. Backtested over <strong>24 years incl. every crash</strong> (VIX vs realized SPY): the signal is real and the defined-risk condor survives; rich-IV timing was <strong>falsified</strong>; the harvest is now unconditional + UW-priced. <strong>Still gated OFF</strong> — the shadow is the live arbiter.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <div style="flex:1;min-width:190px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">INDEX VRP (24yr signal)</div>
+            <div id="vrp_signal" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:190px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">DEFINED-RISK CONDOR (structure)</div>
+            <div id="vrp_structure" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:190px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">BOOK RISK CONCENTRATION</div>
+            <div id="vrp_riskbudget" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== Universe Expansion — zero-capital forward-tests of the 2026-08-12 UW/TS scan adds ===== -->
       <div class="card" id="alt_universe_card" style="min-width:0;">
         <div class="section-title">Universe Expansion — Infra <span id="altuni_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
@@ -1379,6 +1399,36 @@ async function refreshAltShadow(route, bodyId, sumId) {
 }
 
 // The three infra tiles: tracked-candidate counts, quote-stream health, gamma-flip closest-to-cross.
+async function refreshVrpEdge() {
+  // 24yr index-VRP confirmation + the defined-risk structure + the book risk concentration. All read-only.
+  try {
+    const d = await getJSON("/index-vrp-history");
+    const u = d.unconditional || {};
+    const el = document.getElementById("vrp_signal");
+    if (el) el.innerHTML = `<span class="green">+${u.gross_vrp_vol_points}</span> vol pts <span class="sub">· p=${u.p_value} · ${(d.span||[])[0]}→ · rich-IV lift ${(d.rich_iv_tercile||{}).conditioning_lift_bps}bps (falsified)</span>`;
+    const sm = document.getElementById("vrpedge_summary");
+    if (sm) sm.textContent = `index VRP significant (p=${u.p_value}); harvest unconditional + UW-priced; gated OFF`;
+  } catch (e) { const el = document.getElementById("vrp_signal"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const d = await getJSON("/index-condor-structure-backtest");
+    const c = d.defined_risk_condor || {};
+    const posYrs = Object.values(d.ror_pct_by_year || {}).filter(v => v > 0).length;
+    const totYrs = Object.keys(d.ror_pct_by_year || {}).length;
+    const el = document.getElementById("vrp_structure");
+    if (el) el.innerHTML = `<span class="green">${posYrs}/${totYrs} yrs +</span> <span class="sub">· worst ${c.worst_month_ror_pct}% (wing-capped) · Sharpe ${c.sharpe_annualized} (skew ${c.skew_monthly}, tail-flawed)</span>`;
+  } catch (e) { const el = document.getElementById("vrp_structure"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const d = await getJSON("/sleeve-budgets");
+    const rb = (d.risk_budget || {});
+    const mc = rb.most_risk_concentrated || {};
+    const el = document.getElementById("vrp_riskbudget");
+    if (el) {
+      const cls = (mc.current_risk_share_pct >= 45) ? 'yellow' : '';
+      el.innerHTML = `<span class="${cls}">${mc.sleeve || '—'} ${mc.current_risk_share_pct != null ? mc.current_risk_share_pct + '%' : ''}</span> <span class="sub">of book risk · risk-budget ${rb.mode_live ? 'LIVE' : 'advisory'}</span>`;
+    }
+  } catch (e) { const el = document.getElementById("vrp_riskbudget"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+}
+
 async function refreshAltUniverseInfra() {
   try {
     const [ext, alt] = await Promise.all([getJSON("/extended-etf-universe"), getJSON("/alt-asset-universe")]);
@@ -1769,6 +1819,7 @@ async function refreshAll() {
   refreshGexStrategy();     // GEX mean-reversion — dealer-gamma pin signals + forward-test
   refreshVannaCharm();      // vanna/charm — the OPEX rally (2nd-order dealer flow)
   refreshLowVolShadow();    // zero-capital low-vol (BAB) basket shadow — drawdown vs SPY thesis check
+  refreshVrpEdge();          // 24yr index-VRP confirmation + defined-risk structure + book risk concentration
   refreshAltUniverseInfra();// universe-expansion infra: tracked-candidate counts + quote-stream + gamma-flip
   refreshAltShadow("/extended-etf-shadow", "ext_etf_shadow_body", "eets_summary");     // 52 ETFs, xs-momentum
   refreshAltShadow("/futures-tsmom-shadow", "fut_tsmom_shadow_body", "futs_summary");  // 19 futures, TSMOM long/short
