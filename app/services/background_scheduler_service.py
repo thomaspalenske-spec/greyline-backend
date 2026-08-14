@@ -184,6 +184,38 @@ class BackgroundSchedulerService:
             return (False, "outside open-window — heavy recomputes allowed")
         except Exception as exc:
             return (False, "guard error (fail-open): %s" % repr(exc)[:80])
+
+    INSTITUTIONAL_LAST_RUN = Path("app/data/institutional/.institutional_pipeline_last_run")
+
+    @classmethod
+    def _institutional_pipeline_due(cls, market_hours):
+        """The institutional-flow retrain + sweep dominate cycle cost (~940s cold / ~59% — measured
+        2026-08-14) yet are OBSERVATION_ONLY (fire no trades) and target the UNPROVEN flow edge. So run
+        them at most ONCE per day and only OUTSIDE the open window (reusing the heavy-recompute guard),
+        never on the intraday hot path where they slow every 5-min cycle and can straddle the open.
+        GREYLINE_INSTITUTIONAL_PER_CYCLE=true restores the old every-cycle behavior. Returns (due, reason)."""
+        if (getenv("GREYLINE_INSTITUTIONAL_PER_CYCLE", "") or "").strip().lower() == "true":
+            return (True, "per-cycle override on")
+        blocked, why = cls._heavy_recompute_blocked(market_hours)
+        if blocked:
+            return (False, "deferred to off-hours — " + why)
+        try:
+            today = datetime.utcnow().date().isoformat()
+            if cls.INSTITUTIONAL_LAST_RUN.exists() and cls.INSTITUTIONAL_LAST_RUN.read_text().strip() == today:
+                return (False, "already ran today (%s)" % today)
+        except Exception:
+            pass
+        return (True, "off-hours and not yet run today")
+
+    @classmethod
+    def _stamp_institutional_run(cls):
+        """Mark the institutional pipeline as run for today (bulletproof — never breaks the cycle)."""
+        try:
+            cls.INSTITUTIONAL_LAST_RUN.parent.mkdir(parents=True, exist_ok=True)
+            cls.INSTITUTIONAL_LAST_RUN.write_text(datetime.utcnow().date().isoformat())
+        except Exception:
+            pass
+
     _ALERT_AFTER_FAILURES = 3        # consecutive cycle failures before alerting off-box (~15 min)
 
     @classmethod
@@ -580,6 +612,11 @@ class BackgroundSchedulerService:
             fixed_horizon = {"error": repr(exc), "status": "FIXED_HORIZON_GRADER_DEGRADED"}
         cls._ckpt("pre_grade_forward_learn")  # forecast-grade + forward-capture(60) + learning + fixed-horizon
 
+        # THROTTLE the institutional-flow pipeline (sweep + retrain) OFF the per-cycle hot path — it was
+        # ~59% of cycle cost (measured 2026-08-14), is OBSERVATION_ONLY (fires no trades), and targets the
+        # UNPROVEN flow edge. Run at most once/day, off-hours only. When not due, the sweep collects nothing
+        # (collect flag False -> fast) and the retrain scans 0 names (limit 0 -> fast).
+        _inst_due, _inst_reason = cls._institutional_pipeline_due(market_hours)
         try:
             institutional_snapshot_sweep = (
                 InstitutionalSignalSnapshotSweepEngine()
@@ -595,7 +632,7 @@ class BackgroundSchedulerService:
                     # isn't single-flighted (same thundering-herd class as the broker read). It's the
                     # UNPROVEN institutional-flow path, not trade-firing, so disabling it keeps the cycle
                     # alive. Re-enable once the UW provider has single-flight + a total-deadline.
-                    collect_unusual_whales=bool(uw_api_key())
+                    collect_unusual_whales=_inst_due and bool(uw_api_key())
                     and (getenv("GREYLINE_INSTITUTIONAL_SWEEP_ENABLED", "true") or "true").strip().lower() == "true",
                     collect_tradestation=False,
                     include_tradestation_option_chain=False,
@@ -621,11 +658,13 @@ class BackgroundSchedulerService:
             institutional_retraining = (
                 InstitutionalRetrainingOrchestratorEngine()
                 .run(
-                    limit=10,
+                    limit=(10 if _inst_due else 0),   # throttled: 0 names -> near-zero cost off the hot path
                     min_age_minutes=60,
                     persist=True,
                 )
             )
+            if not _inst_due and isinstance(institutional_retraining, dict):
+                institutional_retraining["throttled"] = _inst_reason
         except Exception as exc:
             institutional_retraining = {
                 "symbol_count": 0,
@@ -640,7 +679,11 @@ class BackgroundSchedulerService:
                     "ORCHESTRATOR_DEGRADED"
                 ),
             }
-        cls._ckpt("pre_institutional_retrain")  # per-name institutional model retraining orchestrator
+        if not _inst_due and isinstance(institutional_snapshot_sweep, dict):
+            institutional_snapshot_sweep["throttled"] = _inst_reason
+        elif _inst_due:
+            cls._stamp_institutional_run()          # ran the full pipeline -> once/day marker
+        cls._ckpt("pre_institutional_retrain")  # per-name institutional model retraining orchestrator (throttled once/day off-hours)
         # RETIRED: the old coin-flip signal's execution paths. 28 years / 90k samples
         # proved that signal is noise (core_backtest.py), yet these kept opening equity
         # and options trades on it — competing for the risk budget and contaminating the
