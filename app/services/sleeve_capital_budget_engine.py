@@ -96,19 +96,170 @@ class SleeveCapitalBudgetEngine:
     @classmethod
     def pct(cls, sleeve):
         """Target percent-of-equity for a sleeve. Precedence: explicit env pin
-        (GREYLINE_<SLEEVE>_ALLOC_PCT) > auto-applied override file > static default."""
+        (GREYLINE_<SLEEVE>_ALLOC_PCT) > risk-budget re-mix (only when GREYLINE_SLEEVE_RISK_BUDGET=true, and
+        never over a pin) > auto-applied override file > static default."""
         s = cls._canon(sleeve)
-        default = cls.DEFAULT_PCT.get(s, 0.0)
+        if cls._env_pinned(s):                      # explicit operator env pin ALWAYS wins, risk-mode or not
+            return cls._static_pct(s)
+        if cls._risk_budget_on():                   # gated: size non-pinned armed sleeves to risk parity
+            rp = cls._risk_parity_table().get(s)
+            if rp is not None:
+                return max(0.0, min(100.0, rp))
+        return cls._static_pct(s)
+
+    # ---- RISK-BUDGETED sizing (inverse-vol across sleeves) --------------------------------------
+    # A fixed %-of-equity gives each sleeve equal CAPITAL, not equal RISK: a short-vol sleeve (SVXY carry)
+    # at 20% carries far more book risk per dollar than a low-vol ETF sleeve at 12%, so the book is quietly
+    # short-vol-concentrated (the exact imbalance the 24yr VRP tail work underlines). Risk-budgeting sizes
+    # each sleeve inversely to its own realized vol so risk contributions equalize, re-mixed WITHIN the
+    # same total deployment (not more leverage). ADVISORY by default (surfaced, changes nothing); live
+    # application is gated GREYLINE_SLEEVE_RISK_BUDGET and only re-mixes NON-env-pinned armed sleeves.
+    _HIST = Path("app/data/historical")
+    _RISK_LOOKBACK = 252
+    _rp_cache = {"t": 0.0, "table": None}
+
+    @classmethod
+    def _sleeve_instruments(cls, sleeve):
+        """The traded basket for a sleeve — read from the sleeve engine so it can't go stale."""
+        s = cls._canon(sleeve)
+        try:
+            if s == "vol_carry":
+                from app.services.vol_term_structure_carry_engine import VolTermStructureCarryEngine as E
+                return [getattr(E, "SYMBOL", "SVXY")]
+            if s == "low_vol":
+                from app.services.low_volatility_engine import LowVolatilityEngine as E
+                return list(E.BASKET)
+            if s == "trend":
+                from app.services.trend_following_engine import TrendFollowingEngine as E
+                return list(E.BASKET)
+            if s == "xs_momentum":
+                from app.services.cross_sectional_momentum_engine import CrossSectionalMomentumEngine as E
+                return list(E.UNIVERSE)
+        except Exception:
+            pass
+        return {"vol_carry": ["SVXY"], "low_vol": ["USMV", "SPLV", "EFAV", "XMLV"],
+                "trend": ["QQQM", "IWM", "TLT", "GLDM", "EFA", "DBC"],
+                "xs_momentum": ["QQQM", "IWM", "EFA", "EEM", "TLT", "IEF", "HYG", "GLDM", "DBC", "VNQ"]
+                }.get(s, [])
+
+    @classmethod
+    def _basket_vol(cls, symbols):
+        """Annualized vol of the EQUAL-WEIGHT basket's daily returns over the trailing window (captures the
+        sleeve's own internal diversification). None if the data is missing/too short."""
+        import csv
+        import math
+        series = {}
+        for sym in symbols:
+            try:
+                closes = []
+                with open(cls._HIST / f"{sym}_daily.csv") as f:
+                    for r in csv.DictReader(f):
+                        c = r.get("close")
+                        try:
+                            c = float(c)
+                        except (TypeError, ValueError):
+                            c = None
+                        if c and c > 0:
+                            closes.append((str(r.get("date"))[:10], c))
+                closes.sort()
+                rets = {closes[i][0]: closes[i][1] / closes[i - 1][1] - 1 for i in range(1, len(closes))}
+                series[sym] = rets
+            except Exception:
+                continue
+        if not series:
+            return None
+        common = sorted(set.intersection(*[set(r.keys()) for r in series.values()]))[-cls._RISK_LOOKBACK:]
+        if len(common) < 30:
+            return None
+        basket = [sum(series[sym][d] for sym in series) / len(series) for d in common]
+        m = sum(basket) / len(basket)
+        var = sum((x - m) ** 2 for x in basket) / (len(basket) - 1)
+        return math.sqrt(var) * math.sqrt(252)
+
+    @classmethod
+    def _static_pct(cls, sleeve):
+        """pct() WITHOUT the risk-budget branch — env pin > override > default. The base the advisory
+        re-mixes and the fallback when risk-budget mode is off."""
+        s = cls._canon(sleeve)
         raw = getenv("GREYLINE_%s_ALLOC_PCT" % s.upper(), "")
-        if str(raw).strip():                       # explicit operator env pins the sleeve (highest priority)
+        if str(raw).strip():
             try:
                 return max(0.0, min(100.0, float(raw)))
             except (TypeError, ValueError):
                 pass
-        ov = cls._overrides().get(s)               # evidence-driven auto-applied override beats the default
+        ov = cls._overrides().get(s)
         if ov is not None:
             return max(0.0, min(100.0, ov))
-        return max(0.0, min(100.0, default))
+        return max(0.0, min(100.0, cls.DEFAULT_PCT.get(s, 0.0)))
+
+    @classmethod
+    def _env_pinned(cls, sleeve):
+        return bool(str(getenv("GREYLINE_%s_ALLOC_PCT" % cls._canon(sleeve).upper(), "")).strip())
+
+    @classmethod
+    def _risk_budget_on(cls):
+        return (getenv("GREYLINE_SLEEVE_RISK_BUDGET", "") or "").strip().lower() == "true"
+
+    @classmethod
+    def risk_budget_advisory(cls):
+        """What inverse-vol RISK-BUDGETING would do to the armed sleeves vs the current %-of-equity mix —
+        the risk-concentration diagnostic + the risk-parity target, preserving total deployment."""
+        armed = [s for s in cls.DEFAULT_PCT if cls._static_pct(s) > 0]
+        cur = {s: cls._static_pct(s) for s in armed}
+        vol = {}
+        for s in armed:
+            v = cls._basket_vol(cls._sleeve_instruments(s))
+            if v:
+                vol[s] = v
+        measured = [s for s in armed if s in vol]
+        # re-mix ONLY the measured sleeves' OWN combined budget among themselves — never steal the slot of
+        # an unmeasured sleeve (e.g. disarmed single-name momentum, which has a default pct but no basket).
+        total = sum(cur[s] for s in measured)
+        if not measured or total <= 0:
+            return {"status": "INSUFFICIENT_VOL_DATA", "armed": armed, "measured": measured}
+        inv = {s: 1.0 / vol[s] for s in measured}
+        wsum = sum(inv.values())
+        rp = {s: round(inv[s] / wsum * total, 2) for s in measured}
+        risk_raw = {s: cur[s] * vol[s] for s in measured}
+        rsum = sum(risk_raw.values()) or 1e-9
+        rows = {}
+        for s in measured:
+            rows[s] = {
+                "current_pct": round(cur[s], 2),
+                "vol_annual_pct": round(vol[s] * 100, 1),
+                "current_risk_share_pct": round(risk_raw[s] / rsum * 100, 1),
+                "risk_parity_pct": rp[s],
+                "delta_pct": round(rp[s] - cur[s], 2),
+                "env_pinned": cls._env_pinned(s),
+            }
+        top = max(rows, key=lambda s: rows[s]["current_risk_share_pct"])
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "status": "RISK_BUDGET_ADVISORY",
+            "mode_live": cls._risk_budget_on(),
+            "total_armed_pct": round(total, 2),
+            "sleeves": rows,
+            "most_risk_concentrated": {"sleeve": top,
+                                       "current_risk_share_pct": rows[top]["current_risk_share_pct"]},
+            "note": ("Inverse-vol risk-budget vs current %%-of-equity, re-mixed within the SAME %.1f%% "
+                     "total. current_risk_share shows how book RISK (pct x vol) is actually split today; "
+                     "risk_parity_pct equalizes it. %s carries the most risk today. ADVISORY unless "
+                     "GREYLINE_SLEEVE_RISK_BUDGET=true (then non-pinned armed sleeves size to risk_parity_pct)."
+                     % (total, top)),
+        }
+
+    @classmethod
+    def _risk_parity_table(cls):
+        """Cached {sleeve: risk_parity_pct} for the live sizing branch (kept off pct()'s hot path)."""
+        now = time()
+        c = cls._rp_cache
+        if c["table"] is not None and (now - c["t"]) < 60.0:
+            return c["table"]
+        adv = cls.risk_budget_advisory()
+        table = ({s: adv["sleeves"][s]["risk_parity_pct"] for s in adv["sleeves"]}
+                 if adv.get("status") == "RISK_BUDGET_ADVISORY" else {})
+        cls._rp_cache = {"t": now, "table": table}
+        return table
 
     @classmethod
     def pct_table(cls):
@@ -242,11 +393,16 @@ class SleeveCapitalBudgetEngine:
         table = cls.pct_table()
         budgets = {s: cls.budget_usd(s) for s in table}
         degraded = equity is None   # equity read failed → budgets below are explicit fallbacks, not live
+        try:
+            risk_budget = cls.risk_budget_advisory()   # never let the advisory break the budget read
+        except Exception as e:
+            risk_budget = {"status": "RISK_BUDGET_UNAVAILABLE", "error": str(e)[:120]}
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "mission_equity": equity,
             "deployable_cash": cash,
             "degraded": degraded,
+            "risk_budget": risk_budget,
             "total_target_pct": cls.total_pct(),
             "targets_full_deployment": cls.total_pct() >= 99.5,   # False at the current 97% target
             "cash_buffer_pct": round(max(0.0, 100.0 - cls.total_pct()), 4),   # deliberate unallocated headroom
