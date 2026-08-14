@@ -216,6 +216,28 @@ class BackgroundSchedulerService:
         except Exception:
             pass
 
+    @staticmethod
+    def _day_marker_due(rel):
+        """READ-ONLY: True unless the daily marker at `rel` already carries today's UTC date. FAIL-OPEN
+        (returns True on any read error) so a broken marker degrades to running the task, never to silently
+        skipping integrity/survivorship work — a missed survivorship snapshot is permanent data loss."""
+        try:
+            mk = Path(rel)
+            return not (mk.exists() and mk.read_text().strip() == datetime.utcnow().date().isoformat())
+        except Exception:
+            return True
+
+    @staticmethod
+    def _day_marker_stamp(rel):
+        """Stamp the daily marker at `rel` with today's UTC date — call only AFTER the task succeeds, so a
+        transient failure still retries next cycle. Bulletproof."""
+        try:
+            mk = Path(rel)
+            mk.parent.mkdir(parents=True, exist_ok=True)
+            mk.write_text(datetime.utcnow().date().isoformat())
+        except Exception:
+            pass
+
     _ALERT_AFTER_FAILURES = 3        # consecutive cycle failures before alerting off-box (~15 min)
 
     @classmethod
@@ -1552,9 +1574,17 @@ class BackgroundSchedulerService:
         # Which bars were actually TRADED. Pre-listing stubs are self-consistent, match the
         # vendor, and are still unusable — they manufacture fake momentum in backtests and
         # would let a name into the universe on a handful of real bars.
+        # DAILY-GATED (2026-08-14): tradability is a slow-moving property (new bars arrive daily), so the
+        # full-bar scan does not need to run every 5-min cycle — it was part of the ~273s per-cycle baseline
+        # of this post-trade phase. Runs at most once/UTC-day; consumers read the saved result meanwhile.
+        _trad_marker = "app/data/scheduler/.tradability_scan_last_run"
         try:
-            from app.services.price_bar_tradability_engine import PriceBarTradabilityEngine
-            tradability = PriceBarTradabilityEngine().scan()
+            if cls._day_marker_due(_trad_marker):
+                from app.services.price_bar_tradability_engine import PriceBarTradabilityEngine
+                tradability = PriceBarTradabilityEngine().scan()
+                cls._day_marker_stamp(_trad_marker)
+            else:
+                tradability = {"status": "TRADABILITY_SCAN_NOT_DUE", "ran": False}
         except Exception as exc:
             tradability = {"status": "TRADABILITY_SCAN_DEGRADED", "error": repr(exc)}
 
@@ -1562,11 +1592,20 @@ class BackgroundSchedulerService:
         # feed goes quiet. Delisted-company prices can't be bought back later — TradeStation
         # purges them — so the only way to own a survivorship-free dataset is to stop
         # discarding names as they die, starting now.
+        # DAILY-GATED (2026-08-14): a survivorship snapshot is by definition ONE point-in-time record per
+        # day — running it every 5-min cycle just rewrote the same row and was part of this phase's per-cycle
+        # baseline. Once/UTC-day. Fail-open + stamp-after-success so a missed day (permanent data loss) can't
+        # happen from a marker glitch or a transient error.
+        _surv_marker = "app/data/scheduler/.survivorship_last_run"
         try:
-            from app.services.universe_survivorship_engine import UniverseSurvivorshipEngine
-            _surv = UniverseSurvivorshipEngine()
-            survivorship = _surv.snapshot()
-            survivorship["departures"] = _surv.detect_departures()
+            if cls._day_marker_due(_surv_marker):
+                from app.services.universe_survivorship_engine import UniverseSurvivorshipEngine
+                _surv = UniverseSurvivorshipEngine()
+                survivorship = _surv.snapshot()
+                survivorship["departures"] = _surv.detect_departures()
+                cls._day_marker_stamp(_surv_marker)
+            else:
+                survivorship = {"status": "SURVIVORSHIP_ARCHIVE_NOT_DUE", "ran": False}
         except Exception as exc:
             survivorship = {"status": "SURVIVORSHIP_ARCHIVE_DEGRADED", "error": repr(exc)}
         cls._ckpt("ps_integrity_scans")    # cross-source reconcile (daily) + tradability scan + survivorship (EVERY cycle — suspects)
