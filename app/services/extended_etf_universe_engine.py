@@ -64,6 +64,19 @@ class ExtendedEtfUniverseEngine:
         "TEVA": ("intl_adr", "momentum,xs_momentum", False),
         "VOD":  ("intl_adr", "momentum,xs_momentum", False),
         "JD":   ("intl_adr", "momentum,xs_momentum", False),
+        # more large-cap (>=$10B) single names from the "492 clean" scan (2026-08-14). TRACKED EQUITY
+        # candidates for the momentum shadow ONLY — NOT a single-name OPTIONS/VRP program: the VRP cost
+        # screen PROVED single-name condors are dead-on-arrival on retail costs, and single-name VRP was the
+        # falsified fake-edge (index/ETF VRP is the confirmed one). So these earn their way via the equity
+        # court, never an armed options sleeve. The mid/small tail stays excluded by the trash-pick discipline.
+        "SE":   ("intl_adr", "momentum,xs_momentum", False),   # Sea Ltd (Singapore)
+        "PBR":  ("intl_adr", "momentum,xs_momentum", False),   # Petrobras (Brazil)
+        "VALE": ("intl_adr", "momentum,xs_momentum", False),   # Vale (Brazil)
+        "NOK":  ("intl_adr", "momentum,xs_momentum", False),   # Nokia (Finland)
+        "INFY": ("intl_adr", "momentum,xs_momentum", False),   # Infosys (India)
+        "UMC":  ("intl_adr", "momentum,xs_momentum", False),   # United Microelectronics (Taiwan)
+        "EPD":  ("us_mlp", "momentum,xs_momentum", False),     # Enterprise Products (US energy MLP)
+        "ET":   ("us_mlp", "momentum,xs_momentum", False),     # Energy Transfer (US energy MLP)
         # thematic / industry -> momentum, sector
         "JETS": ("thematic_industry", "momentum", False),
         "IYR":  ("sector_reit", "sector", False),

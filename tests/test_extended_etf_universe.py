@@ -8,18 +8,18 @@ from app.services.tradestation_quote_stream_engine import TradeStationQuoteStrea
 CAUTION = {"BITX", "MSTU", "MUU", "MULL"}
 
 
-def test_registry_is_57_clean_tickers():
+def test_registry_is_65_clean_tickers():
     # 52 scanned ETFs + 5 intl-ADR tracked candidates added 2026-08-14 (Tier 3 breadth)
     u = E.UNIVERSE
-    assert len(u) == 57
+    assert len(u) == 65
     assert all(t == t.upper() and t.isascii() for t in u)          # clean uppercase tickers
-    assert len(set(u)) == 57                                        # no dups
+    assert len(set(u)) == 65                                        # no dups
 
 
 def test_caution_products_excluded_from_tradeable():
     tradeable = set(E.symbols(include_caution=False))
     assert CAUTION.isdisjoint(tradeable)                           # 2x leveraged never tradeable
-    assert len(tradeable) == 53   # 48 ETFs + 5 ADRs (caution still 4)
+    assert len(tradeable) == 61   # 48 ETFs + 13 single-name candidates (caution still 4)
     assert set(E.symbols(include_caution=True)) - tradeable == CAUTION
 
 
@@ -34,7 +34,7 @@ def test_for_sleeve_maps_and_never_returns_caution():
 
 def test_snapshot_counts():
     s = E.snapshot()
-    assert s["count"] == 57 and s["tradeable_count"] == 53 and s["caution_count"] == 4
+    assert s["count"] == 65 and s["tradeable_count"] == 61 and s["caution_count"] == 4
     assert "by_subclass" in s and s["status"] == "EXTENDED_ETF_UNIVERSE"
 
 
