@@ -465,6 +465,139 @@ class ConditionalVRPShortPremiumEngine:
     def _open_risk(self):
         return sum(self._f(r.get("max_loss_total")) for r in self._open_rows())
 
+    def _all_rows(self):
+        """Every ledger row (OPEN and CLOSED), for lifetime / last-book accounting."""
+        try:
+            return [json.loads(l) for l in self.LEDGER.read_text().splitlines() if l.strip()]
+        except Exception:
+            return []
+
+    # ------------------------------------------------------------ arm-health guard
+    # An armed sleeve that quietly books nothing (a benign catalyst hold, a broken broker,
+    # or a silent no-op) is indistinguishable from the outside — and the whole Edge-proof
+    # thesis dies on a stalled clock nobody sees. This classifier makes the daily open
+    # outcome legible and alerts on the states that actually matter.
+    ARM_HEALTH_STATE = Path("app/data/options_paper_trading/.vrp_arm_health.json")
+
+    @staticmethod
+    def _idle_alert_days():
+        try:
+            return max(1, int(getenv("GREYLINE_VRP_IDLE_ALERT_DAYS", "") or 3))
+        except (TypeError, ValueError):
+            return 3
+
+    def _load_arm_state(self):
+        try:
+            return json.loads(self.ARM_HEALTH_STATE.read_text())
+        except Exception:
+            return {"last_eval_date": None, "consecutive_idle_days": 0,
+                    "last_booked_date": None}
+
+    def _save_arm_state(self, st):
+        try:
+            self.ARM_HEALTH_STATE.parent.mkdir(parents=True, exist_ok=True)
+            self.ARM_HEALTH_STATE.write_text(json.dumps(st))
+        except Exception:
+            pass
+
+    def arm_health(self, open_outcome=None, is_rth=None, record=False, now=None):
+        """Classify the armed sleeve's booking health from ground truth (ledger) plus the day's
+        open outcome. READ-ONLY unless record=True (then it advances the once-per-day idle counter).
+
+        States: DISABLED (not armed) / BOOKED (booked today) / BOOK_ERROR (open path errored — the
+        real silent-failure) / HELD_CATALYST (benign macro/FDA hold) / FULL (no free slots — already
+        deployed) / IDLE_NO_BOOK (free slots, not deferred, but booked nothing). Alerts on BOOK_ERROR
+        immediately, and on `consecutive_idle_days >= threshold` (a stalled proof clock — reason-agnostic
+        because stacked benign deferrals still mean no edge is accruing)."""
+        now = now or datetime.utcnow()
+        today = now.date().isoformat()
+        enabled = self.enabled()
+        rows = self._all_rows()
+        open_rows = [r for r in rows if r.get("status") == "OPEN"]
+        opened_dates = [str(r.get("opened_at") or "")[:10] for r in rows if r.get("opened_at")]
+        last_open_at = max((r.get("opened_at") for r in rows if r.get("opened_at")), default=None)
+        booked_today = today in opened_dates
+        oc = open_outcome or {}
+        errors = oc.get("errors") or []
+        deferred = oc.get("status") == "DEFERRED_CATALYST"
+        cat_events = oc.get("events") if deferred else None
+        if open_outcome is None:
+            # READ-ONLY caller (route/dashboard) has no live open outcome — ask the catalyst overlay
+            # directly so the current hold reason is accurate. Fails open (never blocks on a data gap).
+            try:
+                from app.services.catalyst_risk_overlay_engine import CatalystRiskOverlayEngine
+                _c = CatalystRiskOverlayEngine().defer_new_premium(tickers=VARIANCE_HARVEST)
+                deferred = bool(_c.get("defer"))
+                cat_events = _c.get("events") if deferred else None
+            except Exception:
+                pass
+        free_slots = max(0, self._max_concurrent() - len(open_rows))
+
+        if not enabled:
+            day_state = "DISABLED"
+        elif booked_today:
+            day_state = "BOOKED"
+        elif errors:
+            day_state = "BOOK_ERROR"
+        elif deferred:
+            day_state = "HELD_CATALYST"
+        elif free_slots <= 0:
+            day_state = "FULL"
+        else:
+            day_state = "IDLE_NO_BOOK"
+
+        st = self._load_arm_state()
+        # advance the idle counter at most once per RTH day
+        if record and enabled and is_rth and st.get("last_eval_date") != today:
+            if booked_today:
+                st["consecutive_idle_days"] = 0
+                st["last_booked_date"] = today
+            elif free_slots > 0:                       # a day we COULD have booked but didn't
+                st["consecutive_idle_days"] = int(st.get("consecutive_idle_days") or 0) + 1
+            # FULL days don't increment: capital is deployed, the clock is ticking via open condors
+            st["last_eval_date"] = today
+            self._save_arm_state(st)
+        idle_days = int(st.get("consecutive_idle_days") or 0)
+
+        threshold = self._idle_alert_days()
+        should_alert, severity, message, fingerprint = False, "INFO", "", None
+        if day_state == "BOOK_ERROR":
+            should_alert, severity = True, "CRITICAL"
+            message = ("VRP sleeve is ARMED but its open path ERRORED (%d error(s)) — booked 0. "
+                       "The Edge-proof clock is not accruing. Check the broker/booking path." % len(errors))
+            fingerprint = "VRP_ARM_BOOK_ERROR:%s" % today
+        elif enabled and idle_days >= threshold and not booked_today:
+            should_alert, severity = True, "WARNING"
+            reason = ("catalyst hold" if deferred else
+                      "no free slots" if free_slots <= 0 else
+                      "no book (candidates/slots)")
+            message = ("VRP sleeve armed but has booked NOTHING for %d consecutive session(s) "
+                       "(today: %s). The Edge-proof clock is stalled — review the catalyst overlay / "
+                       "universe, or accept the hold." % (idle_days, reason))
+            fingerprint = "VRP_ARM_IDLE_STALL:%s" % today
+
+        return {
+            "timestamp": now.isoformat(),
+            "enabled": enabled,
+            "day_state": day_state,
+            "booked_today": booked_today,
+            "open_positions": len(open_rows),
+            "free_slots": free_slots,
+            "max_concurrent": self._max_concurrent(),
+            "lifetime_opens": len(opened_dates),
+            "last_open_at": last_open_at,
+            "consecutive_idle_days": idle_days,
+            "idle_alert_threshold": threshold,
+            "deferred": deferred,
+            "catalyst_events": cat_events,
+            "errors": len(errors),
+            "should_alert": should_alert,
+            "severity": severity,
+            "message": message,
+            "fingerprint": fingerprint,
+            "status": "VRP_ARM_HEALTH",
+        }
+
     def condor_display_levels(self):
         """{leg_symbol: unit management levels} for the dashboard. A condor's stop/profit-take are
         on the WHOLE unit's P&L (not per leg), so the same levels are surfaced against each of its

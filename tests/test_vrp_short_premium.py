@@ -132,6 +132,7 @@ def test_plan_falls_back_to_symmetric_when_tilt_exceeds_the_cap(monkeypatch):
     monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", _full_chain()))
     monkeypatch.setattr(e, "_open_symbols", lambda: set())
     monkeypatch.setattr(e, "_open_risk", lambda: 0.0)
+    monkeypatch.setattr(e, "PORTFOLIO_RISK_CAP_USD", 100000.0)  # cap resolves off live equity (0 in tests)
 
     real_build = e.build_condor
     def build(sym, contracts, put_delta=None, call_delta=None):
@@ -157,6 +158,7 @@ def test_plan_harvests_richest_skew_first(monkeypatch):
     monkeypatch.setattr(e, "_chain", lambda t: ("2026-07-31", []))
     monkeypatch.setattr(e, "_open_symbols", lambda: set())
     monkeypatch.setattr(e, "_open_risk", lambda: 0.0)
+    monkeypatch.setattr(e, "PORTFOLIO_RISK_CAP_USD", 100000.0)  # cap resolves off live equity (0 in tests)
     skewmap = {"LOWSK": 0.02, "HIGHSK": 0.15, "MIDSK": 0.08}
     monkeypatch.setattr(e, "build_condor", lambda t, c, put_delta=None, call_delta=None: {
         "symbol": t, "quantity": 1, "max_loss_total": 100.0, "credit_total": 20.0,

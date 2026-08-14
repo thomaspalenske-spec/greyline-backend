@@ -48,10 +48,15 @@ def test_prefetch_is_best_effort_on_error(monkeypatch):
 def test_plan_prefetches_then_builds_off_cache(monkeypatch):
     # end-to-end: plan() prefetches the candidate pool, then the loop builds off the (now warm) chains.
     import app.services.conditional_vrp_forward_panel_engine as panel_mod
-    monkeypatch.setattr(panel_mod.ConditionalVRPForwardPanelEngine, "rich_iv_candidates",
+    # plan() sources candidates from harvest_candidates (unconditional harvest — the rich-IV gate was
+    # falsified in #46); mock THAT, not the retired rich_iv_candidates, so the 3-candidate intent holds.
+    monkeypatch.setattr(panel_mod.ConditionalVRPForwardPanelEngine, "harvest_candidates",
                         lambda self, names=None: [{"ticker": t, "iv_rank": 55, "iv": 0.3} for t in ("IWM", "SMH", "XLE")])
     monkeypatch.setattr(V, "_open_symbols", lambda self: set())
     monkeypatch.setattr(V, "_open_risk", lambda self: 0.0)
+    # isolate from live-equity budget resolution (0 outside the running service) — this is a unit test
+    # of prefetch-then-build, so give the risk cap headroom the same way the other risk inputs are mocked.
+    monkeypatch.setattr(V, "PORTFOLIO_RISK_CAP_USD", property(lambda self: 1e9))
     monkeypatch.setattr(V, "_vega_budget", classmethod(lambda cls: 1e9))
     monkeypatch.setattr(V, "_current_book_vega", lambda self: 0.0)
     prefetched = []

@@ -27,6 +27,15 @@ def vrp_short_premium_dress_rehearsal():
     return ConditionalVRPShortPremiumEngine().dress_rehearsal()
 
 
+@router.get("/vrp-short-premium/arm-health")
+def vrp_short_premium_arm_health():
+    """Arm-health of the VRP sleeve: is the armed sleeve actually booking, or silently idle? Classifies
+    the day's state (BOOKED / HELD_CATALYST / FULL / IDLE_NO_BOOK / BOOK_ERROR), reports the current
+    catalyst hold reason, open condors, free slots, and the consecutive-idle-session counter that drives
+    the stalled-proof-clock alert. READ-ONLY — advances no counters."""
+    return ConditionalVRPShortPremiumEngine().arm_health(record=False)
+
+
 @router.get("/vrp-short-premium/cap-sensitivity")
 def vrp_short_premium_cap_sensitivity():
     """READ-ONLY decision tool: how many VRP candidates are tradeable at each per-condor cap level, with

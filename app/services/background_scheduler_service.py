@@ -746,14 +746,36 @@ class BackgroundSchedulerService:
                     from app.services.catalyst_risk_overlay_engine import CatalystRiskOverlayEngine
                     _cat = CatalystRiskOverlayEngine().defer_new_premium(tickers=VARIANCE_HARVEST)
                     if _cat.get("defer"):
+                        # BENIGN, SELF-CLEARING HOLD: do NOT stamp the once-per-day marker here. Stamping
+                        # on a deferral burned the whole day even after the catalyst window cleared — so a
+                        # single morning macro print left the armed sleeve inert until the next day. Leaving
+                        # the marker unstamped lets the open path re-evaluate each RTH cycle and book the
+                        # first cycle the catalyst no longer applies (the Edge-proof clock keeps ticking).
                         vrp_short_premium["open"] = {"status": "DEFERRED_CATALYST", **_cat}
                     else:
                         vrp_short_premium["open"] = _sp.open_positions(
                             names=VARIANCE_HARVEST, dry_run=False, limit=2)
-                    try:
-                        _mk.parent.mkdir(parents=True, exist_ok=True); _mk.write_text(_today)
-                    except Exception:
-                        pass
+                        # stamp only when the booking path actually RAN (booked, or a clean no-op /
+                        # surfaced error) — never on a benign catalyst hold.
+                        try:
+                            _mk.parent.mkdir(parents=True, exist_ok=True); _mk.write_text(_today)
+                        except Exception:
+                            pass
+                # ARM-HEALTH GUARD: classify today's open outcome and alert on the states that matter —
+                # a booking error (armed but silently books 0) immediately, or a stalled proof clock
+                # (armed but nothing booked for N sessions). Benign holds stay visible but quiet.
+                try:
+                    _ah = _sp.arm_health(open_outcome=vrp_short_premium.get("open"),
+                                         is_rth=market_hours.get("is_regular_session"), record=True)
+                    vrp_short_premium["arm_health"] = _ah
+                    if _ah.get("should_alert"):
+                        from app.services.external_alert_engine import ExternalAlertEngine
+                        ExternalAlertEngine().dispatch(
+                            title="VRP arm-health", message=_ah.get("message") or "",
+                            severity=_ah.get("severity") or "WARNING",
+                            fingerprint=_ah.get("fingerprint"))
+                except Exception:
+                    pass
         except Exception as exc:
             vrp_short_premium = {"status": "VRP_SHORT_PREMIUM_DEGRADED", "error": repr(exc)}
         cls._ckpt("vrp_short_premium")
