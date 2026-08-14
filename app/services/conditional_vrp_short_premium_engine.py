@@ -1250,33 +1250,77 @@ class ConditionalVRPShortPremiumEngine:
         except Exception as e:
             plan = {"planned": [], "skipped": [], "error": str(e)[:120]}
         planned = plan.get("planned") or []
-        rehearsed, valid = [], 0
+        uw_close_on = self._uw_close_pricing_on()
+        rehearsed, valid, close_priceable = [], 0, 0
         for con in planned:
             ok, checks, econ = self.validate_condor(con)
             valid += 1 if ok else 0
+            # PROVE THE UW-PRICED CLOSE PATH (the 2026-08-13 unblock): value the close of THESE legs off UW
+            # right now. If UW can price it, an armed close will bank a court-worthy 'uw_mid' realized P&L;
+            # if not, realized falls back to TS (NOT court-worthy) — the key pre-arm check.
+            legs_list = list((con.get("legs") or {}).values())
+            uw_cv = self._uw_close_value({"legs": legs_list}) if uw_close_on else None
+            close_court_worthy = uw_cv is not None
+            close_priceable += 1 if close_court_worthy else 0
             rehearsed.append({"ticker": con.get("symbol"), "expiration": con.get("expiration"),
                               "iv_rank": con.get("iv_rank"), "structure_ok": ok, "checks": checks,
                               "economics": econ,
-                              "court_projection": self.condor_court_projection(econ, "premium_vrp")})
+                              "court_projection": self.condor_court_projection(econ, "premium_vrp"),
+                              "uw_close_value_now": round(uw_cv, 3) if uw_cv is not None else None,
+                              "close_realized_basis": "uw_mid" if close_court_worthy else "ts_fallback",
+                              "close_court_worthy": close_court_worthy})
         gate = []
         if not planned:
             gate.append("plan built 0 condors (see plan.skipped / UW chain / caps)")
         if planned and valid == 0:
             gate.append("built condors FAILED structure validation")
+        if not uw_close_on:
+            gate.append("UW close pricing OFF (GREYLINE_VRP_UW_CLOSE_PRICING) — closes would use the SIM/TS "
+                        "debit the court can't trust")
+        elif planned and close_priceable < valid:
+            gate.append("UW cannot price the CLOSE of %d/%d built condor(s) — their realized P&L would fall "
+                        "back to TS (not court-worthy)" % (valid - close_priceable, valid))
         if not armed:
             gate.append("sleeve DISARMED (GREYLINE_VRP_SHORT_PREMIUM_ENABLED) — arm before the fire")
         build_go = bool(planned and valid > 0)
-        verdict = ("READY TO FIRE — %d sound condor(s) build off live UW chains and round-trip into the "
-                   "court" % valid) if build_go and armed else \
-                  ("BUILD OK, NOT ARMED — %d sound condor(s) would build; arm the sleeve to fire" % valid) \
-                  if build_go else ("NOT READY — " + "; ".join(gate))
+        close_path_go = bool(build_go and uw_close_on and close_priceable >= valid)
+        verdict = (
+            ("READY TO FIRE — %d sound condor(s) build off live UW chains AND their closes price off UW "
+             "(court-worthy realized P&L)" % valid) if (close_path_go and armed) else
+            ("BUILD+CLOSE OK, NOT ARMED — %d sound condor(s) build and would close UW-priced; arm the sleeve "
+             "to fire" % valid) if close_path_go else
+            ("BUILD OK but CLOSE NOT COURT-WORTHY — closes wouldn't UW-price, so live proof wouldn't accrue; "
+             + "; ".join(gate)) if build_go else
+            ("NOT READY — " + "; ".join(gate)))
+
+        # ARM-READINESS: what arming would commit, plus the book-risk context and the measure-before-trust bar.
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine as _B
+            rb = _B.risk_budget_advisory()
+            arm_plan = {
+                "sleeve_pct_of_equity_now": _B.pct("vrp"),
+                "sleeve_budget_usd_now": _B.budget_usd("vrp"),
+                "portfolio_risk_cap_usd": self.PORTFOLIO_RISK_CAP_USD,
+                "per_condor_max_loss_usd": _B.per_condor_max_loss(),
+                "book_risk_concentration": rb.get("most_risk_concentrated") if isinstance(rb, dict) else None,
+                "recommendation": (
+                    "Arm SMALL: the sleeve is at %.0f%% of equity now — fund a modest slice, cap concurrent "
+                    "defined risk at the portfolio cap, and let it accrue. UW-priced closes make every close "
+                    "court-worthy; the edge court needs ~20 INDEPENDENT trading DAYS of closes before its "
+                    "verdict is trustworthy (day-clustered). Nothing here arms anything." % _B.pct("vrp")),
+            }
+        except Exception as e:
+            arm_plan = {"error": str(e)[:120]}
+
         return {
             "timestamp": datetime.utcnow().isoformat(), "sleeve": "premium_vrp",
-            "armed": armed, "build_go": build_go, "valid_condors": valid, "planned_count": len(planned),
+            "armed": armed, "build_go": build_go, "close_path_go": close_path_go,
+            "uw_close_pricing_on": uw_close_on, "close_priceable_condors": close_priceable,
+            "valid_condors": valid, "planned_count": len(planned),
             "candidates_scanned": plan.get("candidates"), "free_slots": plan.get("free_slots"),
             "total_defined_risk_usd": plan.get("total_defined_risk_usd"),
             "rehearsed": rehearsed, "plan_skipped": (plan.get("skipped") or [])[:8],
-            "gate_blocks": gate, "verdict": verdict,
+            "gate_blocks": gate, "verdict": verdict, "arm_plan": arm_plan,
             "note": ("READ-ONLY — builds against live UW chains and PLACES NOTHING. Bounded scan (top few "
                      "rich-IV names, not the full SKEW_POOL) so the route stays fast; the live cycle scans "
                      "the full pool. Projections are bounds (max win = credit, max loss = defined risk). VRP "

@@ -31,7 +31,7 @@ def test_validate_condor_inverted_wing_fails(monkeypatch):
 
 
 # ---------------- dress rehearsal ----------------
-def _prep_rehearsal(monkeypatch, planned, armed=True, skipped=None):
+def _prep_rehearsal(monkeypatch, planned, armed=True, skipped=None, uw_close=1.0):
     monkeypatch.setattr(V, "enabled", staticmethod(lambda: armed))
     monkeypatch.setattr(V, "plan",
                         lambda self, names=None, limit=None, max_scan=None: {"planned": planned, "skipped": skipped or [],
@@ -39,12 +39,19 @@ def _prep_rehearsal(monkeypatch, planned, armed=True, skipped=None):
                                                               "total_defined_risk_usd": sum(p["max_loss_total"] for p in planned)})
     monkeypatch.setattr("app.services.sleeve_capital_budget_engine.SleeveCapitalBudgetEngine.per_condor_max_loss",
                         classmethod(lambda cls: 500.0))
+    # UW close pricing is the 2026-08-13 unblock the rehearsal now proves. Neutralize reload_env (else it
+    # reloads .env's flag) and stub the UW close valuation so the rehearsal exercises the close path
+    # deterministically (uw_close=None simulates UW being unable to price the close).
+    monkeypatch.setattr("app.services.env_reload.reload_env", lambda *a, **k: None)
+    monkeypatch.setenv("GREYLINE_VRP_UW_CLOSE_PRICING", "true")
+    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: uw_close)
 
 
 def test_dress_rehearsal_ready_when_armed(monkeypatch):
     _prep_rehearsal(monkeypatch, [_condor("IWM"), _condor("SMH")], armed=True)
     r = V().dress_rehearsal()
     assert r["build_go"] is True and r["valid_condors"] == 2 and r["armed"] is True
+    assert r["close_path_go"] is True                       # UW prices both closes → court-worthy
     assert r["verdict"].startswith("READY TO FIRE") and r["sleeve"] == "premium_vrp"
     assert r["rehearsed"][0]["court_projection"]["sleeve"] == "premium_vrp"
 
@@ -52,7 +59,7 @@ def test_dress_rehearsal_ready_when_armed(monkeypatch):
 def test_dress_rehearsal_build_ok_not_armed(monkeypatch):
     _prep_rehearsal(monkeypatch, [_condor("XLE")], armed=False)
     r = V().dress_rehearsal()
-    assert r["build_go"] is True and r["verdict"].startswith("BUILD OK, NOT ARMED")
+    assert r["build_go"] is True and r["verdict"].startswith("BUILD+CLOSE OK, NOT ARMED")
     assert any("DISARMED" in g for g in r["gate_blocks"])
 
 
