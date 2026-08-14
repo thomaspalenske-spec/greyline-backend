@@ -180,6 +180,10 @@ from app.routes import gamma_flip_history
 
 app.include_router(gamma_flip_history.router)
 
+from app.routes import index_vrp_history
+
+app.include_router(index_vrp_history.router)
+
 from app.routes import extended_etf_universe
 
 app.include_router(extended_etf_universe.router)
