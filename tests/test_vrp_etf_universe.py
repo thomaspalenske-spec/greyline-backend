@@ -9,9 +9,9 @@ from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShor
 
 
 def _capture_names(monkeypatch):
-    # make rich_iv_candidates raise with the names it received, so we read the universe plan() passed
+    # make harvest_candidates raise with the names it received, so we read the universe plan() passed
     # WITHOUT running any of plan()'s downstream broker work.
-    monkeypatch.setattr(pm.ConditionalVRPForwardPanelEngine, "rich_iv_candidates",
+    monkeypatch.setattr(pm.ConditionalVRPForwardPanelEngine, "harvest_candidates",
                         lambda self, names=None: (_ for _ in ()).throw(AssertionError(repr(names))))
 
 

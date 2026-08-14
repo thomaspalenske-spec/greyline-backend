@@ -72,7 +72,7 @@ def test_dress_rehearsal_bad_structure_not_ready(monkeypatch):
 # ---------------- cap sensitivity ----------------
 def _prep_cap(monkeypatch, per_name, equity=10000.0, current_cap=500.0):
     monkeypatch.setattr(V, "_open_symbols", lambda self: set())
-    monkeypatch.setattr(panel_mod.ConditionalVRPForwardPanelEngine, "rich_iv_candidates",
+    monkeypatch.setattr(panel_mod.ConditionalVRPForwardPanelEngine, "harvest_candidates",
                         lambda self, names=None: [{"ticker": t} for t in per_name])
     monkeypatch.setattr(V, "_chain", lambda self, t: ("2026-09-18", ["x"]))
     def _build(self, symbol, contracts, put_delta=None, call_delta=None, max_loss_cap=None):
