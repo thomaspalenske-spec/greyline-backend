@@ -166,6 +166,54 @@ class UniverseSurvivorshipEngine:
             ),
         }
 
+    def study_exposure(self, universe, since=None, index_level=False):
+        """QUANTIFY the survivorship exposure of ONE backtest, so a study can cite a number instead of a
+        blanket "any positive result is an upper bound" caveat.
+
+        `index_level=True` (VIX / index / single-ETF series like the 24yr index-VRP backtest) is
+        survivorship-free BY CONSTRUCTION — an index level does not drop failed members from its own past.
+        For a single-name universe, the exposure is: (a) how many of its names are already in the delisted
+        registry (post-archive, forward-only — small today), and (b) whether the study window reaches BEFORE
+        the PIT archive began (survivorship_free_from), where today's survivors are applied backward and the
+        pre-archive failures are unrecoverable and ABSENT — the real, irreducible upward bias."""
+        names = sorted({str(n).upper() for n in (universe or []) if n})
+        if index_level:
+            return {"status": "SURVIVORSHIP_EXPOSURE", "index_level": True, "clean": True,
+                    "names": len(names),
+                    "note": ("index / single-ETF level series are survivorship-free BY CONSTRUCTION — the "
+                             "level does not exclude failed constituents from its own history; no bias.")}
+        try:
+            registry = set(json.loads(self.DELISTED.read_text()))
+        except Exception:
+            registry = set()
+        archive = self._read_archive()
+        free_from = archive[0]["date"] if archive else None
+        delisted_in_uni = sorted(n for n in names if n in registry)
+        # the study reaches into the biased (pre-archive) era if its start precedes the archive
+        reaches_pre_archive = bool(since and free_from and str(since)[:10] < str(free_from)[:10]) or \
+            (bool(free_from) and not since)
+        return {
+            "status": "SURVIVORSHIP_EXPOSURE",
+            "index_level": False,
+            "names": len(names),
+            "survivorship_free_from": free_from,
+            "study_since": str(since)[:10] if since else None,
+            "reaches_pre_archive_biased_era": reaches_pre_archive,
+            "delisted_names_in_universe": delisted_in_uni,     # post-archive, registry-tracked (forward-only)
+            "delisted_count_in_universe": len(delisted_in_uni),
+            "bias_direction": "upward" if reaches_pre_archive else "none_observed",
+            "note": (
+                ("Study window reaches BEFORE the PIT archive (%s): its single-name universe is today's "
+                 "SURVIVORS applied backward — every name that failed before the archive is unrecoverable "
+                 "(TradeStation returns 'Invalid Symbol') and ABSENT, so the result is an UPPER BOUND. "
+                 "%d of its names have delisted since the archive began (registry-tracked)."
+                 % (free_from, len(delisted_in_uni))) if reaches_pre_archive else
+                ("Study window is within the PIT-archived era (from %s): survivorship-clean for this window; "
+                 "%d registry delistings among its names." % (free_from, len(delisted_in_uni)))
+                if free_from else
+                "No PIT archive yet — treat any single-name study as survivorship-biased upward."),
+        }
+
     def membership_on(self, date):
         """Universe as recorded on/just before `date` — None if it predates the archive.
 

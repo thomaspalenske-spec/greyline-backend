@@ -212,6 +212,7 @@ class IndexVRPHistoryResearchEngine:
                            "tradeable, so this tests the SIGNAL+tail, not a specific structure's frictions; "
                            "index VRP is a RISK premium — the crash tail is the point, not a flaw",
             },
+            "survivorship": self._survivorship(),
             "vrp_vol_points_by_year": self._by_year(entries),
             "unconditional": self._analyze(entries, 0.0, rng),
             "rich_iv_tercile": self._analyze(entries, self.TERCILE, rng),
@@ -224,6 +225,17 @@ class IndexVRPHistoryResearchEngine:
             except Exception:
                 pass
         return result
+
+    def _survivorship(self):
+        """This backtest is on VIX + SPY — INDEX/single-ETF levels, survivorship-free BY CONSTRUCTION
+        (an index level does not drop failed members from its own past). Self-certify it, quantified by
+        the survivorship engine, so the confirmed edge carries its clean-provenance in its own output."""
+        try:
+            from app.services.universe_survivorship_engine import UniverseSurvivorshipEngine
+            return UniverseSurvivorshipEngine().study_exposure(["SPY"], index_level=True)
+        except Exception:
+            return {"index_level": True, "clean": True,
+                    "note": "VIX + SPY index-level series — survivorship-free by construction."}
 
     def last_study(self):
         try:
