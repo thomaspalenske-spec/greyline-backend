@@ -49,6 +49,8 @@ class BackgroundSchedulerService:
     _RECENT_CAP = 20
     _phase_marks = []                # [(label, monotonic)] within the CURRENT cycle
     _last_phase_timings = {}         # {phase: seconds} from the last COMPLETED cycle — for /status
+    _CYCLE_COST_CAP = 500            # cycle-cost history is a rolling window (steady-state vs one-off)
+    CYCLE_COST_HISTORY = Path("app/data/scheduler/cycle_cost_history.jsonl")
 
     @classmethod
     def _phase_reset(cls):
@@ -62,6 +64,72 @@ class BackgroundSchedulerService:
             cls._phase_marks.append((str(label), time.monotonic()))
         except Exception:
             pass
+
+    @classmethod
+    def _persist_cycle_cost(cls, duration_ms, status):
+        """Append the finalized per-phase breakdown to a rolling history so steady-state vs a one-off
+        hiccup is VISIBLE (the /status card only shows the last cycle — in-memory). BULLETPROOF: a
+        timing log must never break the cycle, so every failure is swallowed. Bounded to the last
+        _CYCLE_COST_CAP cycles."""
+        try:
+            import json
+            timings = dict(cls._last_phase_timings or {})
+            if not timings:
+                return
+            rec = {"timestamp": datetime.utcnow().isoformat(), "status": status,
+                   "duration_ms": duration_ms,
+                   "cycle_seconds": round((duration_ms or 0) / 1000.0, 1),
+                   "phases": {k: v for k, v in timings.items() if k != "_total_instrumented"},
+                   "instrumented_seconds": timings.get("_total_instrumented")}
+            cls.CYCLE_COST_HISTORY.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                lines = cls.CYCLE_COST_HISTORY.read_text().splitlines() if cls.CYCLE_COST_HISTORY.exists() else []
+            except Exception:
+                lines = []
+            lines.append(json.dumps(rec))
+            cls.CYCLE_COST_HISTORY.write_text("\n".join(lines[-cls._CYCLE_COST_CAP:]) + "\n")
+        except Exception:
+            pass
+
+    @classmethod
+    def cycle_cost_history(cls, limit=50):
+        """Summarize the rolling cycle-cost history so STEADY-STATE (median/p90 per phase) is
+        distinguishable from a one-off spike (max) — the /status card only shows the last cycle.
+        READ-ONLY. Ranks phases by median cost = the real optimization target."""
+        import json
+        from collections import defaultdict
+        try:
+            rows = [json.loads(l) for l in cls.CYCLE_COST_HISTORY.read_text().splitlines() if l.strip()]
+        except Exception:
+            rows = []
+        rows = rows[-max(1, int(limit or 50)):]
+        buckets = defaultdict(list)
+        for r in rows:
+            for ph, sec in (r.get("phases") or {}).items():
+                try:
+                    buckets[ph].append(float(sec))
+                except (TypeError, ValueError):
+                    pass
+
+        def _pct(vals, q):
+            if not vals:
+                return None
+            s = sorted(vals)
+            return round(s[min(len(s) - 1, int(q * (len(s) - 1) + 0.5))], 1)
+
+        summary = {ph: {"n": len(v), "median_s": _pct(v, 0.5), "p90_s": _pct(v, 0.9),
+                        "max_s": round(max(v), 1)} for ph, v in buckets.items()}
+        ranked = sorted(summary.items(), key=lambda kv: (kv[1]["median_s"] or 0), reverse=True)
+        cyc = [r.get("cycle_seconds") for r in rows if r.get("cycle_seconds") is not None]
+        return {
+            "cycles_in_window": len(rows),
+            "cycle_seconds": {"median": _pct(cyc, 0.5), "p90": _pct(cyc, 0.9),
+                              "max": round(max(cyc), 1) if cyc else None,
+                              "last": rows[-1].get("cycle_seconds") if rows else None},
+            "phase_cost_ranked_by_median": [{"phase": ph, **st} for ph, st in ranked],
+            "recent": rows[-10:],
+            "status": "SCHEDULER_CYCLE_COST_HISTORY",
+        }
 
     @classmethod
     def _phase_finalize(cls):
@@ -240,6 +308,7 @@ class BackgroundSchedulerService:
             duration_ms = None
 
         cls._last_duration_ms = duration_ms
+        cls._persist_cycle_cost(duration_ms, status)   # rolling history: steady-state vs one-off hiccup
         if status == "COMPLETE":
             prev_failures = cls._consecutive_failures
             cls._success_count += 1
@@ -464,6 +533,7 @@ class BackgroundSchedulerService:
             decision = DecisionSchedulerEngine().run_manual_cycle()
         except Exception as exc:
             decision = {"status": "DECISION_CYCLE_DEGRADED", "error": repr(exc)}
+        cls._ckpt("pre_mkt_token_decision")   # market-hours + TS token refresh + decision cycle
 
         try:
             forecast_grading = (
@@ -508,6 +578,7 @@ class BackgroundSchedulerService:
             )
         except Exception as exc:
             fixed_horizon = {"error": repr(exc), "status": "FIXED_HORIZON_GRADER_DEGRADED"}
+        cls._ckpt("pre_grade_forward_learn")  # forecast-grade + forward-capture(60) + learning + fixed-horizon
 
         try:
             institutional_snapshot_sweep = (
@@ -544,6 +615,7 @@ class BackgroundSchedulerService:
                     "SNAPSHOT_SWEEP_DEGRADED"
                 ),
             }
+        cls._ckpt("pre_institutional_sweep")  # UW institutional-flow snapshot sweep (gated; known hang risk)
 
         try:
             institutional_retraining = (
@@ -568,6 +640,7 @@ class BackgroundSchedulerService:
                     "ORCHESTRATOR_DEGRADED"
                 ),
             }
+        cls._ckpt("pre_institutional_retrain")  # per-name institutional model retraining orchestrator
         # RETIRED: the old coin-flip signal's execution paths. 28 years / 90k samples
         # proved that signal is noise (core_backtest.py), yet these kept opening equity
         # and options trades on it — competing for the risk budget and contaminating the
@@ -584,7 +657,9 @@ class BackgroundSchedulerService:
         # options execution engine runs instead — same directional signal, options vehicle,
         # affordability-gated, Dynamic-TPS exit. The equity book already open keeps being
         # managed by the exit manager below until it closes, so this is a clean handover.
-        cls._ckpt("pre_sleeve")          # market-hours/token/decision/forward/learning/grading
+        cls._ckpt("pre_sleeve")          # RESIDUAL tail only — the heavy pre-sleeve work is now attributed
+        #   across pre_mkt_token_decision / pre_grade_forward_learn / pre_institutional_sweep /
+        #   pre_institutional_retrain (added 2026-08-14 to break up the 758s black box)
         from os import getenv as _getenv
         # MOMENTUM opening runs LATER (priority 5 — LOWEST, after the four edges) so the higher-
         # probability strategies claim capital first. Its EXIT manager still runs here every cycle,

@@ -18,3 +18,10 @@ def background_scheduler_run_once():
 @router.get("/background-scheduler/status")
 def background_scheduler_status():
     return BackgroundSchedulerService.status()
+
+@router.get("/background-scheduler/cycle-cost-history")
+def background_scheduler_cycle_cost_history(limit: int = Query(50)):
+    """Per-phase cycle cost over a rolling window (median/p90/max per phase, ranked by median) so a
+    persistent hot phase is distinguishable from a one-off spike. The /status card shows only the
+    last cycle — this shows the trend."""
+    return BackgroundSchedulerService.cycle_cost_history(limit=limit)
