@@ -91,7 +91,9 @@ class ConditionalVRPShortPremiumEngine:
     # book's total net SHORT vega (|$ P&L per +1 vol point|). At -300, a 4-vol-pt spike ~= the
     # portfolio dollar cap, so the two risk metrics agree. Env-tunable (GREYLINE_VEGA_BUDGET_USD).
     MAX_SHORT_VEGA_USD = 300.0
-    MAX_CONCURRENT = 5
+    MAX_CONCURRENT = 5            # max simultaneously-open condors; env-tunable (GREYLINE_VRP_MAX_CONCURRENT)
+    #                              so the live sleeve can be scaled by COUNT (e.g. hold 2) independently of
+    #                              the dollar risk cap. The RISK cap (PORTFOLIO_RISK_CAP_USD) still binds too.
     SKEW_POOL = 8                 # build this many candidates, then harvest the richest-skew ones
     MIN_CREDIT = 0.10             # required net premium (per share) ABOVE round-trip cost — real edge margin
     COMMISSION_PER_CONTRACT = 0.65  # per-leg-fill commission (8 fills round-trip: 4 legs x in+out)
@@ -115,6 +117,16 @@ class ConditionalVRPShortPremiumEngine:
     @staticmethod
     def _vrp_etf_only():
         return (getenv("GREYLINE_VRP_ETF_ONLY", "true") or "").strip().lower() == "true"
+
+    @classmethod
+    def _max_concurrent(cls):
+        """Max simultaneously-open condors — env-tunable (GREYLINE_VRP_MAX_CONCURRENT) so the live sleeve
+        can be scaled by COUNT independently of the dollar risk cap. Falls back to the class default."""
+        try:
+            v = getenv("GREYLINE_VRP_MAX_CONCURRENT", "")
+            return max(0, int(v)) if str(v).strip() else cls.MAX_CONCURRENT
+        except (TypeError, ValueError):
+            return cls.MAX_CONCURRENT
 
     # SHARED PER-CYCLE PLAN CACHE: the VRP plan() is the dominant heavy-block cost, and it was recomputed
     # 2-3x per cycle — the sleeve's own phase, the best-condors dashboard card, AND the condor shadow each
@@ -903,7 +915,7 @@ class ConditionalVRPShortPremiumEngine:
             names = self.LIQUID_ETFS
         cands = ConditionalVRPForwardPanelEngine().harvest_candidates(names)
         open_syms = self._open_symbols()
-        slots = max(0, self.MAX_CONCURRENT - len(open_syms))
+        slots = max(0, self._max_concurrent() - len(open_syms))
         open_risk = self._open_risk()
         budget_left = self.PORTFOLIO_RISK_CAP_USD - open_risk
         want = limit if limit is not None else slots
