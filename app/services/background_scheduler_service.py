@@ -1444,6 +1444,7 @@ class BackgroundSchedulerService:
                 data_remediation["on_alert"] = _dre.run_on_alert()
         except Exception as exc:
             data_remediation = {"status": "DATA_REMEDIATION_DEGRADED", "error": repr(exc)}
+        cls._ckpt("ps_data_remediation")   # daily TS stale-bar append + OHLC repair (network; self-gated)
 
         # Options reality capture. The options mission cannot be backtested (no historical
         # contract data exists from UW or TradeStation), so this forward panel is the only
@@ -1464,6 +1465,7 @@ class BackgroundSchedulerService:
             earnings_vol["resolved"] = _ev.resolve_realized().get("resolved")
         except Exception as exc:
             earnings_vol = {"status": "EARNINGS_VOL_DEGRADED", "error": repr(exc)}
+        cls._ckpt("ps_reality_capture")    # options + earnings implied-vol forward panels (record-if-due)
 
         # Off-machine backup of the UNRECOVERABLE data (options surface, PIT archive, panels,
         # ledgers). ~5MB, forward-only, no API can rebuild it — one disk failure would restart
@@ -1518,6 +1520,7 @@ class BackgroundSchedulerService:
             deadman_heartbeat = DeadmanHeartbeatEngine().push_if_due()
         except Exception as exc:
             deadman_heartbeat = {"status": "DEADMAN_HEARTBEAT_DEGRADED", "error": repr(exc)}
+        cls._ckpt("ps_backups_dr")         # DR backup(async)+git push+restore drill+deadman (all self-gated 12-20h)
 
         # Broker-side disaster stops: the only protection that survives THIS process dying.
         # Every doctrine exit (ATR stop, TP ladder, maturity liquidation) needs the scheduler
@@ -1534,6 +1537,7 @@ class BackgroundSchedulerService:
         except Exception as exc:
             broker_stops = {"status": "BROKER_STOPS_DEGRADED", "error": repr(exc)}
             broker_stops_fire_drill = {"status": "BROKER_STOPS_DRILL_DEGRADED", "error": repr(exc)}
+        cls._ckpt("ps_broker_stops")       # ensure resting broker stops + ~12h fire drill (broker read/quotes)
 
         # Second-source proof: the integrity scan only checks the CSVs against THEMSELVES.
         # Uniformly-wrong data (a shift, a mis-mapped ticker, an unadjusted split) is
@@ -1565,6 +1569,7 @@ class BackgroundSchedulerService:
             survivorship["departures"] = _surv.detect_departures()
         except Exception as exc:
             survivorship = {"status": "SURVIVORSHIP_ARCHIVE_DEGRADED", "error": repr(exc)}
+        cls._ckpt("ps_integrity_scans")    # cross-source reconcile (daily) + tradability scan + survivorship (EVERY cycle — suspects)
         # Wrapped like every other step: this runs AFTER all trading, but an unguarded throw here
         # would abort before _record_result("COMPLETE"), falsely marking a successful cycle FAILED
         # (and could trip the 3-strike off-box alert). Degrade instead.
@@ -1582,7 +1587,9 @@ class BackgroundSchedulerService:
             scheduled_reports = ScheduledOperatorReportsEngine.run(market_hours)
         except Exception as exc:
             scheduled_reports = {"status": "SCHEDULED_REPORTS_DEGRADED", "error": repr(exc)}
-        cls._ckpt("ps_remediation_backup_health")   # data-remediation + backups + broker-stops + health + reports
+        cls._ckpt("ps_remediation_backup_health")   # RESIDUAL: system-health dashboard + scheduled operator reports
+        #   (the heavy work is now attributed across ps_data_remediation / ps_reality_capture / ps_backups_dr /
+        #    ps_broker_stops / ps_integrity_scans — added 2026-08-14 to break up the ~800s black box)
         cls._ckpt("post_sleeve")         # terminal marker kept (≈0 now) so existing consumers of the label resolve
         cls._phase_finalize()            # -> cls._last_phase_timings for /background-scheduler/status
 
