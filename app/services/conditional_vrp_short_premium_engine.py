@@ -1483,6 +1483,11 @@ class ConditionalVRPShortPremiumEngine:
             return {"status": "NO_VRP_LEDGER", "managed": 0}
         from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
         q = TradeStationQuoteLiveEngine()
+        # Snapshot the arm state ONCE for the whole cycle. A mid-loop reload_env (e.g. the UW option-quote
+        # provider reloads .env to refresh its key when UW-pricing a close) must NOT flip enabled() between
+        # deciding a close and PERSISTING it — that would place the close but skip the ledger write, leaving
+        # a CLOSED-at-broker position marked OPEN on disk. Decide and persist off the same snapshot.
+        armed = self.enabled()
         # A condor CLOSE can only route during the regular session — after hours the broker rejects every
         # order "all routes are closed", which used to fire a scary CRITICAL each cycle for nothing. We
         # still EVALUATE exits after hours (so the operator sees what's due) but only PLACE them at the open.
@@ -1554,13 +1559,13 @@ class ConditionalVRPShortPremiumEngine:
                 continue
 
             committed = False
-            if self.enabled() and not dry_run and not market_open:
+            if armed and not dry_run and not market_open:
                 # A close was decided but the MARKET IS CLOSED — placing now just rejects ("all routes are
                 # closed") and pages the operator for nothing. Defer to the open; the manager re-fires each
                 # cycle and will place it during the regular session. No order, no alert.
                 r["manager_status"] = "VRP_CONDOR_CLOSE_DEFERRED"
                 r["manager_status_reason"] = f"{reason} — market closed, will place at the open"
-            elif self.enabled() and not dry_run:
+            elif armed and not dry_run:
                 b = self._booking()
                 if self._atomic_orders_enabled():
                     # ATOMIC CLOSE: one multi-leg order — all legs close together or none. A partial/naked
@@ -1682,13 +1687,13 @@ class ConditionalVRPShortPremiumEngine:
             decisions.append({"symbol": r["symbol"], "action": "CLOSE", "reason": reason,
                               "committed": committed, "pnl": round(pnl_total, 2), "dte": dte})
 
-        if self.enabled() and not dry_run and any(d["action"] == "CLOSE" for d in decisions):
+        if armed and not dry_run and any(d["action"] == "CLOSE" for d in decisions):
             with open(self.LEDGER, "w") as f:
                 for r in rows:
                     f.write(json.dumps(r) + "\n")
         return {"timestamp": datetime.utcnow().isoformat(),
                 "managed": len(decisions), "decisions": decisions,
-                "acted": bool(self.enabled() and not dry_run), "status": "VRP_SHORT_PREMIUM_MANAGED"}
+                "acted": bool(armed and not dry_run), "status": "VRP_SHORT_PREMIUM_MANAGED"}
 
     def open_condor_exits(self):
         """READ-ONLY exit levels for every OPEN condor — the price targets the exit doctrine acts on.
