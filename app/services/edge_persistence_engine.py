@@ -596,6 +596,93 @@ class EdgePersistenceEngine:
                                 "closest-to-proven ranking are comparable with the condors', not vs raw notional."),
         }
 
+    def proof_maturity(self, now=None):
+        """ONE view of every edge sleeve's distance to a verdict + a rough ETA. The grade's only remaining
+        lever is proof accrual, so this makes it legible at a glance. READ-ONLY, built ON TOP of
+        realized_edge() — the court stays the single source of truth; this only projects distance-to-gate.
+        ETA: periodic sleeves are deterministic (periods-left x cadence); close-based is a ROUGH linear
+        extrapolation of the observed close cadence (flagged low-confidence under 3 independent days)."""
+        from datetime import datetime
+        now = now or datetime.utcnow()
+        re = self.realized_edge()
+        sleeves = dict(re.get("sleeves") or {})
+        close_gate = int(re.get("min_trades_gate") or self.MIN_TRADES)
+        periodic_gate = int(re.get("periodic_gate") or self.PERIODIC_MIN_PERIODS)
+
+        # earliest close per sleeve → observed close-based accrual rate
+        trades, _ = self._closed_trades()
+        first_close = {}
+        for t in trades:
+            s, ca = t.get("sleeve"), str(t.get("closed_at") or "")[:10]
+            if s and ca and (s not in first_close or ca < first_close[s]):
+                first_close[s] = ca
+
+        def _state(verdict):
+            v = str(verdict or "")
+            for k in ("PROVEN", "DECAYED", "ACCUMULATING", "UNPROVEN"):
+                if v.startswith(k):
+                    return k
+            return "UNKNOWN"
+
+        def _days_since(dstr):
+            try:
+                return max(1, (now.date() - datetime.fromisoformat(dstr).date()).days)
+            except Exception:
+                return None
+
+        rows = []
+        universe = set(sleeves) | {"premium_vrp"}   # always surface the armed VRP sleeve (starts booking Mon)
+        for s in sorted(universe):
+            stat = sleeves.get(s) or {}
+            periodic = s in self.PERIODIC_SLEEVES
+            gate = periodic_gate if periodic else close_gate
+            current = int(stat.get("trades") or 0)
+            verdict = stat.get("verdict") or ("ACCUMULATING (0/%d — no closes yet)" % gate)
+            state = _state(verdict)
+            pct = round(100.0 * min(current, gate) / gate, 1) if gate else None
+            remaining = max(0, gate - current)
+            eta_days, eta_conf = None, None
+            if state in ("PROVEN", "DECAYED"):
+                eta_days, eta_conf = 0, "reached"
+            elif periodic:
+                eta_days, eta_conf = remaining * int(self.PERIODIC_SLEEVES[s]), "deterministic (cadence)"
+            else:
+                span = _days_since(first_close.get(s)) if first_close.get(s) else None
+                if current >= 1 and span:
+                    rate = current / span
+                    eta_days = int(round(remaining / rate)) if rate > 0 else None
+                    eta_conf = "rough (observed cadence)" if current >= 3 else "very rough (<3 samples)"
+                else:
+                    eta_conf = "no closes yet — not estimable"
+            rows.append({
+                "sleeve": s, "measure": "periodic" if periodic else "close-based",
+                "current": current, "gate": gate, "progress_pct": pct, "state": state,
+                "mean_return_on_risk_pct": stat.get("mean_return_on_risk_pct"),
+                "fill_confirmed_trades": stat.get("fill_confirmed_trades"),
+                "estimated_trades": stat.get("estimated_trades"),
+                "eta_days_to_gate": eta_days, "eta_confidence": eta_conf, "verdict": verdict,
+            })
+
+        accum = [r for r in rows if r["state"] in ("ACCUMULATING", "UNPROVEN") and r["eta_days_to_gate"]]
+        nearest = min(accum, key=lambda r: r["eta_days_to_gate"], default=None)
+        summary = {
+            "sleeves_tracked": len(rows),
+            "proven": [r["sleeve"] for r in rows if r["state"] == "PROVEN"],
+            "decayed": [r["sleeve"] for r in rows if r["state"] == "DECAYED"],
+            "accumulating": [r["sleeve"] for r in rows if r["state"] in ("ACCUMULATING", "UNPROVEN")],
+            "nearest_to_verdict": ({"sleeve": nearest["sleeve"], "eta_days": nearest["eta_days_to_gate"]}
+                                   if nearest else None),
+            "close_gate": close_gate, "periodic_gate": periodic_gate,
+        }
+        return {
+            "timestamp": now.isoformat(), "summary": summary, "sleeves": rows,
+            "note": ("Distance to each sleeve's verdict gate. close-based gate = %d independent trading DAYS "
+                     "(day-clustered); periodic gate = %d non-overlapping periods. Periodic ETA is deterministic "
+                     "(periods-left x cadence); close-based ETA is a rough linear extrapolation of observed "
+                     "cadence — treat <3-sample ETAs as directional only." % (close_gate, periodic_gate)),
+            "status": "EDGE_PROOF_MATURITY",
+        }
+
     def decay_alert(self, dispatch=True):
         """Fire on any sleeve the court has judged DECAYED (cost-net edge < 0 at 95%, ≥ MIN_TRADES).
         This is the RETIRE half of the measure→retire discipline: a losing edge must not silently bleed.

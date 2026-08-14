@@ -21,6 +21,13 @@ def edge_persistence():
     return EdgePersistenceEngine().report()
 
 
+@router.get("/edge-persistence/proof-maturity")
+def edge_proof_maturity():
+    """Proof-maturity view: every edge sleeve's distance to its verdict gate + a rough ETA, so the grade's
+    only remaining lever (proof accrual) is legible at a glance. Read-only; built on realized_edge()."""
+    return EdgePersistenceEngine().proof_maturity()
+
+
 @router.get("/execution-cost")
 def execution_cost():
     """Per-sleeve round-trip spread cost (live) — pair with /edge-persistence: cost > edge = retire."""
