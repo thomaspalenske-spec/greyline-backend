@@ -10363,5 +10363,20 @@
     "last_bar_date": "2026-07-31",
     "detected_at": "2026-08-11T03:22:25.073719",
     "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "ALDFW": {
+    "last_bar_date": "2026-08-04",
+    "detected_at": "2026-08-15T00:19:01.490110",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "ASPCR": {
+    "last_bar_date": "2026-08-04",
+    "detected_at": "2026-08-15T00:19:01.787073",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "VNQ": {
+    "last_bar_date": "2026-08-04",
+    "detected_at": "2026-08-15T00:19:04.213540",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
   }
 }
