@@ -23,6 +23,21 @@ from app.services.restore_engine import RestoreEngine
 router = APIRouter()
 
 
+def _deprecated_self_audit(name):
+    """These endpoints fed HARDCODED green inputs (True/"PASS"/10000-vs-10000) into real evaluation
+    engines, so they always returned HEALTHY/CLEAR/PASS regardless of reality — a structurally
+    meaningless green light (the 'unfailable self-audit' artifact). The real, input-driven safety layer
+    is GreyLineRealityGuardEngine (/reality-guard, 17+ live invariants). Rather than fabricate a verdict,
+    return an honest deprecation so nothing can mistake a green here for a live check."""
+    return {
+        "status": "ENDPOINT_DEPRECATED",
+        "endpoint": name,
+        "reason": ("This self-audit fed hardcoded inputs and could never fail — it did not reflect real "
+                   "system state. Superseded by the input-driven Reality Guard."),
+        "use_instead": "/reality-guard",
+    }
+
+
 @router.get("/ledger")
 def ledger():
     return LedgerEngine().load()
@@ -50,13 +65,7 @@ def system_status():
 
 @router.get("/backend-readiness")
 def backend_readiness():
-    return BackendReadinessEngine().evaluate_readiness(
-        api_online=True,
-        ledger_online=True,
-        snapshot_online=True,
-        reconciliation_online=True,
-        account_health="HEALTHY"
-    )
+    return _deprecated_self_audit("/backend-readiness")
 
 
 @router.get("/manifest")
@@ -71,13 +80,7 @@ def runtime_configuration():
 
 @router.get("/runtime-safety")
 def runtime_safety():
-    return RuntimeSafetySummaryEngine().summarize_runtime_safety(
-        broker_connected=False,
-        autonomous_execution_enabled=False,
-        authority_level="OBSERVE_RECOMMEND_ONLY",
-        kill_switch_status="STANDBY",
-        credential_safety_approved=True
-    )
+    return _deprecated_self_audit("/runtime-safety")
 
 
 @router.get("/deployment-mode-gate")
@@ -87,28 +90,19 @@ def deployment_mode_gate():
 
 @router.get("/configuration-validation")
 def configuration_validation():
-    return ConfigurationValidationEngine().validate_configuration(
-        {
-            "GREYLINE_MODE": "LOCAL_DEVELOPMENT",
-            "GREYLINE_ENVIRONMENT": "MacBook",
-            "BROKER_CONNECTION_ENABLED": False,
-            "AUTONOMOUS_EXECUTION_ENABLED": False
-        }
-    )
+    return _deprecated_self_audit("/configuration-validation")
 
 
 @router.get("/account-drift")
 def account_drift():
-    return AccountDriftDetectorEngine().detect_drift(ledger_equity=10000, reported_equity=10000)
+    # Was: detect_drift(10000, 10000) → always CLEAR. Real ledger-vs-broker drift is covered by Reality
+    # Guard's REALIZED_CONTINUITY / broker-view invariants and the mission risk governor.
+    return _deprecated_self_audit("/account-drift")
 
 
 @router.get("/account-health")
 def account_health():
-    return AccountHealthEngine().evaluate_health(
-        reconciliation_status="PASS",
-        drift_detected=False,
-        snapshot_valid=True
-    )
+    return _deprecated_self_audit("/account-health")
 
 
 @router.get("/audit-log")
@@ -132,13 +126,7 @@ def backend_control_center():
 
 @router.get("/backend-phase-gate")
 def backend_phase_gate():
-    return BackendPhaseGateEngine().evaluate_phase_gate(
-        backend_ready=True,
-        control_center_online=True,
-        ucf_registry_active=True,
-        capability_registry_active=True,
-        milestone_registry_active=True
-    )
+    return _deprecated_self_audit("/backend-phase-gate")
 
 
 @router.get("/backend-ucfs")

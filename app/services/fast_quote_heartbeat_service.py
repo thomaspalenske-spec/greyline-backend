@@ -158,8 +158,12 @@ class FastQuoteHeartbeatService:
         symbols = {}
         quote_ages = []
 
+        # ONE batched round-trip for all heartbeat symbols — was N serial get_quote calls EVERY 5s (the
+        # highest-frequency quote fan-out in the system). get_quotes hits the comma-list TS endpoint once,
+        # with the same 60s cache + single-flight; each symbol's row is read from its own result entry.
+        batch = quote_engine.get_quotes(list(cls._symbols)) or {}
         for symbol in cls._symbols:
-            quote_result = quote_engine.get_quote(symbol)
+            quote_result = batch.get(str(symbol).upper()) or batch.get(symbol) or {}
             quote_row = cls._extract_quote_row(quote_result)
 
             trade_time = quote_row.get("TradeTime")

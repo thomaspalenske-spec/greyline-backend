@@ -25,12 +25,19 @@ class DecisionAccuracyDashboardEngine:
         if scored_total > 0:
             execute_signal_loss_rate = round((unfavorable / scored_total) * 100, 2)
 
-        decision_quality_score = 0
-        if scored_total > 0:
-            decision_quality_score = round(
-                ((favorable * 1.0) + (neutral * 0.5)) / scored_total * 100,
-                2
-            )
+        # NEUTRAL is NOT half a win. Crediting it 0.5 made the score converge to ~50
+        # whenever most outcomes were flat — which, before the fixed-horizon fix, was
+        # nearly always, because decisions were graded minutes after they were made and
+        # could not have moved. A no-signal system therefore scored 50 and read as
+        # mediocre-but-real rather than as no measurement. It also contradicted
+        # execute_signal_win_rate, which keeps NEUTRAL in the denominator without
+        # crediting it.
+        #
+        # Decisive outcomes only: of the calls that actually resolved, how many were right.
+        decisive_total = favorable + unfavorable
+        decision_quality_score = (
+            round((favorable / decisive_total) * 100, 2) if decisive_total > 0 else None
+        )
 
         symbol_scores = {}
         for item in scoring.get("scored_outcomes", []):
@@ -76,6 +83,11 @@ class DecisionAccuracyDashboardEngine:
             "execute_signal_win_rate": execute_signal_win_rate,
             "execute_signal_loss_rate": execute_signal_loss_rate,
             "decision_quality_score": decision_quality_score,
+            # The denominator behind that score, and the flat calls excluded from it. A
+            # score computed on a handful of decisive outcomes is not comparable to one
+            # computed on hundreds, and that was previously invisible.
+            "decisive_outcomes": decisive_total,
+            "neutral_excluded": neutral,
             "symbol_accuracy": symbols,
             "execution_enabled": False,
             "order_placement_allowed": False,

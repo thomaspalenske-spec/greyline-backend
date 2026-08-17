@@ -28,16 +28,22 @@ def test_index_futures_share_the_bucket_of_the_etf_they_track():
 
 
 def test_full_traded_universe_is_mapped():
-    # The momentum-reversal strategy trades every name with price history; an unmapped
-    # one is a concentration blind spot the risk limit can't see.
-    import glob
-    import os
+    # Every name GreyLine can actually HOLD must carry a sector, or it is a concentration blind spot the
+    # risk limit can't see. This is the sleeves' actual tradeable sets — NOT the historical CSV dir,
+    # which is the full-market point-in-time archive (thousands of names we never trade) and stopped
+    # being "the traded universe" when survivorship archiving expanded it. The derived optionable
+    # universe is kept mapped by app/scripts/build_sector_map.py (which now covers these sets) and any
+    # held-but-unmapped name is surfaced at runtime (see test_unmapped_symbols_are_surfaced).
+    from app.services.vrp_research_engine import VRPResearchEngine
+    from app.services.trend_following_engine import TrendFollowingEngine
+    from app.services.managed_futures_engine import ManagedFuturesEngine
 
     e = PortfolioExposureEngine()
-    syms = [os.path.basename(p).replace("_daily.csv", "")
-            for p in glob.glob("app/data/historical/*_daily.csv")]
-    unmapped = sorted(s for s in syms if e._sector(s) == "UNKNOWN")
-    assert unmapped == [], f"unmapped names in traded universe: {unmapped}"
+    traded = (set(VRPResearchEngine.CURATED_FALLBACK)
+              | set(TrendFollowingEngine.BASKET) | set(ManagedFuturesEngine.BASKET)
+              | {"SGOV", "SVXY", "QQQM", "GLDM"})
+    unmapped = sorted(s for s in traded if e._sector(s) == "UNKNOWN")
+    assert unmapped == [], f"unmapped names in the traded universe: {unmapped}"
 
 
 def test_entire_scan_universe_is_mapped():
@@ -60,6 +66,9 @@ def test_unmapped_symbols_are_surfaced(tmp_path):
     e = PortfolioExposureEngine()
     e.equity_ledger = ledger
     e.option_ledger = tmp_path / "none.jsonl"
+    # Hermetic: pin broker holdings empty+healthy so a live/cached TradeStation read can't leak real
+    # (unmapped) positions into the assertion when the suite runs alongside broker-touching tests.
+    e._broker_positions = lambda: ([], False)
     out = e.evaluate()
 
     assert out["unmapped_symbols"] == ["ZZZZ"]

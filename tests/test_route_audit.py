@@ -17,6 +17,13 @@ def test_all_get_routes_execute():
         "/live-portfolio-snapshot",
         "/tradestation-orders-live",
         "/tradestation-positions-live",
+        "/premium-harvest-os",
+        "/portfolio-greeks",     # live chain greeks per open leg
+        "/crash-stress-test/live",  # reads live book greeks   # aggregates live UW/broker reads
+        "/catalyst-overlay",     # live UW economic/FDA calendar
+        "/vrp-short-premium/plan",   # scans 201 names live (UW + option chains) — verified 200 over HTTP
+        "/adaptive-dte",             # builds condors across candidate tenors live (option chains)
+        "/broker-protection",        # live broker positions/orders read, like the other TS-live routes
         "/tradestation-balance-live",
         "/tradestation-positions-retry",
         "/tradestation-balance-retry",

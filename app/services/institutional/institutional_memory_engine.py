@@ -147,7 +147,26 @@ class InstitutionalMemoryEngine:
                 quotes = (q.get("response_json") or {}).get("Quotes") or []
                 price = float((quotes[0] if quotes else {}).get("Last") or 0)
             if price and float(price) > 0:
-                PriceHistoryStore().record(symbol, price, timestamp)
+                store = PriceHistoryStore()
+                # Reject a price that cannot belong to this symbol.
+                #
+                # A stale loop variable in opportunity_scoring_engine wrote one
+                # instrument's price under every other symbol's ticker for weeks, and
+                # nothing noticed because a price is just a positive float. Compare
+                # against what this symbol has recorded before: a real quote moves a few
+                # percent between cycles, not multiples. Bootstrapping (no history) is
+                # allowed through, so a genuinely new symbol still starts a series.
+                existing = store._load(symbol)
+                if existing:
+                    reference = existing[-1][1]
+                    ratio = float(price) / reference if reference > 0 else 0
+                    if ratio > 1.5 or ratio < 0.67:
+                        return {
+                            "symbol": symbol, "rejected_price": float(price),
+                            "reference_price": reference,
+                            "status": "PRICE_REJECTED_IMPLAUSIBLE_FOR_SYMBOL",
+                        }
+                store.record(symbol, price, timestamp)
         except Exception:
             pass
 

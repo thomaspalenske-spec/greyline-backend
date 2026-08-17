@@ -1,4 +1,5 @@
 import json
+from app.services.time_utils import parse_utc
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +12,7 @@ class ForwardOutcomeHorizonTrackerEngine:
         if not value:
             return None
         try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+            return parse_utc(value)
         except Exception:
             return None
 

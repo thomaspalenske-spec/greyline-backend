@@ -10,38 +10,92 @@ import json
 DATA_DIR = Path("app/data/historical")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-def sp500_symbols():
-    """Current S&P 500 constituents from Unusual Whales (SPY holdings).
+def _index_holdings(etf, min_expected):
+    """Current constituents of an index, from its tracking ETF's holdings (Unusual Whales).
 
-    This replaces a hand-typed list as the definition of the tradable universe.
-    MomentumReversalStrategyEngine._symbols() globs the CSVs this writes, so whatever
-    lands here IS what the strategy may select — the list was the shackle, not the code.
-
-    Returns ~504 tickers: the index holds 500 companies but several have dual share
-    classes (GOOG/GOOGL, FOX/FOXA, NWS/NWSA).
+    Sourcing the universe from live holdings replaces a hand-typed list —
+    MomentumReversalStrategyEngine._symbols() globs the CSVs this writes, so whatever lands
+    here IS what the strategy may select. `min_expected` guards against a partial API
+    response silently shrinking the universe.
     """
     from dotenv import load_dotenv
     load_dotenv(".env")
     from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
 
-    resp = UnusualWhalesProvider()._get("/api/etfs/SPY/holdings", params={"limit": 600})
+    resp = UnusualWhalesProvider()._get(f"/api/etfs/{etf}/holdings", params={"limit": 600})
     rows = (resp.get("data") if isinstance(resp, dict) else resp) or []
     tickers = sorted({r.get("ticker") for r in rows
                       if r.get("ticker") and str(r.get("type", "stock")).lower() == "stock"})
-    if len(tickers) < 400:
+    if len(tickers) < min_expected:
         raise RuntimeError(
-            f"SPY holdings returned only {len(tickers)} tickers — refusing to shrink the "
-            "universe on a partial response. Check the UW plan/endpoint before rerunning."
+            f"{etf} holdings returned only {len(tickers)} tickers (expected >= {min_expected}) "
+            "— refusing to shrink the universe on a partial response. Check the UW endpoint."
         )
     return tickers
 
 
-# The ETFs the strategy trades alongside single names. Not in SPY holdings, so kept
-# explicitly — these are instruments, not an opinion about which companies matter.
+def sp500_symbols():
+    """The ~504 S&P 500 constituents (500 companies, plus dual classes like GOOG/GOOGL)."""
+    return _index_holdings("SPY", min_expected=400)
+
+
+def dow_symbols():
+    """The 30 Dow Jones Industrial Average constituents (DIA holdings).
+
+    Every Dow name is CURRENTLY also an S&P 500 member, so this is a subset of
+    sp500_symbols() today. It is pinned explicitly anyway because the two indices are
+    maintained by DIFFERENT committees: were a Dow component ever dropped from the S&P
+    500, sourcing the universe from SPY holdings alone would silently drop it from what
+    GreyLine can trade. Unioning DIA guarantees the Dow is always tradable regardless.
+    """
+    return _index_holdings("DIA", min_expected=25)
+
+
+def nasdaq100_symbols():
+    """The ~100 NASDAQ-100 constituents (QQQ holdings).
+
+    Unlike the Dow, this genuinely EXPANDS the universe: ~13 NASDAQ-100 names are NOT in
+    the S&P 500 because the S&P 500 requires US domicile and the NASDAQ-100 does not —
+    e.g. ASML (NL), ARM (UK), MELI (AR), PDD (CN), CCEP (UK). Sourcing from SPY holdings
+    alone silently excluded them. Pinning QQQ holdings brings the full NASDAQ-100 in.
+    """
+    return _index_holdings("QQQ", min_expected=90)
+
+
+# ETFs the strategy trades alongside single names — instruments, not an opinion about
+# which companies matter. This is how a $10k CASH-equity account gets futures, commodity,
+# rate and international exposure: through liquid, cash-settled, whole-share-sizable
+# trackers the existing pipeline handles cleanly. It is deliberately NOT leveraged/inverse
+# or volatility-decay products (UVXY, UNG-style contango traps as core holdings) — those
+# adversely select under a momentum signal. Every name here is an established, liquid ETF.
 ETF_SYMBOLS = [
-    "SPY", "QQQ", "IWM", "DIA",
+    # Broad equity beta
+    "SPY", "QQQ", "IWM", "DIA", "VTI",
+    # US sectors
     "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC",
-    "SMH", "IBB", "KRE", "TLT", "GLD", "SLV", "USO",
+    "SMH", "IBB", "KRE",
+    # --- COMMODITIES (the "commodity market", via liquid futures-backed trackers) ---
+    "DBC",   # broad commodity basket
+    "DBA",   # agriculture
+    "GLD", "SLV", "USO",
+    "UNG",   # natural gas
+    "CPER",  # copper
+    "PPLT",  # platinum
+    # --- RATES / BONDS (the Treasury + credit "market") ---
+    "TLT",   # 20y+ Treasuries
+    "IEF",   # 7-10y Treasuries
+    "SHY",   # 1-3y Treasuries
+    "AGG",   # aggregate bond
+    "LQD",   # investment-grade credit
+    "HYG",   # high-yield credit
+    "TIP",   # inflation-protected
+    # --- INTERNATIONAL EQUITY (the ex-US "markets") ---
+    "EFA",   # developed ex-US
+    "EEM",   # emerging markets
+    "VWO",   # emerging markets (Vanguard)
+    "FXI",   # China large-cap
+    "EWJ",   # Japan
+    "EWZ",   # Brazil
     # Liquid non-S&P names the strategy already held; keeping them avoids silently
     # dropping open positions when the universe definition changes.
     "COIN", "MSTR",
@@ -127,8 +181,17 @@ def main():
     bad = 0
     skipped = 0
 
-    symbols = sorted(set(sp500_symbols()) | set(ETF_SYMBOLS))
-    print(f"universe: {len(symbols)} symbols (S&P 500 constituents + {len(ETF_SYMBOLS)} ETFs)")
+    sp500 = set(sp500_symbols())
+    dow = set(dow_symbols())
+    ndx = set(nasdaq100_symbols())
+    symbols = sorted(sp500 | dow | ndx | set(ETF_SYMBOLS))
+    dow_only = sorted(dow - sp500)
+    ndx_only = sorted(ndx - sp500)
+    print(f"universe: {len(symbols)} symbols "
+          f"(S&P 500 + {len(dow)} Dow + {len(ndx)} NASDAQ-100 + {len(ETF_SYMBOLS)} ETFs)")
+    print(f"  Dow-only (pinned so they can't drop): "
+          f"{dow_only if dow_only else 'none — all 30 are S&P members'}")
+    print(f"  NASDAQ-100-only (genuinely new, ex-US / non-S&P): {ndx_only or 'none'}")
 
     for symbol in symbols:
         # Resumable: an existing file with real history is left alone, so a rerun only

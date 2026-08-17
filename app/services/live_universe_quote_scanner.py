@@ -16,6 +16,8 @@ class LiveUniverseQuoteScanner:
         except (TypeError, ValueError, AttributeError, IndexError):
             return None
 
+    _CHUNK = 100     # TS quote URLs are comma-lists with a length cap; ~100/call mirrors _bulk_quotes
+
     def scan_safe_subset(self):
         universe = MarketUniverseEngine().get_universe()
 
@@ -26,13 +28,16 @@ class LiveUniverseQuoteScanner:
                 if symbol not in all_symbols:
                     all_symbols.append(symbol)
 
-        safe_subset = all_symbols
+        # BATCHED: was one serial get_quote per symbol across the ENTIRE universe (hundreds of throttle-bound
+        # round-trips). Now ceil(N/100) batched get_quotes calls; each symbol's row is read from the result.
+        engine = TradeStationQuoteLiveEngine()
+        quotes = {}
+        for i in range(0, len(all_symbols), self._CHUNK):
+            quotes.update(engine.get_quotes(all_symbols[i:i + self._CHUNK]) or {})
 
         results = []
-
-        for symbol in safe_subset:
-            quote = TradeStationQuoteLiveEngine().get_quote(symbol)
-
+        for symbol in all_symbols:
+            quote = quotes.get(str(symbol).upper()) or quotes.get(symbol) or {}
             results.append({
                 "symbol": symbol,
                 "http_status": quote.get("http_status"),
@@ -46,7 +51,7 @@ class LiveUniverseQuoteScanner:
 
         return {
             "timestamp": datetime.utcnow().isoformat(),
-            "symbols_requested": len(safe_subset),
+            "symbols_requested": len(all_symbols),
             "symbols": results,
             "execution_enabled": False,
             "status": "LIVE_UNIVERSE_QUOTE_SCAN_COMPLETE"

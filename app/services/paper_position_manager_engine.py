@@ -40,6 +40,15 @@ class PaperPositionManagerEngine:
         market_hours = MarketHoursEngine().status()
         market_open = bool(market_hours.get('is_regular_session'))
 
+        # BATCH-warm the shared quote cache for every managed symbol in ONE request, so the per-position
+        # get_quote below hits cache instead of a serial, throttle-bound TS round-trip per name.
+        try:
+            TradeStationQuoteLiveEngine().get_quotes(
+                [t.get("symbol") for t in trades
+                 if t.get("status") == "OPEN" and t.get("trade_intent") != "MOMENTUM_REVERSAL" and t.get("symbol")])
+        except Exception:
+            pass
+
         for trade in trades:
             if trade.get("status") != "OPEN":
                 updated.append(trade)

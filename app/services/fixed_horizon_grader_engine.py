@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.services.persistence.json_store import read_jsonl
 from app.services.price_history_store import PriceHistoryStore, _parse
-from app.services.skill_metrics_engine import SkillMetricsEngine
+from app.services.skill_metrics_engine import MIN_SAMPLE, SkillMetricsEngine
 
 FAVORABLE = "FAVORABLE"
 UNFAVORABLE = "UNFAVORABLE"
@@ -27,6 +27,15 @@ class FixedHorizonGraderEngine:
     def __init__(self, horizon_hours=None, tolerance_hours=None):
         self.horizon_hours = float(getenv("GREYLINE_GRADING_HORIZON_HOURS", "24")) if horizon_hours is None else float(horizon_hours)
         self.tolerance_hours = (self.horizon_hours / 4) if tolerance_hours is None else float(tolerance_hours)
+        # Tolerance must stay strictly below the horizon. At tolerance >= horizon the
+        # accepted window reaches back past the decision itself, so a "forward" price could
+        # predate the decision and grade it against its own snapshot. The default of
+        # horizon/4 is safe, but the constructor and the env var both accept overrides.
+        if self.tolerance_hours >= self.horizon_hours:
+            raise ValueError(
+                f"tolerance_hours ({self.tolerance_hours}) must be < horizon_hours "
+                f"({self.horizon_hours}); otherwise the forward price can precede the decision"
+            )
         self.ledger = Path("app/data/opportunity_memory/opportunity_outcome_ledger.jsonl")
         self.store = PriceHistoryStore()
 
@@ -62,8 +71,14 @@ class FixedHorizonGraderEngine:
             return
         index.setdefault(str(symbol).upper(), []).append((dt, price))
 
-    def _price_at(self, index, symbol, target_dt):
+    def _price_at(self, index, symbol, target_dt, after=None):
+        """Price near `target_dt`. `after`, when given, requires the point to be at or
+        after it — used to guarantee a forward price genuinely follows its decision."""
         pts = index.get(str(symbol).upper())
+        if not pts:
+            return None
+        if after is not None:
+            pts = [p for p in pts if p[0] >= after]
         if not pts:
             return None
         best = min(pts, key=lambda p: abs((p[0] - target_dt).total_seconds()))
@@ -78,6 +93,13 @@ class FixedHorizonGraderEngine:
         horizon = timedelta(hours=self.horizon_hours)
 
         counts = {FAVORABLE: 0, UNFAVORABLE: 0, NEUTRAL: 0, PENDING: 0}
+        # PENDING used to absorb three different things: a decision too young to grade, a
+        # malformed record, and a symbol with no forward price. A ledger systematically
+        # broken for some class of symbol therefore reported as merely immature, and if
+        # that breakage correlates with symbol or regime the graded subset is a biased
+        # sample of the decisions — invisible in the output. Counted separately now.
+        malformed = 0
+        no_forward_price = 0
         graded = []
         for d in decisions:
             symbol = d.get("symbol")
@@ -91,11 +113,16 @@ class FixedHorizonGraderEngine:
             except (TypeError, ValueError):
                 snap = 0
             if ts is None or snap <= 0 or bias not in ("BULLISH", "BEARISH"):
+                malformed += 1
                 counts[PENDING] += 1
                 continue
 
-            fwd = self._price_at(index, symbol, ts + horizon)
+            # `after=ts` guarantees the forward price genuinely follows the decision. The
+            # match was two-sided, so with a large enough tolerance a decision could be
+            # graded against a price recorded before it was made.
+            fwd = self._price_at(index, symbol, ts + horizon, after=ts)
             if not fwd:
+                no_forward_price += 1
                 counts[PENDING] += 1
                 continue
 
@@ -113,6 +140,7 @@ class FixedHorizonGraderEngine:
                 "directional_return_pct": round(directional, 4),
                 "forward_price_age_s": fwd["age_seconds"],
                 "grade": grade,
+                "day": ts.date().isoformat(),
             })
 
         # Drift-robust skill metric: raw hit rate is dominated by the market's move over
@@ -128,19 +156,47 @@ class FixedHorizonGraderEngine:
         avail = [h for h in (bull_hr, bear_hr) if h is not None]
         balanced = round(sum(avail) / len(avail), 4) if avail else None
 
+        # Independence. Rows are NOT independent observations: the same symbol is re-graded
+        # every scheduler cycle over overlapping forward windows, and all symbols in one
+        # cycle share a single market move. The honest unit is a distinct symbol-day.
+        effective_n = len({(x["symbol"], x["day"]) for x in graded
+                           if x["grade"] in (FAVORABLE, UNFAVORABLE)})
+
+        # The headline hit rates are suppressed below the same minimum the skill verdict
+        # enforces. They were previously computed unconditionally, so a payload could carry
+        # hit_rate 1.0 next to verdict INSUFFICIENT_DATA, and any dashboard reading the
+        # headline saw a 100% edge on one observation.
+        under_min = effective_n < MIN_SAMPLE
+        if under_min:
+            bull_hr = bear_hr = balanced = None
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "source": "FIXED_HORIZON_GRADER",
             "horizon_hours": self.horizon_hours,
             "tolerance_hours": self.tolerance_hours,
             "counts": counts,
+            # PENDING split into its real causes.
+            "pending_breakdown": {
+                "malformed_record": malformed,
+                "no_forward_price_yet": no_forward_price,
+            },
             "graded_count": len(graded),
+            "effective_n_symbol_days": effective_n,
+            "suppressed_below_min_sample": under_min,
             "per_direction": {
                 "bullish": {"n_decisive": bull_n, "hit_rate": round(bull_hr, 4) if bull_hr is not None else None},
                 "bearish": {"n_decisive": bear_n, "hit_rate": round(bear_hr, 4) if bear_hr is not None else None},
             },
-            "balanced_accuracy_precision_based": balanced,
-            "skill": SkillMetricsEngine().evaluate(graded),
+            # Mean of per-direction PRECISIONS (P(correct | predicted X)), not balanced
+            # accuracy, which averages recalls. The two coincide only when the predictor's
+            # bullish/bearish split is balanced; a predictor skewed toward the trending
+            # direction reads above 0.5 here with no discriminative skill. Use skill.mcc
+            # and skill.balanced_accuracy for the drift-robust answer — this field is
+            # retained for continuity and is deliberately not the one to trust.
+            "mean_per_direction_precision": balanced,
+            "balanced_accuracy_precision_based": balanced,   # deprecated alias, misnamed
+            "skill": SkillMetricsEngine().evaluate(graded, effective_n=effective_n),
             "skill_note": (
                 "Use skill.mcc (Matthews correlation): >0 significant = real skill, ~0 = none, "
                 "<0 = anti-skill. MCC is 0 for any drift/constant predictor, so it is the "

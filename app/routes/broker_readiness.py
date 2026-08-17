@@ -17,10 +17,13 @@ router = APIRouter()
 
 @router.get("/credential-safety-gate")
 def credential_safety_gate():
+    # Derive env_file_present / gitignore_protects_env from the guard engine's REAL file reads instead
+    # of asserting True — a broken .gitignore rule must fail this gate, not sail through green.
+    guard = EnvironmentFileGuardEngine().evaluate_environment_guard()
     return CredentialSafetyGateEngine().evaluate_credential_safety(
         credentials_in_plaintext=False,
-        env_file_present=True,
-        gitignore_protects_env=True,
+        env_file_present=bool(guard.get("env_file_present")),
+        gitignore_protects_env=bool(guard.get("gitignore_protects_env")),
         credential_rotation_required=False
     )
 
@@ -37,12 +40,18 @@ def environment_file_guard():
 
 @router.get("/broker-safety-summary")
 def broker_safety_summary():
+    # Derive the execution-state inputs from the REAL execution governor + kill-switch env, not
+    # hardcoded literals — asserting execution_blocked=False / trading_allowed=False while the actual
+    # governor said otherwise would render a false safety verdict.
+    from os import getenv
+    from app.services.execution_governor import ExecutionGovernor
+    perm = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
     return BrokerSafetySummaryEngine().summarize_safety(
         safe_for_broker_prep=True,
         authority_approved=True,
-        execution_blocked=False,
-        kill_switch_status="STANDBY",
-        trading_allowed=False
+        execution_blocked=not bool(perm.get("execution_enabled")),
+        kill_switch_status=getenv("GREYLINE_KILL_SWITCH_STATE", "LOCKED").upper(),
+        trading_allowed=bool(perm.get("order_placement_allowed"))
     )
 
 
@@ -73,13 +82,18 @@ def api_credential_readiness():
 
 @router.get("/broker-integration-readiness")
 def broker_integration_readiness():
+    # autonomous_execution_enabled is the safety-critical input — derive it from the REAL execution
+    # governor rather than asserting False, so an actually-enabled execution state can't hide behind a
+    # hardcoded "off". (The other flags are always-on architectural subsystems.)
+    from app.services.execution_governor import ExecutionGovernor
+    perm = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
     return BrokerIntegrationReadinessEngine().evaluate_readiness(
         ledger_supremacy_active=True,
         audit_log_active=True,
         snapshot_restore_active=True,
         reconciliation_active=True,
         drift_detection_active=True,
-        autonomous_execution_enabled=False
+        autonomous_execution_enabled=bool(perm.get("execution_enabled"))
     )
 
 

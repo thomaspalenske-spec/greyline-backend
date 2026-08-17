@@ -1,4 +1,5 @@
 import json
+from app.services.time_utils import parse_utc
 from datetime import datetime
 from pathlib import Path
 
@@ -15,9 +16,7 @@ class ForecastHalfLifeEngine:
 
     def _age_days(self, ts):
         try:
-            dt = datetime.fromisoformat(
-                str(ts).replace("Z", "+00:00")
-            ).replace(tzinfo=None)
+            dt = parse_utc(ts)
             return max(
                 0,
                 (datetime.utcnow() - dt).total_seconds() / 86400,

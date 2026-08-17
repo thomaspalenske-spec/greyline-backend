@@ -9,6 +9,15 @@ import requests
 
 from app.services.env_reload import reload_env
 
+_MISS = object()   # cache sentinel: distinguishes "absent/stale" from a cached value of None (e.g. a 403)
+
+
+def _envf(name, default):
+    try:
+        return float(os.getenv(name, "") or default)
+    except (TypeError, ValueError):
+        return float(default)
+
 # .env.local layers over .env — the UW key lives in both and the local one wins (see the
 # credential trap in f514f1f). Applied in order, later file wins; neither overrides a
 # variable the operator actually exported.
@@ -21,6 +30,11 @@ class UnusualWhalesProvider:
 
     _cache = {}
     _cache_lock = Lock()
+    # SINGLE-FLIGHT: at most one in-flight fetch per (path, params) key — concurrent callers for the same
+    # key wait here and share the one result instead of stampeding UW (the thundering-herd class that hung
+    # the scheduler cycle 2026-08-11). Different keys never block each other.
+    _inflight_locks = {}
+    _inflight_guard = Lock()
     _usage_lock = Lock()
     _usage_path = Path("app/data/unusual_whales_api_usage.json")
 
@@ -59,11 +73,15 @@ class UnusualWhalesProvider:
             "/oi-change",
             "/oi-per-strike",
             "/oi-per-expiry",
-            "/variance-risk-premium",
+            "/volatility/",         # realized + variance-risk-premium: daily, ~1-month-lagged — the
+                                    # highest-volume per-ticker endpoint (~200-250/day); no need to re-fetch
+                                    # a name more than once/day (was falling through to the 900s default)
             "/ownership",
             "/volume-and-ratio",
             "/insider/",
             "/congress/",
+            "/economic-calendar",   # market-wide, updates daily — was re-fetched every catalyst cycle at 900s
+            "/fda-calendar",
         )
 
         if any(token in path for token in fast_paths):
@@ -171,6 +189,49 @@ class UnusualWhalesProvider:
             state["cache_hit_count"] += 1
             self._write_usage_state(state)
 
+    def _cached_value(self, cache_key, ttl, now):
+        """Return the cached value if fresh, else the _MISS sentinel (so a cached None still counts)."""
+        with self._cache_lock:
+            cached = self._cache.get(cache_key)
+        if cached and now - cached["timestamp"] < ttl:
+            return cached["value"]
+        return _MISS
+
+    @classmethod
+    def _key_lock(cls, cache_key):
+        """One Lock per cache_key for single-flight coalescing. Soft-capped so the map can't grow without
+        bound over a long-lived process (a rare reset only loses coalescing briefly; correctness holds)."""
+        with cls._inflight_guard:
+            if len(cls._inflight_locks) > 8192:
+                cls._inflight_locks.clear()
+            lk = cls._inflight_locks.get(cache_key)
+            if lk is None:
+                lk = Lock()
+                cls._inflight_locks[cache_key] = lk
+            return lk
+
+    def _bounded_get(self, url, params):
+        """GET with a TOTAL wall-clock deadline over the whole request INCLUDING the streamed body read.
+        requests' read-timeout is only between-bytes, so a trickling/half-open response never trips it and
+        hangs the caller forever (the 2026-08-11 cycle freeze). Stream the body and abort at the deadline.
+        Returns (response, body_bytes); the connection is always released."""
+        connect_to = _envf("GREYLINE_UW_CONNECT_TIMEOUT", 6.0)
+        read_to = _envf("GREYLINE_UW_READ_TIMEOUT", 10.0)
+        total = _envf("GREYLINE_UW_TOTAL_DEADLINE", 25.0)
+        deadline = time.monotonic() + total
+        resp = self.session.get(url, params=params, timeout=(connect_to, read_to), stream=True)
+        try:
+            chunks = []
+            for chunk in resp.iter_content(chunk_size=65536):
+                if chunk:
+                    chunks.append(chunk)
+                if time.monotonic() > deadline:
+                    raise requests.exceptions.Timeout(
+                        f"UW total-request deadline {total:.0f}s exceeded reading body from {url}")
+            return resp, b"".join(chunks)
+        finally:
+            resp.close()
+
     def _get(
         self,
         path,
@@ -185,40 +246,47 @@ class UnusualWhalesProvider:
         now = time.time()
         ttl = self._ttl_for_path(path)
 
+        # FAST PATH: a fresh cached value needs neither the lock nor the network.
         if not force_refresh:
-            with self._cache_lock:
-                cached = self._cache.get(cache_key)
-
-            if cached and now - cached["timestamp"] < ttl:
+            hit = self._cached_value(cache_key, ttl, now)
+            if hit is not _MISS:
                 self._record_cache_hit()
-                return cached["value"]
+                return hit
 
         if not self.api_key:
             raise RuntimeError(
                 "UNUSUAL_WHALES_API_KEY not configured (set it in .env.local)."
             )
 
-        self._consume_budget()
+        # SINGLE-FLIGHT: coalesce concurrent same-key fetches so a burst of callers can't stampede UW.
+        with self._key_lock(cache_key):
+            # double-check: another thread may have populated the cache while we waited on the lock.
+            if not force_refresh:
+                hit = self._cached_value(cache_key, ttl, time.time())
+                if hit is not _MISS:
+                    self._record_cache_hit()
+                    return hit
 
-        response = self.session.get(
-            self.BASE_URL + path,
-            params=params,
-            timeout=20,
-        )
+            self._consume_budget()
 
-        if allow_forbidden and response.status_code == 403:
-            value = None
-        else:
-            response.raise_for_status()
-            value = response.json()
+            response, body = self._bounded_get(self.BASE_URL + path, params)
 
-        provider_daily_count = response.headers.get(
-            "x-uw-daily-req-count"
-        )
-        provider_daily_limit = response.headers.get(
-            "x-uw-token-req-limit"
-        )
+            if allow_forbidden and response.status_code == 403:
+                value = None
+            else:
+                response.raise_for_status()
+                value = json.loads(body) if body else None
 
+            provider_daily_count = response.headers.get(
+                "x-uw-daily-req-count"
+            )
+            provider_daily_limit = response.headers.get(
+                "x-uw-token-req-limit"
+            )
+
+            return self._finish_get(cache_key, value, provider_daily_count, provider_daily_limit)
+
+    def _finish_get(self, cache_key, value, provider_daily_count, provider_daily_limit):
         with self._usage_lock:
             state = self._usage_state()
 
@@ -246,7 +314,7 @@ class UnusualWhalesProvider:
 
         with self._cache_lock:
             self._cache[cache_key] = {
-                "timestamp": now,
+                "timestamp": time.time(),
                 "value": value,
             }
 

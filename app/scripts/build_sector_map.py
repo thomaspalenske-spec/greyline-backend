@@ -66,7 +66,22 @@ def main():
     from app.services.momentum_reversal_strategy_engine import MomentumReversalStrategyEngine
 
     provider = UnusualWhalesProvider()
-    symbols = MomentumReversalStrategyEngine()._symbols()
+    # The FULL traded universe, not just momentum: options/VRP names and the ETF sleeves can all be
+    # HELD, so each needs a sector or it is invisible to the concentration cap. (The historical CSV dir
+    # is the full-market PIT archive — thousands of names we never trade — so it is NOT the universe.)
+    symbols = set(MomentumReversalStrategyEngine()._symbols())
+    try:
+        from app.services.vrp_research_engine import VRPResearchEngine
+        symbols |= set(VRPResearchEngine.CURATED_FALLBACK)
+        from app.services.optionable_universe_engine import OptionableUniverseEngine
+        symbols |= set(OptionableUniverseEngine().names() or [])
+        from app.services.trend_following_engine import TrendFollowingEngine
+        from app.services.managed_futures_engine import ManagedFuturesEngine
+        symbols |= set(TrendFollowingEngine.BASKET) | set(ManagedFuturesEngine.BASKET)
+        symbols |= {"SGOV", "SVXY", "QQQM", "GLDM"}
+    except Exception as exc:
+        print("traded-universe union warning:", exc)
+    symbols = sorted(symbols)
 
     # Bulk first: one screener call covers ~500 of the S&P 500.
     resp = provider._get("/api/screener/stocks", params={"is_s_p_500": "true", "limit": 500})

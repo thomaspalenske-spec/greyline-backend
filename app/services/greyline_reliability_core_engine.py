@@ -28,8 +28,21 @@ class GreyLineReliabilityCoreEngine:
         execution_permission = ExecutionGovernor().evaluate_execution_permission("EXECUTE")
 
         token_ok = token.get("ready_for_read_only") is True
-        balance_ok = balance.get("status") == "BALANCE_READ_SUCCESS"
-        positions_ok = positions.get("status") == "POSITIONS_READ_SUCCESS"
+
+        # A 429 is a RATE-LIMIT ("you're calling too often"), NOT a broker/auth outage or fabricated data —
+        # and it self-clears. A transient throttle on one read must not flap Mission Status to DEGRADED
+        # ("execution authority restricted"), especially since the OTHER reads (token/positions or balance)
+        # already confirm the account is live and authed. So treat a 429 as verified-enough (hold), and
+        # degrade ONLY on a REAL failure — auth (401/403), server (5xx), or an empty/unparseable body.
+        def _read_ok(resp, success_status):
+            if resp.get("status") == success_status:
+                return True, "success"
+            if resp.get("http_status") == 429:
+                return True, "throttled"           # rate-limited — self-clears, not a reliability failure
+            return False, "failed"
+
+        balance_ok, balance_read_state = _read_ok(balance, "BALANCE_READ_SUCCESS")
+        positions_ok, positions_read_state = _read_ok(positions, "POSITIONS_READ_SUCCESS")
 
         broker_positions = (
             positions.get("response_json", {}).get("Positions", [])
@@ -50,8 +63,11 @@ class GreyLineReliabilityCoreEngine:
             else "LIVE_EXECUTION_POSITION_RECONCILIATION_REQUIRED"
         )
 
-        scheduler_alive = scheduler.get("thread_alive") is True
-        scheduler_enabled = scheduler.get("scheduler_enabled") is True
+        # CROSS-PROCESS: thread_alive/scheduler_enabled are process-local (False from an out-of-process audit),
+        # which forced a false -20 'RELIABILITY_CORE_DEGRADED'. scheduler_live (thread alive OR recent persisted
+        # cycle) is accurate from any process; a live scheduler is by definition enabled+running.
+        scheduler_alive = bool(scheduler.get("scheduler_live", scheduler.get("thread_alive")))
+        scheduler_enabled = bool(scheduler.get("scheduler_live", scheduler.get("scheduler_enabled")))
 
         checks = {
             "token_ok": token_ok,
@@ -102,7 +118,9 @@ class GreyLineReliabilityCoreEngine:
             "broker_truth": {
                 "broker": "TradeStation",
                 "balance_status": balance.get("status"),
+                "balance_read_state": balance_read_state,      # success | throttled (429, held) | failed
                 "positions_status": positions.get("status"),
+                "positions_read_state": positions_read_state,
                 "broker_position_count": broker_position_count,
                 "positions": broker_positions,
             },

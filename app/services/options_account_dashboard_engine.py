@@ -7,6 +7,7 @@ from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.tp_state_tracking_engine import TPStateTrackingEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.thesis_integrity_engine import ThesisIntegrityEngine
+from app.services.ttl_cache import ttl_cached
 
 
 class OptionsAccountDashboardEngine:
@@ -356,6 +357,7 @@ class OptionsAccountDashboardEngine:
             }
 
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def get_dashboard(self):
         trades = []
 
@@ -381,22 +383,33 @@ class OptionsAccountDashboardEngine:
         closed_trades = [t for t in trades if t.get("status") == "CLOSED"]
 
         realized_pnl = round(sum(float(t.get("realized_pnl") or 0) for t in closed_trades), 2)
-        unrealized_pnl = round(sum(float(t.get("unrealized_pnl") or 0) for t in open_trades), 2)
+        # Open options currently have NO live contract mark written to the ledger (the position manager
+        # updates the UNDERLYING price + doctrine state, not the option's own bid/ask), so summing
+        # t["unrealized_pnl"] would always be a hard 0 — presenting cost basis as a live mark, so a
+        # deeply-underwater open book reads as break-even. Only count positions that actually carry a
+        # mark; if none do, report unrealized as UNAVAILABLE (null), never a false 0.
+        marked = [t for t in open_trades if t.get("unrealized_pnl") is not None]
+        unrealized_marked = len(marked) > 0
+        unrealized_pnl = round(sum(float(t.get("unrealized_pnl") or 0) for t in marked), 2) if unrealized_marked else None
 
-        deployable_open_trades = [
-            t for t in open_trades
-            if not (
-                str(t.get("manager_status") or "") == "OPTION_MARKET_CLOSED_LAST_QUOTE_MARK"
-                and float(t.get("unrealized_pnl_pct") or 0) <= -35
-            )
-        ]
-        deployed_capital = round(sum(float(t.get("estimated_cost") or 0) for t in deployable_open_trades), 2)
-        open_position_value = round(deployed_capital + unrealized_pnl, 2)
+        # Committed cost stays committed regardless of MARK — never drop a deeply-underwater open
+        # position, which would free imaginary cash (an unreliable mark suppresses unrealized, not cost).
+        deployed_capital = round(sum(float(t.get("estimated_cost") or 0) for t in open_trades), 2)
+        open_position_value = round(deployed_capital + (unrealized_pnl or 0), 2)   # at cost when unmarked
+        # These are OPTIONS-SLEEVE-scoped (this book's realized/unrealized against its notional base) —
+        # they are NOT the whole account. cash_on_hand/current_equity/total_return describe the sleeve.
         cash_on_hand = round(self.starting_equity + realized_pnl - deployed_capital, 2)
-        buying_power_remaining = cash_on_hand
         capital_deployed_pct = round((deployed_capital / self.starting_equity) * 100, 2) if self.starting_equity else 0
-
         current_equity = round(cash_on_hand + open_position_value, 2)
+
+        # Buying power is SHARED with the equity book — draw it from the one cross-book resolver (live
+        # mission equity − at-risk MV) so it never overstates cash by whatever the equity book holds.
+        try:
+            from app.services.options_paper_trade_ledger_engine import OptionsPaperTradeLedgerEngine
+            account_bp = OptionsPaperTradeLedgerEngine().account_free_cash()
+        except Exception:
+            account_bp = None
+        buying_power_remaining = account_bp if account_bp is not None else cash_on_hand
 
         wins = [t for t in closed_trades if float(t.get("realized_pnl") or 0) > 0]
         losses = [t for t in closed_trades if float(t.get("realized_pnl") or 0) < 0]
@@ -415,10 +428,20 @@ class OptionsAccountDashboardEngine:
             "open_position_value": open_position_value,
             "deployed_capital": deployed_capital,
             "buying_power_remaining": buying_power_remaining,
+            "buying_power_basis": ("SHARED cross-book free cash (mission equity − at-risk MV)"
+                                   if account_bp is not None else "options-sleeve cash (broker read degraded)"),
+            "scope_note": ("current_equity / cash_on_hand / total_return_pct are OPTIONS-SLEEVE-scoped "
+                           "(this book vs its notional base), NOT the whole account; buying_power_remaining "
+                           "is the shared account reality."),
             "capital_deployed_pct": capital_deployed_pct,
             "realized_pnl": realized_pnl,
-            "unrealized_pnl": unrealized_pnl,
+            "unrealized_pnl": unrealized_pnl,   # null when open positions carry no live contract mark
+            "unrealized_marked": unrealized_marked,
+            "mark_basis": "LIVE" if unrealized_marked else "COST",
             "total_return_pct": round(((current_equity - self.starting_equity) / self.starting_equity) * 100, 2),
+            "total_return_basis": ("MARK_TO_MARKET" if unrealized_marked else
+                                   "REALIZED_ONLY — open options marked at COST (no live option mark); "
+                                   "unrealized P&L unavailable"),
             "option_trade_count": len(trades),
             "open_option_trade_count": len(open_trades),
             "closed_option_trade_count": len(closed_trades),

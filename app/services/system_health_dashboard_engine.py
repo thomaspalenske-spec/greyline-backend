@@ -5,10 +5,12 @@ from app.services.background_scheduler_service import BackgroundSchedulerService
 from app.services.learning_analytics_engine import LearningAnalyticsEngine
 from app.services.adaptive_weight_governance_engine import AdaptiveWeightGovernanceEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
+from app.services.ttl_cache import ttl_cached
 
 
 class SystemHealthDashboardEngine:
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def status(self):
         broker = TradeStationTokenMaintenanceEngine().evaluate()
         scheduler = BackgroundSchedulerService.status()
@@ -16,7 +18,12 @@ class SystemHealthDashboardEngine:
         governance = AdaptiveWeightGovernanceEngine().active_governance()
 
         broker_healthy = broker.get("status") == "TRADESTATION_TOKEN_MAINTENANCE_READY"
-        scheduler_healthy = scheduler.get("thread_alive") is True or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+        # CROSS-PROCESS: scheduler_live = thread alive OR recent persisted cycle, so this dashboard status is
+        # accurate from any process (thread_alive alone falsely read DEGRADED out-of-process).
+        scheduler_healthy = bool(scheduler.get(
+            "scheduler_live",
+            scheduler.get("thread_alive") is True
+            or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"))
         learning_healthy = learning.get("status") == "LEARNING_ANALYTICS_READY"
         governance_healthy = governance.get("status") == "ACTIVE_WEIGHT_GOVERNANCE_READY"
 

@@ -22,10 +22,16 @@ class OpportunityOutcomeTrackerEngine:
         quotes = (quote_result.get("response_json") or {}).get("Quotes") or []
         row = quotes[0] if quotes else {}
 
+        # None, not 0.0. Three failure paths — no response_json, empty Quotes, unparseable
+        # Last — all returned 0.0, which was then written to the DURABLE ledger as
+        # snapshot_price with no error marker, indistinguishable from a price. Those rows
+        # are permanent, counted as successful records, and later surface as "malformed"
+        # buried inside a PENDING bucket that reads as mere immaturity.
         try:
-            return float(row.get("Last") or 0)
+            price = float(row.get("Last") or 0)
         except Exception:
-            return 0.0
+            return None
+        return price if price > 0 else None
 
 
     def _score_context(self, symbol):

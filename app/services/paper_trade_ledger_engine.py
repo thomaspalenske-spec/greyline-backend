@@ -52,6 +52,8 @@ class PaperTradeLedgerEngine:
         bearish_score=None,
         opposing_score=None,
         direction_confidence=None,
+        entry_atr=None,
+        entry_stop=None,
     ):
         entry_thesis = self._entry_thesis_snapshot(symbol)
 
@@ -71,6 +73,10 @@ class PaperTradeLedgerEngine:
             "direction_confidence": direction_confidence,
             "quantity": quantity,
             "entry_price": float(entry_price),
+            # entry-time risk (recorded by the momentum sleeve): the ATR + the doctrine's initial stop, so
+            # the edge court can measure return on the ACTUAL intended risk, not a notional proxy.
+            "entry_atr": entry_atr,
+            "entry_stop": entry_stop,
             "exit_price": None,
             "realized_pnl": 0.0,
             "status": "OPEN",
@@ -135,6 +141,34 @@ class PaperTradeLedgerEngine:
         trade["audit_logged"] = True
         trade["audit_result"] = audit
         return trade
+
+    def void_latest(self, symbol, reason="broker rejected the order"):
+        """Revert the latest OPEN trade for `symbol` because its broker booking was REJECTED — it
+        never filled, so it must not sit in the ledger as a phantom position. Marks it VOIDED_REJECT
+        (NOT CLOSED — no realized P&L is booked; it never traded) so it drops out of open positions.
+        The reconciler for the place_order body-verification fix: a rejected order can't silently
+        mutate the ledger."""
+        trades = self._read_all()
+        open_trades = [t for t in trades if t.get("symbol") == symbol and t.get("status") == "OPEN"]
+        if not open_trades:
+            return {"timestamp": datetime.utcnow().isoformat(), "symbol": symbol,
+                    "voided": False, "status": "NO_OPEN_PAPER_TRADE"}
+        trade = open_trades[-1]
+        trade["status"] = "VOIDED_REJECT"
+        trade["realized_pnl"] = 0.0
+        trade["void_reason"] = str(reason)[:200]
+        trade["voided_timestamp"] = datetime.utcnow().isoformat()
+        remaining, replaced = [], False
+        for t in trades:
+            if t.get("trade_id") == trade.get("trade_id") and not replaced:
+                remaining.append(trade)
+                replaced = True
+            else:
+                remaining.append(t)
+        atomic_write_text(self.ledger_file, "".join(json.dumps(t) + "\n" for t in remaining))
+        ImmutableAuditLedgerEngine().record("PAPER_TRADE_LEDGER_VOIDED_REJECT", trade)
+        return {"timestamp": datetime.utcnow().isoformat(), "symbol": symbol,
+                "voided": True, "trade_id": trade.get("trade_id"), "status": "VOIDED_REJECT"}
 
 
     def _tp_ladder(self, trade):

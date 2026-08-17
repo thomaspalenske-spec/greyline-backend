@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -10,7 +10,12 @@ from app.services.momentum_exit_manager_engine import MomentumExitManagerEngine
 NOW = datetime(2026, 7, 20, 15, 0, 0)
 
 
-def _trade(direction="LONG", entry=100.0, atr=4.0, qty=100.0, opened="2026-07-20T14:00:00"):
+def _trade(direction="LONG", entry=100.0, atr=4.0, qty=100.0, opened=None):
+    # Default to a RECENT open (relative to now) so the position never ages past MAX_HOLD_DAYS and closes
+    # on time rather than scaling — the fixed 2026-07-20 date silently aged out. MAX_HOLD tests pass an
+    # explicit old date.
+    if opened is None:
+        opened = (datetime.utcnow() - timedelta(days=2)).isoformat()
     plan = TradeDoctrineEngine().exit_plan(entry, direction, atr)
     return {
         "symbol": "TST", "status": "OPEN", "trade_intent": "MOMENTUM_REVERSAL",

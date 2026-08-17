@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.greyline.preopen-readiness</string>
+
+    <!-- Runs GreyLine's end-to-end trade-readiness audit and texts a GO/NO-GO via iMessage.
+         The script itself skips market holidays (launchd can only express Mon-Fri). -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/thomaspalenske/GreyLine/greyline-backend/.venv/bin/python3</string>
+        <string>/Users/thomaspalenske/GreyLine/greyline-backend/scripts/preopen_trade_readiness_alert.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/thomaspalenske/GreyLine/greyline-backend</string>
+
+    <!-- 08:02 local, Monday(1) through Friday(5). -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>2</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>2</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>2</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>2</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>2</integer></dict>
+    </array>
+
+    <!-- Do NOT run on load — the first real run (and text) should be the next scheduled 08:02. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/thomaspalenske/GreyLine/greyline-backend/app/data/logs/preopen_readiness.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/thomaspalenske/GreyLine/greyline-backend/app/data/logs/preopen_readiness.log</string>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>

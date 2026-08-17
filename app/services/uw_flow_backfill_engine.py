@@ -42,11 +42,13 @@ OUT_DIR = Path("app/data/uw_flow")
 
 class UWFlowBackfillEngine:
 
-    def __init__(self, provider=None):
+    def __init__(self, provider=None, out_dir=None):
         if provider is None:
             from app.services.data_providers.unusual_whales_provider import UnusualWhalesProvider
             provider = UnusualWhalesProvider()
         self.provider = provider
+        from pathlib import Path as _P
+        self.out_dir = _P(out_dir) if out_dir else OUT_DIR
         self.signal = UWFlowSignalEngine()
 
     # ---- provider plumbing -------------------------------------------------
@@ -161,11 +163,11 @@ class UWFlowBackfillEngine:
         """Reconstruct `days` trading days back from `end` for each symbol. Idempotent:
         a timestamp already present is skipped, so reruns cost nothing and never duplicate."""
         end = end or date.today()
-        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
         written = skipped = empty = 0
 
         for symbol in symbols:
-            path = OUT_DIR / f"{str(symbol).upper()}.jsonl"
+            path = self.out_dir / f"{str(symbol).upper()}.jsonl"
             seen = self._existing_ts(path)
             lines = []
             cursor, remaining = end, days

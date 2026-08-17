@@ -35,7 +35,9 @@ class OpsMetricsEngine:
         uptime_seconds = round((now - _PROCESS_START).total_seconds(), 1)
 
         scheduler = BackgroundSchedulerService.status()
-        alive = scheduler.get("thread_alive") is True
+        # CROSS-PROCESS: thread_alive is process-local, so an out-of-process metrics run falsely forced RED
+        # "SCHEDULER_THREAD_DOWN". scheduler_live (thread alive OR recent persisted cycle) reads true from any process.
+        alive = bool(scheduler.get("scheduler_live", scheduler.get("thread_alive")))
         consecutive = int(scheduler.get("consecutive_failures", 0) or 0)
 
         try:

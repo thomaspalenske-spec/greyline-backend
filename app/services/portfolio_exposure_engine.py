@@ -98,6 +98,11 @@ class PortfolioExposureEngine:
             "GS": "FINANCIALS", "JPM": "FINANCIALS", "KRE": "FINANCIALS",
             "MA": "FINANCIALS", "MS": "FINANCIALS", "V": "FINANCIALS",
             "WFC": "FINANCIALS",
+            # Stragglers pinned deliberately (the API-frugal daily refresh reuses the OI top-500 + one
+            # marketcap top-500, and these S&P mid-caps sit below both slices — large ETFs fill the
+            # marketcap top). MMC (Marsh, insurance); SQ (Block, retired ticker); BIIB (Biogen); DG
+            # (Dollar General, discount staples). The fail-loud sector test catches any future drift.
+            "MMC": "FINANCIALS", "SQ": "FINANCIALS", "BIIB": "HEALTHCARE", "DG": "CONSUMER_STAPLES",
 
             "ABBV": "HEALTHCARE", "ABT": "HEALTHCARE", "DHR": "HEALTHCARE",
             "IBB": "HEALTHCARE", "JNJ": "HEALTHCARE", "LLY": "HEALTHCARE",
@@ -127,9 +132,49 @@ class PortfolioExposureEngine:
             "GOOG": "COMMUNICATIONS", "GOOGL": "COMMUNICATIONS",
             "NFLX": "COMMUNICATIONS",
 
-            "DIA": "BROAD_MARKET",
+            "DIA": "BROAD_MARKET", "VTI": "BROAD_MARKET",
             "GLD": "PRECIOUS_METALS", "SLV": "PRECIOUS_METALS",
+            "PPLT": "PRECIOUS_METALS",
             "TLT": "TREASURIES",
+            # Multi-asset ETFs added 2026-07-21. Bucketed by asset class so the
+            # concentration limit SEES them: without these, six bond ETFs or five
+            # commodity trackers would each pool into UNKNOWN and read as diversified while
+            # being one correlated bet — the exact concentration-blindness the sector map
+            # exists to prevent. Rates ETFs share a bucket because they move on one factor
+            # (the curve); commodities span sub-groups but are one asset-class exposure at
+            # $10k sizing.
+            "IEF": "TREASURIES", "SHY": "TREASURIES", "TIP": "TREASURIES",
+            "AGG": "BONDS_CREDIT", "LQD": "BONDS_CREDIT", "HYG": "BONDS_CREDIT",
+            "DBC": "COMMODITIES", "DBA": "COMMODITIES", "UNG": "COMMODITIES",
+            "CPER": "COMMODITIES",
+            "EFA": "INTL_EQUITY", "EEM": "INTL_EQUITY", "VWO": "INTL_EQUITY",
+            "FXI": "INTL_EQUITY", "EWJ": "INTL_EQUITY", "EWZ": "INTL_EQUITY",
+
+            # Traded-universe ETFs beyond the original scan list (the derived optionable universe + the
+            # ETF sleeves). UW does NOT sector-classify funds, so they are bucketed HERE by the exposure
+            # that actually moves them — otherwise each pools into UNKNOWN and reads as diversified.
+            "QQQM": "TECH_GROWTH", "TQQQ": "TECH_GROWTH", "SQQQ": "TECH_GROWTH",   # Nasdaq-100 (± leverage)
+            "NVDL": "TECHNOLOGY", "SOXX": "TECHNOLOGY", "SOXL": "TECHNOLOGY",      # single-name/semis
+            "IGV": "TECHNOLOGY",                                                  # software
+            "TSLL": "CONSUMER_DISCRETIONARY",                                     # 2x Tesla
+            "ARKK": "TECH_GROWTH", "ARKG": "TECH_GROWTH",                         # innovation/growth
+            "RSP": "BROAD_MARKET",                                               # S&P 500 equal weight
+            # VIX-futures products — long OR short, they are ONE factor (the VIX curve). Grouped so the
+            # cap sees them as a single bet, not several comfortable-looking ones.
+            "SVXY": "VOLATILITY", "VXX": "VOLATILITY", "VXZ": "VOLATILITY", "UVXY": "VOLATILITY",
+            "UVIX": "VOLATILITY", "SVIX": "VOLATILITY", "VIXY": "VOLATILITY", "VIXM": "VOLATILITY",
+            "BITW": "CRYPTO",                                                    # crypto index fund
+            "XBI": "HEALTHCARE", "MSOS": "HEALTHCARE",                           # biotech / cannabis
+            "XOP": "ENERGY", "BNO": "ENERGY", "URA": "ENERGY",                   # oil E&P / Brent / uranium
+            "GDX": "PRECIOUS_METALS", "SILJ": "PRECIOUS_METALS",                 # gold / silver miners
+            "GLDM": "PRECIOUS_METALS",                                           # gold (sleeve)
+            "COPX": "MATERIALS",                                                 # copper miners
+            "CORN": "COMMODITIES",                                              # grain futures
+            "ETHA": "CRYPTO",                                                    # spot ether
+            "KWEB": "INTL_EQUITY", "ASHR": "INTL_EQUITY", "EWC": "INTL_EQUITY",  # China / Canada
+            "EWY": "INTL_EQUITY", "KORU": "INTL_EQUITY",                         # South Korea (± leverage)
+            "SGOV": "TREASURIES",                                                # 0-3mo T-bills (cash sweep)
+            "DRAM": "TECHNOLOGY", "SNXX": "TECHNOLOGY",                          # memory-chip / 2x-SanDisk ETFs
         }
 
         if symbol in sector_map:
@@ -143,13 +188,25 @@ class PortfolioExposureEngine:
 
     @classmethod
     def _generated_sectors(cls):
+        # Resolve the map by MODULE location, not cwd — a cwd-relative path silently read empty
+        # whenever the process ran from elsewhere (e.g. the sandboxed test cwd), dropping every
+        # UW-generated name to UNKNOWN and blinding the concentration cap.
+        try:
+            path = Path(__file__).resolve().parents[2] / "app" / "data" / "sector_map.json"
+            mtime = path.stat().st_mtime
+        except Exception:
+            path, mtime = None, None
+        # RELOAD when the file changes: the map is regenerated once/day, but this in-process cache used to
+        # be held for the whole process lifetime, so a refreshed sector map was never picked up without a
+        # restart — silently classifying concentration off a stale map. Key the cache on the file mtime.
         cached = getattr(cls, "_generated_sector_cache", None)
-        if cached is None:
+        if cached is None or mtime != getattr(cls, "_generated_sector_mtime", None):
             try:
-                cached = json.loads(Path("app/data/sector_map.json").read_text()).get("sectors") or {}
+                cached = json.loads(path.read_text()).get("sectors") or {}
             except Exception:
                 cached = {}     # absent or unreadable: degrade to the literal map, never crash
             cls._generated_sector_cache = cached
+            cls._generated_sector_mtime = mtime
         return cached
 
     def _notional(self, trade):
@@ -162,6 +219,47 @@ class PortfolioExposureEngine:
 
         multiplier = 100 if trade.get("asset_type") == "OPTION" else 1
         return round(abs(qty * price * multiplier), 2)
+
+    def _broker_positions(self):
+        """Live broker holdings, aggregated by underlying — the ACTUAL exposure. The ETF sleeves
+        (vol-carry / trend / managed-futures / T-bill) book STRAIGHT to the broker, not the paper
+        ledgers, so without this the concentration cap is blind to them. Same source Open Positions uses;
+        market_value isn't populated in the snapshot, so notional is computed from qty x mark.
+
+        Returns (rows, degraded). `degraded` is True when the broker read FAILED (reads_ok False or an
+        exception) — distinct from an empty book. A degraded read means the ETF-sleeve holdings are
+        UNKNOWN, not zero, so the caller must fail closed rather than report a falsely-clean, low
+        concentration computed from the paper ledgers alone."""
+        agg = {}
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            view = BrokerAccountViewEngine().snapshot()
+            if not view.get("reads_ok", True):
+                return [], True
+            try:
+                from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+                cash_sweep = TbillCashSweepEngine.symbol()      # SGOV = parked CASH, not a treasury bet
+            except Exception:
+                cash_sweep = "SGOV"
+            for p in (view.get("positions") or []):
+                raw = str(p.get("symbol") or "")
+                under = (raw.split() or [""])[0].upper()      # OSI option symbols carry spaces
+                if not under or under == str(cash_sweep).upper():
+                    continue                                  # cash-equivalent: not a sector-risk concentration
+                qty = float(p.get("quantity") or 0)
+                price = float(p.get("current_price") or 0)
+                is_opt = (p.get("asset_type") == "OPTION") or (" " in raw)
+                notional = abs(qty * price * (100 if is_opt else 1))
+                e = agg.setdefault(under, {"symbol": under,
+                                           "asset_type": "OPTION" if is_opt else "EQUITY", "notional": 0.0})
+                e["notional"] += notional
+                if is_opt:
+                    e["asset_type"] = "OPTION"
+        except Exception:
+            return [], True
+        for e in agg.values():
+            e["notional"] = round(e["notional"], 2)
+        return list(agg.values()), False
 
     def evaluate(self):
         equity_rows = self._read_jsonl(self.equity_ledger)
@@ -191,6 +289,19 @@ class PortfolioExposureEngine:
                     "notional": self._notional(row),
                     "directional_bias": row.get("directional_bias"),
                     "status": row.get("status"),
+                })
+
+        # ADD live broker holdings the paper ledgers don't carry (the ETF sleeves), deduped by symbol so
+        # a name already in a ledger is never counted twice. This makes the concentration cap reflect
+        # ACTUAL broker exposure — the same holdings the Open Positions card shows — not just the paper book.
+        ledger_syms = {p["symbol"] for p in open_positions if p["symbol"]}
+        broker_rows, broker_degraded = self._broker_positions()
+        for bp in broker_rows:
+            if bp["symbol"] and bp["symbol"] not in ledger_syms:
+                open_positions.append({
+                    "symbol": bp["symbol"], "asset_type": bp["asset_type"],
+                    "sector": self._sector(bp["symbol"]), "notional": bp["notional"],
+                    "directional_bias": None, "status": "OPEN", "source": "BROKER",
                 })
 
         total_notional = round(sum(p["notional"] for p in open_positions), 2)
@@ -240,6 +351,12 @@ class PortfolioExposureEngine:
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "engine": "PortfolioExposureEngine",
+            # When the broker read failed, the ETF-sleeve holdings are UNKNOWN (not zero) — the
+            # concentration numbers below are computed from the paper ledgers ALONE and understate real
+            # exposure. Surface it so the hard limit engine can fail closed instead of reading a
+            # falsely-clean book. reads_ok True only when the live broker holdings were actually seen.
+            "reads_ok": not broker_degraded,
+            "degraded": broker_degraded,
             "open_position_count": len(open_positions),
             "total_notional": total_notional,
             "capital_base": capital_base,
@@ -255,5 +372,5 @@ class PortfolioExposureEngine:
             "max_sector_exposure_pct_of_book": max_sector_pct_of_book,
             "concentration_risk": concentration_risk,
             "positions": open_positions,
-            "status": "PORTFOLIO_EXPOSURE_READY",
+            "status": "PORTFOLIO_EXPOSURE_DEGRADED" if broker_degraded else "PORTFOLIO_EXPOSURE_READY",
         }

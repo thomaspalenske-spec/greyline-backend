@@ -49,6 +49,8 @@ class OptionsCycleEngine:
         candidate_score=None,
         regime_calibration=None,
         enforce_authority=False,
+        account_equity=10000.0,
+        max_contracts=None,
     ):
         if enforce_authority:
             authority = ExecutionAuthorityEngine().evaluate()
@@ -97,18 +99,29 @@ class OptionsCycleEngine:
             and float(c.get("Mid") or 0) > 0
         ]
 
-        account_equity = 10000.0
+        # Sizing base defaults to the full $10k for standalone callers, but the momentum
+        # options engine passes the account's FREE cash here so a new option is only ever
+        # sized against dollars the equity book hasn't already spent.
+        account_equity = float(account_equity or 10000.0)
         max_position_dollars = account_equity * float(max_position_pct or 0.05)
+
+        from app.services.options_execution_cost_engine import OptionsExecutionCostEngine
+        _coster = OptionsExecutionCostEngine()
 
         affordable_candidates = [
             c for c in candidates
             if float(c.get("Ask") or c.get("Mid") or c.get("Last") or 0) > 0
             and float(c.get("Ask") or c.get("Mid") or c.get("Last") or 0) * 100 <= max_position_dollars
+            # reject contracts too expensive to TRADE (spread+fee round-trip), not just too
+            # expensive to buy — the same cost gate the momentum executing path uses, so the
+            # plan and the cycle never diverge on which contract is acceptable.
+            and _coster.viable(c.get("Bid"), c.get("Ask"), c.get("Mid"))[0]
         ]
 
         ranked = sorted(
             affordable_candidates,
             key=lambda c: (
+                -_coster.rank_bucket(c.get("Bid"), c.get("Ask"), c.get("Mid")),  # cheapest-to-trade first
                 int(c.get("DailyOpenInterest") or 0),
                 -abs(float(c.get("Delta") or 0) - 0.40),
                 -float(c.get("Ask") or c.get("Mid") or c.get("Last") or 0),
@@ -158,6 +171,8 @@ class OptionsCycleEngine:
                     max_position_pct=max_position_pct,
                     candidate_score=candidate_score,
                     regime_calibration=regime_calibration,
+                    sizing_base=account_equity,
+                    max_contracts=max_contracts,
                 )
                 paper_trade_recorded = paper_trade.get("paper_trade_recorded") is True
 

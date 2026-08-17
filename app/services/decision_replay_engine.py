@@ -15,7 +15,14 @@ class DecisionReplayEngine:
             decision = event.get("decision")
             top_candidate = event.get("top_candidate") or {}
 
-            replay_state = "NO_ACTION_REPLAY"
+            # Was initialised to NO_ACTION_REPLAY and only ever overridden for one
+            # decision value, so an unrecognised, renamed, malformed or MISSING decision
+            # arrived downstream already stamped as a clean stand-down. That made the
+            # UNKNOWN branch in DecisionPerformanceAttributionEngine dead code and
+            # DecisionOutcomeTrackingEngine.no_action_needs_review structurally always 0 —
+            # broken records were counted as good skips, and the counter meant to surface
+            # breakage could not be non-zero. Default to UNCLASSIFIED so it is visible.
+            replay_state = "UNCLASSIFIED_DECISION"
 
             if decision == "EXECUTE_SIGNAL_BLOCKED_READ_ONLY":
                 replay_state = "WOULD_HAVE_SIGNALLED_EXECUTE"

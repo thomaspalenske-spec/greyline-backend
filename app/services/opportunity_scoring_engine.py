@@ -792,6 +792,15 @@ class OpportunityScoringEngine:
             reverse=True,
         )[:1]
 
+        # Symbol -> its OWN last price from this cycle's quote scan. Looked up by ticker so
+        # a stale loop variable can never again attribute one instrument's price to another.
+        quote_price_by_symbol = {}
+        for _row in (quote_scan.get("symbols") or []):
+            _sym = _row.get("symbol")
+            _last = _row.get("last")
+            if _sym and isinstance(_last, (int, float)) and _last > 0:
+                quote_price_by_symbol[_sym] = float(_last)
+
         intelligence_engine = InstitutionalIntelligenceEngine()
         memory_engine = InstitutionalMemoryEngine()
         validation_engine = InstitutionalValidationEngine()
@@ -964,7 +973,17 @@ class OpportunityScoringEngine:
                     # Pass the price already fetched this cycle so the flow↔price
                     # co-record is deterministic instead of relying on a second live
                     # quote fetch that fails silently (root cause of ungradable snapshots).
-                    price=item.get("last"),
+                    #
+                    # This read `item.get("last")` — but `item` is bound by
+                    # `for item in symbols:` ~890 lines above and is long out of that loop,
+                    # so it held ONE stale scan row: the last symbol processed. Every
+                    # candidate's price point was therefore written with an unrelated
+                    # instrument's price under its own ticker. It is why every file in
+                    # app/data/price_history bottoms out in the same 92-98 band whatever
+                    # the symbol really trades at, and why a SPY forecast graded +87.6% "A"
+                    # against a "current price" of 92.75. Every fixed-horizon grade,
+                    # flow↔price join and outcome return built on that series was garbage.
+                    price=quote_price_by_symbol.get(candidate_symbol),
                 )
 
                 # Shadow A/B: log momentum-proxy vs flow-implied direction (no effect

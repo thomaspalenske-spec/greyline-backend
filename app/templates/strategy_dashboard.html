@@ -92,78 +92,107 @@
 const $ = id => document.getElementById(id);
 const money = n => (n<0?"-":"")+"$"+Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const cls = n => n>0?"up":n<0?"down":"muted";
-async function j(u){const r=await fetch(u);return r.json();}
+async function j(u){const r=await fetch(u); if(!r.ok) throw new Error(u+" HTTP "+r.status); return r.json();}
+
+// Field guards: an undefined/null/non-finite value renders "—", never "undefined" / "$NaN" / "undefined%".
+const NUM = v => (v===undefined||v===null||(typeof v==="number"&&!isFinite(v))) ? null : v;
+const show = v => NUM(v)===null ? "—" : v;
+const pct  = v => NUM(v)===null ? "—" : (v>0?"+":"")+v+"%";
+function cardDown(id,label){ const el=$(id); if(el) el.innerHTML =
+  `<div class="item"><div class="l">${label}</div><span class="pill RED">SOURCE UNAVAILABLE</span></div>`; }
 
 async function refresh(){
+  // Promise.allSettled — one dead route degrades ONLY its own card. Promise.all rejected the whole
+  // batch on any single failure, freezing every card (incl. a stale-green data-integrity pill) and
+  // masking the outage as a healthy page. Each source is now null-on-failure and rendered defensively.
+  const results = await Promise.allSettled([
+    j("/momentum-reversal-rebalance"), j("/momentum-reversal-positions"),
+    j("/momentum-reversal-strategy"), j("/data-integrity"), j("/strategy-performance")
+  ]);
+  const [reb,pos,strat,integ,perf] = results.map(r => r.status==="fulfilled" ? r.value : null);
+  const nfail = results.filter(r => r.status==="rejected").length;
+  $("ts").textContent = new Date().toLocaleTimeString() + (nfail ? ` · ${nfail} source(s) failed` : "");
+
   try{
-    const [reb,pos,strat,integ,perf] = await Promise.all([
-      j("/momentum-reversal-rebalance"), j("/momentum-reversal-positions"),
-      j("/momentum-reversal-strategy"), j("/data-integrity"), j("/strategy-performance")
-    ]);
+    $("live").style.color = (pos && pos.open_count>0) ? "var(--up)" : "var(--faint)";
+    $("mark").textContent = (pos && pos.marked_as_of) ? "· marked to "+pos.marked_as_of+" ("+(pos.data_source||"")+")" : "";
 
-    $("live").style.color = pos.open_count>0 ? "var(--up)" : "var(--faint)";
-    $("ts").textContent = new Date().toLocaleTimeString();
-    $("mark").textContent = pos.marked_as_of ? "· marked to "+pos.marked_as_of+" ("+(pos.data_source||"")+")" : "";
-
-    const cont = integ.continuity||{};
+    const cont = (integ && integ.continuity) || {};
+    const unavail = `<span class="pill RED">UNAVAILABLE</span>`;
     $("kpis").innerHTML = [
-      ["Open positions", pos.open_count ?? "—", money(pos.total_notional||0)+" notional"],
-      ["Unrealized P&L", `<span class="${cls(pos.total_unrealized_pnl)}">${money(pos.total_unrealized_pnl||0)}</span>`, "marked to last close"],
-      ["Realized P&L", `<span class="${cls(reb.realized_pnl||0)}">${money(reb.realized_pnl||0)}</span>`, "last rebalance"],
-      ["Last rebalance", (reb.last_rebalance_at||"—").slice(0,10), "opened "+(reb.opened??"—")+" · closed "+(reb.closed??"—")],
-      ["Data integrity", `<span class="pill ${integ.verdict||'UNKNOWN'}">${integ.verdict||'—'}</span>`, (integ.reasons&&integ.reasons[0]||"").slice(0,42)],
-      ["Continuity", `<span class="pill ${cont.verdict||'UNKNOWN'}">${cont.verdict||'—'}</span>`, cont.currently_live?"live · "+(cont.uptime_pct??"—")+"% up":"—"],
+      ["Open positions", pos ? (pos.open_count ?? "—") : "—", pos ? money(pos.total_notional||0)+" notional" : "positions read failed"],
+      ["Unrealized P&L", pos ? `<span class="${cls(pos.total_unrealized_pnl)}">${money(pos.total_unrealized_pnl||0)}</span>` : "—", "marked to last close"],
+      ["Realized P&L", reb ? `<span class="${cls(reb.realized_pnl||0)}">${money(reb.realized_pnl||0)}</span>` : "—", reb ? "last rebalance" : "rebalance read failed"],
+      ["Last rebalance", reb ? (reb.last_rebalance_at||"—").slice(0,10) : "—", reb ? "opened "+(reb.opened??"—")+" · closed "+(reb.closed??"—") : "—"],
+      ["Data integrity", integ ? `<span class="pill ${integ.verdict||'UNKNOWN'}">${integ.verdict||'—'}</span>` : unavail, integ ? (integ.reasons&&integ.reasons[0]||"").slice(0,42) : "integrity read failed"],
+      ["Continuity", integ ? `<span class="pill ${cont.verdict||'UNKNOWN'}">${cont.verdict||'—'}</span>` : unavail, cont.currently_live?"live · "+(cont.uptime_pct??"—")+"% up":"—"],
     ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
-    const P = pos.positions||[];
-    $("positions").innerHTML = P.length ? P.map(p=>`<tr>
-      <td><b>${p.symbol}</b></td>
-      <td><span class="tag ${p.side==='BUY'?'buy':'sell'}">${p.side==='BUY'?'LONG':'SHORT'}</span></td>
-      <td class="r mono">${p.quantity}</td><td class="r mono">${money(p.entry_price)}</td>
-      <td class="r mono">${money(p.current_price)}</td><td class="r mono">${money(p.notional)}</td>
-      <td class="r mono ${cls(p.unrealized_pnl)}">${money(p.unrealized_pnl)}</td>
-      <td class="r mono ${cls(p.unrealized_pnl)}">${p.unrealized_pct>0?'+':''}${p.unrealized_pct}%</td></tr>`).join("")
-      : `<tr><td colspan="8" class="empty">No open strategy positions.</td></tr>`;
+    if(!pos){
+      $("positions").innerHTML = `<tr><td colspan="8" class="empty">Positions source unavailable.</td></tr>`;
+    } else {
+      const P = pos.positions||[];
+      $("positions").innerHTML = P.length ? P.map(p=>`<tr>
+        <td><b>${p.symbol||"—"}</b></td>
+        <td><span class="tag ${p.side==='BUY'?'buy':'sell'}">${p.side==='BUY'?'LONG':'SHORT'}</span></td>
+        <td class="r mono">${show(p.quantity)}</td><td class="r mono">${money(p.entry_price||0)}</td>
+        <td class="r mono">${money(p.current_price||0)}</td><td class="r mono">${money(p.notional||0)}</td>
+        <td class="r mono ${cls(p.unrealized_pnl)}">${money(p.unrealized_pnl||0)}</td>
+        <td class="r mono ${cls(p.unrealized_pnl)}">${pct(p.unrealized_pct)}</td></tr>`).join("")
+        : `<tr><td colspan="8" class="empty">No open strategy positions.</td></tr>`;
+    }
 
-    const T = strat.targets||[];
-    $("targets").innerHTML = T.length ? T.map((t,i)=>`<tr>
-      <td class="mono muted">${i+1}</td><td><b>${t.symbol}</b></td>
-      <td><span class="tag ${t.side==='BUY'?'buy':'sell'}">${t.side==='BUY'?'LONG':'SHORT'}</span></td>
-      <td class="r mono">${t.conviction}</td>
-      <td class="r mono ${cls(t.momentum_12_1_pct)}">${t.momentum_12_1_pct>0?'+':''}${t.momentum_12_1_pct}%</td>
-      <td class="r mono ${cls(-t.reversal_5d_move_pct)}">${t.reversal_5d_move_pct>0?'+':''}${t.reversal_5d_move_pct}%</td></tr>`).join("")
-      : `<tr><td colspan="6" class="empty">No confirmed signals.</td></tr>`;
+    if(!strat){
+      $("targets").innerHTML = `<tr><td colspan="6" class="empty">Signals source unavailable.</td></tr>`;
+    } else {
+      const T = strat.targets||[];
+      $("targets").innerHTML = T.length ? T.map((t,i)=>`<tr>
+        <td class="mono muted">${i+1}</td><td><b>${t.symbol||"—"}</b></td>
+        <td><span class="tag ${t.side==='BUY'?'buy':'sell'}">${t.side==='BUY'?'LONG':'SHORT'}</span></td>
+        <td class="r mono">${show(t.conviction)}</td>
+        <td class="r mono ${cls(t.momentum_12_1_pct)}">${pct(t.momentum_12_1_pct)}</td>
+        <td class="r mono ${cls(-t.reversal_5d_move_pct)}">${pct(t.reversal_5d_move_pct)}</td></tr>`).join("")
+        : `<tr><td colspan="6" class="empty">No confirmed signals.</td></tr>`;
+    }
 
-    $("health").innerHTML = `
-      <div class="item"><div class="l">Ground-truth data</div>
-        <span class="pill ${integ.verdict||'UNKNOWN'}">${integ.verdict||'—'}</span></div>
-      <div class="item"><div class="l">Accumulation</div>
-        <span class="pill ${cont.verdict||'UNKNOWN'}">${cont.verdict||'—'}</span></div>
-      <div class="item" style="flex:1"><div class="l">Reading</div>
-        <div class="why">${integ.headline||''} ${(integ.reasons||[]).join(" · ")}</div></div>`;
+    if(!integ){
+      cardDown("health","Ground-truth data");
+    } else {
+      $("health").innerHTML = `
+        <div class="item"><div class="l">Ground-truth data</div>
+          <span class="pill ${integ.verdict||'UNKNOWN'}">${integ.verdict||'—'}</span></div>
+        <div class="item"><div class="l">Accumulation</div>
+          <span class="pill ${cont.verdict||'UNKNOWN'}">${cont.verdict||'—'}</span></div>
+        <div class="item" style="flex:1"><div class="l">Reading</div>
+          <div class="why">${integ.headline||''} ${(integ.reasons||[]).join(" · ")}</div></div>`;
+    }
 
     // Track record — the verdict instrument. Deliberately shows the sample size next to
     // the P&L so a lucky streak never reads as an edge.
-    const vcls = {POSITIVE_EDGE_EMERGING:"GREEN", NEGATIVE_EDGE_EMERGING:"RED",
-                  NO_DETECTABLE_EDGE:"AMBER", INSUFFICIENT_SAMPLE:"UNKNOWN"}[perf.verdict]||"UNKNOWN";
-    $("track").innerHTML = `
-      <div class="item"><div class="l">Edge verdict</div>
-        <span class="pill ${vcls}">${(perf.verdict||'—').replace(/_/g," ")}</span></div>
-      <div class="item"><div class="l">Closed trades</div>
-        <div class="mono" style="font-size:19px;font-weight:600">${perf.closed_trades} <span class="muted" style="font-size:11px">/ ${perf.min_trades_for_signal} needed</span></div></div>
-      <div class="item"><div class="l">Realized</div>
-        <div class="mono ${cls(perf.realized_pnl)}" style="font-size:19px;font-weight:600">${money(perf.realized_pnl||0)}</div></div>
-      <div class="item"><div class="l">Total P&L</div>
-        <div class="mono ${cls(perf.total_pnl)}" style="font-size:19px;font-weight:600">${money(perf.total_pnl||0)}</div>
-        <div class="muted" style="font-size:11px">${perf.return_pct_on_capital ?? 0}% of capital</div></div>
-      <div class="item"><div class="l">Expectancy</div>
-        <div class="mono ${cls(perf.expectancy_per_trade)}" style="font-size:19px;font-weight:600">${money(perf.expectancy_per_trade||0)}</div>
-        <div class="muted" style="font-size:11px">t=${perf.expectancy_t_stat ?? "—"} (need |t|>2)</div></div>
-      <div class="item" style="flex:1;min-width:220px"><div class="l">Reading</div>
-        <div class="why">${perf.headline||''}</div></div>`;
-  }catch(e){ $("ts").textContent = "fetch error"; }
+    if(!perf){
+      cardDown("track","Edge verdict");
+    } else {
+      const vcls = {POSITIVE_EDGE_EMERGING:"GREEN", NEGATIVE_EDGE_EMERGING:"RED",
+                    NO_DETECTABLE_EDGE:"AMBER", INSUFFICIENT_SAMPLE:"UNKNOWN"}[perf.verdict]||"UNKNOWN";
+      $("track").innerHTML = `
+        <div class="item"><div class="l">Edge verdict</div>
+          <span class="pill ${vcls}">${(perf.verdict||'—').replace(/_/g," ")}</span></div>
+        <div class="item"><div class="l">Closed trades</div>
+          <div class="mono" style="font-size:19px;font-weight:600">${show(perf.closed_trades)} <span class="muted" style="font-size:11px">/ ${show(perf.min_trades_for_signal)} needed</span></div></div>
+        <div class="item"><div class="l">Realized</div>
+          <div class="mono ${cls(perf.realized_pnl)}" style="font-size:19px;font-weight:600">${money(perf.realized_pnl||0)}</div></div>
+        <div class="item"><div class="l">Total P&L</div>
+          <div class="mono ${cls(perf.total_pnl)}" style="font-size:19px;font-weight:600">${money(perf.total_pnl||0)}</div>
+          <div class="muted" style="font-size:11px">${perf.return_pct_on_capital ?? 0}% of capital</div></div>
+        <div class="item"><div class="l">Expectancy</div>
+          <div class="mono ${cls(perf.expectancy_per_trade)}" style="font-size:19px;font-weight:600">${money(perf.expectancy_per_trade||0)}</div>
+          <div class="muted" style="font-size:11px">t=${perf.expectancy_t_stat ?? "—"} (need |t|>2)</div></div>
+        <div class="item" style="flex:1;min-width:220px"><div class="l">Reading</div>
+          <div class="why">${perf.headline||''}</div></div>`;
+    }
+  }catch(e){ $("ts").textContent = new Date().toLocaleTimeString()+" · render error"; }
 }
-refresh(); setInterval(refresh, 30000);
+refresh(); setInterval(refresh, 60000);
 </script>
 </body>
 </html>

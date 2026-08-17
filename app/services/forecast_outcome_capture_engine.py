@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.services.time_utils import parse_utc
 import hashlib
 import json
 import threading
@@ -87,9 +88,7 @@ class ForecastOutcomeCaptureEngine:
             )
 
             try:
-                row_time = datetime.fromisoformat(
-                    str(timestamp).replace("Z", "+00:00")
-                ).replace(tzinfo=None)
+                row_time = parse_utc(timestamp)
             except Exception:
                 continue
 

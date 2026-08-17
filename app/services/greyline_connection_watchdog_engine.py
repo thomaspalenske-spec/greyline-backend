@@ -25,7 +25,11 @@ class GreyLineConnectionWatchdogEngine:
                                or getenv("TRADESTATION_MARGIN_ACCOUNT_ID") or getenv("TS_MARGIN_ACCOUNT_ID"))
         account_ok = bool(expected_account_id) and summary.get("account_id") == expected_account_id
         summary_ok = summary.get("status") == "LIVE_ACCOUNT_READY"
-        scheduler_ok = scheduler.get("scheduler_enabled") is True and scheduler.get("thread_alive") is True
+        # CROSS-PROCESS: thread_alive/scheduler_enabled are process-local — trusting them made this watchdog
+        # (which AUTO-RESTARTS the scheduler + logs an audit) falsely believe the scheduler was dead when run
+        # outside the service, spawning a throwaway thread + a bogus restart record. scheduler_live is True
+        # when the thread is alive OR a recent cycle is persisted, so it's accurate from any process.
+        scheduler_ok = scheduler.get("scheduler_live") is True
 
         if not scheduler_ok:
             BackgroundSchedulerService.start()
@@ -40,7 +44,11 @@ class GreyLineConnectionWatchdogEngine:
             )
 
             scheduler = BackgroundSchedulerService.status()
-            scheduler_ok = scheduler.get("scheduler_enabled") is True and scheduler.get("thread_alive") is True
+            # CROSS-PROCESS: thread_alive/scheduler_enabled are process-local — trusting them made this watchdog
+        # (which AUTO-RESTARTS the scheduler + logs an audit) falsely believe the scheduler was dead when run
+        # outside the service, spawning a throwaway thread + a bogus restart record. scheduler_live is True
+        # when the thread is alive OR a recent cycle is persisted, so it's accurate from any process.
+        scheduler_ok = scheduler.get("scheduler_live") is True
 
         overall_ready = account_ok and summary_ok and scheduler_ok
 

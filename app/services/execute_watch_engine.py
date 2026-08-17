@@ -1,0 +1,210 @@
+"""Execute / Watch — surface buy opportunities and WHY they haven't fired.
+
+The momentum candidate engine produces the ranked buy opportunities. This annotates them so the
+operator can see, at a glance:
+  * WATCH — the opportunities ranked top-to-bottom by conviction (closest to firing on top).
+  * EXECUTE — a candidate that MEETS the buy criteria but can't fire: blocked by no free capital,
+    a rejected/glitched order, or (meets criteria + has capital yet still not deployed) a strategy
+    that should be firing and isn't. This is the "wanted to buy, got blocked" visibility — the same
+    class of silent failure that hid the rejected sells.
+
+Read-only. Reads the CACHED candidate list (a full universe scan is ~minutes — far too heavy here),
+so it says how stale that cache is instead of recomputing.
+"""
+
+import json
+from datetime import datetime
+from pathlib import Path
+from os import getenv
+
+
+class ExecuteWatchEngine:
+
+    CACHE = Path("app/data/momentum_reversal/top_candidates_cache.json")
+    SLEEVE_INSTRUMENTS = {"SVXY", "QQQM", "IWM", "TLT", "GLDM", "EFA", "DBC", "SGOV"}
+    MOMENTUM_TOP_N = 10
+
+    @staticmethod
+    def _f(v, d=0.0):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return d
+
+    def _candidates(self):
+        try:
+            d = json.loads(self.CACHE.read_text())
+            return d.get("candidates") or [], d.get("as_of"), d.get("data_source")
+        except Exception:
+            return [], None, None
+
+    def _compute_time_discards(self):
+        """Trash discarded at COMPUTE time (before it ever reached the cached candidate list) — so
+        the panel can still show what was thrown out even when nothing trash survived into the cache."""
+        try:
+            d = json.loads(self.CACHE.read_text())
+            return d.get("trash_discarded_names") or []
+        except Exception:
+            return []
+
+    def _held_symbols(self):
+        """Returns (held_set, ok). ok=False signals the broker read FAILED — an empty set then means
+        "unknown", not "nothing held". A silently-empty held set makes genuinely-held names fall through
+        to QUEUED/BLOCKED, so the panel could suggest buying something already owned. view() surfaces it."""
+        try:
+            from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+            rj = TradeStationPositionsLiveEngine().get_positions().get("response_json") or {}
+            return {str(p.get("Symbol")).split()[0].upper() for p in (rj.get("Positions") or [])
+                    if int(self._f(p.get("Quantity"))) != 0}, True
+        except Exception:
+            return set(), False
+
+    def _rejected_symbols(self):
+        """Symbols with a recent REJECTED order — a glitch that blocked execution. Returns (set, ok);
+        ok=False signals the orders read failed (empty = unknown, not "no rejects")."""
+        try:
+            from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+            out = set()
+            for o in ((TradeStationSimBookingEngine().orders().get("response_json") or {}).get("Orders") or []):
+                if str(o.get("StatusDescription")) == "Rejected":
+                    out.add(str((o.get("Legs") or [{}])[0].get("Symbol") or "").split()[0].upper())
+            return out, True
+        except Exception:
+            return set(), False
+
+    def _free_cash(self):
+        try:
+            from app.services.mission_risk_governor_engine import MissionRiskGovernorEngine
+            eq, dep, _ = MissionRiskGovernorEngine()._equity_and_deployed()
+            return round(eq - dep, 2)
+        except Exception:
+            return 0.0
+
+    def view(self):
+        cands, as_of, source = self._candidates()
+        # FAILSAFE: discard trash picks (penny stocks / artifact momentum / crashes) — only clean,
+        # confirmed picks are shown or acted on. Same filter the execution path uses.
+        from app.services.trash_pick_filter_engine import TrashPickFilterEngine
+        cands, discarded = TrashPickFilterEngine.partition(cands)
+        # merge in trash the compute step already dropped (never made it into the cache), so the
+        # operator sees the full "thrown out" picture, not just what survived to serve-time.
+        seen = {str(d.get("symbol") or "").upper() for d in discarded}
+        for t in self._compute_time_discards():
+            if str(t.get("symbol") or "").upper() not in seen:
+                discarded.append({"symbol": t.get("symbol"), "last_close": t.get("last_close"),
+                                  "discard_reason": t.get("reason")})
+        held, held_ok = self._held_symbols()
+        rejects, rejects_ok = self._rejected_symbols()
+        # A failed broker read means the held/rejected classification is running on PARTIAL data — the
+        # panel could suggest buying a name that's actually already held. Surface it so the operator
+        # knows the executability column is unreliable this cycle rather than trusting a clean-looking view.
+        sources_failed = ([] + (["positions"] if not held_ok else []) + (["orders"] if not rejects_ok else []))
+        free_cash = self._free_cash()
+        # Momentum's cap is now %-of-equity (SleeveCapitalBudgetEngine), so the "can it fire" view
+        # must read the same live budget the executor uses — not the retired static env var.
+        try:
+            from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
+            mom_cap = SleeveCapitalBudgetEngine.budget_usd("momentum")
+        except Exception:
+            try:
+                mom_cap = float(getenv("GREYLINE_MOMENTUM_CAPITAL_USD", "") or 0)
+            except (TypeError, ValueError):
+                mom_cap = 0.0
+        per_name = mom_cap / self.MOMENTUM_TOP_N if self.MOMENTUM_TOP_N else 0.0
+        # momentum's own free slots = its cap not yet spent on momentum names
+        mom_held = len(held - self.SLEEVE_INSTRUMENTS)
+        free_slots = max(0, self.MOMENTUM_TOP_N - mom_held)
+
+        # BUDGET sizing (default on): the executor no longer caps on a fixed slot count — it deploys
+        # the sleeve's UNSPENT dollars (budget − committed cost basis of the held momentum book) into
+        # the top-ranked affordable names. Mirror that here so the panel's QUEUED/WATCH matches what
+        # the rebalance will actually do (else a name the engine WILL buy shows as "below the cutoff").
+        budget_sizing = (getenv("GREYLINE_MOMENTUM_BUDGET_SIZING", "true") or "true").strip().lower() == "true"
+        remaining_budget = 0.0
+        if budget_sizing:
+            try:
+                from app.services.paper_trade_ledger_engine import PaperTradeLedgerEngine
+                committed = sum(float(t.get("entry_price") or 0) * abs(float(t.get("quantity") or 0))
+                                for t in PaperTradeLedgerEngine()._read_all()
+                                if t.get("status") == "OPEN" and t.get("trade_intent") == "MOMENTUM_REVERSAL")
+                remaining_budget = max(0.0, mom_cap - committed)
+            except Exception:
+                budget_sizing = False   # can't read the book → fall back to the slot-count view
+
+        watch = []
+        for i, c in enumerate(cands):                         # cache is already ranked by conviction
+            sym = str(c.get("symbol") or "").upper()
+            share_px = self._f(c.get("last_close")) or per_name
+            # momentum sizes each name at its PER-NAME budget (cap / slots), buying whole shares.
+            # A name is only openable if >=1 whole share fits that budget AND the momentum cash is
+            # actually free. Checking cross-book free_cash here was wrong — it made $250 semis look
+            # affordable to a $100/name sleeve.
+            whole_shares = int(per_name // share_px) if share_px > 0 else 0
+            # Status vocabulary (display-only; NOT the decision-layer EXECUTE/WATCH/REJECT signal):
+            #   BOUGHT  = already held
+            #   QUEUED  = meets the signal AND is affordable — will buy at the next momentum rebalance
+            #             (momentum runs on a 7-day cadence, it is NOT an intraday buyer)
+            #   BLOCKED = meets the signal but CANNOT fire — too expensive for the per-name budget, no
+            #             free cash, or a prior order was rejected
+            #   WATCH   = ranked below the buy cutoff, or the sleeve is unfunded
+            if sym in held:
+                status, reason = "BOUGHT", "held"
+            elif sym in rejects:
+                status, reason = "BLOCKED", "a prior order was rejected (glitch) and it isn't held — needs a retry"
+            elif mom_cap <= 0:
+                status, reason = "WATCH", "momentum unfunded ($0 capital)"
+            elif whole_shares < 1:
+                status, reason = "BLOCKED", (f"can't afford: 1 share (${round(share_px)}) exceeds the "
+                                             f"${round(per_name)}/name momentum budget "
+                                             f"(cap ${round(mom_cap)} / {self.MOMENTUM_TOP_N} slots)")
+            elif free_cash < share_px:
+                status, reason = "BLOCKED", f"no free cash (need ~${round(share_px)}, have ${round(free_cash)})"
+            elif budget_sizing:
+                # deploy the sleeve's unspent dollars into the top-ranked affordable names, each
+                # capped at the per-name target — the same rule the rebalance executes.
+                alloc = min(per_name, remaining_budget)
+                ws = int(alloc // share_px) if share_px > 0 else 0
+                if ws >= 1:
+                    status, reason = "QUEUED", (f"fits the sleeve's ${round(remaining_budget)} unspent budget → "
+                                                f"{ws} share(s) @ ${round(share_px)} — buys at the next rebalance "
+                                                "(7-day cadence), not intraday")
+                    remaining_budget -= ws * share_px
+                else:
+                    status, reason = "WATCH", (f"sleeve budget spent (${round(remaining_budget)} left < 1 share "
+                                               f"@ ${round(share_px)}) — frees up when a holding exits")
+            elif i < free_slots:
+                status, reason = "QUEUED", (f"meets signal + affords {whole_shares} share(s) @ ${round(per_name)}/name — "
+                                            "will buy at the next momentum rebalance (7-day cadence), not intraday")
+            else:
+                status, reason = "WATCH", f"ranked below the buy cutoff (slot {i+1} > {free_slots} free)"
+            watch.append({"rank": c.get("rank", i + 1), "symbol": sym,
+                          "direction": c.get("direction"), "conviction": c.get("conviction"),
+                          "last_close": c.get("last_close"),
+                          "momentum_12_1_pct": c.get("momentum_12_1_pct"),
+                          "reversal_5d_move_pct": c.get("reversal_5d_move_pct"),
+                          "status": status, "reason": reason})
+
+        queued = [w for w in watch if w["status"] == "QUEUED"]      # will fire at the next rebalance
+        blocked = [w for w in watch if w["status"] == "BLOCKED"]    # meets signal but cannot fire
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "candidates_as_of": as_of, "data_source": source,
+            "data_degraded": bool(sources_failed),
+            "sources_failed": sources_failed,   # broker reads that failed → executability is partial
+            "free_cash": free_cash, "momentum_capital": mom_cap, "momentum_free_slots": free_slots,
+            "queued_count": len(queued), "queued": queued,
+            "blocked_count": len(blocked), "blocked": blocked,
+            # backward-compat aliases (old key names) — the two together are every non-held, meets-signal name
+            "execute_blocked_count": len(queued) + len(blocked),
+            "execute_blocked": queued + blocked,
+            "watch": watch,                                   # ranked, closest-to-firing on top (clean only)
+            "discarded_trash_count": len(discarded),
+            "discarded_trash": [{"symbol": d.get("symbol"), "last_close": d.get("last_close"),
+                                 "reason": d.get("discard_reason")} for d in discarded],
+            "note": ("WATCH = buy opportunities ranked by conviction (closest to firing on top). "
+                     "QUEUED = meets criteria + affordable, will buy at the next momentum rebalance (7-day "
+                     "cadence). BLOCKED = meets criteria but can't fire (too expensive for the per-name "
+                     "budget / no free cash / rejected order). See each row's reason. Candidates from the "
+                     "cached universe scan — see candidates_as_of."),
+            "status": "EXECUTE_WATCH",
+        }

@@ -38,6 +38,19 @@ def operator_commander_summary():
     top = decision.get("top_candidate") or {}
     decision_name = decision.get("decision")
     unread = notifications.get("unread_count") or 0
+    unread_critical = notifications.get("unread_critical_count") or 0
+
+    # STALENESS: this card renders the LAST RECORDED master decision, which can be hours/a day old if the
+    # scheduler cycle stalled (a documented silent-failure mode). Returning the headline under a fresh
+    # utcnow() timestamp made a stale decision read as live. Surface the decision's OWN timestamp + age so
+    # the dashboard can mark it stale (the sibling battlefield-summary route already carries this).
+    decision_at = decision.get("timestamp")
+    decision_age_seconds = None
+    if decision_at:
+        try:
+            decision_age_seconds = round((datetime.utcnow() - datetime.fromisoformat(str(decision_at))).total_seconds())
+        except Exception:
+            decision_age_seconds = None
 
     status = "GREEN"
     action_required = False
@@ -55,9 +68,14 @@ def operator_commander_summary():
             headline = f"Paper Trader active: {symbol} {option_type} qualified; live orders remain locked."
         else:
             headline = f"{symbol} {option_type} qualified; execution authority restricted."
-    elif unread > 0:
+    elif unread_critical > 0:
+        # Mission Status reflects SYSTEM HEALTH + genuine attention items — NOT inbox size. Only unread
+        # CRITICAL alerts degrade it; routine WARNING/INFO backlog (e.g. recurring backup-snapshot notes)
+        # is surfaced as a count in its own tile but must not flap Mission Status YELLOW and desensitize
+        # the operator to real degradation.
         status = "YELLOW"
-        headline = f"{unread} unread operator notification(s)."
+        headline = (f"{unread_critical} unread CRITICAL alert(s) need attention"
+                    + (f" ({unread} unread total)." if unread > unread_critical else "."))
         action_required = True
 
     return {
@@ -79,6 +97,8 @@ def operator_commander_summary():
             "signal_decision": authority.get("signal_decision"),
             "reliability_score": reliability.get("health_score"),
             "master_decision": decision_name,
+            "master_decision_at": decision_at,                 # the decision's OWN time (not this poll's)
+            "master_decision_age_seconds": decision_age_seconds,
             "top_symbol": top.get("symbol"),
             "top_option_type": top.get("option_type"),
             "top_score": top.get("composite_score"),

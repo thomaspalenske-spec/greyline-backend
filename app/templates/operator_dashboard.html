@@ -223,6 +223,13 @@ button.primary {
   color: var(--yellow);
 }
 
+/* Position lifecycle badges — each state visually distinct at a glance. */
+.badge.open    { background: rgba(53, 208, 111, .12); color: var(--green); }
+.badge.closing { background: rgba(255, 179, 44, .14); color: var(--yellow); }
+.badge.unmanaged { background: rgba(255, 77, 87, .14); color: var(--red); }
+.badge.pending { background: rgba(90, 160, 255, .16); color: #6fa8ff; }
+.badge.neutral { background: rgba(255, 255, 255, .08); color: rgba(255,255,255,.7); }
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -341,6 +348,28 @@ table {
     overflow-x: auto !important;
 }
 
+/* Open Positions is a 13-column table (…Take-Profits, P/L, P/L %, Status, Stage). Give it its OWN
+   scroll box so every column is reachable — horizontal scroll for width, vertical for length — with the
+   header sticky while scrolling. The card delegates scrolling to this inner box. */
+/* min-width:0 is the critical bit — the card is a CSS-grid item, whose default min-width:auto makes it
+   grow to the 13-column table's width (overflowing the page) instead of letting the inner box scroll. */
+#open_positions_card { min-width: 0 !important; overflow: visible !important; max-height: none !important; }
+/* The box fits the VIEWPORT (max-height:65vh) so the horizontal scrollbar — pinned to the box's bottom
+   edge — is always on-screen when the card is in view, no matter which rows you've scrolled to. rows
+   scroll INSIDE the box (overflow-y), so the h-bar never drifts off with them. overflow-x:scroll keeps
+   the h-bar always present, and the header stays sticky. */
+.pos-scroll { overflow-x: scroll; overflow-y: auto; max-height: 65vh; max-width: 100%; }
+.pos-scroll table { width: max-content !important; min-width: 100%; }
+.pos-scroll thead th {
+    position: sticky; top: 0; z-index: 100;
+    background: #161b22; color: #dbe4ee; border-bottom: 2px solid #2d333b;
+}
+/* chunky, always-visible scrollbars so the horizontal one is easy to grab at any scroll position */
+.pos-scroll::-webkit-scrollbar { height: 14px; width: 12px; }
+.pos-scroll::-webkit-scrollbar-track { background: #0d1117; }
+.pos-scroll::-webkit-scrollbar-thumb { background: #3d444d; border-radius: 7px; border: 2px solid #0d1117; }
+.pos-scroll::-webkit-scrollbar-thumb:hover { background: #545c66; }
+
 td,
 th {
     white-space: nowrap !important;
@@ -354,53 +383,64 @@ th {
 }
 
 
-/* ===== GREYLINE SURGICAL COMMAND CENTER FIX ===== */
-.app {
-  width: 100vw !important;
-  max-width: none !important;
-  grid-template-columns: 260px minmax(0, 1fr) !important;
-}
+/* ===== GREYLINE SURGICAL COMMAND CENTER FIX =====
+   Scoped to wide viewports. This block forces the desktop layout with !important on
+   .app/.main/.metrics/etc. Unscoped, that beat EVERY responsive breakpoint below it —
+   media queries add no specificity, so a later !important rule wins outright. The result
+   was that the dashboard had no working narrow layout at all: .app stayed
+   "260px minmax(0,1fr)", so at a narrow (or zoomed) viewport the main column collapsed to
+   ~260px while its content still needed ~1314px, crushing every card into a clipped strip.
+   Scoping to min-width:1201px keeps the wide-screen fix and lets the max-width:1200px rule
+   below actually take effect. */
+@media (min-width: 1201px) {
+  .app {
+    width: 100vw !important;
+    max-width: none !important;
+    grid-template-columns: 260px minmax(0, 1fr) !important;
+  }
 
-.main {
-  width: 100% !important;
-  max-width: none !important;
-  min-width: 0 !important;
-  padding-right: 28px !important;
-}
+  .main {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    padding-right: 28px !important;
+  }
 
-.metrics {
-  grid-template-columns: repeat(6, minmax(190px, 1fr)) !important;
-}
+  .metrics {
+    grid-template-columns: repeat(6, minmax(190px, 1fr)) !important;
+  }
 
-.health {
-  grid-template-columns: repeat(5, minmax(190px, 1fr)) !important;
-}
+  .health {
+    grid-template-columns: repeat(5, minmax(190px, 1fr)) !important;
+  }
 
-.content {
-  grid-template-columns: minmax(520px, 0.9fr) minmax(900px, 1.6fr) !important;
-}
+  .content {
+    grid-template-columns: minmax(520px, 0.9fr) minmax(900px, 1.6fr) !important;
+  }
 
-.battlefield {
-  grid-template-columns: minmax(260px, 0.75fr) minmax(420px, 1.25fr) !important;
-}
+  .battlefield {
+    grid-template-columns: minmax(260px, 0.75fr) minmax(420px, 1.25fr) !important;
+  }
 
-.card {
-  min-width: 0 !important;
-}
+  .card {
+    min-width: 0 !important;
+  }
 
-.value {
-  overflow: visible !important;
-  text-overflow: clip !important;
-  white-space: nowrap !important;
-  font-size: clamp(28px, 1.65vw, 38px) !important;
-}
+  .value {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+    font-size: clamp(28px, 1.65vw, 38px) !important;
+  }
 
-table {
-  min-width: 980px !important;
-}
+  table {
+    min-width: 980px !important;
+  }
 
-.content > .card:nth-child(2) {
-  overflow-x: auto !important;
+  .content > .card:nth-child(2) {
+    overflow-x: auto !important;
+  }
+
 }
 
 @media (max-width: 1700px) {
@@ -440,30 +480,6 @@ table {
     font-weight: 800;
     box-shadow: 0 0 10px rgba(250, 204, 21, .25);
   }
-
-.commander-summary {
-  margin-bottom: 14px;
-  border: 1px solid rgba(53, 208, 111, .35);
-  box-shadow: 0 0 22px rgba(53, 208, 111, .08);
-}
-
-.commander-headline {
-  font-size: clamp(22px, 2vw, 34px);
-  font-weight: 950;
-  margin-top: 6px;
-}
-
-.commander-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(160px, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.commander-status {
-  font-weight: 950;
-}
-
 
 /* ===== OPERATOR COCKPIT BANNER ===== */
 .cockpit-banner {
@@ -580,7 +596,6 @@ table {
 
     <nav class="nav">
       <a class="active" href="#">Overview</a>
-      <a href="/greyline-market-battlefield-summary">Battlefield</a>
       <a href="/paper-trade-ledger">Positions</a>
       <a href="/options-paper-trade-ledger">Options Manager</a>
       <a href="/background-scheduler/status">Risk & Health</a>
@@ -598,8 +613,8 @@ table {
   <main class="main">
     <div class="topbar">
       <div>
-        <span class="status-pill"><span class="dot"></span> PAPER AUTO</span>
-        <span class="sub" id="last_update">Last Update: --</span>
+        <span class="status-pill" id="topbar_pill"><span class="dot" id="topbar_dot"></span> <span id="topbar_mode">PAPER AUTO</span></span>
+        <span class="sub" id="last_update">Fetched: --</span>
       </div>
       <div class="actions">
         <button onclick="refreshAll()">Refresh Now</button>
@@ -607,6 +622,7 @@ table {
       </div>
     </div>
 
+    <div id="reality_guard_banner" style="display:none;border-radius:10px;padding:11px 15px;margin-bottom:14px;font-size:13.5px;font-weight:700;line-height:1.5;"></div>
 
     <section class="card cockpit-banner" id="cockpit_banner">
       <div class="section-title">OPERATOR COCKPIT</div>
@@ -614,22 +630,17 @@ table {
       <div class="cockpit-headline green" id="cockpit_headline">Loading cockpit status...</div>
       <div class="cockpit-grid">
         <div class="cockpit-tile"><div class="label">Mission Status</div><div class="cockpit-value green" id="cockpit_status">--</div></div>
-        <div class="cockpit-tile"><div class="label">Battlefield</div><div class="cockpit-value" id="cockpit_battlefield">--</div></div>
         <div class="cockpit-tile"><div class="label">Execution Authority</div><div class="cockpit-value" id="cockpit_mode">--</div></div>
         <div class="cockpit-tile"><div class="label">Reliability</div><div class="cockpit-value" id="cockpit_reliability">--</div></div>
         <div class="cockpit-tile"><div class="label">Unread Alerts</div><div class="cockpit-value" id="cockpit_unread">--</div></div>
-        <div class="cockpit-tile"><div class="label">Last Decision</div><div class="cockpit-value" id="cockpit_decision">--</div></div>
       </div>
 
       <div class="execution-readiness" id="execution_authority_panel">
         <div class="readiness-title">EXECUTION AUTHORITY</div>
         <div class="readiness-grid">
-          <div class="readiness-tile"><div class="label">Signal</div><div class="readiness-value" id="auth_signal">--</div></div>
-          <div class="readiness-tile"><div class="label">Authority Verdict</div><div class="readiness-value" id="auth_verdict">--</div></div>
           <div class="readiness-tile"><div class="label">Governor Mode</div><div class="readiness-value" id="auth_mode">--</div></div>
           <div class="readiness-tile"><div class="label">Paper Kill-Switch</div><div class="readiness-value" id="auth_killswitch">--</div></div>
         </div>
-        <div class="auth-reason" id="auth_reason">--</div>
       </div>
 
       <div class="execution-readiness">
@@ -647,60 +658,229 @@ table {
 
     <section class="grid metrics">
       <div class="card"><div class="label">Account Equity</div><div class="value" id="equity">$--</div></div>
-      <div class="card"><div class="label">Cash On Hand</div><div class="value" id="cash">$--</div></div>
+      <div class="card"><div class="label">Cash On Hand</div><div class="value" id="cash">$--</div><div class="sub" id="cash_sub"></div></div>
       <div class="card"><div class="label">Buying Power</div><div class="value" id="buying_power">$--</div></div>
       <div class="card"><div class="label">Deployed Capital</div><div class="value" id="deployed">$--</div><div class="sub" id="deployed_pct">--</div></div>
       <div class="card"><div class="label">Unrealized P/L</div><div class="value" id="unrealized">$--</div></div>
       <div class="card"><div class="label">Total Return</div><div class="value" id="total_return">--</div></div>
+      <div class="card"><div class="label">24 Hour Return</div><div class="value" id="return_24h">--</div><div class="sub" id="return_24h_sub"></div></div>
     </section>
 
     <section class="grid health">
       <div class="card"><div class="label">Open Positions</div><div class="value yellow" id="open_trades">--</div></div>
       <div class="card"><div class="label">Paper Execution Enabled</div><div class="value red" id="execution_enabled">NO</div></div>
       <div class="card"><div class="label">Live Order Placement Allowed</div><div class="value red" id="orders_allowed">NO</div></div>
-      <div class="card"><div class="label">Battlefield Health</div><div class="value yellow" id="battlefield_health">--</div></div>
       <div class="card"><div class="label">Token Status</div><div class="value green" id="token_status">READY</div></div>
     </section>
 
     <section class="content">
-      <div class="card">
-        <div class="section-title">BATTLEFIELD SUMMARY <span style="font-size:11px;font-weight:800;color:#ffb32c;background:rgba(255,179,44,.12);padding:3px 9px;border-radius:6px;margin-left:10px;letter-spacing:.5px;">RETIRED SIGNAL — NOT TRADING</span></div><div style="background:rgba(255,179,44,.08);border:1px solid rgba(255,179,44,.35);color:#ffb32c;border-radius:9px;padding:9px 12px;font-size:12.5px;margin-bottom:14px;line-height:1.5;">These candidates come from the legacy options signal, which backtested as a coin flip (bal. accuracy 0.49 over 28 years) and was <b>retired from execution</b>. It still scores, but it <b>cannot open trades</b>. Your live positions below are from the momentum-reversal strategy.</div>
-        <div class="battlefield">
-          <div class="card">
-            <div class="label">Top Candidate</div>
-            <div class="big-symbol" id="top_symbol">--</div>
-            <div class="badge" id="top_result">--</div>
-            <div class="sub" id="top_type">--</div>
-            <div class="value" id="top_score">--</div>
-            <div class="sub">Composite Score</div>
-            <br>
-            <div class="label">Flow Confirmation</div>
-            <strong id="flow_confirmation" class="green">--</strong>
-            <div class="label" style="margin-top:12px;">Signal Age</div>
-            <strong id="signal_age" class="yellow">--</strong>
+      <div class="card" id="transactions_card">
+        <div class="section-title">Transactions — Rolling 2 Days <span id="tx_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Today's running tally and the actual day before it (yesterday), from GreyLine's own sleeve ledgers. Pure function of the ET date and the ledger timestamps — no nightly shift job. If yesterday was a weekend or holiday with no trades, it simply shows 0 (it does not skip back to the last active session).</div>
+        <table>
+          <thead>
+            <tr><th>Sleeve</th><th>Symbol</th><th>Net</th><th>Entry</th><th>Current</th><th>Detail</th><th>Realized &amp; Unrealized P&amp;L</th></tr>
+          </thead>
+          <tbody id="transactions_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="opportunity_board_card">
+        <div class="section-title">Opportunity Board — Equity + Options <span id="ob_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Every live candidate across the harvesting sleeves, grouped by edge and sorted by each edge's <em>native</em> score. Deliberately NOT cross-ranked — a directional-equity conviction and a defined-risk condor's IV rank are different units; one blended "expected profit" number on unproven edges would be false precision. A true cross-instrument ranking waits on <a href="/edge-persistence" style="color:inherit;">measured live edge</a>.</div>
+        <table>
+          <thead>
+            <tr><th>Symbol</th><th>Instrument</th><th>Price</th><th>Score</th><th>Status</th><th>Reason</th><th>Detail</th></tr>
+          </thead>
+          <tbody id="opportunity_board_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="condor_shadow_card" style="min-width:0;">
+        <div class="section-title">Condor Shadow — VRP vs Earnings edge <span id="cs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Two ZERO-capital forward-tests of the short-premium edge, measured <strong>separately</strong>: the SIM sandbox can't price condors, so this builds + marks the condors each sleeve WOULD open off Unusual Whales (clean greeks + NBBO), <strong>no orders</strong>. Each sleeve needs its min closed count before its verdict is trustworthy. Full detail at <a href="/condor-shadow" style="color:inherit;">/condor-shadow</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>Contracts</th><th>Sleeve</th><th>Entry (credit)</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>DTE</th></tr>
+            </thead>
+            <tbody id="condor_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="gex_strategy_card" style="min-width:0;">
+        <div class="section-title">GEX Mean-Reversion — dealer-gamma pins <span id="gex_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">A NEW strategy (not the condor filter): when dealers are <strong>long gamma</strong> (spot above the gamma-flip) they fade moves and pin price toward the gamma-magnet — so this FADES the extremes (short at the call-wall, long at the put-wall) toward the magnet, and stands aside in short-gamma (dealers amplify). ZERO-capital forward-test on the underlying, <strong>no orders</strong>. Live signal + P&L at <a href="/gex-strategy" style="color:inherit;">/gex-strategy</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Contracts</th><th>Regime</th><th>Signal</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Flip</th><th>Magnet</th><th>Put/Call Wall</th></tr>
+            </thead>
+            <tbody id="gex_strategy_body"><tr><td colspan="11"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="vanna_charm_card" style="min-width:0;">
+        <div class="section-title">Vanna/Charm — the OPEX rally <span id="vc_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">A second-order dealer-flow strategy (distinct from gamma): dealers are net-short <strong>vanna</strong>, so as vol and time decay <em>into monthly OPEX</em> they mechanically buy the index — the "vanna rally." This goes <strong>LONG SPY/QQQ in the OPEX window when net vanna is negative</strong>, holding to the 3rd-Friday expiry. ZERO-capital forward-test on the underlying, <strong>no orders</strong>. Live signal + P&L at <a href="/vanna-charm" style="color:inherit;">/vanna-charm</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Contracts</th><th>Signal</th><th>Days→OPEX</th><th>Net Vanna</th><th>Net Charm</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Reason</th></tr>
+            </thead>
+            <tbody id="vanna_charm_body"><tr><td colspan="11"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="low_vol_shadow_card" style="min-width:0;">
+        <div class="section-title">Low-Vol Shadow — BAB basket edge <span id="lvs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">ZERO-capital forward-test of the parked low-vol (betting-against-beta) sleeve — the inverse-vol-weighted USMV/SPLV/EFAV/XMLV basket marked daily on settled bars, <strong>no orders, no budget</strong>. The low-vol <em>thesis</em> is a smaller drawdown than the broad market, so the key read is drawdown vs SPY (ratio &lt;1 = thesis holds). Detail at <a href="/low-volatility-shadow" style="color:inherit;">/low-volatility-shadow</a>.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Days</th><th>Cumulative</th><th>Sharpe (ann.)</th><th>Max DD</th><th>SPY Max DD</th><th>DD Ratio</th><th>Verdict</th></tr>
+            </thead>
+            <tbody id="low_vol_shadow_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== VRP Edge — the 2026-08-13 24yr confirmation + operationalization ===== -->
+      <div class="card" id="vrp_edge_card" style="min-width:0;">
+        <div class="section-title">VRP Edge — Confirmed <span id="vrpedge_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">GreyLine's one edge that clears significance is the <strong>index variance risk premium</strong>. Backtested over <strong>24 years incl. every crash</strong> (VIX vs realized SPY): the signal is real and the defined-risk condor survives; rich-IV timing was <strong>falsified</strong>; the harvest is now unconditional + UW-priced. <strong>Still gated OFF</strong> — the shadow is the live arbiter.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <div style="flex:1;min-width:190px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">INDEX VRP (24yr signal)</div>
+            <div id="vrp_signal" style="font-weight:600;margin-top:4px;">—</div>
           </div>
-
-          <div>
-            <div class="card">
-              <div class="label">Market Bias</div>
-              <div class="value green" id="market_bias">--</div>
-              <div class="grid" style="grid-template-columns:repeat(4,1fr); margin-top:14px;">
-                <div><div class="label">Call Count</div><strong id="call_count">--</strong></div>
-                <div><div class="label">Put Count</div><strong id="put_count">--</strong></div>
-                <div><div class="label">Ready Calls</div><strong id="ready_calls">--</strong></div>
-                <div><div class="label">Ready Puts</div><strong id="ready_puts">--</strong></div>
-              </div>
-            </div>
-
-            <div class="card" style="margin-top:14px;">
-              <div class="section-title">Top 5 Candidates</div>
-              <table>
-                <thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Flow</th><th>Conviction</th><th>Gate</th><th>Result</th><th>Status</th></tr></thead>
-                <tbody id="top_calls"></tbody>
-              </table>
-            </div>
+          <div style="flex:1;min-width:190px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">DEFINED-RISK CONDOR (structure)</div>
+            <div id="vrp_structure" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:190px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">BOOK RISK CONCENTRATION</div>
+            <div id="vrp_riskbudget" style="font-weight:600;margin-top:4px;">—</div>
           </div>
         </div>
+      </div>
+
+      <!-- ===== Universe Expansion — zero-capital forward-tests of the 2026-08-12 UW/TS scan adds ===== -->
+      <div class="card" id="alt_universe_card" style="min-width:0;">
+        <div class="section-title">Universe Expansion — Infra <span id="altuni_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">The scan added new instruments as <strong>tracked candidates</strong> (52 ETFs · 5 vol ETPs · 19 futures · 6 FX · 80 large-cap single names) — each measured ZERO-capital on the edge court's bar before any capital. <strong>Nothing here is armed.</strong> Infra status below; the four forward-tests follow.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">TRACKED CANDIDATES</div>
+            <div id="altuni_counts" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">QUOTE STREAM</div>
+            <div id="altuni_stream" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">POSITIONS STREAM (cross-check)</div>
+            <div id="altuni_broker" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+          <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
+            <div class="sub" style="letter-spacing:.08em;">GAMMA-FLIP (condor GATE 2)</div>
+            <div id="altuni_gamma" style="font-weight:600;margin-top:4px;">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="ext_etf_shadow_card" style="min-width:0;">
+        <div class="section-title">Extended-ETF Shadow — cross-sectional momentum <span id="eets_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">The 52 scanned ETFs, ZERO-capital: rank by 3-month trailing return, hold the top-6 a week, settle at live quotes, judged on the court's bar. <a href="/extended-etf-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Symbol</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <tbody id="ext_etf_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="fut_tsmom_shadow_card" style="min-width:0;">
+        <div class="section-title">Futures TSMOM Shadow — the REAL managed-futures test <span id="futs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Time-series momentum on the 19 continuous futures (vs today's ETF proxies): long positive 12-month trend, short negative, monthly, ZERO-capital. Long/short diversifier, judged on the court's bar. <a href="/futures-tsmom-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Future</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <tbody id="fut_tsmom_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="vol_etp_shadow_card" style="min-width:0;">
+        <div class="section-title">Long-Vol Leg Shadow — regime-conditioned <span id="vets_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">The long-vol leg that complements the SVXY carry sleeve: long VXX <strong>only in backwardation</strong> (VIX≥VIX3M), flat in contango (so it never bleeds). ZERO-capital, judged on the court's bar. <a href="/vol-etp-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Symbol</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <tbody id="vol_etp_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="fx_trend_shadow_card" style="min-width:0;">
+        <div class="section-title">FX Trend Shadow — long/short spot FX <span id="fxts_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">3-month trend on the 6 spot-FX pairs: long positive trend, short negative, weekly, ZERO-capital. Watch USD concentration (vs-USD vs USD-vs pairs). <a href="/fx-trend-shadow" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Pair</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <tbody id="fx_trend_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="open_equity_positions_card" style="min-width:0;">
+        <div class="section-title">Open Equity Positions <span id="oeq_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Every whole-share equity &amp; ETF holding across the sleeves — momentum-reversal names plus the trend / vol-carry / managed-futures / T-bill ETFs. Cost = what we paid (shares × entry); Market Value = shares × current price; P/L is live unrealized (P/L % = return on cost). Stop is the sleeve's dynamic exit; Take Profit is the momentum names' ATR ladder (TP1–3 bank tranches ✓ when reached, TP4 runner trails). Trend / vol-carry / T-bill ETFs exit on signal or rebalance, not a fixed stop/TP.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>Shares</th><th>Entry</th><th>Current</th><th>Cost</th><th>Market Value</th><th>P/L</th><th>P/L %</th><th>Stop</th><th>Take Profit</th></tr>
+            </thead>
+            <tbody id="open_equity_positions_body"><tr><td colspan="10"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+
+      <div class="card" id="edge_court_card" style="min-width:0;">
+        <div class="section-title">Edge Court — live per-sleeve verdict <span id="ec_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Is each sleeve ACTUALLY earning? Verdict from REALIZED closed trades only (forced/admin closes excluded), cost-net, with a 95% CI and a 20 <strong>independent-trading-day</strong> minimum. The sample is <strong>day-clustered</strong>: multiple lots closed in the same instant, and multiple names closed by one same-day rebalance, are ONE correlated observation — not many — so a single close can't masquerade as a proven track record (counting rows independently inflated the t-stat by ~√(fake n)). <b>Low-turnover sleeves</b> (trend, managed_futures) close ~quarterly, so a close-based gate is unreachable — they're verdicted instead on <b>non-overlapping periodic book returns</b> (return-on-deployed capital, rebalance-flow periods excluded), which proves live earning power on held capital, not market-neutral alpha. Realized P&amp;L is fill-reconciled on every sleeve — condor closes, momentum equity exits, AND long-option exits: a close priced from an estimate/quote is upgraded to the actual broker fill (never fabricated when unconfirmed), and a CLOSED position the broker still holds is reverted to OPEN (never counted as a realized win). Execution = measured slippage (decision-mid vs fill) shown beside the edge — pair them: measured cost &gt; edge ⇒ retire. Daily open-marks are autocorrelated and never used here.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Sleeve</th><th>Verdict</th><th title="independent trading days (day-clustered) · raw close-rows">Days · closes</th><th>Edge (return on risk · 95% CI)</th><th>Execution (slippage · fill)</th></tr>
+            </thead>
+            <tbody id="edge_court_body"><tr><td colspan="5"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="capital_alloc_card" style="min-width:0;">
+        <div class="section-title">Capital Allocation — evidence → capital <span id="ca_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">How measured edge moves money. Each sleeve's LIVE %-of-equity budget vs the allocator's RECOMMENDED %, tagged by basis: <b>measured</b> (a gated court verdict funds/retires it), <b>prior+tilt</b> (a capped, sample-shrunk lean on below-gate court evidence), or <b>prior</b> (static backtest, no live evidence yet). Auto-apply steps the live budget toward the recommendation — evidence-only, capped, reversible, GATED OFF by default. An active override shows its applied %; an explicit env pin always wins.</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Sleeve</th><th>Live %</th><th>Recommended %</th><th>Basis</th><th>Override</th></tr>
+            </thead>
+            <tbody id="capital_alloc_body"><tr><td colspan="5"><span class="sub">Loading…</span></td></tr></tbody>
+          </table>
+        </div>
+        <div id="ca_applypath" style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+          <div class="sub" style="margin-bottom:6px;"><b>Auto-apply plan</b> — the capped, evidence-only step toward the recommendation. Approving writes a reversible %-override the sizing engines read at the next rebalance; it places NO order now. Approval binds to the exact plan shown (token): if the evidence shifts before you click, the server refuses and asks you to re-review — so exactly the reviewed allocation applies, or none.</div>
+          <div id="ca_plan_body"><span class="sub">Loading…</span></div>
+          <div style="display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap;">
+            <button id="ca_apply_btn" class="primary" onclick="approveApplyAllocation()" disabled>Approve &amp; apply plan</button>
+            <button id="ca_revert_btn" onclick="revertAllocation()" disabled>Revert overrides</button>
+            <span id="ca_action_result" class="sub"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="cycle_cost_card" style="min-width:0;">
+        <div class="section-title">Scheduler Cycle Cost <span id="cc_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Per-phase wall-clock of the LAST scheduler cycle — which phase dominates. The heaviest bar is the one to optimize. <code>post_sleeve</code> bundles momentum-open / broker-stops / health / reports / remediation. The gap between the instrumented total and the full cycle duration is uninstrumented remainder. Populates after the first cycle completes (a cold-cache first cycle after a restart runs long).</div>
+        <div id="cycle_cost_body"><span class="sub">Loading…</span></div>
       </div>
 
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
@@ -713,14 +893,16 @@ table {
         </table>
       </div>
 
-      <div class="card">
+      <div class="card" id="open_positions_card">
         <div class="section-title">OPEN POSITIONS</div>
+        <div class="pos-scroll">
         <table>
           <thead>
-            <tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L</th><th>P/L %</th><th>Status</th><th>Stage</th></tr>
+            <tr><th>Symbol</th><th>P/L</th><th>P/L %</th><th>Side</th><th>Shares</th><th>Limit Buy</th><th>Entry</th><th>Current</th><th>Cost</th><th>Paid</th><th>Stop</th><th>Take-Profits (TP1·TP2·TP3)</th><th>Status</th><th>Stage</th></tr>
           </thead>
           <tbody id="positions"></tbody>
         </table>
+        </div>
       </div>
     </section>
 
@@ -752,9 +934,53 @@ const fmtMoney = n => Number(n || 0).toLocaleString("en-US", {style:"currency", 
 const fmtPct = n => `${Number(n || 0).toFixed(2)}%`;
 
 async function getJSON(url) {
-  const res = await fetch(url + "?refresh=" + Date.now());
-  if (!res.ok) throw new Error(url);
-  return await res.json();
+  // Resilient fetch: the heavy live-data cards (opportunity-board, condor/momentum shadows) fire together
+  // on the 15s refresh, and a slow response occasionally arrives truncated/interrupted — res.json() then
+  // throws WebKit's cryptic "SyntaxError: The string did not match the expected pattern" on a body that is
+  // actually fine server-side. Read as text + parse ourselves, retry ONCE on a transient network / gateway /
+  // parse failure, and surface a clean, legible message instead of the raw parser error. Success path
+  // unchanged (returns parsed JSON) — a strict superset of the old one-shot behavior.
+  const label = url.replace(/^\//, "");
+  let lastMsg = label + " — unavailable";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res;
+    try {
+      res = await fetch(url + "?refresh=" + Date.now(), { credentials: "same-origin", cache: "no-store" });
+    } catch (netErr) {
+      lastMsg = label + " — network error";
+      continue;                                   // transient blip → one retry, then surface cleanly
+    }
+    if (!res.ok) {
+      lastMsg = label + " — HTTP " + res.status;
+      if (res.status >= 500 && attempt === 0) continue;   // gateway/5xx → retry once
+      throw new Error(lastMsg);                    // 4xx (e.g. auth) won't fix on retry
+    }
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      lastMsg = label + " — slow/partial response (retries next cycle)";
+      continue;                                   // truncated/interrupted body → one retry
+    }
+  }
+  throw new Error(lastMsg);
+}
+
+// SELF-RELOAD ON DEPLOY: the page auto-refreshes DATA every 15s but never reloads its own JS, so a
+// tab left open keeps rendering with old code (old columns/panels) until a manual hard-refresh. This
+// embeds the code stamp the tab loaded with and compares it to the server's current stamp; when they
+// differ — i.e. new dashboard code was deployed — the tab reloads itself ONCE. After the reload the
+// embedded stamp matches the server's, so it can't loop.
+const DASH_VERSION = "{{ code_version }}";
+let _dashReloading = false;
+async function checkDashboardVersion() {
+  try {
+    const d = await getJSON("/dashboard-version");
+    if (d && d.version && DASH_VERSION && d.version !== DASH_VERSION && !_dashReloading) {
+      _dashReloading = true;
+      location.reload();
+    }
+  } catch (e) { /* transient — try again next cycle */ }
 }
 
 async function postCommand(command) {
@@ -797,29 +1023,43 @@ function setClassBySign(id, value) {
   el.classList.add(Number(value || 0) >= 0 ? "green" : "red");
 }
 
-function drawCurve(trades) {
+// Plot the REAL recorded mission-equity series (/portfolio-equity-timeline). Never fabricate: the old
+// version cumulatively summed realized/unrealized P&L over the currently-open positions in broker order
+// and rendered it as an equity-over-time curve — it was not a time series at all. With fewer than 2 real
+// equity points we say so rather than draw a made-up line.
+async function renderEquityCurve() {
   const svg = document.getElementById("equity_curve");
-  svg.innerHTML = "";
-  let points = [0];
-  let running = 0;
-  trades.forEach(t => {
-    running += Number(t.realized_pnl || t.unrealized_pnl || 0);
-    points.push(running);
-  });
+  if (!svg) return;
+  let series = [], failed = false;
+  try {
+    const d = await getJSON("/portfolio-equity-timeline");
+    series = (d.series || []).filter(p => Number.isFinite(Number(p.mission_equity)));
+  } catch (e) { failed = true; }
 
-  const w = 700, h = 220, pad = 24;
-  const min = Math.min(...points, -1);
-  const max = Math.max(...points, 1);
-  const x = i => pad + i * ((w - pad*2) / Math.max(points.length - 1, 1));
-  const y = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
-
-  for (let i = 0; i < 5; i++) {
-    const yy = pad + i * ((h-pad*2)/4);
-    svg.innerHTML += `<line x1="${pad}" y1="${yy}" x2="${w-pad}" y2="${yy}" stroke="rgba(255,255,255,.12)" />`;
+  // Distinguish a ROUTE FAILURE from genuinely-no-data-yet — an error must never read as "no history".
+  if (failed) {
+    svg.innerHTML = `<text x="350" y="110" text-anchor="middle" fill="var(--red)" font-size="13">Equity timeline unavailable — could not load.</text>`;
+    return;
+  }
+  if (series.length < 2) {
+    svg.innerHTML = `<text x="350" y="110" text-anchor="middle" fill="rgba(255,255,255,.5)" font-size="13">Equity history is still being recorded — no verified curve to plot yet.</text>`;
+    return;
   }
 
-  const d = points.map((p,i) => `${i===0 ? "M" : "L"} ${x(i)} ${y(p)}`).join(" ");
-  svg.innerHTML += `<path d="${d}" fill="none" stroke="#ff4d57" stroke-width="4" />`;
+  const pts = series.map(p => Number(p.mission_equity));
+  const w = 700, h = 220, pad = 24;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const x = i => pad + i * ((w - pad*2) / Math.max(pts.length - 1, 1));
+  const y = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad*2);
+  let html = "";
+  for (let i = 0; i < 5; i++) {
+    const yy = pad + i * ((h-pad*2)/4);
+    html += `<line x1="${pad}" y1="${yy}" x2="${w-pad}" y2="${yy}" stroke="rgba(255,255,255,.12)" />`;
+  }
+  const dd = pts.map((p,i) => `${i===0 ? "M" : "L"} ${x(i)} ${y(p)}`).join(" ");
+  const up = pts[pts.length - 1] >= pts[0];
+  html += `<path d="${dd}" fill="none" stroke="${up ? '#22c55e' : '#ff4d57'}" stroke-width="4" />`;
+  svg.innerHTML = html;
 }
 
 async function ackPositionAlert(tradeId) {
@@ -828,86 +1068,44 @@ async function ackPositionAlert(tradeId) {
 }
 
 
-async function refreshCommanderSummary() {
+async function refreshCockpitBanner() {
   try {
     const payload = await getJSON("/operator-commander-summary");
     const summary = payload.operator_summary || {};
 
-    setText("commander_headline", summary.headline || "--");
-    setText("commander_status", summary.status || "--");
-    setText("commander_mode", summary.operating_mode || "--");
-    setText("commander_reliability", `${summary.reliability_score ?? "--"}/100`);
-    setText("commander_candidate", `${summary.top_symbol || "--"} ${summary.top_option_type || ""}`);
-    setText("commander_score", summary.top_score ?? "--");
-    setText("commander_unread", summary.unread_notifications ?? "--");
-
-    const headline = document.getElementById("commander_headline");
-    const status = document.getElementById("commander_status");
-    if (headline && status) {
-      headline.className = "commander-headline " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
-      status.className = "commander-status " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
-    }
-
-    const paperMode = summary.operating_mode === "PAPER_OPERATIONAL" || summary.paper_execution_allowed === true;
-    const liveMode = summary.live_execution_allowed === true;
-    setText("side_mode", paperMode && !liveMode ? "PAPER AUTO" : (liveMode ? "LIVE AUTO" : "OBSERVE"));
-  } catch (e) {
-    setText("commander_headline", "Commander summary unavailable.");
-    const headline = document.getElementById("commander_headline");
-    if (headline) headline.className = "commander-headline yellow";
-  }
-}
-
-
-async function refreshCockpitBanner() {
-  try {
-    let payload = await getJSON("/operator-commander-summary");
-    let summary = payload.operator_summary || {};
-
-    if (!summary.status) {
-      const cockpit = await getJSON("/operator-cockpit-status");
-      summary = {
-        status: cockpit.overall_reliability === "GREEN" ? "GREEN" : cockpit.overall_reliability === "RED" ? "RED" : "YELLOW",
-        headline: cockpit.mission_readiness?.status === "GO" ? "GreyLine cockpit ready." : "Cockpit action required.",
-        top_symbol: "--",
-        top_option_type: "",
-        top_score: "",
-        operating_mode: cockpit.operating_mode,
-        reliability_score: cockpit.reliability_score,
-        unread_notifications: cockpit.unread_notifications,
-        master_decision: cockpit.master_decision?.decision || "--",
-      };
-    }
-
+    // The commander-summary ENGINE owns the GREEN/RED/YELLOW verdict and headline (engines decide,
+    // displays render). We do NOT re-derive them in JS from a second source (cockpit) — a second
+    // derivation could silently disagree with the engine's. If status is somehow absent, default to
+    // YELLOW (never green), and the fields fall back to "--" below.
     const status = summary.status || "YELLOW";
     const color = status === "GREEN" ? "green" : status === "RED" ? "red" : "yellow";
 
     setText("cockpit_headline", summary.headline || "--");
     setText("cockpit_status", status);
-    setText("cockpit_battlefield", `${summary.top_symbol || "--"} ${summary.top_option_type || ""} ${summary.top_score ?? ""}`.trim());
     setText("cockpit_mode", summary.operating_mode || "--");
     setText("cockpit_reliability", `${summary.reliability_score ?? "--"}/100`);
     setText("cockpit_unread", summary.unread_notifications ?? "--");
-    setText("cockpit_decision", summary.master_decision || "--");
 
-    // Execution authority (richer ExecutionAuthorityEngine state).
-    const verdict = summary.execution_authority || "--";
-    setText("auth_signal", summary.signal_decision || summary.master_decision || "--");
-    setText("auth_verdict", verdict);
+    // Execution authority — governor mode + kill-switch only. The Signal / Authority Verdict /
+    // "No executable signal" fields were driven by the RETIRED coin-flip options signal, which
+    // is permanently NO_ACTION and does not gate the momentum/options path. Showing them made a
+    // healthy system read as stuck, so they're gone.
     setText("auth_mode", summary.operating_mode || "--");
 
     const paperEnabled = summary.paper_execution_enabled;
     setText("auth_killswitch", paperEnabled === true ? "ARMED" : paperEnabled === false ? "BLOCKED" : "--");
-    setText("auth_reason", summary.execution_authority_reason || "--");
-
-    const verdictEl = document.getElementById("auth_verdict");
-    if (verdictEl) {
-      const blocked = verdict === "KILL_SWITCH_BLOCKED" || verdict === "BLOCKED";
-      const executing = verdict === "PAPER_EXECUTE" || verdict === "LIVE_EXECUTE";
-      verdictEl.className = "readiness-value " + (blocked ? "red" : executing ? "green" : "yellow");
-    }
     const killEl = document.getElementById("auth_killswitch");
     if (killEl) killEl.className = "readiness-value " + (paperEnabled === true ? "green" : paperEnabled === false ? "red" : "yellow");
+
+    // Top-bar + sidebar mode pill: reflect the REAL operating mode + execution authority, not a
+    // hardcoded green "PAPER AUTO". Green only when paper execution is actually armed (mirrors the
+    // kill-switch tile semantics right above), red when blocked, yellow when unknown.
+    const modeLabel = summary.operating_mode || "PAPER";
+    setText("topbar_mode", modeLabel);
+    setText("side_mode", modeLabel);
+    const pillColor = paperEnabled === true ? "var(--green)" : paperEnabled === false ? "var(--red)" : "var(--yellow)";
+    const topPill = document.getElementById("topbar_pill"); if (topPill) topPill.style.color = pillColor;
+    const topDot = document.getElementById("topbar_dot"); if (topDot) topDot.style.background = pillColor;
 
     const banner = document.getElementById("cockpit_banner");
     const headline = document.getElementById("cockpit_headline");
@@ -917,19 +1115,640 @@ async function refreshCockpitBanner() {
     if (headline) headline.className = "cockpit-headline " + color;
     if (statusEl) statusEl.className = "cockpit-value " + color;
   } catch (e) {
+    // Cockpit read FAILED — blank every tile, strip the static green off Mission Status and the
+    // top-bar pill, so a failed read can't leave a stale (or hardcoded-green) verdict frozen on screen.
     setText("cockpit_headline", "Cockpit data loading...");
     const headline = document.getElementById("cockpit_headline");
     if (headline) headline.className = "cockpit-headline yellow";
+    ["cockpit_status", "cockpit_mode", "cockpit_reliability", "cockpit_unread"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = "—"; el.className = "cockpit-value yellow"; }
+    });
+    const topPill = document.getElementById("topbar_pill"); if (topPill) topPill.style.color = "var(--yellow)";
+    const topDot = document.getElementById("topbar_dot"); if (topDot) topDot.style.background = "var(--yellow)";
+  }
+}
+
+async function refreshRealityGuard() {
+  const el = document.getElementById("reality_guard_banner");
+  if (!el) return;
+  const paint = (bg, border, color) => { el.style.display = "block"; el.style.background = bg; el.style.border = "1px solid " + border; el.style.color = color; };
+  try {
+    const d = await getJSON("/reality-guard");
+    const failed = (d.checks || []).filter(c => !c.ok);
+    if (d.verdict === "FANTASY_DETECTED") {
+      paint("rgba(248,81,73,.16)", "rgba(248,81,73,.75)", "#ff6b6b");
+      el.innerHTML = "⛔ FANTASY DATA DETECTED — the dashboard may not reflect real TradeStation state.<br>" +
+        failed.filter(c => c.severity === "critical" && !c.degraded_class).map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>");
+    } else if (d.verdict === "BROKER_READ_DEGRADED") {
+      // NOT fantasy — the live broker read failed, so figures shown are last-known-good / unknown (never
+      // fabricated). Name the REAL cause: a 5xx from TradeStation is a broker-side OUTAGE (clears when their
+      // API recovers), not a local scheduler blip. Only guess "busy scheduler cycle" when it isn't broker-side.
+      paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
+      const brokerSide = failed.some(c => c.id === "BROKER_READS_OK" && c.broker_side);
+      const cause = brokerSide
+        ? "This is a TradeStation server error (broker-side outage) — it clears when their API recovers, not on our side."
+        : "Usually a busy scheduler cycle saturating TradeStation; this self-heals.";
+      el.innerHTML = "⚠ Broker read degraded — can't confirm LIVE TradeStation state right now; money tiles show last-known-good, not fabricated numbers. " + cause + "<br>" +
+        failed.filter(c => c.degraded_class).map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>");
+    } else if (d.verdict === "REAL_DATA_WITH_WARNINGS") {
+      paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
+      el.innerHTML = "⚠ Real broker data, with warnings:<br>" +
+        failed.map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>");
+    } else if (d.verdict === "REAL_DATA_VERIFIED" && !failed.some(c => c.severity === "critical")) {
+      paint("rgba(63,185,80,.10)", "rgba(63,185,80,.4)", "#3fb950");
+      el.innerHTML = `✓ Real data verified — reading ${d.account_label || "TradeStation"}. No phantom positions; execution & booking coherent.`;
+    } else {
+      // A safety monitor must NEVER default an unknown state to green. An unexpected/missing verdict — or
+      // a "verified" verdict that disagrees with a live critical check — is unverifiable, not all-clear.
+      paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
+      el.innerHTML = `⚠ Reality Guard returned an unexpected verdict (<b>${d.verdict || "(none)"}</b>) — cannot confirm data is real.` +
+        (failed.length ? "<br>" + failed.map(c => `• <b>${c.id}</b>: ${c.detail}`).join("<br>") : "");
+    }
+  } catch (e) {
+    paint("rgba(255,179,44,.10)", "rgba(255,179,44,.5)", "#ffb32c");
+    el.textContent = "⚠ Reality Guard unavailable — cannot verify data is real right now.";
+  }
+}
+
+async function refreshTransactions() {
+  const body = document.getElementById("transactions_body");
+  const summary = document.getElementById("tx_summary");
+  if (!body) return;
+  const money = (v) => (v == null ? "" : (v >= 0 ? "+$" : "-$") + Math.abs(Number(v)).toFixed(2));
+  const pnlCell = (v) => (v == null ? '<span class="sub">—</span>'
+                          : `<span class="${Number(v) >= 0 ? 'green' : 'red'}">${money(v)}</span>`);
+  // unrealized shown in parentheses beside realized, e.g. "— (+$12.34)". Muted so realized still leads.
+  const unrlParen = (v) => (v == null ? ""
+                          : ` <span class="sub">(<span class="${Number(v) >= 0 ? 'green' : 'red'}" style="opacity:.85;">${money(v)}</span> unrl)</span>`);
+  try {
+    const d = await getJSON("/transactions-rolling");
+    const y = d.yesterday || {}, t = d.today || {};
+    if (summary) summary.textContent =
+      `Yesterday ${y.date || "—"}: ${y.count || 0} txn, realized ${money(y.realized_pnl || 0)}`
+      + ` · Today ${t.date || "—"}: ${t.count || 0} txn, running ${money(t.realized_pnl || 0)}`;
+    let html = "";
+    const section = (label, b, running) => {
+      html += `<tr><td colspan="7" style="padding-top:12px;font-weight:700;">${label}`
+            + ` <span class="sub" style="font-weight:600;">${b.date || "—"} · ${b.count || 0} txn `
+            + `(${b.opens || 0} open / ${b.closes || 0} close) · realized ${money(b.realized_pnl || 0)}`
+            + `${running ? " (running)" : ""}</span></td></tr>`;
+      // BY POSITION (the P&L story) — one netted line per name, so dozens of rebalance legs collapse to
+      // "carry SVXY: +$X net". This is the default view; the raw fills follow below for the audit trail.
+      const pos = b.by_position || [];
+      // Show ONLY the netted BY-POSITION P&L story. The raw per-fill "ALL FILLS" list is intentionally NOT
+      // rendered — every BUY leg realizes nothing (shows "—"), which is audit noise, not signal. The full
+      // per-fill detail is still available on the /transactions-rolling route for anyone who needs it.
+      if (!pos.length) {
+        html += `<tr><td colspan="7"><span class="sub">no positions traded</span></td></tr>`; return;
+      }
+      for (const p of pos) {
+        const net = (p.bought || 0) - (p.sold || 0);
+        const ep = p.entry_price, cp = p.current_price;
+        html += `<tr><td><span class="sub">${p.sleeve || ""}</span></td>`
+              + `<td><b>${p.symbol || ""}</b></td>`
+              + `<td class="sub">${net >= 0 ? "+" : ""}${net}</td>`
+              + `<td>${ep != null ? fmtMoney(ep) : "<span class='sub'>—</span>"}</td>`
+              + `<td>${cp != null ? fmtMoney(cp) : "<span class='sub'>—</span>"}</td>`
+              + `<td><span class="sub">${p.bought || 0} bought · ${p.sold || 0} sold · ${p.fills || 0} fills</span></td>`
+              + `<td>${pnlCell(p.realized_pnl)}${unrlParen(p.unrealized_pnl)}</td></tr>`;
+      }
+    };
+    section("YESTERDAY", y, false);
+    section("TODAY", t, true);
+    body.innerHTML = html || `<tr><td colspan="7"><span class="sub">no transactions in the last 2 sessions</span></td></tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7"><span class="sub">transactions unavailable</span></td></tr>`;
+  }
+}
+
+async function refreshOpportunityBoard() {
+  const body = document.getElementById("opportunity_board_body");
+  const summary = document.getElementById("ob_summary");
+  try {
+    const d = await getJSON("/opportunity-board");
+    const groups = d.groups || [];
+    if (summary) summary.textContent = `${d.total_candidates || 0} live candidates across ${groups.length} edges · sorted within edge, not cross-ranked`;
+    let html = "";
+    for (const g of groups) {
+      const cands = g.candidates || [];
+      html += `<tr><td colspan="7" style="padding-top:14px;">
+        <strong>${g.strategy || ""}</strong> <span class="sub">· ${g.instrument || ""}</span><br>
+        <span class="sub">${g.edge || ""}</span><br>
+        <span class="sub" style="opacity:.85;">${g.action || ""}${g.error ? " — <span class='red'>"+g.error+"</span>" : ""}</span>${g.held_note ? `<br><span class="sub" style="opacity:.7;font-style:italic;">${g.held_note}</span>` : ""}${g.shadow_open_note ? `<br><span class="sub" style="opacity:.7;font-style:italic;">${g.shadow_open_note}</span>` : ""}
+      </td></tr>`;
+      if (!cands.length) {
+        html += `<tr><td colspan="7"><span class="sub">${g.note || "no candidates right now"}</span></td></tr>`;
+        continue;
+      }
+      html += cands.map(c => {
+        const badge = c.status === "BLOCKED" ? "unmanaged" : (c.status === "BOUGHT" || c.status === "ARMED") ? "open" : "neutral";
+        return `<tr>
+        <td><strong>${c.symbol}</strong></td>
+        <td><span class="sub">${c.instrument || ""}</span></td>
+        <td>${c.price != null ? fmtMoney(c.price) : "—"}</td>
+        <td>${c.score != null ? c.score : "—"} <span class="sub">${c.score_label || ""}</span></td>
+        <td>${c.status && c.status !== "—" ? `<span class="badge ${badge}">${c.status}</span>` : "—"}</td>
+        <td><span class="sub">${c.reason || "—"}</span></td>
+        <td><span class="sub">${c.detail || ""}</span></td>
+      </tr>`;
+      }).join("");
+    }
+    body.innerHTML = html || `<tr><td colspan="7"><span class="sub">No candidates right now.</span></td></tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7"><span class="red">Opportunity board unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+// Generic renderer for the 4 alt-universe forward-tests — they share one report shape (open_positions +
+// cohorts_closed/min_cohorts + verdict + status). Zero-capital; entry/live shown as raw numbers (mixed
+// asset classes: ETFs $, futures points, FX rates — no $ prefix).
+async function refreshAltShadow(route, bodyId, sumId) {
+  const body = document.getElementById(bodyId), summary = document.getElementById(sumId);
+  if (!body) return;
+  const numf = (v) => v == null ? "—" : (Math.abs(v) >= 1 ? Number(v).toFixed(2) : Number(v).toFixed(5));
+  try {
+    const d = await getJSON(route);
+    const pos = d.open_positions || [];
+    const measuring = String(d.status || "").endsWith("MEASURING");
+    if (summary) {
+      const nL = pos.filter(p => p.side === "BUY").length, nS = pos.length - nL;
+      summary.textContent = `${pos.length} open${pos.length ? " (" + nL + "L/" + nS + "S)" : ""} · ${d.cohorts_closed || 0}/${d.min_cohorts} cohorts · ${measuring ? ("Sharpe " + d.annualized_sharpe) : "accumulating"}`;
+    }
+    if (!pos.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">${d.verdict || "—"}</span></td></tr>`; return; }
+    const signedD = (v) => (v > 0 ? "+" : "") + fmtMoney(v);
+    body.innerHTML = pos.map(p => {
+      const lv = p.unrealized_pct;
+      const lvCls = lv == null ? "" : (lv > 0 ? "green" : (lv < 0 ? "red" : ""));
+      const pd = p.pnl_dollars;
+      return `<tr>
+        <td><strong>${p.symbol}</strong></td>
+        <td>${p.contracts != null ? p.contracts : "<span class='sub'>—</span>"}</td>
+        <td><span class="badge ${p.side === "BUY" ? "open" : "neutral"}">${p.side === "BUY" ? "LONG" : "SHORT"}</span></td>
+        <td>${numf(p.entry_close)} <span class="sub">${p.entry_date || ""}</span></td>
+        <td>${p.live_last != null ? numf(p.live_last) : "<span class='sub'>—</span>"}</td>
+        <td>${pd != null ? `<span class="${lvCls}">${signedD(pd)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${lv != null ? `<span class="${lvCls}">${(lv > 0 ? "+" : "") + lv.toFixed(2)}%</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${p.days_to_settle != null ? p.days_to_settle : "—"}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8"><span class="red">unavailable — ${String(e).slice(0, 60)}</span></td></tr>`;
+  }
+}
+
+// The three infra tiles: tracked-candidate counts, quote-stream health, gamma-flip closest-to-cross.
+async function refreshVrpEdge() {
+  // 24yr index-VRP confirmation + the defined-risk structure + the book risk concentration. All read-only.
+  try {
+    const d = await getJSON("/index-vrp-history");
+    const u = d.unconditional || {};
+    const el = document.getElementById("vrp_signal");
+    if (el) el.innerHTML = `<span class="green">+${u.gross_vrp_vol_points}</span> vol pts <span class="sub">· p=${u.p_value} · ${(d.span||[])[0]}→ · rich-IV lift ${(d.rich_iv_tercile||{}).conditioning_lift_bps}bps (falsified)</span>`;
+    const sm = document.getElementById("vrpedge_summary");
+    if (sm) sm.textContent = `index VRP significant (p=${u.p_value}); harvest unconditional + UW-priced; gated OFF`;
+  } catch (e) { const el = document.getElementById("vrp_signal"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const d = await getJSON("/index-condor-structure-backtest");
+    const c = d.defined_risk_condor || {};
+    const posYrs = Object.values(d.ror_pct_by_year || {}).filter(v => v > 0).length;
+    const totYrs = Object.keys(d.ror_pct_by_year || {}).length;
+    const el = document.getElementById("vrp_structure");
+    if (el) el.innerHTML = `<span class="green">${posYrs}/${totYrs} yrs +</span> <span class="sub">· worst ${c.worst_month_ror_pct}% (wing-capped) · Sharpe ${c.sharpe_annualized} (skew ${c.skew_monthly}, tail-flawed)</span>`;
+  } catch (e) { const el = document.getElementById("vrp_structure"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const d = await getJSON("/sleeve-budgets");
+    const rb = (d.risk_budget || {});
+    const mc = rb.most_risk_concentrated || {};
+    const el = document.getElementById("vrp_riskbudget");
+    if (el) {
+      const cls = (mc.current_risk_share_pct >= 45) ? 'yellow' : '';
+      el.innerHTML = `<span class="${cls}">${mc.sleeve || '—'} ${mc.current_risk_share_pct != null ? mc.current_risk_share_pct + '%' : ''}</span> <span class="sub">of book risk · risk-budget ${rb.mode_live ? 'LIVE' : 'advisory'}</span>`;
+    }
+  } catch (e) { const el = document.getElementById("vrp_riskbudget"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+}
+
+async function refreshAltUniverseInfra() {
+  try {
+    const [ext, alt] = await Promise.all([getJSON("/extended-etf-universe"), getJSON("/alt-asset-universe")]);
+    const by = alt.by_class || {};
+    const el = document.getElementById("altuni_counts");
+    if (el) el.innerHTML = `${ext.count || 0} ETFs · ${(by.vol_etp || []).length} vol · ${(by.futures || []).length} fut · ${(by.fx || []).length} FX <span class="sub">· not armed</span>`;
+    const sm = document.getElementById("altuni_summary");
+    if (sm) sm.textContent = `${(ext.count || 0) + (alt.count || 0)} tracked candidates · all zero-capital`;
+  } catch (e) { const el = document.getElementById("altuni_counts"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const s = await getJSON("/ts-quote-stream");
+    const el = document.getElementById("altuni_stream");
+    if (el) {
+      const on = s.enabled && s.connected;
+      el.innerHTML = `<span class="${on ? 'green' : (s.enabled ? 'yellow' : '')}">${s.status || '—'}</span> <span class="sub">${s.enabled ? ((s.frames || 0) + " frames" + (s.stale_seconds != null ? " · " + s.stale_seconds + "s" : "")) : "off"}</span>`;
+    }
+  } catch (e) { const el = document.getElementById("altuni_stream"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const b = await getJSON("/ts-broker-stream");
+    const el = document.getElementById("altuni_broker");
+    if (el) {
+      // green only when it's actually agreeing with REST (synced); yellow when enabled-but-unverified.
+      const cls = b.synced ? 'green' : (b.enabled ? 'yellow' : '');
+      const detail = b.enabled
+        ? (b.synced ? ("synced · " + (b.mirror_positions || 0) + " pos") : (b.snapshot_complete ? "desynced → REST" : "syncing"))
+        : "off · REST";
+      el.innerHTML = `<span class="${cls}">${b.status || '—'}</span> <span class="sub">${detail}</span>`;
+    }
+  } catch (e) { const el = document.getElementById("altuni_broker"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+  try {
+    const g = await getJSON("/gamma-flip-history");
+    const el = document.getElementById("altuni_gamma");
+    const arr = Object.entries(g.symbols || {}).map(([k, v]) => ({ k, gap: v.last_gap_pct }))
+      .filter(x => x.gap != null).sort((a, b) => a.gap - b.gap);
+    if (el) el.innerHTML = arr.length ? `${arr[0].k} ${arr[0].gap > 0 ? "+" : ""}${arr[0].gap}% <span class="sub">closest to flip</span>` : `<span class="sub">accruing</span>`;
+  } catch (e) { const el = document.getElementById("altuni_gamma"); if (el) el.innerHTML = `<span class="sub">unavailable</span>`; }
+}
+
+async function refreshVannaCharm() {
+  const body = document.getElementById("vanna_charm_body");
+  const summary = document.getElementById("vc_summary");
+  const fmtB = (v) => v == null ? "—" : (v/1e6).toFixed(0) + "M";
+  try {
+    const d = await getJSON("/vanna-charm");
+    const sigs = d.signals || [];
+    const open = (d.open_positions || []).length;
+    if (summary) {
+      const measuring = d.status === "VANNA_SHADOW_MEASURING";
+      summary.textContent = `${open} open · next OPEX ${d.next_opex || "—"} · ${d.closed_trades || 0}/${d.min_closed} closed · ${measuring ? ("win " + d.win_rate_pct + "%") : "accumulating"}`;
+    }
+    if (!sigs.length) { body.innerHTML = `<tr><td colspan="11"><span class="sub">${d.verdict || "no signal"}</span></td></tr>`; return; }
+    // Merge in the live entry + unrealized P/L for names that are an OPEN position (engine-supplied).
+    const openByName = {};
+    (d.open_positions || []).forEach(o => { openByName[o.name] = o; });
+    const signedD = (v) => (v > 0 ? "+" : "") + fmtMoney(v);   // fmtMoney already renders a leading − for negatives
+    body.innerHTML = sigs.map(s => {
+      const act = s.action || "FLAT";
+      const badge = act === "LONG" ? "open" : "neutral";
+      const vCls = s.net_vanna == null ? "" : (s.net_vanna < 0 ? "green" : "red");
+      const o = openByName[s.name];
+      const hasPnl = o && o.pnl_pct != null;
+      const plCls = hasPnl ? (o.pnl_pct > 0 ? "green" : (o.pnl_pct < 0 ? "red" : "")) : "";
+      return `<tr>
+        <td><strong>${s.name}</strong></td>
+        <td>${o && o.contracts != null ? o.contracts : "<span class='sub'>—</span>"}</td>
+        <td><span class="badge ${badge}">${act}</span></td>
+        <td>${s.biz_days_to_opex != null ? s.biz_days_to_opex : "—"}</td>
+        <td><span class="${vCls}">${fmtB(s.net_vanna)}</span></td>
+        <td>${fmtB(s.net_charm)}</td>
+        <td>${o && o.entry != null ? fmtMoney(o.entry) : "<span class='sub'>—</span>"}</td>
+        <td>${s.spot != null ? fmtMoney(s.spot) : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${signedD(o.pnl_dollars)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${fmtPct(o.pnl_pct)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td><span class="sub">${(s.reason || "").slice(0, 46)}</span></td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="11"><span class="red">Vanna/charm unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+async function refreshGexStrategy() {
+  const body = document.getElementById("gex_strategy_body");
+  const summary = document.getElementById("gex_summary");
+  try {
+    const d = await getJSON("/gex-strategy");
+    const sigs = d.signals || [];
+    const open = (d.open_positions || []).length;
+    if (summary) {
+      const measuring = d.status === "GEX_SHADOW_MEASURING";
+      const active = sigs.filter(s => s.action === "LONG" || s.action === "SHORT").length;
+      summary.textContent = `${open} open · ${active} live signal(s) · ${d.closed_trades || 0}/${d.min_closed} closed · ${measuring ? ("win " + d.win_rate_pct + "%") : "accumulating"}`;
+    }
+    if (!sigs.length) {
+      body.innerHTML = `<tr><td colspan="11"><span class="sub">${d.verdict || "no signal"}</span></td></tr>`;
+      return;
+    }
+    // Merge in the live entry + unrealized P/L for names that are an OPEN fade (engine-supplied, side-aware).
+    const openByName = {};
+    (d.open_positions || []).forEach(o => { openByName[o.name] = o; });
+    const signedD = (v) => (v > 0 ? "+" : "") + fmtMoney(v);   // fmtMoney renders a leading − for negatives
+    body.innerHTML = sigs.map(s => {
+      const act = s.action || "FLAT";
+      const badge = act === "LONG" ? "open" : (act === "SHORT" ? "unmanaged" : "neutral");
+      const longG = s.regime === "long_gamma";
+      const regCls = longG ? "green" : "";
+      const o = openByName[s.name];
+      const hasPnl = o && o.pnl_pct != null;
+      const plCls = hasPnl ? (o.pnl_pct > 0 ? "green" : (o.pnl_pct < 0 ? "red" : "")) : "";
+      return `<tr>
+        <td><strong>${s.name}</strong></td>
+        <td>${o && o.contracts != null ? o.contracts : "<span class='sub'>—</span>"}</td>
+        <td><span class="${regCls}">${s.regime || "—"}</span></td>
+        <td><span class="badge ${badge}">${act}</span></td>
+        <td>${o && o.entry != null ? fmtMoney(o.entry) : "<span class='sub'>—</span>"}</td>
+        <td>${s.spot != null ? fmtMoney(s.spot) : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${signedD(o.pnl_dollars)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${fmtPct(o.pnl_pct)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${s.gamma_flip != null ? fmtMoney(s.gamma_flip) : "—"}</td>
+        <td>${s.gamma_magnet != null ? fmtMoney(s.gamma_magnet) : "—"}</td>
+        <td><span class="sub">${s.put_wall != null ? fmtMoney(s.put_wall) : "—"} / ${s.call_wall != null ? fmtMoney(s.call_wall) : "—"}</span></td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="11"><span class="red">GEX strategy unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+async function refreshCondorShadow() {
+  const body = document.getElementById("condor_shadow_body");
+  const summary = document.getElementById("cs_summary");
+  try {
+    const d = await getJSON("/condor-shadow");
+    const pos = d.open_positions || [];
+    const measuring = d.status === "CONDOR_SHADOW_MEASURING";
+    if (summary) {
+      summary.textContent = d.degraded
+        ? "degraded — a sleeve threw during candidate generation (verdict may be biased)"
+        : `${d.open_condors || 0} open · ${d.closed_condors || 0}/${d.min_closed} closed · realized ${fmtMoney(d.realized_pnl || 0)} · ${measuring ? ("win " + (d.win_rate_pct != null ? d.win_rate_pct + "%" : "—")) : "accumulating"} · priced off Unusual Whales`;
+    }
+    const label = { vrp: "VRP", earnings: "Earnings", index_vrp: "Index VRP", commodity_vrp: "Commodity VRP",
+                    energy_vrp: "Energy VRP", rates_vrp: "Rates VRP", crypto_vrp: "Crypto VRP" };
+    if (!pos.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">${d.verdict || "no open shadow condors right now"}</span></td></tr>`; return; }
+    const signedD = (v) => (v > 0 ? "+" : "") + fmtMoney(v);   // fmtMoney renders a leading − for negatives
+    // Per-OPEN-condor: entry credit → current mark → unrealized P/L (short premium, real qty × 100 multiplier).
+    body.innerHTML = pos.map(p => {
+      const hasPnl = p.pnl_pct != null;
+      const plCls = hasPnl ? (p.pnl_pct > 0 ? "green" : (p.pnl_pct < 0 ? "red" : "")) : "";
+      return `<tr>
+        <td><strong>${p.symbol}</strong> <span class="sub">${p.expiration || ""}</span></td>
+        <td>${p.contracts != null ? p.contracts : "—"}</td>
+        <td><span class="sub">${label[p.sleeve] || p.sleeve || "—"}</span></td>
+        <td>${p.entry_credit != null ? fmtMoney(p.entry_credit) : "<span class='sub'>—</span>"}</td>
+        <td>${p.current_value != null ? fmtMoney(p.current_value) : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${signedD(p.pnl_dollars)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${fmtPct(p.pnl_pct)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${p.dte != null ? p.dte : "—"}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8"><span class="red">Condor shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+async function refreshLowVolShadow() {
+  const body = document.getElementById("low_vol_shadow_body");
+  const summary = document.getElementById("lvs_summary");
+  try {
+    const d = await getJSON("/low-volatility-shadow");
+    const measuring = d.status === "LOWVOL_SHADOW_MEASURING";
+    if (summary) {
+      summary.textContent = d.status === "LOWVOL_SHADOW_NO_DATA"
+        ? "no marks yet — starts on the next settled bar"
+        : `${d.days_tracked || 0}/${d.min_days} days · ${measuring ? "measuring" : "accumulating"} · thesis = draw down less than SPY`;
+    }
+    if (!d.days_tracked) {
+      body.innerHTML = `<tr><td colspan="7"><span class="sub">${d.verdict || "no data yet"}</span></td></tr>`;
+      return;
+    }
+    const dr = d.drawdown_ratio_vs_spy;
+    const drCls = dr == null ? "" : (dr < 1 ? "green" : "red");     // <1 = low-vol thesis holds
+    const cumCls = (d.cumulative_return_pct || 0) >= 0 ? "green" : "red";
+    body.innerHTML = `<tr>
+      <td>${d.days_tracked}/${d.min_days}</td>
+      <td><span class="${cumCls}">${d.cumulative_return_pct != null ? (d.cumulative_return_pct >= 0 ? "+" : "") + d.cumulative_return_pct + "%" : "—"}</span></td>
+      <td>${d.annualized_sharpe != null ? d.annualized_sharpe : "—"}</td>
+      <td><span class="red">${d.max_drawdown_pct != null ? d.max_drawdown_pct + "%" : "—"}</span></td>
+      <td><span class="sub">${d.benchmark_max_drawdown_pct != null ? d.benchmark_max_drawdown_pct + "%" : "—"}</span></td>
+      <td><span class="${drCls}">${dr != null ? dr : "—"}</span></td>
+      <td><span class="sub"><span class="badge ${measuring ? "open" : "neutral"}">${measuring ? "measuring" : "accumulating"}</span></span></td>
+    </tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7"><span class="red">Low-vol shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+async function refreshEdgeCourt() {
+  const body = document.getElementById("edge_court_body");
+  const summary = document.getElementById("ec_summary");
+  if (!body) return;
+  try {
+    const d = await getJSON("/edge-persistence");
+    const re = d.realized_edge || {};
+    const sleeves = re.sleeves || {};
+    const ec = re.execution_cost || {};
+    const gate = re.min_trades_gate || 20;
+    const closest = (re.closest_to_proven || [])[0];
+    if (summary) summary.textContent = `gate ${gate} independent days · ${re.excluded_forced_closes || 0} admin close(s) excluded`
+      + (closest && closest.trades ? ` · closest: ${closest.sleeve} (t=${closest.t_stat ?? "—"}, ${closest.trades}d/${closest.closes ?? "—"} closes)` : "");
+    // union of instrumented + traded sleeves, condors first
+    const order = ["premium_vrp", "premium_earnings", "momentum", "carry", "trend", "tbill", "managed_futures"];
+    const names = order.filter(s => (s in ec) || (s in sleeves));
+    body.innerHTML = names.map(s => {
+      const v = sleeves[s];
+      const trades = v ? v.trades : 0;
+      const closes = v ? (v.closes ?? v.trades) : 0;
+      const verdict = v ? v.verdict : `ACCUMULATING (0/${gate} independent trading days)`;
+      const vcls = verdict.startsWith("PROVEN") ? "green" : verdict.startsWith("DECAYED") ? "red"
+        : verdict.startsWith("UNPROVEN") ? "yellow" : "";
+      // return-on-risk is only comparable across sleeves if you can see its DENOMINATOR — surface the
+      // instrument-aware basis (honest "mixed (...)" when a sleeve blends exact stops + vol proxies).
+      const BASIS = {defined_max_loss: "÷ max loss", premium_at_risk: "÷ premium",
+                     stop_atr_doctrine: "÷ ATR stop", stop_proxy_12pct: "÷ 12% stop proxy",
+                     return_on_deployed: "÷ deployed cap"};
+      const rbRaw = v && v.risk_basis ? String(v.risk_basis) : "";
+      const rb = rbRaw.startsWith("mixed") ? "÷ mixed basis" : (BASIS[rbRaw] || (rbRaw ? "÷ " + rbRaw : ""));
+      const edge = (v && v.mean_return_on_risk_pct != null)
+        ? `${v.mean_return_on_risk_pct > 0 ? "+" : ""}${v.mean_return_on_risk_pct}%`
+          + (v.ci95_return_on_risk_pct ? ` <span class="sub">[${v.ci95_return_on_risk_pct[0]}, ${v.ci95_return_on_risk_pct[1]}]</span>` : "")
+          + (rb ? ` <span class="sub" title="return-on-risk denominator">${rb}</span>` : "")
+        : `<span class="sub">—</span>`;
+      const e = ec[s] || {};
+      // prefix-match "instrumented …" (awaiting orders OR awaiting fills) so the cell stays robust to the
+      // exact wording/punctuation of the engine's honest label — never render the raw em-dash string.
+      const exec = e.source === "measured"
+        ? `${e.avg_slippage_bps} bps <span class="sub">· ${e.fill_rate_pct}% fill</span>`
+        : `<span class="sub">${/^instrumented/.test(e.source || "") ? "instrumented · awaiting fills"
+             : (e.source || "—").replace(" (realized P&L is already fill-net)", " · fill-net")}</span>`;
+      return `<tr>
+        <td><strong>${s}</strong></td>
+        <td class="${vcls}">${verdict}</td>
+        <td>${trades}<span class="sub">${closes !== trades ? ` · ${closes} closes` : ""}</span></td>
+        <td>${edge}</td>
+        <td>${exec}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="5"><span class="sub">No sleeves.</span></td></tr>`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5"><span class="red">Edge court unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+async function refreshCapitalAllocation() {
+  const body = document.getElementById("capital_alloc_body");
+  const summary = document.getElementById("ca_summary");
+  if (!body) return;
+  try {
+    // two reads: the allocator recommendation (per-sleeve recommended % + basis) and the auto-apply
+    // state (enabled flag + active overrides). Both are read-only; the card renders, never decides.
+    const [allocRes, aaRes] = await Promise.allSettled([
+      getJSON("/capital-allocator"), getJSON("/sleeve-budget-autoapply")
+    ]);
+    if (allocRes.status !== "fulfilled") throw new Error("allocator unavailable");
+    const alloc = allocRes.value, aa = aaRes.status === "fulfilled" ? aaRes.value : {};
+    const equity = Number(alloc.equity) || 0;
+    const sleeves = alloc.sleeves || {};
+    const overrides = aa.active_overrides || {};
+    const tiltOn = !!alloc.court_tilt_enabled, aaOn = !!aa.enabled;
+    const nOv = Object.keys(overrides).length;
+    if (summary) summary.textContent =
+      `auto-apply ${aaOn ? "ON" : "OFF"} · tilt ${tiltOn ? "ON" : "OFF"} · ${nOv} override${nOv === 1 ? "" : "s"}`;
+    // allocator sleeve -> budget/override key (carry is vol_carry in the budget engine)
+    const OVKEY = {trend: "trend", carry: "vol_carry", vrp: "vrp", earnings: "earnings", momentum: "momentum"};
+    const order = ["momentum", "trend", "carry", "vrp", "earnings"];
+    body.innerHTML = order.filter(s => sleeves[s]).map(s => {
+      const v = sleeves[s];
+      const curPct = equity > 0 ? (Number(v.current_usd) || 0) / equity * 100 : null;
+      const recPct = v.recommended_pct;
+      const basis = String(v.basis || "prior");
+      const bcls = basis.startsWith("measured_proven") ? "green"
+        : basis.startsWith("measured_decayed") ? "red"
+        : basis === "prior+tilt" ? "yellow" : "";
+      const blabel = basis === "prior+tilt" ? "prior + tilt"
+        : basis.startsWith("measured_") ? "measured (" + basis.replace("measured_", "") + ")" : basis;
+      const ovVal = overrides[OVKEY[s]];
+      const ov = (ovVal === undefined || ovVal === null) ? `<span class="sub">—</span>` : `${Number(ovVal).toFixed(1)}%`;
+      const cur = curPct === null ? `<span class="sub">—</span>` : `${curPct.toFixed(1)}%`;
+      const rec = (recPct === undefined || recPct === null) ? `<span class="sub">—</span>` : `${Number(recPct).toFixed(1)}%`;
+      return `<tr>
+        <td><strong>${s}</strong></td>
+        <td>${cur}</td>
+        <td>${rec}</td>
+        <td class="${bcls}">${blabel}</td>
+        <td>${ov}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="5"><span class="sub">No sleeves.</span></td></tr>`;
+
+    // --- apply-path: the capped, evidence-only plan + operator-approved apply/revert ---
+    const plan = aa.plan_preview || {};
+    const moves = plan.moves || [];
+    const token = plan.plan_token || "";
+    window._caPlanToken = token;
+    const planBody = document.getElementById("ca_plan_body");
+    const applyBtn = document.getElementById("ca_apply_btn");
+    const revertBtn = document.getElementById("ca_revert_btn");
+    if (planBody) {
+      if (moves.length) {
+        planBody.innerHTML = moves.map(m =>
+          `<div style="font-variant-numeric:tabular-nums;font-size:12px;margin:2px 0;">
+             <b>${m.sleeve}</b>: ${Number(m.from_pct).toFixed(1)}% → <b>${Number(m.to_pct).toFixed(1)}%</b>
+             <span class="sub">(step ${m.step_pct > 0 ? "+" : ""}${Number(m.step_pct).toFixed(1)} pts toward ${Number(m.target_pct).toFixed(1)}%)</span>
+           </div>`).join("") +
+          `<div class="sub" style="margin-top:6px;">resulting book ${Number(plan.resulting_total_pct).toFixed(1)}% of equity${plan.book_clamped_to_100 ? " (clamped to 100%)" : ""} · plan token <code>${token}</code></div>`;
+      } else {
+        planBody.innerHTML = `<span class="sub">No moves — every sleeve is on a static prior (no measured court verdict yet), and auto-apply only steps evidence-driven sleeves. Nothing to apply until a sleeve earns a verdict. plan token <code>${token || "—"}</code></span>`;
+      }
+    }
+    if (applyBtn) { applyBtn.disabled = !moves.length; applyBtn.title = moves.length ? "" : "no evidence-driven moves to apply yet"; }
+    if (revertBtn) { revertBtn.disabled = nOv === 0; revertBtn.title = nOv === 0 ? "no active overrides to revert" : ""; }
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5"><span class="red">Capital allocation unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+  }
+}
+
+async function approveApplyAllocation() {
+  // Operator-approved apply: carries the exact plan_token shown, so the server applies ONLY the reviewed
+  // plan (AUTOAPPLY_PLAN_CHANGED if evidence shifted). Writes a reversible override; places no order.
+  const token = window._caPlanToken;
+  const out = document.getElementById("ca_action_result");
+  if (!token) return;
+  if (!confirm("Approve and apply THIS allocation plan (token " + token + ")?\n\nIt writes a reversible sleeve %-override the sizing engines use at the next rebalance. No order is placed now; fully reversible via Revert.")) return;
+  if (out) { out.textContent = "Applying…"; out.className = "sub"; }
+  try {
+    const res = await fetch("/sleeve-budget-autoapply/apply?plan_token=" + encodeURIComponent(token), { method: "POST" });
+    const j = await res.json();
+    if (j.applied) {
+      if (out) { out.textContent = "Applied: " + (j.moves || []).map(m => `${m.sleeve}→${Number(m.to_pct).toFixed(1)}%`).join(", "); out.className = "green"; }
+    } else if (j.status === "AUTOAPPLY_PLAN_CHANGED") {
+      if (out) { out.textContent = "Plan changed since you reviewed it — re-review the refreshed plan and approve again."; out.className = "yellow"; }
+    } else {
+      if (out) { out.textContent = "Not applied: " + (j.status || j.note || "no moves"); out.className = "yellow"; }
+    }
+  } catch (e) {
+    if (out) { out.textContent = "Apply failed: " + String(e).slice(0, 80); out.className = "red"; }
+  }
+  refreshCapitalAllocation();
+}
+
+async function revertAllocation() {
+  const out = document.getElementById("ca_action_result");
+  if (!confirm("Revert ALL auto-applied sleeve %-overrides? Every sleeve falls back to its env/default budget.")) return;
+  if (out) { out.textContent = "Reverting…"; out.className = "sub"; }
+  try {
+    const res = await fetch("/sleeve-budget-autoapply/revert", { method: "POST" });
+    const j = await res.json();
+    if (out) { out.textContent = j.reverted ? "Reverted — overrides cleared." : (j.status || "nothing to revert"); out.className = j.reverted ? "green" : "sub"; }
+  } catch (e) {
+    if (out) { out.textContent = "Revert failed: " + String(e).slice(0, 80); out.className = "red"; }
+  }
+  refreshCapitalAllocation();
+}
+
+function renderCycleCost(s) {
+  // per-phase wall-clock of the last cycle: horizontal bars, heaviest highlighted, remainder shown.
+  const body = document.getElementById("cycle_cost_body");
+  const summary = document.getElementById("cc_summary");
+  if (!body) return;
+  try {
+    const pt = (s && s.last_phase_timings) || {};
+    const total = pt._total_instrumented;
+    const phases = Object.keys(pt).filter(k => k !== "_total_instrumented").map(k => ({name: k, secs: Number(pt[k]) || 0}));
+    if (!phases.length) {
+      body.innerHTML = `<span class="sub">No cycle timed yet — populates after the first cycle completes (a cold first cycle post-restart runs long).</span>`;
+      if (summary) summary.textContent = "";
+      return;
+    }
+    phases.sort((a, b) => b.secs - a.secs);
+    const max = Math.max(...phases.map(p => p.secs), 0.01);
+    const durS = (s.last_duration_ms != null) ? s.last_duration_ms / 1000 : null;
+    const remainder = (durS != null && total != null) ? Math.max(0, durS - total) : null;
+    if (summary) summary.textContent =
+      (durS != null ? `cycle ${durS.toFixed(1)}s` : "") + (total != null ? ` · instrumented ${total.toFixed(1)}s` : "");
+    body.innerHTML = phases.map((p, i) => {
+      const pct = Math.max(2, Math.round(p.secs / max * 100));
+      const color = i === 0 ? "#f0883e" : "rgba(88,166,255,.55)";   // heaviest = amber, rest = blue
+      return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <div style="width:150px;flex:0 0 150px;font-size:12px;${i === 0 ? "font-weight:600;" : ""}">${p.name}</div>
+        <div style="flex:1;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;">
+          <div style="width:${pct}%;background:${color};height:14px;"></div>
+        </div>
+        <div style="width:56px;flex:0 0 56px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;">${p.secs.toFixed(1)}s</div>
+      </div>`;
+    }).join("") +
+      (remainder != null ? `<div class="sub" style="margin-top:8px;">uninstrumented remainder: ${remainder.toFixed(1)}s (of ${durS.toFixed(1)}s cycle)</div>` : "");
+  } catch (e) {
+    body.innerHTML = `<span class="red">Cycle cost unavailable — ${String(e).slice(0, 80)}</span>`;
   }
 }
 
 async function refreshAll() {
-  setText("last_update", "Last Update: " + new Date().toLocaleTimeString());
+  // "Fetched", NOT "Last Update": this is the browser clock at refresh time, not the age of any cache.
+  // Each card carries its own as_of/cache age; this only says when the page last pulled.
+  setText("last_update", "Fetched: " + new Date().toLocaleTimeString());
+  checkDashboardVersion();  // fire-and-forget: self-reload once if new dashboard code was deployed
   await refreshCockpitBanner();
-  await refreshCommanderSummary();
+  refreshRealityGuard();    // fire-and-forget: must never stall the main loop
+  refreshTransactions();    // fire-and-forget: rolling 2-day transaction ledger
+  refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
+  refreshCondorShadow();    // zero-capital short-premium shadow — VRP vs earnings edge, measured apart
+  refreshGexStrategy();     // GEX mean-reversion — dealer-gamma pin signals + forward-test
+  refreshVannaCharm();      // vanna/charm — the OPEX rally (2nd-order dealer flow)
+  refreshLowVolShadow();    // zero-capital low-vol (BAB) basket shadow — drawdown vs SPY thesis check
+  refreshVrpEdge();          // 24yr index-VRP confirmation + defined-risk structure + book risk concentration
+  refreshAltUniverseInfra();// universe-expansion infra: tracked-candidate counts + quote-stream + gamma-flip
+  refreshAltShadow("/extended-etf-shadow", "ext_etf_shadow_body", "eets_summary");     // 52 ETFs, xs-momentum
+  refreshAltShadow("/futures-tsmom-shadow", "fut_tsmom_shadow_body", "futs_summary");  // 19 futures, TSMOM long/short
+  refreshAltShadow("/vol-etp-shadow", "vol_etp_shadow_body", "vets_summary");          // regime-conditioned long-vol
+  refreshAltShadow("/fx-trend-shadow", "fx_trend_shadow_body", "fxts_summary");        // 6 FX pairs, trend
+  refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
+  refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 
-  const [battlefield, ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
-    getJSON("/greyline-market-battlefield-summary"),
+  const [ledger, scheduler, positionAlerts, cockpit, book, acctRes] = await Promise.allSettled([
     getJSON("/options-account-dashboard"),
     getJSON("/background-scheduler/status"),
     getJSON("/position-alerts"),
@@ -938,12 +1757,9 @@ async function refreshAll() {
     getJSON("/account-summary")
   ]);
 
-  if (arguments[0]) {}
-
-  const alertsResult = arguments;
-
   if (scheduler.status === "fulfilled") {
     const s = scheduler.value;
+    renderCycleCost(s);          // per-phase cycle timing strip — never throws, never stalls the loop
     const ledgerData = ledger.status === "fulfilled" ? ledger.value : {};
     const ex = !!(ledgerData.paper_execution_enabled ?? s.execution_enabled);
     const ord = !!(ledgerData.live_order_placement_allowed ?? s.order_placement_allowed);
@@ -960,63 +1776,31 @@ async function refreshAll() {
     document.getElementById("orders_allowed").className = "value " + (ord ? "green" : "red");
 
     const schedulerRunning = !!(s.thread_alive || s.last_status === "BACKGROUND_SCHEDULER_CYCLE_COMPLETE");
-    const tokenReady = String(s.token_status || s.broker_token_status || "READY").toUpperCase();
+    // Unknown token status is NOT "ready" — default to CHECK (yellow), never green, so a missing/renamed
+    // token field can't render the broker token as confirmed-ready.
+    const tokenReady = String(s.token_status || s.broker_token_status || "CHECK").toUpperCase();
     setStatusValue("ready_execution", ex ? "READY" : "BLOCKED", ex ? "green" : "red");
     setStatusValue("ready_orders", ord ? "READY" : "BLOCKED", ord ? "green" : "red");
     setStatusValue("ready_scheduler", schedulerRunning ? "RUNNING" : "CHECK", schedulerRunning ? "green" : "yellow");
-    setStatusValue("ready_token", tokenReady.includes("READY") || tokenReady.includes("VALID") ? "READY" : tokenReady, tokenReady.includes("READY") || tokenReady.includes("VALID") ? "green" : "yellow");
+    const tokOk = tokenReady.includes("READY") || tokenReady.includes("VALID");
+    const tokLabel = tokOk ? "READY" : tokenReady, tokColor = tokOk ? "green" : "yellow";
+    setStatusValue("ready_token", tokLabel, tokColor);
+    setStatusValue("token_status", tokLabel, tokColor);   // was hardcoded green "READY" that JS never updated
+    setText("side_token", tokLabel);
     setText("ready_refresh", new Date().toLocaleTimeString());
+  } else {
+    // The scheduler-status read FAILED this cycle — flag it rather than leaving the readiness tiles
+    // showing stale green (a failed read is not a confirmation of readiness). Both scheduler and token
+    // status come from this one response, so neither can be confirmed now.
+    setStatusValue("ready_scheduler", "UNAVAILABLE", "yellow");
+    setStatusValue("ready_token", "UNAVAILABLE", "yellow");
+    setStatusValue("token_status", "UNAVAILABLE", "yellow");
+    setText("side_token", "UNAVAILABLE");
+    setText("ready_refresh", new Date().toLocaleTimeString() + " (status read failed)");
   }
 
-  if (battlefield.status === "fulfilled") {
-    const b = battlefield.value;
-    // The engine decides; this dashboard only renders. b.top_candidate is the
-    // candidate GreyLineMasterDecisionEngine actually decided on. Do NOT re-derive a
-    // top pick here from best_call/best_put — a display surface that computes its own
-    // recommendation will sooner or later disagree with the engine that gates trading,
-    // and the operator will be looking at the wrong one.
-    const top = b.top_candidate || {};
-
-    setText("battlefield_health", b.battlefield_health || "--");
-    setText("market_bias", String(b.market_bias || "--").replaceAll("_", " "));
-    setText("top_symbol", top.symbol || "--");
-    setText("top_result", top.result || "--");
-    setText("top_type", `${top.option_type || "--"} • ${top.directional_bias || "--"}`);
-    setText("top_score", top.composite_score || top.score || "--");
-    setText("flow_confirmation", String(top.flow_confirmation || "--").replaceAll("_", " "));
-    setText("signal_age", top.signal_age_days ? `${(top.signal_age_days * 24).toFixed(1)}h` : "--");
-    setText("call_count", b.call_count ?? "--");
-    setText("put_count", b.put_count ?? "--");
-    setText("ready_calls", b.ready_call_count ?? "--");
-    setText("ready_puts", b.ready_put_count ?? "--");
-
-    // top_candidates is the engine's ranking across both sides, already ordered.
-    // Render it as given — no client-side re-sorting. (Reading only top_calls was
-    // what showed "No candidates" on a bearish day while top_puts held EXECUTE setups.)
-    const ranked = b.top_candidates || [];
-
-    const rows = ranked.slice(0, 5).map((c, i) => {
-      const flow = String(c.institutional_flow_direction || "--").replaceAll("_", " ");
-      const flowClass = c.institutional_flow_direction === "INFLOW" ? "green" : c.institutional_flow_direction === "OUTFLOW" ? "red" : "yellow";
-      const gate = String(c.institutional_flow_gate || "--").replaceAll("_", " ");
-      const gateClass = c.institutional_flow_gate === "ALIGNED" ? "green" : "red";
-      const conviction = c.institutional_conviction_score ?? "--";
-      const convictionState = String(c.institutional_conviction_state || "--").replaceAll("_", " ");
-
-      return `
-      <tr>
-        <td>${i+1}</td>
-        <td><strong>${c.symbol}</strong><br><span class="${flowClass}">${c.option_type || ""}</span></td>
-        <td>${c.composite_score}</td>
-        <td><strong class="${flowClass}">${flow}</strong><br><span class="sub">${c.institutional_flow_confidence ?? "--"} conf</span></td>
-        <td><strong>${conviction}</strong><br><span class="sub">${convictionState}</span></td>
-        <td><span class="badge ${gateClass === "green" ? "" : "blocked"}">${gate}</span></td>
-        <td>${c.result}</td>
-        <td><span class="badge blocked">${c.order_placement_allowed ? "LIVE ALLOWED" : "LIVE BLOCKED"}</span></td>
-      </tr>`;
-    }).join("");
-    document.getElementById("top_calls").innerHTML = rows || `<tr><td colspan="8">No candidates</td></tr>`;
-  }
+  // Retired-signal battlefield panel removed 2026-07-22 — the legacy options signal is a
+  // proven coin flip that cannot trade, so its scores are no longer fetched or rendered.
 
 
   if (positionAlerts.status === "fulfilled") {
@@ -1043,6 +1827,15 @@ async function refreshAll() {
       card.style.display = "none";
       body.innerHTML = "";
     }
+  } else {
+    // A FAILED alert fetch must NOT read as "no alerts". Show the card with a visible feed-down warning
+    // rather than silently leaving it hidden/stale — errored is not empty, especially for a warning feed.
+    const card = document.getElementById("position_alert_card");
+    const body = document.getElementById("position_alerts");
+    if (card && body) {
+      card.style.display = "block";
+      body.innerHTML = `<tr><td colspan="8"><span class="red">⚠ Position alert feed unavailable — could not check for alerts this cycle.</span></td></tr>`;
+    }
   }
 
 
@@ -1064,10 +1857,18 @@ async function refreshAll() {
     }
 
     setStatusValue("ready_quotes", label, color);
+  } else {
+    // Cockpit read FAILED — quote-heartbeat health is UNKNOWN, not fresh. Flag it rather than leaving
+    // ready_quotes showing a stale green.
+    setStatusValue("ready_quotes", "UNAVAILABLE", "yellow");
   }
 
-  if (ledger.status === "fulfilled") {
-    const l = ledger.value;
+  {
+    // Run even if the ledger (/options-account-dashboard) read failed: the money tiles come from
+    // /account-summary (acct), positions from /open-positions (book), and the equity curve from
+    // /portfolio-equity-timeline — all INDEPENDENT routes. Gating them on the ledger route froze all
+    // three on a ledger hiccup. `l` (used only for the option trade COUNTS) falls back to {}.
+    const l = (ledger.status === "fulfilled" ? ledger.value : {}) || {};
     const trades = l.open_positions || [];
     const open = l.open_positions || [];
     const unrealized = Number(l.unrealized_pnl || 0);
@@ -1081,50 +1882,231 @@ async function refreshAll() {
     // the options-only engine, so they showed $0 deployed / $0 unrealized while real
     // equity was held, and a Total Return that belonged entirely to the RETIRED signal.
     const acct = (typeof acctRes !== "undefined" && acctRes.status === "fulfilled") ? acctRes.value : null;
-    setText("equity", fmtMoney(acct ? acct.total_equity : equity));
-    setText("cash", fmtMoney(acct ? acct.cash_on_hand : cash));
-    setText("buying_power", fmtMoney(acct ? acct.buying_power : cash));
-    setText("deployed", fmtMoney(acct ? acct.deployed_capital : deployed));
-    setText("deployed_pct", `${fmtPct((deployed / Math.max(equity, 1)) * 100)} of Equity`);
-    setText("unrealized", fmtMoney(acct ? acct.unrealized_pnl : unrealized));
-    setText("total_return", fmtPct(acct ? acct.total_return_pct : totalReturn));
-    setText("open_trades", acct ? acct.open_position_count : open.length);
-    setText("total_trades", acct ? acct.total_trade_count : (l.option_trade_count ?? trades.length));
-    setText("open_trade_count", acct ? acct.open_position_count : (l.open_option_trade_count ?? open.length));
-    setText("closed_trade_count", acct ? acct.closed_trade_count : (l.closed_option_trade_count ?? 0));
-    setText("realized_pnl", fmtMoney(acct ? acct.realized_pnl : (l.realized_pnl || 0)));
+    // The mission money tiles come ONLY from /account-summary (both books, broker-reconciled). Show "—"
+    // when it's DEGRADED (broker read failed → null tiles + degraded:true) OR the route itself FAILED
+    // (acct null) — NEVER fall back to the pre-account-summary options-ledger values (sleeve-scoped,
+    // $0-deployed: the exact fantasy this card was built to stop) and never a computed 0 / NaN.
+    const deg = !!(acct && acct.degraded);
+    // On a DEGRADED broker read, fall back to the LAST CONFIRMED reading (clearly aged) instead of a blank
+    // "—". This is honest: the stale value carries a "· stale Nm" suffix so it can never be mistaken for
+    // live, and we still NEVER invent numbers — last_good is a real prior broker reading, or absent.
+    const lg = (deg && acct && acct.last_good) ? acct.last_good : null;
+    const src = lg || acct;
+    const unavailable = (!acct) || (deg && !lg);     // blank ONLY when there is no data at all
+    const ageM = (lg && lg.age_seconds != null) ? Math.max(1, Math.round(lg.age_seconds / 60)) : null;
+    const st = lg ? ` · stale ${ageM}m` : "";        // staleness marker — a stale tile must not look live
+    const M = (v) => unavailable ? "—" : (fmtMoney(v) + st);
+    setText("equity", M(src.total_equity));
+    setText("cash", M(src.cash_on_hand));
+    // "Cash On Hand" counts SGOV as a cash-equivalent, so surface how much of it is actually PARKED in
+    // T-bills vs genuinely free — otherwise the swept cash looks idle. (Answers "why isn't cash in Treasury".)
+    setText("cash_sub", (unavailable || src.tbill_sweep_value == null) ? "" :
+      (src.tbill_sweep_value > 0
+        ? `${fmtMoney(src.tbill_sweep_value)} parked in SGOV · ${fmtMoney((src.cash_on_hand || 0) - src.tbill_sweep_value)} free`
+        : "all free (T-bill sweep idle)"));
+    setText("buying_power", M(src.buying_power));
+    setText("deployed", M(src.deployed_capital));
+    setText("deployed_pct", unavailable ? "—" :
+      `${fmtPct(src.deployed_pct_of_equity)} of Equity${st}`);   // read the engine's own field, don't re-derive
+    setText("unrealized", M(src.unrealized_pnl));
+    setText("total_return", unavailable ? "—" : (fmtPct(src.total_return_pct) + st));
+    // 24 Hour Return: engine-supplied (return_24h_pct), null until ~24h of equity history exists → show "—"
+    // with an "accumulating" note rather than a fabricated 0. Read the engine's field, never re-derive.
+    const r24 = (src && src.return_24h_pct != null) ? src.return_24h_pct : null;
+    setText("return_24h", (unavailable || r24 == null) ? "—" : (fmtPct(r24) + st));
+    setText("return_24h_sub", (unavailable || r24 != null) ? "" : "accumulating 24h of history");
+    setText("realized_pnl", M(src.realized_pnl));
+    setText("open_trades", unavailable ? "—" : (src.open_position_count + st));
+    setText("open_trade_count", unavailable ? "—" : (src.open_position_count + st));
+    // Trade COUNTS: /account-summary carries no account-wide counts, so these stay the options-ledger
+    // counts (labelled as such) — not money, so a sleeve-scoped count is acceptable. (Previously read
+    // acct.total_trade_count / acct.closed_trade_count, which the route never provides, so they rendered
+    // "undefined" in the normal case.)
+    setText("total_trades", l.option_trade_count ?? trades.length);
+    setText("closed_trade_count", l.closed_option_trade_count ?? 0);
 
-    setClassBySign("unrealized", unrealized);
-    setClassBySign("total_return", totalReturn);
-    setClassBySign("realized_pnl", l.realized_pnl || 0);
+    // Color the SAME value the card shows — read `src` (the last-good value actually displayed on a stale
+    // tile), NOT `acct` (whose fields are null on a degraded read, so Number(null||0)=0 painted a negative
+    // stale value GREEN). Neutral only when there's truly nothing to show.
+    setClassBySign("unrealized", unavailable ? 0 : src.unrealized_pnl);
+    setClassBySign("total_return", unavailable ? 0 : src.total_return_pct);
+    setClassBySign("return_24h", (unavailable || r24 == null) ? 0 : r24);
+    setClassBySign("realized_pnl", unavailable ? 0 : src.realized_pnl);
 
     // Render the WHOLE book from /open-positions (equity + options). This panel used
     // to read only the options ledger, so it reported "No open positions" while real
     // equity was held — a position could hide simply by being in the other ledger.
     const bk = (book.status === "fulfilled" ? book.value : {}) || {};
     const rowsAll = bk.open_positions || [];
+    // CRITICAL: a FAILED broker read must never look like a flat account. If the fetch
+    // rejected or the broker read was not ok, we do NOT know the positions — say exactly
+    // that, in red, instead of the identical-looking "No open positions".
+    const bookReadFailed = (book.status !== "fulfilled") || (bk.reads_ok === false);
+
+    // Open Equity Positions — a dedicated breakout of the held equity book (same source as the full
+    // Open Positions table below, just filtered to non-options). Reuses `rowsAll` so there's ONE book
+    // read, one source of truth — never a second fetch that could disagree.
+    (function renderEquityPositions() {
+      const body = document.getElementById("open_equity_positions_body");
+      const sum = document.getElementById("oeq_summary");
+      if (!body) return;
+      const dash = `<span class="sub">—</span>`;
+      const fmtAge = (ms) => ms < 90000 ? `${Math.round(ms/1000)}s` : `${Math.round(ms/60000)}m`;
+      // Render a set of equity rows. `stale` marks a last-known-good fallback (muted + age badge) shown
+      // when the live read flapped — honest last-known-good, NEVER presented as a live figure.
+      function renderRows(eq, stale, ageMs) {
+        const totPnl = eq.reduce((a, p) => a + Number(p.pending ? 0 : (p.unrealized_pnl || 0)), 0);
+        if (sum) sum.textContent = stale
+          ? `${eq.length} name(s) · last-known-good, live read unavailable`
+          : `${eq.length} name(s) · P/L ${fmtMoney(totPnl)}`;
+        const banner = stale
+          ? `<tr><td colspan="10"><span class="sub" style="color:#d9a441;">⚠ Live broker read unavailable (transient) — showing last-known holdings as of ${fmtAge(ageMs)} ago, retrying. Not live.</span></td></tr>`
+          : "";
+        body.innerHTML = banner + eq.map(p => {
+          const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
+          const shares = (p.shares != null ? p.shares : p.quantity);
+          const mktVal = (p.current_price != null && shares != null) ? Number(p.current_price) * Number(shares) : null;
+          // Real dynamic exit: trend = the 200-DMA level (p.stop_loss) — label it as such, not a generic
+          // stop; carry/T-bill have no PRICE stop but DO have an exit RULE (p.stage: backwardation / −15%
+          // hard stop / cash floor) — show that instead of a bare "—", so no row implies "no exit".
+          const isDMA = /200-DMA/.test(p.stage || "");
+          const stopCell = (p.stop_loss != null)
+            ? `${fmtMoney(p.stop_loss)}${isDMA ? '<br><span class="sub">200-DMA exit</span>'
+                : (p.current_price ? `<br><span class="sub red">${((p.stop_loss/p.current_price-1)*100).toFixed(1)}%</span>` : "")}`
+            : (p.stage ? `<span class="sub">${p.stage}</span>` : dash);
+          // Take-Profit ladder — same source + rendering as the full Open Positions table below, so the
+          // two never disagree. Momentum-reversal names carry an ATR ladder (targets[] + tps_filled,
+          // banked ones ✓ green, TP4 runner trails); trend/carry/T-bill ETFs have none → dash.
+          const tpCell = (p.targets && p.targets.length)
+            ? p.targets.map((t, i) => {
+                const banked = (p.tps_filled || 0) > i;
+                return `<span class="${banked ? "green" : "sub"}" title="TP${i+1}${banked ? " (reached)" : ""}">${banked ? "✓ " : ""}TP${i+1} ${fmtMoney(t)}</span>`;
+              }).join("<br>") + `<br><span class="sub" title="Runner: last tranche trails 3 ATR, uncapped">TP4 · runner${p.runner_contracts ? " (" + p.runner_contracts + "c)" : ""}</span>`
+            : (p.tp_note ? `<span class="sub">${p.tp_note}</span>` : dash);
+          return `
+          <tr${(p.pending || stale) ? ' style="opacity:.6;"' : ''}>
+            <td><strong>${p.symbol || "—"}</strong>${p.pending ? ' <span class="badge pending">PENDING</span>' : ''}</td>
+            <td>${shares != null ? shares : "—"}</td>
+            <td>${p.entry_price != null ? fmtMoney(p.entry_price) : dash}</td>
+            <td>${p.current_price != null ? fmtMoney(p.current_price) : dash}</td>
+            <td>${p.initial_cost != null ? fmtMoney(p.initial_cost) : dash}</td>
+            <td>${mktVal != null ? fmtMoney(mktVal) : dash}</td>
+            <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
+            <td class="${sign}">${p.pending ? dash : (p.unrealized_pnl_pct > 0 ? "+" : "") + p.unrealized_pnl_pct + "%"}</td>
+            <td>${stopCell}</td>
+            <td>${p.pending ? dash : tpCell}</td>
+          </tr>`;
+        }).join("");
+      }
+      if (bookReadFailed) {
+        // Transient broker-read flap: fall back to the last-known-good holdings (age-badged) instead of
+        // blanking the table — the display-side twin of the exposure gate's last-good fallback. Only a
+        // PERSISTENT failure (no fresh cache) shows the red "holdings unknown".
+        const lg = window.__lastGoodEquity;
+        const MAX_AGE_MS = 10 * 60 * 1000;
+        if (lg && lg.rows && (Date.now() - lg.at) <= MAX_AGE_MS) {
+          renderRows(lg.rows, true, Date.now() - lg.at);
+        } else {
+          body.innerHTML = `<tr><td colspan="10"><span class="red">Broker position read failed — holdings unknown (not necessarily flat).</span></td></tr>`;
+          if (sum) sum.textContent = "";
+        }
+        return;
+      }
+      const eq = rowsAll.filter(p => (p.asset_type || "").toUpperCase() !== "OPTION");
+      // cache this confirmed-good read so a later transient flap can fall back to it
+      window.__lastGoodEquity = { rows: eq, at: Date.now() };
+      if (!eq.length) { body.innerHTML = `<tr><td colspan="10"><span class="sub">No open equity positions.</span></td></tr>`; if (sum) sum.textContent = ""; return; }
+      renderRows(eq, false, 0);
+    })();
+
     document.getElementById("positions").innerHTML = rowsAll.map(p => {
       const sign = p.unrealized_pnl > 0 ? "green" : p.unrealized_pnl < 0 ? "red" : "";
       const sideCls = p.side === "SHORT" ? "red" : "green";
+      const shares = (p.shares != null ? p.shares : p.quantity);
+      // For options the doctrine fires on the UNDERLYING STOCK's move — so Stop/TP are STOCK
+      // prices, not option premium. Anchor them to the stock's own price (symbol + now/entry)
+      // so they don't read as nonsense next to the option's Entry/Current premium.
+      const isU = p.levels_basis === "UNDERLYING";
+      const ref = isU ? p.underlying_price : p.current_price;   // % reference
+      const uName = p.underlying || "underlying";
+      const uAnchor = (isU && p.underlying_price)
+        ? `<br><span class="sub">${uName} $${Number(p.underlying_price).toFixed(2)}${p.underlying_entry_price ? " · in $"+Number(p.underlying_entry_price).toFixed(2) : ""}</span>`
+        : "";
+      // A VRP condor is managed as a UNIT (not per-leg), so its stop/TP are P&L dollars, not
+      // underlying prices — render those instead of the momentum ATR cells.
+      const cl = p.condor_levels;
+      const stopCell = cl
+        ? `<span class="red">${fmtMoney(cl.hard_stop_usd)}</span><br><span class="sub">hard stop · 80% of ${fmtMoney(cl.max_loss_usd)} max</span>`
+        : (p.stop_loss != null)
+        ? `${fmtMoney(p.stop_loss)}${isU ? ` <span class="sub">${uName}</span>` : ""}${ref ? `<br><span class="sub red">${((p.stop_loss/ref-1)*100).toFixed(1)}%</span>` : ""}`
+        : `<span class="sub">—</span>`;
+      // TP1/2/3 (banked ones ✓ green) + TP4 the runner (trails, uncapped). Underlying-anchored.
+      const tpCell = cl
+        ? `<span class="green">+${fmtMoney(cl.profit_take_usd)}</span><br><span class="sub">50% of ${fmtMoney(cl.credit_usd)} credit · exit ${cl.dte}→${cl.manage_dte}d</span>`
+        : (p.targets && p.targets.length)
+        ? p.targets.map((t,i) => {
+            const banked = (p.tps_filled||0) > i;
+            return `<span class="${banked ? "green" : "sub"}" title="TP${i+1}${banked ? " (reached)" : ""}">${banked ? "✓ " : ""}TP${i+1} ${fmtMoney(t)}</span>`;
+          }).join("<br>") + `<br><span class="sub" title="Runner: last tranche trails 3 ATR, uncapped">TP4 · runner${p.runner_contracts ? " ("+p.runner_contracts+"c)" : ""}</span>`
+        : (p.tp_note)
+        ? `<span class="sub">${p.tp_note}</span>`
+        : `<span class="sub">—</span>`;
+      const dash = `<span class="sub">—</span>`;
+      const entryVal = isU && p.underlying_entry_price != null ? p.underlying_entry_price : p.entry_price;
+      const curVal = isU && p.underlying_price != null ? p.underlying_price : p.current_price;
+      // OPTIONS: show the FULL-CONTRACT total ($ premium x100 x qty) as the headline, with the
+      // per-share premium and the UNDERLYING spot beneath — so the math (equity price -> premium ->
+      // total contract) is all traceable in the row. Equities keep the plain share price.
+      const isOpt = p.asset_type === "OPTION";
+      const undTag = (p.underlying_price != null)
+        ? ` · ${p.underlying || uName} $${Number(p.underlying_price).toFixed(2)}` : "";
+      const entryCell = isOpt
+        ? (p.initial_cost != null ? `${fmtMoney(p.initial_cost)}<br><span class="sub">${fmtMoney(p.entry_price)}/sh${undTag}</span>` : dash)
+        : (entryVal != null ? `${fmtMoney(entryVal)}${isU ? `<br><span class="sub">${uName} stock</span>` : ""}` : dash);
+      const curCell = isOpt
+        ? (p.current_value != null ? `${fmtMoney(p.current_value)}<br><span class="sub">${fmtMoney(p.current_price)}/sh</span>` : dash)
+        : (curVal != null ? fmtMoney(curVal) : dash);
+      const limitCell = p.limit_buy != null ? `<span class="yellow">${fmtMoney(p.limit_buy)}</span>` : dash;
+      const costCell = p.initial_cost != null ? fmtMoney(p.initial_cost) : dash;
+      // "Paid" = the TRUE signed cash at entry: a debit for longs/wings (you paid), a CREDIT for shorts
+      // (you were paid — shown green with "cr"). Unlike "Cost" (absolute size), this reads the direction.
+      const paidCell = p.net_paid == null ? dash
+        : (p.net_paid < 0 ? `<span class="green">${fmtMoney(Math.abs(p.net_paid))} cr</span>` : fmtMoney(p.net_paid));
+      // Every lifecycle state gets a distinct, legible badge — not raw text mixed into the
+      // row. OPEN=green, CLOSING=yellow (order queued), UNMANAGED=red (real risk GreyLine is
+      // not managing), PENDING=blue (limit buy not yet filled).
+      const badgeCls = p.pending ? "pending"
+        : p.status === "CLOSING" ? "closing"
+        : p.status === "UNMANAGED" ? "unmanaged"
+        : p.status === "OPEN" ? "open" : "neutral";
+      const statusCell = `<span class="badge ${badgeCls}">${p.pending ? "PENDING" : (p.status || "—")}</span>`;
       return `
-      <tr>
-        <td><strong>${p.symbol}</strong><br><span class="sub">${p.asset_type}</span></td>
-        <td><span class="${sideCls}">${p.side}</span><br><span class="sub">${p.quantity}</span></td>
-        <td>${fmtMoney(p.entry_price)}</td>
-        <td>${fmtMoney(p.current_price)}</td>
-        <td class="${sign}">${fmtMoney(p.unrealized_pnl)}</td>
-        <td class="${sign}">${p.unrealized_pnl_pct > 0 ? "+" : ""}${p.unrealized_pnl_pct}%</td>
-        <td>${p.status}</td>
-        <td><span class="sub">${p.stage}</span></td>
+      <tr${p.pending ? ' style="opacity:.75;"' : ''}>
+        <td><strong>${p.symbol || "—"}</strong><br><span class="sub">${p.asset_type || ""}</span></td>
+        <td class="${sign}">${p.pending ? dash : fmtMoney(p.unrealized_pnl)}</td>
+        <td class="${sign}">${p.pending ? dash : (p.unrealized_pnl_pct > 0 ? "+" : "") + p.unrealized_pnl_pct + "%"}</td>
+        <td><span class="${sideCls}">${p.side || "—"}</span></td>
+        <td>${shares != null ? shares : "—"}</td>
+        <td>${limitCell}</td>
+        <td>${entryCell}</td>
+        <td>${curCell}</td>
+        <td>${costCell}</td>
+        <td>${paidCell}</td>
+        <td>${p.pending ? dash : stopCell}</td>
+        <td>${p.pending ? dash : tpCell}</td>
+        <td>${statusCell}</td>
+        <td><span class="sub">${p.stage || ""}</span></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="8">No open positions</td></tr>`;
+    }).join("") || (bookReadFailed
+      ? `<tr><td colspan="14"><span class="red">⚠ Could not read the broker — positions UNKNOWN (not necessarily flat). Retrying…</span></td></tr>`
+      : `<tr><td colspan="14"><span class="sub">Account is flat — no open positions.</span></td></tr>`);
 
-    drawCurve(rowsAll);   // real open book, not the retired options ledger
+    renderEquityCurve();   // real recorded equity series — never a cumsum over open positions
   }
 }
 
 refreshAll();
-setInterval(refreshAll, 15000);
+setInterval(refreshAll, 60000);
 </script>
 </body>
 </html>
