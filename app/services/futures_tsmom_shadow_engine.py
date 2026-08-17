@@ -21,6 +21,7 @@ import math
 from datetime import datetime, date, timedelta
 from os import getenv
 from pathlib import Path
+from app.services.ttl_cache import ttl_cached
 
 
 def _rigorous_verdict(rets, min_n):
@@ -247,6 +248,7 @@ class FuturesTsmomShadowEngine:
         m = sum(xs) / n
         return math.sqrt(sum((x - m) ** 2 for x in xs) / (n - 1))
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def report(self):
         closed = self._closed()
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]

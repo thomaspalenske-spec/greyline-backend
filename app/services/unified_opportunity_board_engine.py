@@ -16,6 +16,7 @@ import json
 from datetime import datetime, date
 from pathlib import Path
 from os import getenv
+from app.services.ttl_cache import ttl_cached
 
 
 class UnifiedOpportunityBoardEngine:
@@ -224,6 +225,7 @@ class UnifiedOpportunityBoardEngine:
         from os import getenv
         return (getenv(flag, "") or "").strip().lower() == "true"
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def board(self):
         # The condor sleeves (earnings-vol IV-crush, VRP) were RETIRED 2026-08-04 — the SIM can't price
         # atomic condor closes — so a DISABLED condor sleeve must not paint the board with "OFF, would sell

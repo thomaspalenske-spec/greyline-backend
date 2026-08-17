@@ -14,6 +14,7 @@ import math
 from datetime import date, datetime
 from os import getenv
 from pathlib import Path
+from app.services.ttl_cache import ttl_cached
 
 STATE = Path("app/data/condor_shadow")
 LEDGER = STATE / "shadow_ledger.jsonl"
@@ -269,6 +270,7 @@ class CondorShadowEngine:
                              f"{round(100*wins/n,1) if n else 0}%"),
         }
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def report(self):
         entries = self._entries()
         overall = self._slice_metrics(entries)
