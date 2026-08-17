@@ -191,6 +191,11 @@ def _neutralize_external_alerts(monkeypatch):
               "GREYLINE_MOMENTUM_ENABLED", "GREYLINE_MOMENTUM_ALLOC_PCT"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GREYLINE_ALERT_MACOS_LOCAL", "false")
+    # Disable the shadow report() TTL cache in tests: several tests call report() twice in one test and
+    # assert it reflects freshly-written state between the calls (e.g. NO_DATA -> MEASURING). clear_all()
+    # only flushes BETWEEN tests, so the within-test cache would return the stale first result. (Uses the
+    # shadow key only; test_ttl_cache exercises the decorator via its own GREYLINE_TEST_TTL key.)
+    monkeypatch.setenv("GREYLINE_SHADOW_CACHE_TTL", "0")
 
     # No test may spawn a LIVE streaming daemon. The app's startup event calls
     # BackgroundSchedulerService.start(), so any test that drives a TestClient (route/schema audits)
