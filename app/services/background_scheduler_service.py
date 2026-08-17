@@ -431,6 +431,45 @@ class BackgroundSchedulerService:
             "recent_cycles": cls._recent_cycles,
         })
 
+    _LIVE_FRESH_SECONDS = 1200      # a persisted cycle within ~3-4 intervals proves the live scheduler runs
+
+    @classmethod
+    def scheduler_live(cls):
+        """CROSS-PROCESS scheduler liveness — use THIS in health/readiness checks, never raw `thread_alive`.
+        `thread_alive` is PROCESS-LOCAL (False from any other process — a route worker, a scheduled job, a
+        one-off script), so checks that trusted it falsely reported 'scheduler down' out-of-process. This
+        returns True if the in-process thread is alive OR the scheduler's OWN persisted output shows a recent
+        cycle. LIVENESS only (is it running) — health/success is consecutive_failures' job, kept separate.
+        Reads state files directly (never mutates the live class attrs)."""
+        try:
+            if cls._thread is not None and cls._thread.is_alive():
+                return True
+        except Exception:
+            pass
+        from datetime import datetime as _dt
+
+        def _fresh(ts):
+            try:
+                return (_dt.utcnow() - _dt.fromisoformat(str(ts))).total_seconds() <= cls._LIVE_FRESH_SECONDS
+            except Exception:
+                return False
+        # (a) per-cycle persisted output — timestamped every completed cycle
+        try:
+            import json as _json
+            lines = [l for l in cls.CYCLE_COST_HISTORY.read_text().splitlines() if l.strip()]
+            if lines and _fresh(_json.loads(lines[-1]).get("timestamp")):
+                return True
+        except Exception:
+            pass
+        # (b) persisted scheduler state — read WITHOUT mutating the live class attrs
+        try:
+            st = read_json(cls._state_file, default=dict) or {}
+            if _fresh(st.get("last_run")):
+                return True
+        except Exception:
+            pass
+        return False
+
     @classmethod
     def start(cls, interval_seconds=300):
         if cls._enabled:
@@ -520,6 +559,9 @@ class BackgroundSchedulerService:
             "last_run": cls._last_run,
             "last_status": cls._last_status,
             "thread_alive": bool(cls._thread and cls._thread.is_alive()),
+            # CROSS-PROCESS liveness — health/readiness checks must gate on THIS, not the process-local
+            # thread_alive above, so an out-of-process audit never false-reports 'scheduler down'.
+            "scheduler_live": cls.scheduler_live(),
             "success_count": cls._success_count,
             "failure_count": cls._failure_count,
             "consecutive_failures": cls._consecutive_failures,

@@ -299,14 +299,15 @@ class GreyLineRealityGuardEngine:
                     stale = (datetime.utcnow().date() - datetime.fromisoformat(str(as_of)[:10]).date()).days > MAX_CANDIDATE_STALE_DAYS
                 except (ValueError, TypeError):
                     stale = False
-            # This candidate snapshot is ONLY refreshed and consumed by the momentum strategy. When momentum
-            # is DISARMED nothing reads it and nothing refreshes it, so a stale snapshot is EXPECTED — not a
-            # strategy trading on old data (same retired-sleeve cry-wolf as the condor cache). Still flag a
-            # FAKE source: that would be wrong the moment momentum re-arms.
-            momentum_on = (getenv("GREYLINE_MOMENTUM_ENABLED", "true") or "").strip().lower() == "true"
-            stale_flag = stale and momentum_on
+            # WRONG-FLAG FIX (2026-08-17, same shape as the condor cache): top_candidates_cache.json is PRODUCED
+            # only by MomentumScanWarmEngine.warm_if_due (gated on GREYLINE_MOMENTUM_SCAN_WARM, OFF by default) —
+            # NOT by arming the momentum sleeve (the rebalance path writes different files and never reads this
+            # one). So gate STALENESS on the producer's flag: with scan-warm off nothing auto-refreshes it, so a
+            # stale snapshot is EXPECTED (e.g. operator away >5d), not a fault. A FAKE source is always flagged.
+            scan_warm_on = (getenv("GREYLINE_MOMENTUM_SCAN_WARM", "false") or "").strip().lower() == "true"
+            stale_flag = stale and scan_warm_on
             ok = source_ok and not stale_flag
-            note = "" if momentum_on else " (momentum disarmed — snapshot not refreshed/consumed)"
+            note = "" if scan_warm_on else " (scan-warm off — snapshot not auto-refreshed, staleness expected)"
             return {"id": "DATA_SOURCE_REAL", "severity": "warning", "ok": ok,
                     "detail": (f"candidates from {source} as of {as_of}{note}" if ok
                                else f"suspect candidate source={source!r} as_of={as_of!r} "
@@ -566,6 +567,16 @@ class GreyLineRealityGuardEngine:
         evidence base the options mission can ever be verified against. A day not captured is
         a permanent hole, which is why a stale capture is surfaced rather than ignored.
         """
+        # INTENT GATE (consistent with _check_data_source / _check_decision_caches_fresh): the options capture
+        # REQUIRES a UW key to advance. With no key the mission isn't being pursued, so "no capture" is EXPECTED,
+        # not a fault — else this warns forever on a deployment that never opted into the options mission.
+        try:
+            from app.services.env_reload import uw_api_key
+            if not uw_api_key():
+                return {"id": "OPTIONS_CAPTURE_ADVANCING", "severity": "warning", "ok": True,
+                        "detail": "options mission not configured (no UW key) — capture N/A"}
+        except Exception:
+            pass
         try:
             from app.services.options_reality_capture_engine import OptionsRealityCaptureEngine
             cov = OptionsRealityCaptureEngine().coverage()

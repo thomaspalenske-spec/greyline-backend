@@ -65,8 +65,27 @@ class LiveAccountDriftEngine:
             ("MarketValue", "MARKET_VALUE_CHANGED"),
         ]
 
+        # DOLLAR balances mark-to-market EVERY snapshot (any held position ticks Equity/MarketValue/BuyingPower),
+        # so exact-inequality flagged "drift" on ordinary price movement every cycle — the PASS state was
+        # unreachable for any non-flat book. Only a MATERIAL move (default 5%, GREYLINE_ACCOUNT_DRIFT_FRAC) is
+        # real drift worth surfacing; the structural count changes above stay exact. (2026-08-17 artifact fix.)
+        from os import getenv as _g
+        try:
+            frac = max(0.0, float(_g("GREYLINE_ACCOUNT_DRIFT_FRAC", "0.05") or 0.05))
+        except (TypeError, ValueError):
+            frac = 0.05
+
+        def _num(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
         for field, reason in balance_fields:
-            if latest_balance.get(field) != previous_balance.get(field):
+            a, b = _num(latest_balance.get(field)), _num(previous_balance.get(field))
+            if a is None or b is None:
+                if latest_balance.get(field) != previous_balance.get(field):
+                    drift_reasons.append(reason)          # non-numeric change: exact compare (rare)
+            elif abs(a - b) > frac * max(abs(b), 1.0):
                 drift_reasons.append(reason)
 
         drift_detected = len(drift_reasons) > 0

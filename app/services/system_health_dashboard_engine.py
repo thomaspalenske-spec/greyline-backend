@@ -18,7 +18,12 @@ class SystemHealthDashboardEngine:
         governance = AdaptiveWeightGovernanceEngine().active_governance()
 
         broker_healthy = broker.get("status") == "TRADESTATION_TOKEN_MAINTENANCE_READY"
-        scheduler_healthy = scheduler.get("thread_alive") is True or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
+        # CROSS-PROCESS: scheduler_live = thread alive OR recent persisted cycle, so this dashboard status is
+        # accurate from any process (thread_alive alone falsely read DEGRADED out-of-process).
+        scheduler_healthy = bool(scheduler.get(
+            "scheduler_live",
+            scheduler.get("thread_alive") is True
+            or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"))
         learning_healthy = learning.get("status") == "LEARNING_ANALYTICS_READY"
         governance_healthy = governance.get("status") == "ACTIVE_WEIGHT_GOVERNANCE_READY"
 

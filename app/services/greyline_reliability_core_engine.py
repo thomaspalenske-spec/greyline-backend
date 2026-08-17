@@ -63,8 +63,11 @@ class GreyLineReliabilityCoreEngine:
             else "LIVE_EXECUTION_POSITION_RECONCILIATION_REQUIRED"
         )
 
-        scheduler_alive = scheduler.get("thread_alive") is True
-        scheduler_enabled = scheduler.get("scheduler_enabled") is True
+        # CROSS-PROCESS: thread_alive/scheduler_enabled are process-local (False from an out-of-process audit),
+        # which forced a false -20 'RELIABILITY_CORE_DEGRADED'. scheduler_live (thread alive OR recent persisted
+        # cycle) is accurate from any process; a live scheduler is by definition enabled+running.
+        scheduler_alive = bool(scheduler.get("scheduler_live", scheduler.get("thread_alive")))
+        scheduler_enabled = bool(scheduler.get("scheduler_live", scheduler.get("scheduler_enabled")))
 
         checks = {
             "token_ok": token_ok,

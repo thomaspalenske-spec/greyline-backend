@@ -114,12 +114,15 @@ def test_stale_candidates_flag_when_momentum_armed(tmp_path, monkeypatch):
     assert r["ok"] is False and "suspect" in r["detail"]
 
 
-def test_stale_candidates_ignored_when_momentum_disarmed(tmp_path, monkeypatch):
+def test_stale_candidates_ignored_when_scanwarm_off(tmp_path, monkeypatch):
+    # wrong-flag fix: staleness is gated on the PRODUCER (MomentumScanWarmEngine / GREYLINE_MOMENTUM_SCAN_WARM),
+    # OFF by default. With the producer off, nothing refreshes the snapshot, so staleness is EXPECTED, not a fault.
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("GREYLINE_MOMENTUM_ENABLED", "false")       # disarmed -> nothing refreshes/consumes it
+    monkeypatch.delenv("GREYLINE_MOMENTUM_SCAN_WARM", raising=False)
+    monkeypatch.setenv("GREYLINE_MOMENTUM_ENABLED", "false")
     _write_candidates({"data_source": "TRADESTATION_LIVE_CACHED", "as_of": "2026-07-01"})
     r = G()._check_data_source()
-    assert r["ok"] is True and "momentum disarmed" in r["detail"]
+    assert r["ok"] is True and "scan-warm off" in r["detail"]
 
 
 def test_fake_source_flags_even_when_disarmed(tmp_path, monkeypatch):

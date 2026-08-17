@@ -38,10 +38,12 @@ class ReliabilityGovernorEngine:
 
         checks = {
             "system_health_ok": system_health_ok,
-            "scheduler_ok": (
+            # CROSS-PROCESS liveness — scheduler_live is (thread alive OR recent persisted cycle), so this
+            # governor never falsely fires "scheduler not running" when evaluated outside the service process.
+            "scheduler_ok": bool(scheduler.get(
+                "scheduler_live",
                 bool(scheduler.get("thread_alive"))
-                or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE"
-            ),
+                or scheduler.get("last_status") == "BACKGROUND_SCHEDULER_CYCLE_COMPLETE")),
             "quote_ok": quote.get("status") == "FAST_QUOTE_HEARTBEAT_STATUS_READY",
             "token_ok": bool(token.get("ready_for_read_only")),
         }
