@@ -687,6 +687,7 @@ th {
       <div class="card"><div class="label">Deployed Capital</div><div class="value" id="deployed">$--</div><div class="sub" id="deployed_pct">--</div></div>
       <div class="card"><div class="label">Unrealized P/L</div><div class="value" id="unrealized">$--</div></div>
       <div class="card"><div class="label">Total Return</div><div class="value" id="total_return">--</div></div>
+      <div class="card"><div class="label">24 Hour Return</div><div class="value" id="return_24h">--</div><div class="sub" id="return_24h_sub"></div></div>
     </section>
 
     <section class="grid health">
@@ -1990,6 +1991,11 @@ async function refreshAll() {
       `${fmtPct(src.deployed_pct_of_equity)} of Equity${st}`);   // read the engine's own field, don't re-derive
     setText("unrealized", M(src.unrealized_pnl));
     setText("total_return", unavailable ? "—" : (fmtPct(src.total_return_pct) + st));
+    // 24 Hour Return: engine-supplied (return_24h_pct), null until ~24h of equity history exists → show "—"
+    // with an "accumulating" note rather than a fabricated 0. Read the engine's field, never re-derive.
+    const r24 = (src && src.return_24h_pct != null) ? src.return_24h_pct : null;
+    setText("return_24h", (unavailable || r24 == null) ? "—" : (fmtPct(r24) + st));
+    setText("return_24h_sub", (unavailable || r24 != null) ? "" : "accumulating 24h of history");
     setText("realized_pnl", M(src.realized_pnl));
     setText("open_trades", unavailable ? "—" : (src.open_position_count + st));
     setText("open_trade_count", unavailable ? "—" : (src.open_position_count + st));
@@ -2005,6 +2011,7 @@ async function refreshAll() {
     // stale value GREEN). Neutral only when there's truly nothing to show.
     setClassBySign("unrealized", unavailable ? 0 : src.unrealized_pnl);
     setClassBySign("total_return", unavailable ? 0 : src.total_return_pct);
+    setClassBySign("return_24h", (unavailable || r24 == null) ? 0 : r24);
     setClassBySign("realized_pnl", unavailable ? 0 : src.realized_pnl);
 
     // Render the WHOLE book from /open-positions (equity + options). This panel used

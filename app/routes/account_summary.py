@@ -16,7 +16,7 @@ router = APIRouter()
 _LAST_GOOD = Path("app/data/state/account_summary_last_good.json")
 _MONEY_KEYS = ("starting_capital", "deployed_capital", "deployed_pct_of_equity", "open_market_value",
                "tbill_sweep_value", "cash_on_hand", "buying_power", "unrealized_pnl", "realized_pnl",
-               "total_equity", "total_return_pct", "open_position_count")
+               "total_equity", "total_return_pct", "return_24h_pct", "open_position_count")
 
 
 def _save_last_good(resp):
@@ -84,6 +84,7 @@ def account_summary():
             "deployed_capital": None, "deployed_pct_of_equity": None, "open_market_value": None,
             "tbill_sweep_value": None, "cash_on_hand": None, "buying_power": None,
             "unrealized_pnl": None, "total_equity": None, "total_return_pct": None,
+            "return_24h_pct": None,   # equity unknown this cycle -> don't record a bogus sample or fabricate a delta
             "open_position_count": None,
             # surface WHY the read failed so the operator (and diagnostics) see the real cause — a 429
             # throttle vs a broker-side 5xx vs a transient timeout are very different situations.
@@ -126,6 +127,11 @@ def account_summary():
     # cash-funded with no margin, so buying power = cash on hand.
     cash_on_hand = round(mission_equity - at_risk_market_value, 2)
 
+    # 24-HOUR RETURN: measured against the mission equity ~24h ago from a compact self-maintained history
+    # (fed here on each healthy poll). None until ~24h of history exists — never a fabricated baseline.
+    from app.services.account_return_horizon_engine import AccountReturnHorizonEngine
+    horizon = AccountReturnHorizonEngine().record_and_measure(mission_equity)
+
     resp = {
         "timestamp": datetime.utcnow().isoformat(),
         "account_mode": view.get("account_mode"),
@@ -144,6 +150,8 @@ def account_summary():
         "realized_pnl": realized,
         "total_equity": mission_equity,
         "total_return_pct": round(100 * (mission_equity - base) / base, 2) if base else 0,
+        "return_24h_pct": horizon.get("return_24h_pct"),   # None until ~24h of history has accumulated
+        "return_24h": horizon,                             # baseline equity / as-of / samples / reason
         "open_position_count": len(rows),
 
         # --- the real TradeStation account being read (broker truth, not faked to $10k) ---
