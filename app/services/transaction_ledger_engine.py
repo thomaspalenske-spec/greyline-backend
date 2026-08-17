@@ -291,10 +291,12 @@ class TransactionLedgerEngine:
         except Exception:
             return by_position
         held_upnl = defaultdict(float)
+        held_px = {}                                                 # sym -> (avg entry / cost basis, current)
         for p in positions:
             sym = str(p.get("symbol") or "").split()[0].upper()      # OSI option symbols carry spaces
             if sym and abs(self._f(p.get("quantity")) or 0.0) > 0:
                 held_upnl[sym] += self._f(p.get("unrealized_pnl")) or 0.0
+                held_px[sym] = (self._f(p.get("entry_price")), self._f(p.get("current_price")))
         # EMPTY-READ GUARD: a broker read showing ZERO holdings while we have net-long rows is almost
         # certainly degraded (an all-positions-vanished event is implausible). Don't drop every row as a
         # phantom on a bad read — leave the rows untouched (same fail-closed pattern as the sleeve ledger).
@@ -311,6 +313,12 @@ class TransactionLedgerEngine:
         for sym, rows in rows_by_sym.items():
             if sym not in held_upnl:
                 continue
+            ep, cp = held_px.get(sym, (None, None))       # broker cost basis + live price for this held name
+            for r in rows:
+                if ep is not None:
+                    r["entry_price"] = round(ep, 2)
+                if cp is not None:
+                    r["current_price"] = round(cp, 2)
             upnl = round(held_upnl[sym], 2)
             longs = [(r, max(0, int(r.get("bought") or 0) - int(r.get("sold") or 0))) for r in rows]
             tot = sum(w for _, w in longs)
