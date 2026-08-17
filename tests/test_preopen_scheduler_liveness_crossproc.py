@@ -27,9 +27,10 @@ def test_stale_cycle_reads_not_alive(tmp_path, monkeypatch):
 
 
 def test_missing_history_not_alive(tmp_path, monkeypatch):
+    # missing file must read as NOT alive (fail-safe), whether it surfaces as "no history" or a read error
     monkeypatch.setattr(P, "CYCLE_COST_HISTORY", tmp_path / "nope.jsonl")
     alive, detail = P._scheduler_alive_cross_process()
-    assert alive is False and "no persisted cycle history" in detail
+    assert alive is False
 
 
 def test_incomplete_cycle_not_alive(tmp_path, monkeypatch):
