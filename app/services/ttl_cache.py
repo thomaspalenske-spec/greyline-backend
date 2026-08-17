@@ -18,16 +18,29 @@ import threading
 import time
 from os import getenv
 
-# Registry of every decorator's cache dict, so tests can flush them ALL between cases. These caches are
-# process-wide and exclude `self` from the key, so without a flush one test's cached report() leaks into
-# the next — the root of a class of order-dependent test failures. clear_all() is called by an autouse
-# conftest fixture; production never calls it.
+# Registry of every @ttl_cached decorator's cache dict, so tests can flush them ALL between cases. These
+# caches exclude `self` from the key, so without a flush one test's cached report() leaks into the next —
+# a root of order-dependent test failures. clear_all() (called by an autouse conftest fixture, which also
+# resets the engines' own ad-hoc caches by name) is the single clear point; production never calls it.
 _ALL_CACHES = []
+
+
+def _reset(cache):
+    """A TTL-dict ({'t'/'at'/'epoch': ts, <payload>}) is invalidated by zeroing its timestamp — keeping the
+    required keys present so `cache['t']` never KeyErrors. A plain keyed cache dict is cleared outright."""
+    if not isinstance(cache, dict):
+        return
+    ts_keys = [k for k in ("t", "at", "epoch") if k in cache]
+    if ts_keys:
+        for k in ts_keys:
+            cache[k] = 0.0
+    else:
+        cache.clear()
 
 
 def clear_all():
     for c in _ALL_CACHES:
-        c.clear()
+        _reset(c)
 
 
 def ttl_cached(seconds=30.0, env_key=None):

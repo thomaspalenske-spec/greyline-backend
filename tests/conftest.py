@@ -49,36 +49,67 @@ def _data_sandbox(tmp_path_factory):
     return sandbox
 
 
+# Every PROCESS-WIDE cache/singleton that must be flushed between tests, as (module, dotted-attr). `self`
+# and instances are excluded from these keys, so without a flush one test's cached equity / held positions /
+# quotes / greeks / report leaks into the next — the root of the suite's order-dependent failures. Found by
+# sweeping app/services for class- and module-level cache dicts; add new ones here when engines gain them.
+_ENGINE_CACHES = [
+    ("app.services.broker_account_view_engine", "_SNAPSHOT_CACHE"),
+    ("app.services.greyline_reality_guard_engine", "_GUARD_CACHE"),
+    ("app.services.pre_open_readiness_engine", "_AUDIT_CACHE"),
+    ("app.services.adaptive_dte_selection_engine", "AdaptiveDTESelectionEngine._cache"),
+    ("app.services.breadth_scoring_engine", "BreadthScoringEngine._quote_context_cache"),
+    ("app.services.conditional_vrp_short_premium_engine", "ConditionalVRPShortPremiumEngine._PLAN_CACHE"),
+    ("app.services.gex_mean_reversion_shadow_engine", "GexMeanReversionShadowEngine._signals_cache"),
+    ("app.services.optionable_universe_engine", "OptionableUniverseEngine._fetch_cache"),
+    ("app.services.sleeve_capital_budget_engine", "SleeveCapitalBudgetEngine._cache"),
+    ("app.services.sleeve_capital_budget_engine", "SleeveCapitalBudgetEngine._rp_cache"),
+    ("app.services.tradestation_positions_live_engine", "TradeStationPositionsLiveEngine._CACHE"),
+    ("app.services.tradestation_balance_live_engine", "TradeStationBalanceLiveEngine._CACHE"),
+    ("app.services.tradestation_option_chain_live_engine", "TradeStationOptionChainLiveEngine._snap_cache"),
+    ("app.services.tradestation_sim_booking_engine", "TradeStationSimBookingEngine._READ_CACHE"),
+    ("app.services.tradestation_quote_live_engine", "TradeStationQuoteLiveEngine._quote_cache"),
+    ("app.services.uw_option_quote_engine", "UWOptionQuoteEngine._cache"),
+    ("app.services.uw_stream_engine", "UWStreamEngine._cache"),
+    ("app.services.uw_option_chain_engine", "UWOptionChainEngine._cache"),
+]
+
+
+def _reset_cache_obj(obj):
+    """A TTL-dict ({'t'/'at'/'epoch': ts, <payload>}) is invalidated by zeroing its timestamp (keeps the
+    required keys present so `cache['t']` never KeyErrors); a plain cache dict is cleared outright."""
+    if not isinstance(obj, dict):
+        return
+    ts_keys = [k for k in ("t", "at", "epoch") if k in obj]
+    if ts_keys:
+        for k in ts_keys:
+            obj[k] = 0.0
+    else:
+        obj.clear()
+
+
+def _flush_engine_caches():
+    import importlib
+    from app.services.ttl_cache import clear_all
+    clear_all()                                              # every @ttl_cached report() cache
+    for mod_path, dotted in _ENGINE_CACHES:
+        try:
+            obj = importlib.import_module(mod_path)
+            for part in dotted.split("."):
+                obj = getattr(obj, part)
+            _reset_cache_obj(obj)
+        except Exception:
+            pass
+
+
 @pytest.fixture(autouse=True)
 def _flush_ttl_caches():
-    """Flush every PROCESS-WIDE in-memory cache before each test so state can't leak across cases — the root
-    of a class of order-dependent failures. Three vectors:
-      - @ttl_cached report() caches (self excluded from the key -> one test's report leaks to the next),
-      - the broker READ cache (kind -> held positions) and account SNAPSHOT cache: a test that opens
-        positions leaves them 'held' for the 5s TTL, so the next rebalance sees full slots and opens nothing.
-    Clearing (not disabling) keeps within-test caching intact; production never calls these."""
-    from app.services.ttl_cache import clear_all
-    clear_all()
-    try:
-        from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
-        TradeStationSimBookingEngine._READ_CACHE.clear()
-    except Exception:
-        pass
-    try:
-        import app.services.broker_account_view_engine as _bav
-        _bav._SNAPSHOT_CACHE.clear()
-    except Exception:
-        pass
-    try:
-        # SleeveCapitalBudgetEngine coalesces the equity/cash read in a class-level {t,equity,cash} cache
-        # (5s TTL). Left warm, a stubbed equity=20000 in one budget test reads the PRIOR test's cached
-        # equity, so budget_usd() = pct × wrong-equity. Invalidate it (t=0 forces a refetch).
-        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine as _SCB
-        _SCB._cache["t"] = 0.0
-    except Exception:
-        pass
+    """Flush EVERY process-wide in-memory cache before AND after each test so state can't leak across cases
+    — the root of the suite's order-dependent failures (a test's cached equity/held-positions/report bleeds
+    into the next). Clearing (not disabling) keeps within-test caching intact; production never calls this."""
+    _flush_engine_caches()
     yield
-    clear_all()
+    _flush_engine_caches()
 
 
 @pytest.fixture(autouse=True)
@@ -141,8 +172,11 @@ def _neutralize_external_alerts(monkeypatch):
     """
     for k in ("GREYLINE_ALERT_WEBHOOK_URL", "GREYLINE_ALERT_NTFY_TOPIC",
               "GREYLINE_ALERT_IMESSAGE_TO",
-              # operator arming flags for real-order-placing features must never leak into tests
-              "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_BROKER_PROTECTIVE_STOPS"):
+              # operator arming flags for real-order-placing features must never leak into tests — a sleeve
+              # armed in the operator's .env (e.g. momentum, re-armed 2026-08-17) would otherwise flip the
+              # "disabled path" unit tests, which expect the flag OFF unless the test itself sets it.
+              "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_BROKER_PROTECTIVE_STOPS",
+              "GREYLINE_MOMENTUM_ENABLED", "GREYLINE_MOMENTUM_ALLOC_PCT"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GREYLINE_ALERT_MACOS_LOCAL", "false")
 
