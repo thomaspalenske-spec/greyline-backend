@@ -351,7 +351,8 @@ class MomentumReversalShadowEngine:
         n = len(rets)
         rigorous = _rigorous_verdict(rets, self.MIN_COHORTS)   # SAME bar the live court uses
         open_cohorts = self._load_open()
-        positions = self.open_positions()
+        from app.services.shadow_contract_sizing import enrich_open_rows
+        positions = enrich_open_rows(self.open_positions())   # + contracts + total-$ P/L (hypothetical lots)
         entry_source = (open_cohorts[0].get("source") if open_cohorts else None)
         # explain an EMPTY book honestly: with nothing open, are we waiting on a fresh live scan?
         open_wait = None

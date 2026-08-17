@@ -289,16 +289,20 @@ class GexMeanReversionShadowEngine:
         openp = self._load_open()
         # Enrich each OPEN fade with its live mark + unrealized P/L (side-aware: LONG or SHORT) so the card
         # can show entry -> current price and the running return. Reuse the signals' spots (no extra quote).
+        from app.services.shadow_contract_sizing import default_contracts, pnl_dollars
+        contracts = default_contracts()
         sigs = self.signals()
         spot_by = {s.get("name"): s.get("spot") for s in sigs}
         open_rows = []
         for k, v in openp.items():
-            row = {"name": k, **v}
+            row = {"name": k, **v, "contracts": contracts}    # hypothetical 100-share lots (zero capital)
             entry, spot, side = self._f(v.get("entry")), spot_by.get(k), v.get("side")
             if entry and spot and entry > 0:
                 ret = (spot / entry - 1.0) if side == "LONG" else (entry / spot - 1.0)
+                pps = round((spot - entry) if side == "LONG" else (entry - spot), 2)
                 row["mark"] = round(spot, 2)                   # current price (live spot)
-                row["pnl_per_share"] = round((spot - entry) if side == "LONG" else (entry - spot), 2)
+                row["pnl_per_share"] = pps                     # per share, signed by side
+                row["pnl_dollars"] = pnl_dollars(pps, contracts)   # total $ = per-share × 100 × contracts
                 row["pnl_pct"] = round(ret * 100, 2)           # gross unrealized return (signed by side)
                 row["net_pnl_pct"] = round((ret - self.COST_ROUNDTRIP) * 100, 2)
             open_rows.append(row)

@@ -218,11 +218,13 @@ class VolEtpShadowEngine:
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]
         n = len(rets)
         sig = self._signal()
+        from app.services.shadow_contract_sizing import enrich_open_rows
+        positions = enrich_open_rows(self.open_positions())   # + contracts + total-$ P/L (hypothetical lots)
         base = {"timestamp": datetime.utcnow().isoformat(), "shadow_enabled": self.enabled(),
                 "engine": "VolEtpShadowEngine", "instrument": self.INSTRUMENT,
                 "cohorts_closed": n, "min_cohorts": self.MIN_COHORTS,
                 "rigorous_verdict": _rigorous_verdict(rets, self.MIN_COHORTS),
-                "open_cohorts": len(self._load_open()), "open_positions": self.open_positions(),
+                "open_cohorts": len(self._load_open()), "open_positions": positions,
                 "current_regime": (sig.get("state") if sig.get("ok") else "UNKNOWN"),
                 "term_structure_ratio": sig.get("ratio"),
                 "signal": "long VXX ONLY in backwardation (VIX>=VIX3M); flat in contango",

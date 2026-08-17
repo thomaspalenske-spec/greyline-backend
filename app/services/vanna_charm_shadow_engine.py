@@ -273,16 +273,20 @@ class VannaCharmShadowEngine:
         openp = self._load_open()
         # Enrich each OPEN position with its live mark + unrealized P/L so the card can show entry -> current
         # exit and the running return. Reuse the signals' spots (already fetched) — no extra quote round-trip.
+        from app.services.shadow_contract_sizing import default_contracts, pnl_dollars
+        contracts = default_contracts()
         sigs = self.signals()
         spot_by = {s.get("name"): s.get("spot") for s in sigs}
         open_rows = []
         for k, v in openp.items():
-            row = {"name": k, **v}
+            row = {"name": k, **v, "contracts": contracts}    # hypothetical 100-share lots (zero capital)
             entry, spot = self._f(v.get("entry")), spot_by.get(k)
             if entry and spot and entry > 0:
                 ret = spot / entry - 1.0                       # LONG the underlying
-                row["mark"] = round(spot, 2)                   # current exit (live spot)
-                row["pnl_per_share"] = round(spot - entry, 2)  # zero-capital: P/L per share of the index ETF
+                pps = round(spot - entry, 2)
+                row["mark"] = round(spot, 2)                   # current price (live spot)
+                row["pnl_per_share"] = pps                     # per share of the index ETF
+                row["pnl_dollars"] = pnl_dollars(pps, contracts)   # total $ = per-share × 100 × contracts
                 row["pnl_pct"] = round(ret * 100, 2)           # gross unrealized return
                 row["net_pnl_pct"] = round((ret - self.COST_ROUNDTRIP) * 100, 2)  # after round-trip cost
             open_rows.append(row)
