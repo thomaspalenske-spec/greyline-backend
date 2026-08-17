@@ -291,12 +291,14 @@ class TransactionLedgerEngine:
         except Exception:
             return by_position
         held_upnl = defaultdict(float)
-        held_px = {}                                                 # sym -> (avg entry / cost basis, current)
+        held_px = {}                                                 # sym -> (avg entry / cost basis, current) — EQUITY only
         for p in positions:
-            sym = str(p.get("symbol") or "").split()[0].upper()      # OSI option symbols carry spaces
+            raw = str(p.get("symbol") or "")
+            sym = raw.split()[0].upper() if raw else ""              # OSI option symbols carry spaces
             if sym and abs(self._f(p.get("quantity")) or 0.0) > 0:
                 held_upnl[sym] += self._f(p.get("unrealized_pnl")) or 0.0
-                held_px[sym] = (self._f(p.get("entry_price")), self._f(p.get("current_price")))
+                if " " not in raw:                                   # EQUITY only — a single option leg's price
+                    held_px[sym] = (self._f(p.get("entry_price")), self._f(p.get("current_price")))  # can't represent a spread
         # EMPTY-READ GUARD: a broker read showing ZERO holdings while we have net-long rows is almost
         # certainly degraded (an all-positions-vanished event is implausible). Don't drop every row as a
         # phantom on a bad read — leave the rows untouched (same fail-closed pattern as the sleeve ledger).
@@ -315,6 +317,12 @@ class TransactionLedgerEngine:
                 continue
             ep, cp = held_px.get(sym, (None, None))       # broker cost basis + live price for this held name
             for r in rows:
+                # Entry/Current are meaningful only for a single-instrument EQUITY row. A condor/option row's
+                # "symbol" is the UNDERLYING (SPY/IWM) but the book holds a 4-leg spread — no single price
+                # represents it, and pairing one leg's mark with the net P&L reads as a contradiction
+                # (spread value up, short-premium P&L down). Leave those "—"; the Condor card prices them.
+                if str(r.get("sleeve") or "").lower() in ("vrp_condor", "earnings", "options"):
+                    continue
                 if ep is not None:
                     r["entry_price"] = round(ep, 2)
                 if cp is not None:
