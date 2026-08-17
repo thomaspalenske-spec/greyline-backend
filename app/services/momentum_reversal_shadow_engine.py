@@ -212,12 +212,22 @@ class MomentumReversalShadowEngine:
 
     # ---- mark ----------------------------------------------------------------------------------
 
+    @staticmethod
+    def _market_open():
+        """THE RULE (shared): only record an open/settle when it could ACTUALLY have executed on
+        TradeStation — here, during the regular equity session. Single definition in
+        shadow_tradeability_gate so it can never drift between shadows. FAIL-CLOSED if unconfirmable."""
+        from app.services.shadow_tradeability_gate import equity_session_open
+        return equity_session_open()
+
     def mark(self):
-        """Settle any cohort that has completed its HOLD_DAYS business-day hold (at live quotes), then
-        (weekly, non-overlapping) open a fresh cohort from the LIVE signal. NO orders, NO budget."""
+        """Settle any matured cohort AND (weekly, non-overlapping) open a fresh one from the LIVE signal —
+        BOTH only during a regular session, so entries/exits are tradeable live quotes, never a stale
+        weekend/overnight close. NO orders, NO budget."""
         if not self.enabled():
             return {"status": "MOM_SHADOW_DISABLED", "acted": False}
 
+        rth = self._market_open()
         cost = self._cost_roundtrip()
         cohorts = self._load_open()
         closed_now, still_open = [], []
@@ -227,6 +237,9 @@ class MomentumReversalShadowEngine:
             legs = co.get("legs", [])
             if self._biz_days_elapsed(co.get("opened")) < self.HOLD_DAYS:
                 still_open.append(co)
+                continue
+            if not rth:
+                still_open.append(co)          # matured, but settle only at a LIVE quote -> next RTH mark
                 continue
             prices = self._live_prices([l["symbol"] for l in legs])
             settled = []
@@ -258,7 +271,10 @@ class MomentumReversalShadowEngine:
         opened, skip_reason = None, None
         targets, clean_bench, asof, top_n, source = self._signal_targets(prefer_live=True)
         if not still_open:
-            if source not in self.LIVE_SOURCES:
+            if not rth:
+                skip_reason = ("market closed — deferring the weekly open to the next regular session so the "
+                               "entry is a live tradeable quote, not a stale weekend/overnight close")
+            elif source not in self.LIVE_SOURCES:
                 skip_reason = ("waiting for a fresh LIVE momentum scan — NOT opening on stale/absent data "
                                f"(scan source={source!r}). The scan is produced by /top-candidates on a live "
                                "universe fetch; the shadow won't trigger that heavy ~2000-name fetch itself.")

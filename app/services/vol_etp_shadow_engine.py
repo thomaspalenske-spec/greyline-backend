@@ -134,6 +134,9 @@ class VolEtpShadowEngine:
         term structure is in backwardation (long-vol favorable). NO orders, NO budget."""
         if not self.enabled():
             return {"status": "VOL_ETP_SHADOW_DISABLED", "acted": False}
+        # THE RULE: only open/settle when it could actually have executed on TradeStation (equity session).
+        from app.services.shadow_tradeability_gate import equity_session_open
+        rth = equity_session_open()
         cost = self._cost_roundtrip()
         cohorts = self._load_open()
         closed_now, still_open = [], []
@@ -141,6 +144,9 @@ class VolEtpShadowEngine:
         for co in cohorts:
             if self._biz_days_elapsed(co.get("opened")) < self.HOLD_DAYS:
                 still_open.append(co)
+                continue
+            if not rth:
+                still_open.append(co)                     # matured, but settle only at a live quote -> next RTH
                 continue
             px = self._live_price(co["symbol"])
             ec = self._f2(co.get("entry_close"))
@@ -159,7 +165,9 @@ class VolEtpShadowEngine:
         opened, skip = None, None
         sig = self._signal()
         if not still_open:
-            if not sig.get("ok"):
+            if not rth:
+                skip = "market closed — deferring open to the next equity session (entry must be a live quote)"
+            elif not sig.get("ok"):
                 skip = "no term-structure quote (VIX/VIX3M) — not opening"
             elif sig.get("contango"):
                 skip = (f"CONTANGO (VIX/VIX3M {sig.get('ratio')}) — long-vol UNFAVORABLE, standing flat "

@@ -158,6 +158,10 @@ class FxTrendShadowEngine:
     def mark(self):
         if not self.enabled():
             return {"status": "FX_TREND_SHADOW_DISABLED", "acted": False}
+        # THE RULE: only open/settle when it could actually have executed on TradeStation. FX trades ~24/5,
+        # so the non-tradeable window is the weekend/holiday close (not equity RTH). Fail-closed defers.
+        from app.services.shadow_tradeability_gate import futures_fx_session_open
+        session = futures_fx_session_open()
         cost = self._cost_roundtrip()
         cohorts = self._load_open()
         closed_now, still_open = [], []
@@ -166,6 +170,9 @@ class FxTrendShadowEngine:
             legs = co.get("legs", [])
             if self._biz_days_elapsed(co.get("opened")) < self.HOLD_DAYS:
                 still_open.append(co)
+                continue
+            if not session:
+                still_open.append(co)               # matured, but settle only when the market is open -> next session
                 continue
             prices = self._live_prices([l["ts_symbol"] for l in legs])
             settled = []
@@ -188,7 +195,7 @@ class FxTrendShadowEngine:
             closed_now.append(rec)
 
         opened = None
-        if not still_open:
+        if not still_open and session:              # non-overlapping AND only when the market is open
             picks = self._signal()
             live = self._live_prices([p["ts_symbol"] for p in picks])
             legs = [{**p, "entry_close": round(live[p["ts_symbol"]], 6)} for p in picks if live.get(p["ts_symbol"])]

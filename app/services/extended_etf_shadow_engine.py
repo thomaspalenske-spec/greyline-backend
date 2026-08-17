@@ -163,6 +163,9 @@ class ExtendedEtfShadowEngine:
         long the top-K relative-strength ETFs at live entry. NO orders, NO budget."""
         if not self.enabled():
             return {"status": "ETF_SHADOW_DISABLED", "acted": False}
+        # THE RULE: only open/settle when it could actually have executed on TradeStation (equity session).
+        from app.services.shadow_tradeability_gate import equity_session_open
+        rth = equity_session_open()
         cost = self._cost_roundtrip()
         cohorts = self._load_open()
         closed_now, still_open = [], []
@@ -171,6 +174,9 @@ class ExtendedEtfShadowEngine:
             legs = co.get("legs", [])
             if self._biz_days_elapsed(co.get("opened")) < self.HOLD_DAYS:
                 still_open.append(co)
+                continue
+            if not rth:
+                still_open.append(co)                 # matured, but settle only at a live quote -> next RTH
                 continue
             prices = self._live_prices([l["symbol"] for l in legs])
             settled = []
@@ -191,7 +197,7 @@ class ExtendedEtfShadowEngine:
             closed_now.append(rec)
 
         opened = None
-        if not still_open:                             # non-overlapping: only open when nothing is open
+        if not still_open and rth:                     # non-overlapping AND only during a real session
             picks = self._signal_targets()
             live = self._live_prices([p["symbol"] for p in picks])
             legs = []

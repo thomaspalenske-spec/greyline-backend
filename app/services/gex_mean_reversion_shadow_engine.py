@@ -203,6 +203,11 @@ class GexMeanReversionShadowEngine:
         just hammers UW/TS (contributed to broker-read throttle 2026-08-10)."""
         if not self.enabled():
             return {"status": "GEX_SHADOW_DISABLED", "acted": False}
+        # THE RULE: never open/settle a hypothetical fade at a stale quote — only when it could actually have
+        # executed on TradeStation (regular equity/index-option session). Fail-closed defers to the next RTH mark.
+        from app.services.shadow_tradeability_gate import equity_session_open
+        if not equity_session_open():
+            return {"status": "GEX_SHADOW_MARKET_CLOSED", "acted": False}
         if not self._mark_due():
             return {"status": "GEX_SHADOW_NOT_DUE", "acted": False}
         self._stamp_mark()

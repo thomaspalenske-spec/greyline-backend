@@ -199,6 +199,11 @@ class VannaCharmShadowEngine:
     def mark(self):
         if not self.enabled():
             return {"status": "VANNA_SHADOW_DISABLED", "acted": False}
+        # THE RULE: only open/settle when it could actually have executed on TradeStation (regular equity/
+        # index-option session). Fail-closed defers to the next RTH mark rather than record a stale quote.
+        from app.services.shadow_tradeability_gate import equity_session_open
+        if not equity_session_open():
+            return {"status": "VANNA_SHADOW_MARKET_CLOSED", "acted": False}
         if not self._mark_due():
             return {"status": "VANNA_SHADOW_NOT_DUE", "acted": False}
         self._stamp_mark()

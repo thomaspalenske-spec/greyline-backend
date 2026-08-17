@@ -228,6 +228,11 @@ class CondorShadowEngine:
         """Scheduler entry: open new shadow condors, then mark existing. Self-gated once/day."""
         if not self.enabled():
             return {"status": "CONDOR_SHADOW_DISABLED", "ran": False}
+        # THE RULE: only open/settle a shadow condor when it could actually have executed on TradeStation
+        # (the regular equity/index-option session). Fail-closed defers to the next session's run.
+        from app.services.shadow_tradeability_gate import equity_session_open
+        if not equity_session_open():
+            return {"status": "CONDOR_SHADOW_MARKET_CLOSED", "ran": False}
         marker = STATE / "last_run.txt"
         today = self._et_date()
         try:
