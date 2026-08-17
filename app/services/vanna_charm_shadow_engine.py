@@ -271,13 +271,28 @@ class VannaCharmShadowEngine:
         n = len(rets)
         rigorous = _rigorous_verdict(rets, self.MIN_CLOSED)   # SAME bar the live court uses
         openp = self._load_open()
+        # Enrich each OPEN position with its live mark + unrealized P/L so the card can show entry -> current
+        # exit and the running return. Reuse the signals' spots (already fetched) — no extra quote round-trip.
+        sigs = self.signals()
+        spot_by = {s.get("name"): s.get("spot") for s in sigs}
+        open_rows = []
+        for k, v in openp.items():
+            row = {"name": k, **v}
+            entry, spot = self._f(v.get("entry")), spot_by.get(k)
+            if entry and spot and entry > 0:
+                ret = spot / entry - 1.0                       # LONG the underlying
+                row["mark"] = round(spot, 2)                   # current exit (live spot)
+                row["pnl_per_share"] = round(spot - entry, 2)  # zero-capital: P/L per share of the index ETF
+                row["pnl_pct"] = round(ret * 100, 2)           # gross unrealized return
+                row["net_pnl_pct"] = round((ret - self.COST_ROUNDTRIP) * 100, 2)  # after round-trip cost
+            open_rows.append(row)
         base = {
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
             "engine": "VannaCharmShadowEngine",
             "names": list(self.NAMES),
-            "open_positions": [{"name": k, **v} for k, v in openp.items()],
-            "signals": self.signals(),
+            "open_positions": open_rows,
+            "signals": sigs,
             "closed_trades": n, "min_closed": self.MIN_CLOSED,
             "rigorous_verdict": rigorous,
             "next_opex": (self._next_opex().isoformat() if self._next_opex() else None),
