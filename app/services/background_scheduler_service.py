@@ -380,6 +380,16 @@ class BackgroundSchedulerService:
             cls._consecutive_failures += 1
             cls._last_error = error
             cls._last_error_at = datetime.utcnow().isoformat()
+            # FORENSICS: last_error is cleared on the next success, so without this the failure leaves no
+            # trace beyond the count. Persist a classified record (error class, failure-locus phase, signed
+            # minutes-to-open) so the ~8% failure rate becomes diagnosable and near-open (entry-threatening)
+            # failures are countable. Best-effort — never let bookkeeping turn a failure into a crash.
+            try:
+                from app.services.cycle_failure_forensics_engine import CycleFailureForensicsEngine
+                CycleFailureForensicsEngine.record(
+                    error, phase_hint=CycleFailureForensicsEngine._phase_hint_from_timings(cls._last_phase_timings))
+            except Exception:
+                pass
             # MAKE SILENT FAILURES LOUD: the cycle self-gates when the market is closed, so a total
             # failure is invisible from outside (it hid for 25h / 303 cycles on 2026-07-26). Alert
             # OFF the box after a few consecutive failures; the dispatch's fingerprint cooldown keeps
@@ -587,11 +597,34 @@ class BackgroundSchedulerService:
         return result
 
     @classmethod
+    def _next_interval(cls, interval_seconds, failed):
+        """Wait before the next cycle. After a FAILED cycle within the open-critical window, retry PROMPTLY
+        (short backoff) instead of waiting the full cadence: a failure near 09:30 risks a MISSED armed entry
+        (a lost court-day for the VRP proof), and sleeve opens are idempotent — broker-confirmed held_qty +
+        in-flight-orders guard + book-deployment cap all prevent a double-open — so a quick retry recovers
+        the entry safely. Everything else waits the normal interval. Gated (GREYLINE_OPEN_RETRY_ENABLED,
+        default on); fail-safe to the normal interval on any error."""
+        if not failed or (getenv("GREYLINE_OPEN_RETRY_ENABLED", "true") or "true").strip().lower() != "true":
+            return interval_seconds
+        try:
+            from app.services.cycle_failure_forensics_engine import CycleFailureForensicsEngine
+            now_et, mh = CycleFailureForensicsEngine._now_et()
+            mins = CycleFailureForensicsEngine._minutes_to_open(now_et, mh)
+            if mins is not None and abs(mins) <= CycleFailureForensicsEngine.NEAR_OPEN_MIN:
+                backoff = int(getenv("GREYLINE_OPEN_RETRY_BACKOFF_SEC", "45") or "45")
+                return max(15, min(backoff, interval_seconds))       # never longer than normal, floor 15s
+        except Exception:
+            pass
+        return interval_seconds
+
+    @classmethod
     def _run_loop(cls, interval_seconds):
         while not cls._stop_event.is_set():
+            failed = False
             try:
                 cls._run_cycle()
             except Exception as exc:
+                failed = True
                 cls._last_run = datetime.utcnow().isoformat()
                 cls._last_status = f"BACKGROUND_SCHEDULER_CYCLE_FAILED: {exc}"
                 cls._record_result("FAILED", cls._last_run, error=str(exc))
@@ -604,7 +637,7 @@ class BackgroundSchedulerService:
                         "order_placement_allowed": ExecutionGovernor().evaluate_execution_permission("EXECUTE").get("order_placement_allowed"),
                     },
                 )
-            cls._stop_event.wait(interval_seconds)
+            cls._stop_event.wait(cls._next_interval(interval_seconds, failed))
 
     @classmethod
     def _run_cycle(cls):

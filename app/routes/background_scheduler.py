@@ -25,3 +25,11 @@ def background_scheduler_cycle_cost_history(limit: int = Query(50)):
     persistent hot phase is distinguishable from a one-off spike. The /status card shows only the
     last cycle — this shows the trend."""
     return BackgroundSchedulerService.cycle_cost_history(limit=limit)
+
+@router.get("/cycle-failure-forensics")
+def cycle_failure_forensics(limit: int = Query(500)):
+    """Classified scheduler cycle failures (error class, failure-locus phase, minutes-to-open) — turns the
+    black-box failure COUNT into a diagnosable record. `near_open_failures` are the ones that could have
+    missed an armed VRP/momentum entry at the 09:30 open (a lost court-day). Forward-only from first deploy."""
+    from app.services.cycle_failure_forensics_engine import CycleFailureForensicsEngine
+    return CycleFailureForensicsEngine.summary(limit=limit)

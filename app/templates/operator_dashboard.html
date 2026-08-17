@@ -883,6 +883,12 @@ th {
         <div id="cycle_cost_body"><span class="sub">Loading…</span></div>
       </div>
 
+      <div class="card" id="cycle_failure_card" style="min-width:0;">
+        <div class="section-title">Cycle Failure Forensics <span id="cf_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">Classified scheduler cycle failures — the black-box failure <em>count</em> made diagnosable. <strong>Near-open</strong> failures (within ±20 min of the 09:30 ET open) are the dangerous ones: a failed cycle there can miss an armed VRP/momentum entry (a lost court-day for the edge proof). Forward-only from first deploy; detail at <a href="/cycle-failure-forensics" style="color:inherit;">/cycle-failure-forensics</a>.</div>
+        <div id="cycle_failure_body"><span class="sub">Loading…</span></div>
+      </div>
+
       <div class="card" id="position_alert_card" style="display:none; border:1px solid rgba(248,81,73,.65); box-shadow:0 0 18px rgba(248,81,73,.18);">
         <div class="section-title red">⚠️ POSITION ALERTS — ACK REQUIRED</div>
         <table>
@@ -1726,6 +1732,44 @@ function renderCycleCost(s) {
   }
 }
 
+async function refreshCycleFailure() {
+  const body = document.getElementById("cycle_failure_body");
+  const summary = document.getElementById("cf_summary");
+  if (!body) return;
+  try {
+    const d = await getJSON("/cycle-failure-forensics");
+    const rec = d.recorded || 0, nearOpen = d.near_open_failures || 0;
+    if (summary) {
+      summary.innerHTML = rec === 0 ? `<span class="sub">none recorded yet</span>`
+        : `${rec} recorded · <span class="${nearOpen > 0 ? "red" : "green"}">${nearOpen} near-open</span>`;
+    }
+    if (!rec) {
+      body.innerHTML = `<span class="sub">No cycle failures recorded since deploy — the scheduler has run clean.</span>`;
+      return;
+    }
+    const cls = (d.by_class || []).slice(0, 6);
+    const max = Math.max(...cls.map(c => c.count), 1);
+    const bars = cls.map(c => {
+      const pct = Math.max(3, Math.round(c.count / max * 100));
+      const isOpen = c.class && (c.class.startsWith("TS") || c.class === "BROKER_READ");
+      return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <div style="width:130px;flex:0 0 130px;font-size:12px;">${c.class}</div>
+        <div style="flex:1;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;">
+          <div style="width:${pct}%;background:${isOpen ? "#f0883e" : "rgba(88,166,255,.55)"};height:14px;"></div>
+        </div>
+        <div style="width:40px;flex:0 0 40px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;">${c.count}</div>
+      </div>`;
+    }).join("");
+    const recent = (d.recent_near_open || []).slice(0, 3).map(r =>
+      `<div class="sub" style="margin-top:3px;">⚠️ ${r.at ? r.at.slice(0, 16).replace("T", " ") : ""} · ${r.error_class} · ${r.minutes_to_open != null ? (r.minutes_to_open >= 0 ? "+" : "") + r.minutes_to_open + "m vs open" : ""}${r.phase_after ? " · after " + r.phase_after : ""}</div>`
+    ).join("");
+    body.innerHTML = bars +
+      (nearOpen > 0 ? `<div style="margin-top:8px;" class="red">${nearOpen} failure(s) within ±20m of the open — entry risk:</div>${recent}` : "");
+  } catch (e) {
+    body.innerHTML = `<span class="red">Cycle failure forensics unavailable — ${String(e).slice(0, 80)}</span>`;
+  }
+}
+
 async function refreshAll() {
   // "Fetched", NOT "Last Update": this is the browser clock at refresh time, not the age of any cache.
   // Each card carries its own as_of/cache age; this only says when the page last pulled.
@@ -1733,6 +1777,7 @@ async function refreshAll() {
   checkDashboardVersion();  // fire-and-forget: self-reload once if new dashboard code was deployed
   await refreshCockpitBanner();
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
+  refreshCycleFailure();    // fire-and-forget: classified cycle-failure forensics + near-open entry risk
   refreshTransactions();    // fire-and-forget: rolling 2-day transaction ledger
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls
   refreshCondorShadow();    // zero-capital short-premium shadow — VRP vs earnings edge, measured apart
