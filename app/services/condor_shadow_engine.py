@@ -176,7 +176,13 @@ class CondorShadowEngine:
     def _current_value(self, legs):
         """Current MID value still in the condor off UW (shorts' mid − wings' mid), per share. None if
         any leg is unquotable. Held to profit-target/expiry, so mid (fair value) is the honest mark —
-        crossing the spread twice is only realized if you actually close, which the exit models."""
+        crossing the spread twice is only realized if you actually close, which the exit models.
+
+        A leg with bid == 0 but a POSITIVE ask is NOT unquotable — it's a legitimately near-worthless
+        option (common on near-expiry deep-OTM condor wings), and mid = ask/2 is a fine mark. Requiring a
+        positive BID left near-expiry condors permanently unpriced, which also blocked mark() from ever
+        profit-taking or closing them at MANAGE_DTE. Only a non-positive ASK (no real offer at all) means
+        the leg has no market and the condor can't be honestly valued this cycle."""
         from app.services.uw_option_quote_engine import UWOptionQuoteEngine
         q = UWOptionQuoteEngine()
         if not q.enabled():
@@ -187,7 +193,7 @@ class CondorShadowEngine:
             if not sym:
                 return None
             b, a = q.quote(sym)
-            if b <= 0 or a <= 0:
+            if a <= 0 or b < 0:          # no real offer (or a bad negative bid) -> genuinely unquotable
                 return None
             now[n] = {"bid": b, "ask": a}
         return self._condor_value(now)

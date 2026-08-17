@@ -46,6 +46,35 @@ def test_unpriceable_condor_has_no_fabricated_pnl(monkeypatch):
     assert "pnl_dollars" not in row and "current_value" not in row
 
 
+def test_zero_bid_leg_still_prices(monkeypatch):
+    # regression: a near-expiry deep-OTM wing quotes bid 0.00 / ask 0.05 — a legitimately worthless option,
+    # NOT missing data. It must still price (mid = ask/2), or near-expiry condors stay unpriced forever and
+    # mark() never profit-takes or closes them at MANAGE_DTE.
+    import app.services.uw_option_quote_engine as m
+
+    class FakeQ:
+        def enabled(self): return True
+        def quote(self, sym): return (0.0, 0.05)   # zero bid, positive ask
+
+    monkeypatch.setattr(m, "UWOptionQuoteEngine", FakeQ)
+    e = CondorShadowEngine()
+    legs = {n: {"symbol": f"X {n}"} for n in e._LEGS}
+    assert e._current_value(legs) is not None       # prices (would have been None before the fix)
+
+
+def test_no_ask_is_still_unquotable(monkeypatch):
+    import app.services.uw_option_quote_engine as m
+
+    class FakeQ0:
+        def enabled(self): return True
+        def quote(self, sym): return (0.0, 0.0)     # no offer at all -> genuinely no market
+
+    monkeypatch.setattr(m, "UWOptionQuoteEngine", FakeQ0)
+    e = CondorShadowEngine()
+    legs = {n: {"symbol": f"X {n}"} for n in e._LEGS}
+    assert e._current_value(legs) is None           # fail-closed when there's truly no market
+
+
 def test_closed_condors_are_excluded(monkeypatch):
     e = CondorShadowEngine()
     monkeypatch.setattr(e, "_entries", lambda: [_cond(status="CLOSED"), _cond(symbol="QQQ")])
