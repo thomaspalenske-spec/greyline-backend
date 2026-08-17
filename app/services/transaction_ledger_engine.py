@@ -343,15 +343,16 @@ class TransactionLedgerEngine:
                 share = round(upnl - running, 2) if i == len(net_rows) - 1 else round(upnl * w / tot, 2)
                 running += share
                 row["unrealized_pnl"] = share
-                # A short condor has no single price, but it DOES have an honest entry↔current pair:
-                # entry = the net credit received; current = what it now costs to close = credit − unrl.
-                # These reconcile by construction (entry − current == the P&L shown), so the columns can be
-                # verified by eye — unlike a lone option-leg mark, which read as a contradiction.
+                # A short condor has no single price, but it DOES have an honest entry↔current pair, quoted
+                # PER CONTRACT (per-share premium, the options convention): entry = net credit received;
+                # current = what it now costs to close = credit − unrl. Per-share so it reads like the equity
+                # rows; the P&L follows as (entry − current) × 100 × contracts.
                 cr = self._f(row.get("credit_total"))
-                if cr is not None and str(row.get("sleeve") or "").lower() in ("vrp_condor", "earnings"):
-                    row_credit = round(cr * w / tot, 2)
-                    row["entry_price"] = row_credit
-                    row["current_price"] = round(row_credit - share, 2)
+                if cr is not None and w > 0 and str(row.get("sleeve") or "").lower() in ("vrp_condor", "earnings"):
+                    row_credit = cr * w / tot                       # this row's share of the total $ credit
+                    per_share = 100.0 * w                           # 1 contract = 100 shares
+                    row["entry_price"] = round(row_credit / per_share, 2)
+                    row["current_price"] = round((row_credit - share) / per_share, 2)
         return cleaned
 
     def rolling(self):
