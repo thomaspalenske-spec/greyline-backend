@@ -93,18 +93,51 @@ class SleeveCapitalBudgetEngine:
         except Exception:
             return {}
 
+    # Crisis-diversifier floors: a sleeve here is never de-risked below this %-of-equity even under
+    # risk-parity — vol_carry (short-vol) is a DIFFERENT-crash diversifier, so de-concentrating it must not
+    # zero it. Override per-sleeve with GREYLINE_<SLEEVE>_RISK_FLOOR_PCT.
+    RISK_FLOOR_PCT = {"vol_carry": 5.0}
+
+    @classmethod
+    def _risk_floor(cls, sleeve):
+        s = cls._canon(sleeve)
+        raw = getenv("GREYLINE_%s_RISK_FLOOR_PCT" % s.upper(), "")
+        try:
+            if str(raw).strip():
+                return max(0.0, float(raw))
+        except (TypeError, ValueError):
+            pass
+        return cls.RISK_FLOOR_PCT.get(s, 0.0)
+
+    @classmethod
+    def _risk_trim(cls):
+        """The stepped, floored, DOWN-ONLY risk-concentration overrides written by
+        SleeveBudgetAutoApplyEngine (override file 'risk_trim' map) — the glide that de-risks an
+        over-concentrated sleeve toward risk-parity. Read-only; empty if none/unreadable."""
+        try:
+            d = json.loads(cls.OVERRIDE_FILE.read_text())
+            return {cls._canon(k): float(v) for k, v in (d.get("risk_trim") or {}).items()}
+        except Exception:
+            return {}
+
     @classmethod
     def pct(cls, sleeve):
         """Target percent-of-equity for a sleeve. Precedence: explicit env pin
-        (GREYLINE_<SLEEVE>_ALLOC_PCT) > risk-budget re-mix (only when GREYLINE_SLEEVE_RISK_BUDGET=true, and
-        never over a pin) > auto-applied override file > static default."""
+        (GREYLINE_<SLEEVE>_ALLOC_PCT) — but when risk-budget mode is on, a stepped DOWN-ONLY risk-trim may
+        still de-risk a pinned concentration hog toward risk-parity (never raise a pin) > risk-budget re-mix
+        of non-pinned armed sleeves to floored risk-parity > auto-applied override file > static default."""
         s = cls._canon(sleeve)
-        if cls._env_pinned(s):                      # explicit operator env pin ALWAYS wins, risk-mode or not
-            return cls._static_pct(s)
-        if cls._risk_budget_on():                   # gated: size non-pinned armed sleeves to risk parity
+        if cls._env_pinned(s):                      # explicit operator env pin is the CEILING
+            pin = cls._static_pct(s)
+            if cls._risk_budget_on():
+                trim = cls._risk_trim().get(s)      # pin reconciliation: a risk-trim may pull it DOWN only
+                if trim is not None and trim < pin:
+                    return max(0.0, min(100.0, trim))
+            return pin
+        if cls._risk_budget_on():                   # gated: size non-pinned armed sleeves to floored risk parity
             rp = cls._risk_parity_table().get(s)
             if rp is not None:
-                return max(0.0, min(100.0, rp))
+                return max(0.0, min(100.0, max(rp, cls._risk_floor(s))))
         return cls._static_pct(s)
 
     # ---- RISK-BUDGETED sizing (inverse-vol across sleeves) --------------------------------------

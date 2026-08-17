@@ -918,10 +918,16 @@ class BackgroundSchedulerService:
         # ENABLED. Evidence-only, capped per step, reversible. Places no orders.
         try:
             from app.services.sleeve_budget_autoapply_engine import SleeveBudgetAutoApplyEngine
-            sleeve_budget_autoapply = SleeveBudgetAutoApplyEngine().run_if_due(
-                market_open=bool(market_hours.get("is_regular_session")))
+            _aa = SleeveBudgetAutoApplyEngine()
+            mkt_open = bool(market_hours.get("is_regular_session"))
+            sleeve_budget_autoapply = _aa.run_if_due(market_open=mkt_open)
+            # RISK-PARITY de-concentration glide (gated by GREYLINE_SLEEVE_RISK_BUDGET): step an
+            # over-concentrated sleeve toward floored risk-parity, once/day, market-closed. Down-only,
+            # reversible. No-op unless the flag is on.
+            sleeve_risk_trim = _aa.run_risk_trim_if_due(market_open=mkt_open)
         except Exception as exc:
             sleeve_budget_autoapply = {"status": "AUTOAPPLY_DEGRADED", "error": repr(exc), "ran": False}
+            sleeve_risk_trim = {"status": "RISK_TRIM_DEGRADED", "error": repr(exc), "ran": False}
         cls._ckpt("options_and_autoapply")
 
         # Conditional-VRP short-premium (defined-risk iron condors). GATED OFF by default. When

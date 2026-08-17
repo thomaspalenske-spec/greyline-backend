@@ -41,6 +41,7 @@ class SleeveBudgetAutoApplyEngine:
     OVERRIDE_FILE = SleeveCapitalBudgetEngine.OVERRIDE_FILE
     HISTORY = Path("app/data/state/sleeve_pct_autoapply_history.jsonl")
     MARKER = Path("app/data/state/.sleeve_autoapply_last")
+    RISK_TRIM_MARKER = Path("app/data/state/.sleeve_risk_trim_last")
 
     @staticmethod
     def enabled():
@@ -169,6 +170,97 @@ class SleeveBudgetAutoApplyEngine:
                 "plan_token": p["plan_token"], "moves": p["moves"],
                 "new_overrides": p["new_overrides"], "resulting_total_pct": p["resulting_total_pct"]}
 
+    # ---- RISK-PARITY de-concentration (operationalizes the risk-budget sizing backtest) ----------------
+    # Down-only glide that pulls an over-concentrated sleeve (e.g. vol_carry: 20% of capital, 51% of book
+    # RISK) toward its FLOORED risk-parity share. Gated by GREYLINE_SLEEVE_RISK_BUDGET; pct() honors the
+    # written risk_trim only under that flag, and never above the pin (pin = ceiling). Fully reversible.
+
+    def _existing_risk_trim(self):
+        try:
+            d = json.loads(self.OVERRIDE_FILE.read_text())
+            return {str(k): float(v) for k, v in (d.get("risk_trim") or {}).items()}
+        except Exception:
+            return {}
+
+    def risk_trim_plan(self):
+        """The next stepped, DOWN-ONLY move toward each armed sleeve's FLOORED risk-parity target. READ-ONLY.
+        Active only when GREYLINE_SLEEVE_RISK_BUDGET is on. Caps the step per apply (MAX_STEP_PCT); floors a
+        crisis diversifier so it isn't zeroed; glides over days (steps from the current trimmed level, not
+        the pin) and stops once at target."""
+        on = SleeveCapitalBudgetEngine._risk_budget_on()
+        sleeves = (SleeveCapitalBudgetEngine.risk_budget_advisory() or {}).get("sleeves") or {}
+        existing = self._existing_risk_trim()
+        moves, at_target = [], []
+        for s, row in sleeves.items():
+            rp = self._f(row.get("risk_parity_pct"))
+            target = round(max(rp, SleeveCapitalBudgetEngine._risk_floor(s)), 2)
+            base = SleeveCapitalBudgetEngine._static_pct(s)        # pin/override/default = the ceiling
+            cur = existing.get(s, base)
+            drop = cur - target
+            if drop <= self.MIN_MOVE_PCT:                         # only de-risk a meaningful over-concentration
+                if s in existing:
+                    at_target.append({"sleeve": s, "pct": round(cur, 2), "target_pct": target})
+                continue
+            step = min(self.MAX_STEP_PCT, drop)
+            moves.append({"sleeve": s, "from_pct": round(cur, 2), "to_pct": round(cur - step, 2),
+                          "target_pct": target, "step_pct": round(-step, 2), "ceiling_pct": round(base, 2)})
+        new_trim = dict(existing)
+        for m in moves:
+            new_trim[m["sleeve"]] = m["to_pct"]
+        return {"active": on, "moves": moves, "at_target": at_target, "new_risk_trim": new_trim,
+                "max_step_pct": self.MAX_STEP_PCT,
+                "note": ("Down-only glide to floored risk-parity; pct() honors it only when "
+                         "GREYLINE_SLEEVE_RISK_BUDGET=true, never above the pin. Reversible via revert().")}
+
+    def apply_risk_trim(self, force=False):
+        """Write the next stepped risk-trim into the override file, PRESERVING the allocator 'pct' overrides.
+        GATED by GREYLINE_SLEEVE_RISK_BUDGET (or force). Never places an order. Reversible via revert()."""
+        if not (SleeveCapitalBudgetEngine._risk_budget_on() or force):
+            return {"status": "RISK_TRIM_DISABLED", "applied": False,
+                    "note": "GREYLINE_SLEEVE_RISK_BUDGET is not true (pass force=true to preview-apply)"}
+        p = self.risk_trim_plan()
+        if not p["moves"]:
+            return {"status": "RISK_TRIM_NO_MOVES", "applied": False, "plan": p}
+        try:
+            d = json.loads(self.OVERRIDE_FILE.read_text()) if self.OVERRIDE_FILE.exists() else {}
+        except Exception:
+            d = {}
+        d["risk_trim"] = p["new_risk_trim"]
+        d.setdefault("pct", d.get("pct") or {})               # keep any allocator overrides intact
+        d["risk_trim_applied_at"] = datetime.utcnow().isoformat()
+        try:
+            self.OVERRIDE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            self.OVERRIDE_FILE.write_text(json.dumps(d, indent=2))
+            with open(self.HISTORY, "a") as f:
+                f.write(json.dumps({"applied_at": d["risk_trim_applied_at"], "source": "risk_trim",
+                                    "risk_trim": p["new_risk_trim"], "moves": p["moves"]}) + "\n")
+        except Exception as e:
+            return {"status": "RISK_TRIM_WRITE_FAILED", "applied": False, "error": str(e)[:120], "plan": p}
+        return {"status": "RISK_TRIM_APPLIED", "applied": True, "moves": p["moves"],
+                "new_risk_trim": p["new_risk_trim"]}
+
+    def run_risk_trim_if_due(self, market_open):
+        """Scheduler hook: advance the risk-trim glide at most ONCE per trading day, market CLOSED only.
+        Gated by GREYLINE_SLEEVE_RISK_BUDGET. Best-effort."""
+        if not SleeveCapitalBudgetEngine._risk_budget_on():
+            return {"status": "RISK_TRIM_DISABLED", "ran": False}
+        if market_open:
+            return {"status": "RISK_TRIM_DEFERRED_MARKET_OPEN", "ran": False}
+        today = self._today()
+        try:
+            if today and self.RISK_TRIM_MARKER.read_text().strip() == today:
+                return {"status": "RISK_TRIM_ALREADY_RAN_TODAY", "ran": False, "date": today}
+        except Exception:
+            pass
+        res = self.apply_risk_trim()
+        try:
+            self.RISK_TRIM_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            self.RISK_TRIM_MARKER.write_text(today or "")
+        except Exception:
+            pass
+        res["ran"] = True
+        return res
+
     def revert(self):
         """Full revert: remove the override file so every sleeve falls back to its env/default pct."""
         try:
@@ -213,7 +305,12 @@ class SleeveBudgetAutoApplyEngine:
         return {"timestamp": datetime.utcnow().isoformat(), "enabled": self.enabled(),
                 "max_step_pct": self.MAX_STEP_PCT, "min_move_pct": self.MIN_MOVE_PCT,
                 "active_overrides": self._existing_overrides(),
+                "active_risk_trim": self._existing_risk_trim(),
                 "plan_preview": self.plan(),
+                "risk_trim_plan": self.risk_trim_plan(),
+                "risk_budget_mode": SleeveCapitalBudgetEngine._risk_budget_on(),
                 "note": ("GATED OFF by default. Steps the sleeve %-of-equity budgets toward the measured "
                          "allocation, evidence-only, capped per apply, reversible (revert clears the "
-                         "override file). An explicit GREYLINE_<SLEEVE>_ALLOC_PCT env pin always wins.")}
+                         "override file). An explicit GREYLINE_<SLEEVE>_ALLOC_PCT env pin always wins — except "
+                         "a DOWN-only risk-trim (GREYLINE_SLEEVE_RISK_BUDGET) may de-risk a pinned "
+                         "concentration hog toward floored risk-parity.")}

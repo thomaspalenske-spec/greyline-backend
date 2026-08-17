@@ -25,6 +25,7 @@ _EXEMPT_MODULES = {
     "test_schema_audit",               # drives every live route (needs real env)
     "test_end_to_end_trade_readiness", # audits the LIVE trade-firing chain (real data + broker reads)
     "test_risk_budget_sizing_backtest",# reads the real historical CSVs (2013+ crash-year coverage)
+    "test_risk_budget_operationalize", # reads the real historical CSVs (advisory vols for the glide plan)
 }
 
 

@@ -31,3 +31,19 @@ def sleeve_budget_autoapply_apply(force: bool = False, plan_token: str = None):
 def sleeve_budget_autoapply_revert():
     """Full revert: clear the override file so every sleeve falls back to its env/default pct."""
     return SleeveBudgetAutoApplyEngine().revert()
+
+
+@router.get("/risk-budget-trim")
+def risk_budget_trim_preview():
+    """READ-ONLY dry-run of the risk-parity de-concentration glide: the next capped, DOWN-only step that
+    would pull an over-concentrated sleeve toward its floored risk-parity share. Active only when
+    GREYLINE_SLEEVE_RISK_BUDGET is on (the backtest evidence for flipping it is /risk-budget-sizing-backtest)."""
+    return SleeveBudgetAutoApplyEngine().risk_trim_plan()
+
+
+@router.post("/risk-budget-trim/apply")
+def risk_budget_trim_apply(force: bool = False):
+    """Apply one capped DOWN-only risk-trim step (preserves allocator overrides; places no order; reversible
+    via /sleeve-budget-autoapply/revert). No-op unless GREYLINE_SLEEVE_RISK_BUDGET is on, or ?force=true for
+    a deliberate operator preview-apply."""
+    return SleeveBudgetAutoApplyEngine().apply_risk_trim(force=force)
