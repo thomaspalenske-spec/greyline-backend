@@ -76,7 +76,7 @@ class TransactionLedgerEngine:
             if r.get("opened_at"):
                 cr = self._f(r.get("credit_total"))
                 ev.append({"ts": r["opened_at"], "sleeve": sleeve, "symbol": r.get("symbol"),
-                           "action": "OPEN", "quantity": qty,
+                           "action": "OPEN", "quantity": qty, "credit_total": cr,
                            "detail": (f"condor · credit ${cr:+.0f}" if cr is not None else "condor"),
                            "pnl": None})
             if str(r.get("status")).upper() == "CLOSED" and r.get("closed_at"):
@@ -250,7 +250,8 @@ class TransactionLedgerEngine:
         for e in evs:
             k = (e.get("sleeve"), e.get("symbol"))
             a = pos.setdefault(k, {"sleeve": e.get("sleeve"), "symbol": e.get("symbol"),
-                                   "bought": 0, "sold": 0, "fills": 0, "_pnl": 0.0, "_pnl_rows": 0})
+                                   "bought": 0, "sold": 0, "fills": 0, "_pnl": 0.0, "_pnl_rows": 0,
+                                   "_credit": 0.0, "_has_credit": False})
             try:
                 q = abs(int(e.get("quantity"))) if e.get("quantity") is not None else 0
             except (TypeError, ValueError):
@@ -263,9 +264,13 @@ class TransactionLedgerEngine:
             if e.get("pnl") is not None:
                 a["_pnl"] += e["pnl"]
                 a["_pnl_rows"] += 1
+            if e.get("action") == "OPEN" and e.get("credit_total") is not None:
+                a["_credit"] += e["credit_total"]      # net credit received (condors) — the honest entry
+                a["_has_credit"] = True
         out = []
         for a in pos.values():
             a["realized_pnl"] = round(a.pop("_pnl"), 2) if a.pop("_pnl_rows") else None
+            a["credit_total"] = round(a.pop("_credit"), 2) if a.pop("_has_credit") else None
             out.append(a)
         # losers first (most negative), names with a P&L before names without, then most fills
         out.sort(key=lambda r: (r["realized_pnl"] is None, r["realized_pnl"] if r["realized_pnl"] is not None else 0,
@@ -338,6 +343,15 @@ class TransactionLedgerEngine:
                 share = round(upnl - running, 2) if i == len(net_rows) - 1 else round(upnl * w / tot, 2)
                 running += share
                 row["unrealized_pnl"] = share
+                # A short condor has no single price, but it DOES have an honest entry↔current pair:
+                # entry = the net credit received; current = what it now costs to close = credit − unrl.
+                # These reconcile by construction (entry − current == the P&L shown), so the columns can be
+                # verified by eye — unlike a lone option-leg mark, which read as a contradiction.
+                cr = self._f(row.get("credit_total"))
+                if cr is not None and str(row.get("sleeve") or "").lower() in ("vrp_condor", "earnings"):
+                    row_credit = round(cr * w / tot, 2)
+                    row["entry_price"] = row_credit
+                    row["current_price"] = round(row_credit - share, 2)
         return cleaned
 
     def rolling(self):
