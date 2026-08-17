@@ -85,10 +85,23 @@ def test_degraded_orders_read_fails_closed(monkeypatch):
 
 
 def test_buy_with_no_price_is_blocked(monkeypatch):
+    # a MARKET buy (no limit) is now priced off a live quote to size-check; it is only blocked if that
+    # quote ALSO fails (genuinely unpriceable) — then fail-closed as before.
     _env(monkeypatch)
+    monkeypatch.setattr(CAP, "_live_price", classmethod(lambda cls, s: 0.0))   # quote unavailable
     book = _Book([_pos("USMV", 1, 100.0)])
     chk = CAP.check_equity_buy("SPLV", 10, None, book)
     assert chk["allowed"] is False and "no usable price" in chk["reason"]
+
+
+def test_market_buy_is_priced_off_a_live_quote(monkeypatch):
+    # momentum's validated entry is MARKET (no limit price) — the cap must size-check it off a live quote,
+    # not fail-closed. 10 x $50 = $500, well under the cap -> allowed.
+    _env(monkeypatch)
+    monkeypatch.setattr(CAP, "_live_price", classmethod(lambda cls, s: 50.0))
+    book = _Book([_pos("USMV", 1, 100.0)])
+    chk = CAP.check_equity_buy("SPLV", 10, None, book)
+    assert chk["allowed"] is True and chk["order_usd"] == 500.0
 
 
 def test_disabled_flag_allows_everything(monkeypatch):

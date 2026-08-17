@@ -124,6 +124,18 @@ class BookDeploymentCapEngine:
         return round(deployed, 2), True
 
     @classmethod
+    def _live_price(cls, symbol):
+        """Best-available live price to SIZE-CHECK a market buy (no limit price passed). REST quote, so it
+        works even with the streaming feed disabled. 0.0 on any failure -> caller then fail-closes."""
+        try:
+            from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+            q = TradeStationQuoteLiveEngine().get_quote(symbol) or {}
+            row = ((((q.get("response_json") or {}).get("Quotes") or [{}]) or [{}])[0]) or {}
+            return cls._f(row.get("Last")) or cls._f(row.get("Close")) or cls._f(row.get("Ask")) or 0.0
+        except Exception:
+            return 0.0
+
+    @classmethod
     def check_equity_buy(cls, symbol, quantity, price, booking):
         """Decide whether an equity BUY may proceed. allowed=False blocks it. Fail closed on any
         unverifiable input (degraded read, or a buy with no usable price)."""
@@ -134,10 +146,15 @@ class BookDeploymentCapEngine:
         _tb = cls._tbill_symbol()
         if _tb and str(symbol or "").upper() == _tb:
             return {"allowed": True, "reason": "T-bill cash sweep — not risk deployment"}
-        order_val = abs(cls._f(quantity)) * cls._f(price)
+        px = cls._f(price)
+        if px <= 0:
+            # a MARKET buy carries no limit price — size-check it off a live quote (momentum's validated
+            # entry is intentionally MARKET, so this is the normal path, not an error). Only if the quote
+            # ALSO fails do we fail-closed below.
+            px = cls._live_price(symbol)
+        order_val = abs(cls._f(quantity)) * px
         if order_val <= 0:
-            # a BUY with no usable price can't be size-checked -> block (fail closed). The rebalance
-            # sleeves always pass a limit price, so this only fires on a genuinely unpriced buy.
+            # genuinely no price (no limit AND the quote lookup failed) -> can't size-check -> block (fail closed)
             return {"allowed": False, "reason": "book cap: buy has no usable price to size-check (blocked)"}
         deployed, ok = cls.committed_long_equity_usd(booking)
         if not ok:
