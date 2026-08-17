@@ -275,6 +275,40 @@ class CondorShadowEngine:
                              f"{round(100*wins/n,1) if n else 0}%"),
         }
 
+    def open_positions(self):
+        """Per-OPEN-condor rows for the dashboard: entry credit -> current mark -> unrealized P/L, using the
+        condor's ACTUAL contract quantity × the 100 options multiplier (this is a real size, not the shadows'
+        hypothetical 100-share lot). Short premium: P/L = (entry credit − current value) × 100 × qty; % is the
+        share of the entry credit captured. Marked to UW mid — a condor whose legs can't be quoted this cycle
+        is returned UNPRICED (current/P&L None), never fabricated."""
+        today = self._et_date()
+        try:
+            today_d = date.fromisoformat(today) if today else None
+        except (ValueError, TypeError):
+            today_d = None
+        rows = []
+        for e in self._entries():
+            if e.get("status") != "OPEN":
+                continue
+            credit = self._f(e.get("entry_credit_mid"))
+            qty = int(e.get("quantity") or 1)
+            cv = self._current_value(e.get("legs") or {})
+            try:
+                dte = (date.fromisoformat(e["expiration"]) - today_d).days if today_d else None
+            except Exception:
+                dte = None
+            row = {"symbol": e.get("symbol"), "sleeve": e.get("sleeve"), "expiration": e.get("expiration"),
+                   "contracts": qty, "entry_credit": round(credit, 3) if credit else None,
+                   "iv_rank": e.get("iv_rank"), "dte": dte}
+            if cv is not None and credit:
+                row["current_value"] = round(cv, 3)
+                row["pnl_dollars"] = round((credit - cv) * 100 * qty, 2)     # short premium, real multiplier×qty
+                row["pnl_pct"] = round((credit - cv) / credit * 100, 2)      # % of entry credit captured
+            rows.append(row)
+        rows.sort(key=lambda r: (r.get("dte") if r.get("dte") is not None else 9999,
+                                 -abs(r.get("pnl_dollars") or 0)))            # soonest expiry, then most material
+        return rows
+
     @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def report(self):
         entries = self._entries()
@@ -292,6 +326,7 @@ class CondorShadowEngine:
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
             **overall,
+            "open_positions": self.open_positions(),   # per-condor rows for the card (entry->mark->P/L)
             "by_sleeve": by_sleeve,
             "sleeve_errors": sleeve_errors,
             "degraded": bool(sleeve_errors),

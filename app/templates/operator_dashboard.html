@@ -739,9 +739,9 @@ th {
         <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>Sleeve</th><th>Open</th><th>Closed</th><th>Realized</th><th>Win %</th><th>Verdict</th></tr>
+              <tr><th>Symbol</th><th>Contracts</th><th>Sleeve</th><th>Entry (credit)</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>DTE</th></tr>
             </thead>
-            <tbody id="condor_shadow_body"><tr><td colspan="6"><span class="sub">Loading…</span></td></tr></tbody>
+            <tbody id="condor_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1568,33 +1568,34 @@ async function refreshCondorShadow() {
   const summary = document.getElementById("cs_summary");
   try {
     const d = await getJSON("/condor-shadow");
-    const bs = d.by_sleeve || {};
+    const pos = d.open_positions || [];
+    const measuring = d.status === "CONDOR_SHADOW_MEASURING";
     if (summary) {
       summary.textContent = d.degraded
         ? "degraded — a sleeve threw during candidate generation (verdict may be biased)"
-        : `${d.open_condors || 0} open · ${d.closed_condors || 0} closed · zero-capital, priced off Unusual Whales`;
+        : `${d.open_condors || 0} open · ${d.closed_condors || 0}/${d.min_closed} closed · realized ${fmtMoney(d.realized_pnl || 0)} · ${measuring ? ("win " + (d.win_rate_pct != null ? d.win_rate_pct + "%" : "—")) : "accumulating"} · priced off Unusual Whales`;
     }
-    const label = { vrp: "VRP (single-name)", earnings: "Earnings-vol",
-                    index_vrp: "Index VRP (XSP/QQQ/IWM)", commodity_vrp: "Commodity VRP (GLD)",
-                    energy_vrp: "Energy VRP (USO)", rates_vrp: "Rates VRP (TLT)",
-                    crypto_vrp: "Crypto VRP (IBIT)" };
-    const rows = ["vrp", "earnings", "index_vrp", "commodity_vrp", "energy_vrp", "rates_vrp", "crypto_vrp"].map(k => {
-      const m = bs[k] || {};
-      const r = m.realized_pnl;
-      const rcls = r == null ? "" : (r >= 0 ? "green" : "red");
-      const measuring = m.status === "CONDOR_SHADOW_MEASURING";
+    const label = { vrp: "VRP", earnings: "Earnings", index_vrp: "Index VRP", commodity_vrp: "Commodity VRP",
+                    energy_vrp: "Energy VRP", rates_vrp: "Rates VRP", crypto_vrp: "Crypto VRP" };
+    if (!pos.length) { body.innerHTML = `<tr><td colspan="8"><span class="sub">${d.verdict || "no open shadow condors right now"}</span></td></tr>`; return; }
+    const signedD = (v) => (v > 0 ? "+" : "") + fmtMoney(v);   // fmtMoney renders a leading − for negatives
+    // Per-OPEN-condor: entry credit → current mark → unrealized P/L (short premium, real qty × 100 multiplier).
+    body.innerHTML = pos.map(p => {
+      const hasPnl = p.pnl_pct != null;
+      const plCls = hasPnl ? (p.pnl_pct > 0 ? "green" : (p.pnl_pct < 0 ? "red" : "")) : "";
       return `<tr>
-        <td><strong>${label[k]}</strong></td>
-        <td>${m.open_condors != null ? m.open_condors : "—"}</td>
-        <td>${m.closed_condors != null ? m.closed_condors : 0}/${m.min_closed != null ? m.min_closed : "—"}</td>
-        <td><span class="${rcls}">${r != null ? (r >= 0 ? "+" : "") + fmtMoney(r) : "—"}</span></td>
-        <td>${m.win_rate_pct != null ? m.win_rate_pct + "%" : "—"}</td>
-        <td><span class="sub"><span class="badge ${measuring ? "open" : "neutral"}">${measuring ? "measuring" : "accumulating"}</span> ${m.verdict || ""}</span></td>
+        <td><strong>${p.symbol}</strong> <span class="sub">${p.expiration || ""}</span></td>
+        <td>${p.contracts != null ? p.contracts : "—"}</td>
+        <td><span class="sub">${label[p.sleeve] || p.sleeve || "—"}</span></td>
+        <td>${p.entry_credit != null ? fmtMoney(p.entry_credit) : "<span class='sub'>—</span>"}</td>
+        <td>${p.current_value != null ? fmtMoney(p.current_value) : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${signedD(p.pnl_dollars)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${fmtPct(p.pnl_pct)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${p.dte != null ? p.dte : "—"}</td>
       </tr>`;
     }).join("");
-    body.innerHTML = rows;
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="6"><span class="red">Condor shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+    body.innerHTML = `<tr><td colspan="8"><span class="red">Condor shadow unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
   }
 }
 
