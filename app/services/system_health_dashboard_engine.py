@@ -5,10 +5,12 @@ from app.services.background_scheduler_service import BackgroundSchedulerService
 from app.services.learning_analytics_engine import LearningAnalyticsEngine
 from app.services.adaptive_weight_governance_engine import AdaptiveWeightGovernanceEngine
 from app.services.immutable_audit_ledger_engine import ImmutableAuditLedgerEngine
+from app.services.ttl_cache import ttl_cached
 
 
 class SystemHealthDashboardEngine:
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def status(self):
         broker = TradeStationTokenMaintenanceEngine().evaluate()
         scheduler = BackgroundSchedulerService.status()

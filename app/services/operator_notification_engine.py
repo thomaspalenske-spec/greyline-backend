@@ -2,6 +2,7 @@ import json
 from app.services.time_utils import parse_utc
 from datetime import datetime, timedelta
 from pathlib import Path
+from app.services.ttl_cache import ttl_cached
 
 
 class OperatorNotificationEngine:
@@ -109,6 +110,7 @@ class OperatorNotificationEngine:
             "status": "OPERATOR_NOTIFICATION_RECORDED",
         }
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def unread(self, limit=25):
         cutoff = datetime.utcnow() - timedelta(hours=24)
         rows = []

@@ -7,6 +7,7 @@ from app.services.dynamic_tp_management_engine import DynamicTPManagementEngine
 from app.services.tp_state_tracking_engine import TPStateTrackingEngine
 from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
 from app.services.thesis_integrity_engine import ThesisIntegrityEngine
+from app.services.ttl_cache import ttl_cached
 
 
 class OptionsAccountDashboardEngine:
@@ -356,6 +357,7 @@ class OptionsAccountDashboardEngine:
             }
 
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def get_dashboard(self):
         trades = []
 

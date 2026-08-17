@@ -1,10 +1,12 @@
 from datetime import datetime
 
 from app.services.decision_learning_memory_engine import DecisionLearningMemoryEngine
+from app.services.ttl_cache import ttl_cached
 
 
 class LearningAnalyticsEngine:
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def summarize(self, limit=500):
         history = DecisionLearningMemoryEngine().get_history(limit=limit)
         events = history.get("events", [])

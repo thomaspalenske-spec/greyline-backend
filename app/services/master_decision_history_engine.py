@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from app.services.ttl_cache import ttl_cached
 
 
 class MasterDecisionHistoryEngine:
@@ -8,6 +9,7 @@ class MasterDecisionHistoryEngine:
     def __init__(self):
         self.log_file = Path("app/data/master_decisions/master_decision_events.jsonl")
 
+    @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def get_history(self, limit=20):
         if not self.log_file.exists():
             return {
