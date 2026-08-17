@@ -109,6 +109,13 @@ def _isolate_os_environ():
     reload re-populates the operator's .env values (armed sleeve flags, alloc pins) and they persist into
     later tests, flipping their expectations. Restoring the snapshot contains those direct mutations."""
     saved = dict(os.environ)
+    # Strip operator arming flags DIRECTLY from os.environ (not via monkeypatch, which fixture ordering can
+    # undo): they live in the operator's .env — momentum was re-armed 2026-08-17 — so they're present at
+    # session start and a mid-run reload_env re-adds them. Removing them here guarantees every test body
+    # sees them OFF unless the test sets them itself; the snapshot restore below brings them back after.
+    for _k in ("GREYLINE_MOMENTUM_ENABLED", "GREYLINE_MOMENTUM_ALLOC_PCT",
+               "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_BROKER_PROTECTIVE_STOPS"):
+        os.environ.pop(_k, None)
     yield
     os.environ.clear()
     os.environ.update(saved)

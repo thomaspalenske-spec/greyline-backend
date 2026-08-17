@@ -32,7 +32,9 @@ def test_constant_signal_flagged_as_data_quality(tmp_path):
         _snap("NVDA", "2026-07-01T10:00:00", 100, 0),
         _snap("NVDA", "2026-07-01T11:00:00", 100, 0),
     ])
-    with patch(f"{MOD}.getenv", return_value=None):
+    # Simulate no UW key by patching the ACTUAL source validate() reads (env_reload.uw_api_key) — patching
+    # this module's getenv doesn't reach it, and the real .env has a key, so the warning never fired.
+    with patch("app.services.env_reload.uw_api_key", return_value=""):
         r = eng.validate()
     assert any("CONSTANT_OR_ONE_SIDED" in w for w in r["data_quality_warnings"])
     assert any("KEY_NOT_CONFIGURED" in w for w in r["data_quality_warnings"])

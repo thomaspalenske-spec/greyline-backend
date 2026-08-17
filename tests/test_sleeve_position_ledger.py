@@ -26,21 +26,30 @@ def test_effective_held_disarmed_returns_broker(monkeypatch, tmp_path):
     assert L.effective_held("trend", "QQQM", 8) == 8
 
 
+def _mock_others(monkeypatch, held_by_others):
+    """Stub the CONFIRMED other-sleeve holds that effective_held subtracts. The drift-immune design
+    (2026-08-06) reads these from SleeveTradeLedgerEngine.held_qty_excluding(exclude, symbol) — the fresh
+    broker total minus what OTHER sleeves confirmed-hold — NOT this sleeve's own record()."""
+    import app.services.sleeve_trade_ledger_engine as stl
+    monkeypatch.setattr(stl.SleeveTradeLedgerEngine, "held_qty_excluding",
+                        lambda self, exclude, sym, rows=None: held_by_others.get(exclude, 0))
+
+
 def test_effective_held_armed_returns_own_not_broker(monkeypatch, tmp_path):
     _iso(monkeypatch, tmp_path)
     monkeypatch.setenv("GREYLINE_PER_SLEEVE_SIZING", "true")
-    L.record("trend", "QQQM", 5)
-    # broker total is 8 (trend 5 + xs_momentum 3), but trend sizes against its OWN 5 -> won't touch the 3
-    assert L.effective_held("trend", "QQQM", 8) == 5
-    assert L.effective_held("xs_momentum", "QQQM", 8) == 0   # xs_momentum has recorded nothing yet
+    # broker holds 8 QQQM but 3 are xs_momentum's (confirmed) -> trend sizes against its OWN 5, not 8
+    _mock_others(monkeypatch, {"trend": 3})
+    assert L.effective_held("trend", "QQQM", 8) == 5          # 8 broker - 3 held by other sleeves
+    assert L.effective_held("xs_momentum", "QQQM", 8) == 8    # no OTHER sleeve holds it -> full broker total
 
 
 def test_overlapping_sleeves_do_not_collide(monkeypatch, tmp_path):
     _iso(monkeypatch, tmp_path)
     monkeypatch.setenv("GREYLINE_PER_SLEEVE_SIZING", "true")
-    L.record("trend", "QQQM", 5)
-    L.record("xs_momentum", "QQQM", 3)
-    # each sees only its own; the broker holds the sum (8) but neither would liquidate the other's shares
+    # broker holds 8 QQQM = trend 5 + xs_momentum 3 (confirmed); each sizes against its OWN share so neither
+    # would liquidate the other's shares
+    _mock_others(monkeypatch, {"trend": 3, "xs_momentum": 5})
     assert L.effective_held("trend", "QQQM", 8) == 5
     assert L.effective_held("xs_momentum", "QQQM", 8) == 3
 

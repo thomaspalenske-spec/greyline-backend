@@ -79,6 +79,7 @@ def test_candidates_dedup_against_open(monkeypatch, tmp_path):
 def test_dryrun_respects_daily_limit(monkeypatch):
     monkeypatch.setenv("GREYLINE_EARNINGS_VOL_ENABLED", "true")
     eng = ENG()
+    eng._prc_cache = 10000.0   # set the defined-risk cap (0 in a bare test env: no equity + earnings 0% budget)
     monkeypatch.setattr(eng, "_candidates", lambda today=None: [
         {"ticker": t, "report_date": _iso(1), "days_to_report": 1, "iv_rank": 0.8, "implied_move_pct": 8}
         for t in ("AAA", "BBB", "CCC", "DDD")])
