@@ -752,9 +752,9 @@ th {
         <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>Name</th><th>Regime</th><th>Signal</th><th>Spot</th><th>Flip</th><th>Magnet</th><th>Put/Call Wall</th></tr>
+              <tr><th>Name</th><th>Regime</th><th>Signal</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Flip</th><th>Magnet</th><th>Put/Call Wall</th></tr>
             </thead>
-            <tbody id="gex_strategy_body"><tr><td colspan="7"><span class="sub">Loading…</span></td></tr></tbody>
+            <tbody id="gex_strategy_body"><tr><td colspan="10"><span class="sub">Loading…</span></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -765,7 +765,7 @@ th {
         <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>Name</th><th>Signal</th><th>Days→OPEX</th><th>Net Vanna</th><th>Net Charm</th><th>Entry</th><th>Spot</th><th>P/L $</th><th>P/L %</th><th>Reason</th></tr>
+              <tr><th>Name</th><th>Signal</th><th>Days→OPEX</th><th>Net Vanna</th><th>Net Charm</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Reason</th></tr>
             </thead>
             <tbody id="vanna_charm_body"><tr><td colspan="10"><span class="sub">Loading…</span></td></tr></tbody>
           </table>
@@ -1523,26 +1523,36 @@ async function refreshGexStrategy() {
       summary.textContent = `${open} open · ${active} live signal(s) · ${d.closed_trades || 0}/${d.min_closed} closed · ${measuring ? ("win " + d.win_rate_pct + "%") : "accumulating"}`;
     }
     if (!sigs.length) {
-      body.innerHTML = `<tr><td colspan="7"><span class="sub">${d.verdict || "no signal"}</span></td></tr>`;
+      body.innerHTML = `<tr><td colspan="10"><span class="sub">${d.verdict || "no signal"}</span></td></tr>`;
       return;
     }
+    // Merge in the live entry + unrealized P/L for names that are an OPEN fade (engine-supplied, side-aware).
+    const openByName = {};
+    (d.open_positions || []).forEach(o => { openByName[o.name] = o; });
+    const signed = (v) => (v > 0 ? "+" : "") + fmtMoney(v);   // fmtMoney renders a leading − for negatives
     body.innerHTML = sigs.map(s => {
       const act = s.action || "FLAT";
       const badge = act === "LONG" ? "open" : (act === "SHORT" ? "unmanaged" : "neutral");
       const longG = s.regime === "long_gamma";
       const regCls = longG ? "green" : "";
+      const o = openByName[s.name];
+      const hasPnl = o && o.pnl_pct != null;
+      const plCls = hasPnl ? (o.pnl_pct > 0 ? "green" : (o.pnl_pct < 0 ? "red" : "")) : "";
       return `<tr>
         <td><strong>${s.name}</strong></td>
         <td><span class="${regCls}">${s.regime || "—"}</span></td>
         <td><span class="badge ${badge}">${act}</span></td>
+        <td>${o && o.entry != null ? fmtMoney(o.entry) : "<span class='sub'>—</span>"}</td>
         <td>${s.spot != null ? fmtMoney(s.spot) : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${signed(o.pnl_per_share)}</span>` : "<span class='sub'>—</span>"}</td>
+        <td>${hasPnl ? `<span class="${plCls}">${fmtPct(o.pnl_pct)}</span>` : "<span class='sub'>—</span>"}</td>
         <td>${s.gamma_flip != null ? fmtMoney(s.gamma_flip) : "—"}</td>
         <td>${s.gamma_magnet != null ? fmtMoney(s.gamma_magnet) : "—"}</td>
         <td><span class="sub">${s.put_wall != null ? fmtMoney(s.put_wall) : "—"} / ${s.call_wall != null ? fmtMoney(s.call_wall) : "—"}</span></td>
       </tr>`;
     }).join("");
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="7"><span class="red">GEX strategy unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
+    body.innerHTML = `<tr><td colspan="10"><span class="red">GEX strategy unavailable — ${String(e).slice(0, 80)}</span></td></tr>`;
   }
 }
 

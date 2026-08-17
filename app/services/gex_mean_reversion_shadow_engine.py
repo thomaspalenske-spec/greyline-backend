@@ -287,13 +287,28 @@ class GexMeanReversionShadowEngine:
         n = len(rets)
         rigorous = _rigorous_verdict(rets, self.MIN_CLOSED)   # SAME bar the live court uses
         openp = self._load_open()
+        # Enrich each OPEN fade with its live mark + unrealized P/L (side-aware: LONG or SHORT) so the card
+        # can show entry -> current price and the running return. Reuse the signals' spots (no extra quote).
+        sigs = self.signals()
+        spot_by = {s.get("name"): s.get("spot") for s in sigs}
+        open_rows = []
+        for k, v in openp.items():
+            row = {"name": k, **v}
+            entry, spot, side = self._f(v.get("entry")), spot_by.get(k), v.get("side")
+            if entry and spot and entry > 0:
+                ret = (spot / entry - 1.0) if side == "LONG" else (entry / spot - 1.0)
+                row["mark"] = round(spot, 2)                   # current price (live spot)
+                row["pnl_per_share"] = round((spot - entry) if side == "LONG" else (entry - spot), 2)
+                row["pnl_pct"] = round(ret * 100, 2)           # gross unrealized return (signed by side)
+                row["net_pnl_pct"] = round((ret - self.COST_ROUNDTRIP) * 100, 2)
+            open_rows.append(row)
         base = {
             "timestamp": datetime.utcnow().isoformat(),
             "shadow_enabled": self.enabled(),
             "engine": "GexMeanReversionShadowEngine",
             "names": list(self.NAMES),
-            "open_positions": [{"name": k, **v} for k, v in openp.items()],
-            "signals": self.signals(),        # cached live per-name signal (drives the dashboard card)
+            "open_positions": open_rows,
+            "signals": sigs,                  # cached live per-name signal (drives the dashboard card)
             "closed_trades": n, "min_closed": self.MIN_CLOSED,
             "rigorous_verdict": rigorous,
             "params": {"wall_buffer": self.WALL_BUFFER, "stop_buffer": self.STOP_BUFFER,
