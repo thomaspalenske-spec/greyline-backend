@@ -481,30 +481,6 @@ th {
     box-shadow: 0 0 10px rgba(250, 204, 21, .25);
   }
 
-.commander-summary {
-  margin-bottom: 14px;
-  border: 1px solid rgba(53, 208, 111, .35);
-  box-shadow: 0 0 22px rgba(53, 208, 111, .08);
-}
-
-.commander-headline {
-  font-size: clamp(22px, 2vw, 34px);
-  font-weight: 950;
-  margin-top: 6px;
-}
-
-.commander-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(160px, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.commander-status {
-  font-weight: 950;
-}
-
-
 /* ===== OPERATOR COCKPIT BANNER ===== */
 .cockpit-banner {
   margin-bottom: 14px;
@@ -1089,38 +1065,6 @@ async function renderEquityCurve() {
 async function ackPositionAlert(tradeId) {
   await fetch(`/position-alerts/ack/${encodeURIComponent(tradeId)}`, { method: "POST" });
   refreshAll();
-}
-
-
-async function refreshCommanderSummary() {
-  try {
-    const payload = await getJSON("/operator-commander-summary");
-    const summary = payload.operator_summary || {};
-
-    setText("commander_headline", summary.headline || "--");
-    setText("commander_status", summary.status || "--");
-    setText("commander_mode", summary.operating_mode || "--");
-    setText("commander_reliability", `${summary.reliability_score ?? "--"}/100`);
-    setText("commander_candidate", `${summary.top_symbol || "--"} ${summary.top_option_type || ""}`);
-    setText("commander_score", summary.top_score ?? "--");
-    setText("commander_unread", summary.unread_notifications ?? "--");
-
-    const headline = document.getElementById("commander_headline");
-    const status = document.getElementById("commander_status");
-    if (headline && status) {
-      headline.className = "commander-headline " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
-      status.className = "commander-status " + (summary.status === "GREEN" ? "green" : summary.status === "RED" ? "red" : "yellow");
-    }
-
-    // side_mode is NOT derived here: it's the sidebar execution-mode indicator that refreshAll owns
-    // (from the authoritative scheduler/ledger execution flags) and sets AFTER this runs. Deriving it a
-    // second time here — off different fields — only risked a flicker/disagreement before refreshAll
-    // overwrote it. Engines/one owner decide, displays render.
-  } catch (e) {
-    setText("commander_headline", "Commander summary unavailable.");
-    const headline = document.getElementById("commander_headline");
-    if (headline) headline.className = "commander-headline yellow";
-  }
 }
 
 
@@ -1788,7 +1732,6 @@ async function refreshAll() {
   setText("last_update", "Fetched: " + new Date().toLocaleTimeString());
   checkDashboardVersion();  // fire-and-forget: self-reload once if new dashboard code was deployed
   await refreshCockpitBanner();
-  await refreshCommanderSummary();
   refreshRealityGuard();    // fire-and-forget: must never stall the main loop
   refreshTransactions();    // fire-and-forget: rolling 2-day transaction ledger
   refreshOpportunityBoard();// fire-and-forget: aggregator, never streams chains, never stalls

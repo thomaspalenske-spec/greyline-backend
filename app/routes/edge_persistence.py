@@ -28,9 +28,11 @@ def edge_proof_maturity():
     return EdgePersistenceEngine().proof_maturity()
 
 
-@router.get("/execution-cost")
-def execution_cost():
-    """Per-sleeve round-trip spread cost (live) — pair with /edge-persistence: cost > edge = retire."""
+@router.get("/sleeve-execution-cost")
+def sleeve_execution_cost():
+    """Per-sleeve round-trip spread cost (live) — pair with /edge-persistence: cost > edge = retire.
+    Path renamed from /execution-cost, which collided with the options round-trip endpoint in
+    execution_cost.py (registered first, so this handler was permanently shadowed/unreachable)."""
     return ExecutionCostEngine().profile()
 
 
