@@ -143,11 +143,11 @@ class SleeveCapitalBudgetEngine:
                 }.get(s, [])
 
     @classmethod
-    def _basket_vol(cls, symbols):
-        """Annualized vol of the EQUAL-WEIGHT basket's daily returns over the trailing window (captures the
-        sleeve's own internal diversification). None if the data is missing/too short."""
+    def _basket_returns(cls, symbols):
+        """EQUAL-WEIGHT daily return series [(date, ret), ...] over the FULL common history of `symbols`.
+        The single source of truth for a sleeve's return stream — shared by the risk-budget vol calc and
+        the sizing backtest so both see exactly the same series. Empty list on missing/unreadable data."""
         import csv
-        import math
         series = {}
         for sym in symbols:
             try:
@@ -162,18 +162,25 @@ class SleeveCapitalBudgetEngine:
                         if c and c > 0:
                             closes.append((str(r.get("date"))[:10], c))
                 closes.sort()
-                rets = {closes[i][0]: closes[i][1] / closes[i - 1][1] - 1 for i in range(1, len(closes))}
-                series[sym] = rets
+                series[sym] = {closes[i][0]: closes[i][1] / closes[i - 1][1] - 1 for i in range(1, len(closes))}
             except Exception:
                 continue
         if not series:
+            return []
+        common = sorted(set.intersection(*[set(r.keys()) for r in series.values()]))
+        return [(d, sum(series[sym][d] for sym in series) / len(series)) for d in common]
+
+    @classmethod
+    def _basket_vol(cls, symbols):
+        """Annualized vol of the EQUAL-WEIGHT basket's daily returns over the trailing window (captures the
+        sleeve's own internal diversification). None if the data is missing/too short."""
+        import math
+        window = cls._basket_returns(symbols)[-cls._RISK_LOOKBACK:]
+        if len(window) < 30:
             return None
-        common = sorted(set.intersection(*[set(r.keys()) for r in series.values()]))[-cls._RISK_LOOKBACK:]
-        if len(common) < 30:
-            return None
-        basket = [sum(series[sym][d] for sym in series) / len(series) for d in common]
-        m = sum(basket) / len(basket)
-        var = sum((x - m) ** 2 for x in basket) / (len(basket) - 1)
+        vals = [r for _, r in window]
+        m = sum(vals) / len(vals)
+        var = sum((x - m) ** 2 for x in vals) / (len(vals) - 1)
         return math.sqrt(var) * math.sqrt(252)
 
     @classmethod
