@@ -103,6 +103,18 @@ def _flush_engine_caches():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_os_environ():
+    """Snapshot and restore os.environ around each test. reload_env() writes directly into os.environ (the
+    documented .env-precedence trap), NOT through monkeypatch — so without this a test that triggers a
+    reload re-populates the operator's .env values (armed sleeve flags, alloc pins) and they persist into
+    later tests, flipping their expectations. Restoring the snapshot contains those direct mutations."""
+    saved = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(saved)
+
+
+@pytest.fixture(autouse=True)
 def _flush_ttl_caches():
     """Flush EVERY process-wide in-memory cache before AND after each test so state can't leak across cases
     — the root of the suite's order-dependent failures (a test's cached equity/held-positions/report bleeds
