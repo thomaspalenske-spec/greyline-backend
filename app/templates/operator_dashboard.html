@@ -700,7 +700,7 @@ th {
     <section class="content">
       <div class="card" id="transactions_card">
         <div class="section-title">Transactions — Rolling 2 Days <span id="tx_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">Yesterday's completed session and today's running tally, from GreyLine's own sleeve ledgers. Rolls automatically at the open — the newest session becomes Today, Today becomes Yesterday, and anything older than the prior session drops off. No nightly shift job; it's a pure function of the ET date and the ledger timestamps.</div>
+        <div class="sub" style="margin-bottom:10px;">Today's running tally and the actual day before it (yesterday), from GreyLine's own sleeve ledgers. Pure function of the ET date and the ledger timestamps — no nightly shift job. If yesterday was a weekend or holiday with no trades, it simply shows 0 (it does not skip back to the last active session).</div>
         <table>
           <thead>
             <tr><th>Time (ET)</th><th>Sleeve</th><th>Symbol</th><th>Action</th><th>Qty</th><th>Detail</th><th>Realized &amp; Unrealized P&amp;L</th></tr>

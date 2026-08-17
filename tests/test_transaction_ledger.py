@@ -110,10 +110,17 @@ def test_by_position_nets_churn_into_one_line(monkeypatch):
 
 
 def test_empty_ledgers_are_safe(monkeypatch):
+    from datetime import datetime, timedelta
     monkeypatch.setattr(T, "_events", lambda self: [])
-    r = T().rolling()
+    e = T()
+    r = e.rolling()
     assert r["today"]["count"] == 0 and r["yesterday"]["count"] == 0
-    assert r["yesterday"]["date"] is None and r["status"] == "TRANSACTIONS_ROLLING_READY"
+    # yesterday is the ACTUAL calendar day before today (not None, not the last active session) — an empty
+    # ledger just shows 0 txn for both real dates.
+    today = datetime.now(e.MARKET_TZ).date()
+    assert r["today"]["date"] == today.isoformat()
+    assert r["yesterday"]["date"] == (today - timedelta(days=1)).isoformat()
+    assert r["status"] == "TRANSACTIONS_ROLLING_READY"
 
 
 def test_yesterday_held_rows_get_unrealized_and_phantoms_drop(monkeypatch):

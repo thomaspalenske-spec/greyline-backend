@@ -10,7 +10,7 @@ converted to America/New_York so the day buckets match the trading session the o
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -335,10 +335,9 @@ class TransactionLedgerEngine:
                 continue
 
         today = datetime.now(self.MARKET_TZ).date()
+        yday = today - timedelta(days=1)                               # the ACTUAL calendar day before today
         today_ev = [e for e in dated if e["_date"] == today]
-        prior_dates = sorted({e["_date"] for e in dated if e["_date"] < today}, reverse=True)
-        yday = prior_dates[0] if prior_dates else None                 # most recent PRIOR session (skips weekends)
-        yday_ev = [e for e in dated if yday and e["_date"] == yday]
+        yday_ev = [e for e in dated if e["_date"] == yday]             # empty if yesterday had no trades (e.g. a weekend)
 
         def pack(evs, day, running):
             evs = sorted(evs, key=lambda x: x["_sort"])
@@ -366,9 +365,9 @@ class TransactionLedgerEngine:
             "timestamp": datetime.utcnow().isoformat(),
             "today": pack(today_ev, today, running=True),
             "yesterday": pack(yday_ev, yday, running=False),
-            "note": ("Rolling 2-day window: today's running tally + the prior completed session. It rolls at "
-                     "the open automatically (pure function of the ET date + ledger timestamps) — older than "
-                     "the prior session drops off. Source: GreyLine's own sleeve ledgers."),
+            "note": ("Rolling 2 calendar days: today's running tally + the actual day before today (yesterday). "
+                     "Pure function of the ET date + ledger timestamps — if yesterday was a weekend/holiday with "
+                     "no trades it simply shows 0. Source: GreyLine's own sleeve ledgers."),
             "status": "TRANSACTIONS_ROLLING_READY",
         }
         # unrealized + phantom-drop are a CURRENT-BOOK reconciliation — they apply to every net-long row in
