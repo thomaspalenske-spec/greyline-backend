@@ -18,10 +18,22 @@ import threading
 import time
 from os import getenv
 
+# Registry of every decorator's cache dict, so tests can flush them ALL between cases. These caches are
+# process-wide and exclude `self` from the key, so without a flush one test's cached report() leaks into
+# the next — the root of a class of order-dependent test failures. clear_all() is called by an autouse
+# conftest fixture; production never calls it.
+_ALL_CACHES = []
+
+
+def clear_all():
+    for c in _ALL_CACHES:
+        c.clear()
+
 
 def ttl_cached(seconds=30.0, env_key=None):
     def deco(fn):
         cache = {}                 # (args_excl_self, kwargs) -> (monotonic_ts, result)
+        _ALL_CACHES.append(cache)
         lock = threading.Lock()
 
         def _ttl():

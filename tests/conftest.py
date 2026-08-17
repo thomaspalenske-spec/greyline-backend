@@ -12,6 +12,7 @@ A small allowlist of modules is EXEMPT — they audit the real repo (git/.env) o
 live routes, need the real working directory, and do not write unit-test data.
 """
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -49,14 +50,35 @@ def _data_sandbox(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def _disable_shadow_report_cache(monkeypatch):
-    """The shadow report() methods (condor/vanna/gex/system-health) share ONE process-wide TTL cache —
-    `self` is excluded from the key, so all instances/callers reuse one entry. In production that's a
-    fine 30s read cache; in tests it leaks one test's cached report into the next (a test writes a fresh
-    ledger, calls report(), and gets a prior test's result), which made report-shape assertions flaky by
-    order. Disable it so every test reads its own freshly-written state. (test_ttl_cache exercises the
-    decorator via its own GREYLINE_TEST_TTL key, so it is unaffected.)"""
-    monkeypatch.setenv("GREYLINE_SHADOW_CACHE_TTL", "0")
+def _flush_ttl_caches():
+    """Flush every PROCESS-WIDE in-memory cache before each test so state can't leak across cases — the root
+    of a class of order-dependent failures. Three vectors:
+      - @ttl_cached report() caches (self excluded from the key -> one test's report leaks to the next),
+      - the broker READ cache (kind -> held positions) and account SNAPSHOT cache: a test that opens
+        positions leaves them 'held' for the 5s TTL, so the next rebalance sees full slots and opens nothing.
+    Clearing (not disabling) keeps within-test caching intact; production never calls these."""
+    from app.services.ttl_cache import clear_all
+    clear_all()
+    try:
+        from app.services.tradestation_sim_booking_engine import TradeStationSimBookingEngine
+        TradeStationSimBookingEngine._READ_CACHE.clear()
+    except Exception:
+        pass
+    try:
+        import app.services.broker_account_view_engine as _bav
+        _bav._SNAPSHOT_CACHE.clear()
+    except Exception:
+        pass
+    try:
+        # SleeveCapitalBudgetEngine coalesces the equity/cash read in a class-level {t,equity,cash} cache
+        # (5s TTL). Left warm, a stubbed equity=20000 in one budget test reads the PRIOR test's cached
+        # equity, so budget_usd() = pct × wrong-equity. Invalidate it (t=0 forces a refetch).
+        from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine as _SCB
+        _SCB._cache["t"] = 0.0
+    except Exception:
+        pass
+    yield
+    clear_all()
 
 
 @pytest.fixture(autouse=True)
@@ -150,6 +172,24 @@ def _isolate_app_data(request, _data_sandbox):
     if module in _EXEMPT_MODULES:
         yield
         return
+
+    # RESET app/data to empty before each test. The sandbox is session-scoped for speed, so without this the
+    # persisted ledgers/state one test writes (e.g. a rebalance's opened positions) leak into the next — a
+    # test opens into "free slots", the next sees them already held and opens nothing. Wiping restores the
+    # fresh-empty app/data every engine expects at start, giving per-test isolation of mutable state without
+    # re-symlinking the whole repo per test. (app/data holds only real files here — nothing symlinked.)
+    data_dir = _data_sandbox / "app" / "data"
+    if data_dir.exists():
+        for child in data_dir.iterdir():
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                try:
+                    child.unlink()
+                except OSError:
+                    pass
+    else:
+        data_dir.mkdir(parents=True, exist_ok=True)
 
     original_cwd = Path.cwd()
     os.chdir(_data_sandbox)
