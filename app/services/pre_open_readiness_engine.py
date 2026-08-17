@@ -33,6 +33,28 @@ def _audit_ttl():
 class PreOpenReadinessEngine:
 
     HIST = Path("app/data/historical")
+    CYCLE_COST_HISTORY = Path("app/data/scheduler/cycle_cost_history.jsonl")
+    SCHEDULER_FRESH_SECONDS = 1200          # ~3-4 cycles; a recent persisted cycle proves the live scheduler runs
+
+    @classmethod
+    def _scheduler_alive_cross_process(cls):
+        """Cross-process scheduler liveness: age of the last cycle from the scheduler's OWN persisted output
+        (cycle_cost_history). thread_alive is process-local — false when this audit runs outside the service
+        — so a recent COMPLETE persisted cycle is the honest, process-independent proof. Returns (alive, detail)."""
+        try:
+            import json as _json
+            lines = [l for l in cls.CYCLE_COST_HISTORY.read_text().splitlines() if l.strip()]
+            if not lines:
+                return (False, "no persisted cycle history")
+            d = _json.loads(lines[-1])
+            ts = d.get("timestamp")
+            if not ts:
+                return (False, "last cycle row has no timestamp")
+            age = (datetime.utcnow() - datetime.fromisoformat(ts)).total_seconds()
+            ok = age <= cls.SCHEDULER_FRESH_SECONDS and str(d.get("status", "")).upper().endswith("COMPLETE")
+            return (ok, "last persisted cycle %.1f min ago (%s)" % (age / 60.0, d.get("status")))
+        except Exception as e:
+            return (False, "cycle-history read failed: %s" % (repr(e)[:60]))
     TREND_BASKET = ["QQQM", "IWM", "TLT", "GLDM", "EFA", "DBC"]
 
     @staticmethod
@@ -402,9 +424,18 @@ class PreOpenReadinessEngine:
                     f"scheduler alive but check the last cycle: last={last or 'n/a'}, "
                     f"consecutive_failures={consec}, last_error={st.get('last_error')}")
             else:
-                add("scheduler_liveness", "WARN",
-                    "no scheduler thread in THIS process — confirm on the live service via "
-                    "GET /background-scheduler/status (thread_alive there must be True)")
+                # thread_alive is PROCESS-LOCAL — false here just means the audit is running OUTSIDE the
+                # service. Don't cry wolf: confirm via the scheduler's OWN persisted output (a recent COMPLETE
+                # cycle proves the live service's scheduler is running, regardless of which process audits).
+                x_alive, x_detail = self._scheduler_alive_cross_process()
+                if x_alive:
+                    add("scheduler_liveness", "PASS",
+                        "scheduler alive (cross-process: %s; thread not in this audit process, which is fine)"
+                        % x_detail)
+                else:
+                    add("scheduler_liveness", "WARN",
+                        "no scheduler thread here AND %s — confirm on the live service via "
+                        "GET /background-scheduler/status (thread_alive must be True)" % x_detail)
         except Exception as e:
             add("scheduler_liveness", "WARN", f"scheduler status threw: {repr(e)[:80]}")
 
