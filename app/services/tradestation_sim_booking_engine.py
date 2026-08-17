@@ -13,6 +13,8 @@ fail-closed guard that requires BOTH:
 If either is false it raises — it is structurally incapable of touching the real account.
 """
 
+import threading
+import time
 from datetime import datetime
 from os import getenv
 
@@ -165,17 +167,58 @@ class TradeStationSimBookingEngine:
         return resp
 
     # --- reads (SIM account state) ----------------------------------------
+    # SHORT-TTL SINGLE-FLIGHT CACHE (2026-08-16): the dashboard auto-refreshes ~30 cards, several of which
+    # reach the edge court / opportunity board -> _broker_fills -> orders(). Each call did a FRESH uncached
+    # SSL request to TradeStation, so a refresh burst fired dozens of concurrent handshakes + JSON parses:
+    # it pegged a core (parsing) AND exhausted outbound TS connections -> the "broker read degraded" +
+    # deadman-starved banners. positions already had a cache (TradeStationPositionsLiveEngine); orders/balances
+    # did not. This collapses a burst into ONE fetch per kind: cache hits skip the network, and a lock
+    # single-flights the miss so N concurrent callers do 1 handshake, not N. Invalidated on every order place.
+    _READ_CACHE = {}                     # kind -> (monotonic_ts, result)
+    _READ_LOCK = threading.Lock()
+
+    @staticmethod
+    def _read_ttl():
+        # GREYLINE_BROKER_READ_CACHE_TTL=0 disables the cache (kill switch); default 5s — fresh enough for
+        # per-cycle reconcilers, short enough that a stampede can't; order placement invalidates immediately.
+        try:
+            return max(0.0, float(getenv("GREYLINE_BROKER_READ_CACHE_TTL", "5") or 5))
+        except (TypeError, ValueError):
+            return 5.0
+
+    @classmethod
+    def _invalidate_reads(cls):
+        """Drop the cached broker reads so a post-trade reader sees the new state, not a ≤TTL snapshot."""
+        try:
+            cls._READ_CACHE.clear()
+        except Exception:
+            pass
+
     def _read(self, kind):
-        acct = self._assert_sim()
-        url = f"{SIM_HOST}/v3/brokerage/accounts/{acct}/{kind}"
-        resp = self._request("GET", url)
-        return {
-            "timestamp": datetime.utcnow().isoformat(),
-            "broker": "TradeStation", "environment": "SANDBOX", "kind": kind,
-            "http_status": resp.status_code,
-            "ok": resp.status_code == 200,
-            "response_json": _safe_json(resp),
-        }
+        ttl = self._read_ttl()
+        if ttl > 0:
+            hit = self._READ_CACHE.get(kind)
+            if hit and (time.monotonic() - hit[0]) < ttl:
+                return hit[1]
+        # single-flight: serialize the miss so a dashboard burst does ONE handshake per kind, not N
+        with self._READ_LOCK:
+            if ttl > 0:
+                hit = self._READ_CACHE.get(kind)          # re-check: another thread may have just fetched
+                if hit and (time.monotonic() - hit[0]) < ttl:
+                    return hit[1]
+            acct = self._assert_sim()
+            url = f"{SIM_HOST}/v3/brokerage/accounts/{acct}/{kind}"
+            resp = self._request("GET", url)
+            result = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "broker": "TradeStation", "environment": "SANDBOX", "kind": kind,
+                "http_status": resp.status_code,
+                "ok": resp.status_code == 200,
+                "response_json": _safe_json(resp),
+            }
+            if ttl > 0 and result["ok"]:                  # never pin a transient failure in the cache
+                self._READ_CACHE[kind] = (time.monotonic(), result)
+            return result
 
     def balances(self):
         return self._read("balances")
@@ -261,8 +304,9 @@ class TradeStationSimBookingEngine:
         # now reports ok=False / order_id=None so callers can't record it as a filled position.
         ok, order_id, reject_reason = _interpret_order(resp.status_code, payload)
         if ok:
-            # the book just changed — drop the shared positions cache so any same-cycle reader sees the
-            # new state rather than a ≤TTL-stale snapshot.
+            # the book just changed — drop the shared positions cache AND this engine's read cache
+            # (balances/positions/orders) so any same-cycle reader sees the new state, not a ≤TTL snapshot.
+            self._invalidate_reads()
             try:
                 from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
                 TradeStationPositionsLiveEngine.invalidate()
