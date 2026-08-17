@@ -18,6 +18,9 @@ def _iso(monkeypatch, tmp_path):
     monkeypatch.setattr(M, "BENCH_CACHE", tmp_path / "top_candidates_cache.json")
     monkeypatch.setenv("GREYLINE_MOMENTUM_EQUITY_SHADOW", "true")
     monkeypatch.setenv("GREYLINE_COST_BPS_ROUND_TRIP", "10")   # 10bps round-trip
+    # Force the shadow-tradeability RTH gate OPEN so these open/settle tests are time-independent (the gate
+    # itself is tested in test_momentum_shadow_rth_gate). Without this they fail whenever the suite runs after hours.
+    monkeypatch.setattr("app.services.shadow_tradeability_gate.equity_session_open", lambda: True)
     yield
 
 

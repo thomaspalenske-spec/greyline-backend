@@ -19,6 +19,9 @@ def _iso(monkeypatch, tmp_path):
     monkeypatch.setattr(V, "MARK_INTERVAL_MIN", 0)                                # no rate-gate in tests
     monkeypatch.setattr(V, "_today", staticmethod(lambda: date(2026, 8, 13)))     # 6 biz days before 08-21 OPEX
     monkeypatch.setenv("GREYLINE_VANNA_CHARM_SHADOW", "true")
+    # Force the shadow-tradeability RTH gate OPEN so these open/settle tests are time-independent (the gate
+    # itself is tested in test_shadow_tradeability_gate). Without this they fail whenever the suite runs after hours.
+    monkeypatch.setattr("app.services.shadow_tradeability_gate.equity_session_open", lambda: True)
     yield
 
 

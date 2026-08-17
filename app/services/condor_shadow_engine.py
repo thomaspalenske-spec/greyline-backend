@@ -122,8 +122,11 @@ class CondorShadowEngine:
 
     @classmethod
     def _mid(cls, leg):
+        # Mid whenever there's a real ASK; a zero BID is a valid near-worthless quote (mid = ask/2), not
+        # missing data. Requiring bid > 0 here under-marked decayed legs to 0.0 — inconsistent with the
+        # _current_value gate and it distorts the condor value when only one leg of a spread has a 0 bid.
         b, a = cls._f(leg.get("bid")), cls._f(leg.get("ask"))
-        return (b + a) / 2 if (b > 0 and a > 0) else 0.0
+        return (b + a) / 2 if a > 0 and b >= 0 else 0.0
 
     @classmethod
     def _condor_value(cls, legs):

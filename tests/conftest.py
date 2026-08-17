@@ -49,6 +49,17 @@ def _data_sandbox(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _disable_shadow_report_cache(monkeypatch):
+    """The shadow report() methods (condor/vanna/gex/system-health) share ONE process-wide TTL cache —
+    `self` is excluded from the key, so all instances/callers reuse one entry. In production that's a
+    fine 30s read cache; in tests it leaks one test's cached report into the next (a test writes a fresh
+    ledger, calls report(), and gets a prior test's result), which made report-shape assertions flaky by
+    order. Disable it so every test reads its own freshly-written state. (test_ttl_cache exercises the
+    decorator via its own GREYLINE_TEST_TTL key, so it is unaffected.)"""
+    monkeypatch.setenv("GREYLINE_SHADOW_CACHE_TTL", "0")
+
+
+@pytest.fixture(autouse=True)
 def _block_real_broker_orders(monkeypatch):
     """NO test may place a real broker order. Ever.
 

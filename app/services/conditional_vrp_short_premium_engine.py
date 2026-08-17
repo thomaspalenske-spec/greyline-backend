@@ -810,7 +810,7 @@ class ConditionalVRPShortPremiumEngine:
                     return None
                 b, a = q.quote(sym)
                 b, a = self._f(b), self._f(a)
-                if not b or not a or b <= 0 or a <= 0:
+                if a <= 0 or b < 0:          # a zero BID is a valid worthless quote; only a missing ASK is unpriceable
                     return None
                 mid = (b + a) / 2.0
                 cost += mid if leg.get("action") == "SELLTOOPEN" else -mid   # pay to buy shorts, receive to sell wings
@@ -1658,9 +1658,9 @@ class ConditionalVRPShortPremiumEngine:
             leg_quotes = {}
             for leg in r["legs"]:
                 bid, ask = quote_map.get(leg["symbol"], (0.0, 0.0))   # warm from the concurrent prefetch
-                if bid <= 0 or ask <= 0:
-                    priced = False
-                    break
+                if ask <= 0 or bid < 0:        # a zero BID is a valid worthless leg (decayed wing); only a
+                    priced = False             # missing ASK is a genuinely stale/absent quote. Requiring bid>0
+                    break                      # left near-expiry condors stuck HOLD, never evaluated to close.
                 leg_quotes[leg["symbol"]] = (bid, ask)     # retained to PRICE the exit, not market it
                 mid = (bid + ask) / 2
                 cost_to_close += mid if leg["action"] == "SELLTOOPEN" else -mid  # buy back shorts, sell wings

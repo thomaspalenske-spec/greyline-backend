@@ -5,7 +5,16 @@ bar. NO orders. Hermetic — universe/prices monkeypatched, no network."""
 import csv
 import json
 
+import pytest
+
 from app.services.extended_etf_shadow_engine import ExtendedEtfShadowEngine as X
+
+
+@pytest.fixture(autouse=True)
+def _force_session_open(monkeypatch):
+    # Force the shadow-tradeability RTH gate OPEN so these open/settle tests are time-independent (the gate
+    # itself is tested in test_shadow_tradeability_gate). Without this they fail whenever the suite runs after hours.
+    monkeypatch.setattr("app.services.shadow_tradeability_gate.equity_session_open", lambda: True)
 
 
 def test_signal_ranks_by_trailing_return_top_k(monkeypatch):

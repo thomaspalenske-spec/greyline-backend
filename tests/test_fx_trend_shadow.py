@@ -3,7 +3,16 @@ measurement trio). Hermetic — instruments/trailing/prices monkeypatched, no ne
 
 import json
 
+import pytest
+
 from app.services.fx_trend_shadow_engine import FxTrendShadowEngine as F
+
+
+@pytest.fixture(autouse=True)
+def _force_session_open(monkeypatch):
+    # Force the futures/FX tradeability gate OPEN so these open/settle tests are time-independent (they'd
+    # otherwise fail on a weekend/holiday). The gate itself is tested in test_shadow_tradeability_gate.
+    monkeypatch.setattr("app.services.shadow_tradeability_gate.futures_fx_session_open", lambda: True)
 
 
 def test_signal_long_short_by_trend(monkeypatch):
