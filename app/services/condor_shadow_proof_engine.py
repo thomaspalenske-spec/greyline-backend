@@ -56,6 +56,21 @@ class CondorShadowProofEngine:
                 seen += 1
         return half * 100.0 * qty, seen >= 3
 
+    def _eligible(self, e):
+        """Does the LIVE sleeve actually TRADE this underlying? The single-name 'vrp' sleeve is ETF-only by
+        default (single-name condors were RETIRED as cost-eaten — GREYLINE_VRP_ETF_ONLY), so legacy
+        single-name shadow condors (opened before the cutover) must NOT pollute the forward verdict for a
+        strategy the live book will never run. index_vrp / commodity_vrp trade their own roots — untouched."""
+        if e.get("sleeve") != "vrp":
+            return True
+        try:
+            from app.services.conditional_vrp_short_premium_engine import ConditionalVRPShortPremiumEngine as V
+            if V._vrp_etf_only():
+                return str(e.get("symbol") or "").upper() in set(V.LIQUID_ETFS)
+        except Exception:
+            pass
+        return True
+
     def _day_returns(self, closed, sleeves):
         """Day-clustered, cost-net return-on-risk observations. INDEPENDENCE by day: condors closed on the
         same date are ONE observation (sum net / sum risk) — the same anti-inflation clustering the live
@@ -63,9 +78,12 @@ class CondorShadowProofEngine:
         haircut only when a condor stored no usable NBBO)."""
         from app.services.edge_persistence_engine import EdgePersistenceEngine as EP
         hc = EP.CONDOR_CLOSE_HAIRCUT_FRAC
-        by_day, rows = {}, 0
+        by_day, rows, excluded = {}, 0, 0
         for e in closed:
             if e.get("sleeve") not in sleeves:
+                continue
+            if not self._eligible(e):          # retired single-name condor — not what the live sleeve trades
+                excluded += 1
                 continue
             qty = int(self._f(e.get("quantity")) or 0)
             risk = self._f(e.get("max_loss_per")) * qty
@@ -82,7 +100,7 @@ class CondorShadowProofEngine:
             by_day[d] = (sn + net, sr + risk)
             rows += 1
         days = [(d, sn / sr) for d, (sn, sr) in sorted(by_day.items()) if sr > 0]
-        return days, rows
+        return days, rows, excluded
 
     def cost_validation(self):
         """Measured condor round-trip close cost (as %-of-max-loss) vs the court's flat 3% haircut — the
@@ -110,7 +128,7 @@ class CondorShadowProofEngine:
 
     def _track(self, sleeves, label):
         from app.services.edge_persistence_engine import EdgePersistenceEngine as EP
-        days, rows = self._day_returns(self._closed(), sleeves)
+        days, rows, excluded = self._day_returns(self._closed(), sleeves)
         v = EP.verdict_from_returns([r for _, r in days], min_n=self.MIN_DAYS)
         eta = None
         if 2 <= len(days) < self.MIN_DAYS:
@@ -125,6 +143,7 @@ class CondorShadowProofEngine:
             "track": "FORWARD_SHADOW (out-of-sample, zero-capital, mid-marked — NOT live-proven)",
             "label": label, "sleeves": list(sleeves),
             "independent_days": len(days), "closed_condor_rows": rows,
+            "excluded_ineligible_rows": excluded,     # retired single-name condors the live sleeve won't trade
             "first_close": days[0][0] if days else None, "last_close": days[-1][0] if days else None,
             "eta_days_to_verdict": eta,
         })

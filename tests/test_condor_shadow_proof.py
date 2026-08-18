@@ -5,8 +5,9 @@ Deterministic — the shadow ledger is stubbed. No network, no orders."""
 from app.services.condor_shadow_proof_engine import CondorShadowProofEngine as E
 
 
-def _c(sleeve, d, pnl, max_loss_per, qty=1):
-    return {"status": "CLOSED", "sleeve": sleeve, "closed_date": d,
+def _c(sleeve, d, pnl, max_loss_per, qty=1, symbol="SPY"):
+    # symbol defaults to an eligible LIQUID_ETF so vrp-sleeve rows pass the live-universe filter
+    return {"status": "CLOSED", "sleeve": sleeve, "closed_date": d, "symbol": symbol,
             "realized_pnl": pnl, "max_loss_per": max_loss_per, "quantity": qty}
 
 
@@ -14,7 +15,7 @@ def test_day_clustering_and_cost_net(monkeypatch):
     closed = [_c("vrp", "2026-08-01", 100, 500), _c("vrp", "2026-08-01", 50, 500),
               _c("vrp", "2026-08-08", 80, 400)]
     monkeypatch.setattr(E, "_closed", lambda self: closed)
-    days, rows = E()._day_returns(closed, ("vrp",))
+    days, rows, _ = E()._day_returns(closed, ("vrp",))
     assert rows == 3 and len(days) == 2                       # two same-date closes collapse to ONE day
     # day1: (150 - 0.03*1000)/1000 = 0.12 ; day2: (80 - 0.03*400)/400 = 0.17
     assert abs(days[0][1] - 0.12) < 1e-9
@@ -24,13 +25,13 @@ def test_day_clustering_and_cost_net(monkeypatch):
 def test_earnings_excluded_from_vrp_family(monkeypatch):
     closed = [_c("vrp", "2026-08-01", 100, 500), _c("earnings", "2026-08-01", 999, 500)]
     monkeypatch.setattr(E, "_closed", lambda self: closed)
-    _, rows = E()._day_returns(closed, E.VRP_SLEEVES)
+    _, rows, _ = E()._day_returns(closed, E.VRP_SLEEVES)
     assert rows == 1                                          # only the vrp close counts toward the VRP family
 
 
 def test_zero_risk_close_skipped(monkeypatch):
     monkeypatch.setattr(E, "_closed", lambda self: [_c("vrp", "2026-08-01", 100, 0)])
-    days, rows = E()._day_returns([_c("vrp", "2026-08-01", 100, 0)], ("vrp",))
+    days, rows, _ = E()._day_returns([_c("vrp", "2026-08-01", 100, 0)], ("vrp",))
     assert days == [] and rows == 0
 
 
@@ -64,7 +65,7 @@ def test_real_spread_cost_used_when_legs_present(monkeypatch):
     monkeypatch.setattr(E, "_closed", lambda self: [e])
     cost, had = E()._close_cost(e)
     assert had is True and abs(cost - 73.0) < 1e-6
-    days, _ = E()._day_returns([e], ("vrp",))
+    days, _, _ = E()._day_returns([e], ("vrp",))
     # net = 100 - 73 = 27 ; risk 225 -> 0.12 (a flat-3% haircut would give (100-6.75)/225 = 0.414)
     assert abs(days[0][1] - (27.0 / 225.0)) < 1e-9
 
@@ -84,3 +85,14 @@ def test_report_structure(monkeypatch):
     r = E().report()
     assert r["status"] == "CONDOR_SHADOW_PROOF"
     assert "vrp_family" in r and set(r["by_sleeve"]) == set(E.VRP_SLEEVES)
+
+
+def test_single_name_excluded_from_vrp_verdict(monkeypatch):
+    # the live 'vrp' sleeve is ETF-only (single-name condors retired as cost-eaten); a legacy single-name
+    # close (CRCL) must NOT count toward the forward verdict, while an eligible ETF (SPY) does.
+    closed = [_c("vrp", "2026-08-01", 100, 500, symbol="SPY"),
+              _c("vrp", "2026-08-02", 999, 500, symbol="CRCL")]   # single name, not in LIQUID_ETFS
+    monkeypatch.setattr(E, "_closed", lambda self: closed)
+    days, rows, excluded = E()._day_returns(closed, ("vrp",))
+    assert rows == 1 and excluded == 1               # only SPY counts; CRCL excluded
+    assert len(days) == 1
