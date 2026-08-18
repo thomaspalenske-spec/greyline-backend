@@ -47,6 +47,7 @@ class MomentumReversalStrategyEngine:
     # only lever on time-to-verdict: 30 closed trades is ~6 weeks at 5/week, ~3 at 10.
     TOP_N = 10
     HISTORICAL_DIR = "app/data/historical"
+    TR_DIR = "app/data/historical_total_return"   # dividend+split adjusted adj_close (gated wiring)
 
     # Round-trip transaction cost (spread + slippage; retail commissions are ~0).
     # NOT cosmetic: the backtest's out-of-sample Sharpe went 0.42 gross -> 0.25 @5bps ->
@@ -153,23 +154,60 @@ class MomentumReversalStrategyEngine:
                                   for p in glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv"))
                       if s not in excluded)
 
+    @staticmethod
+    def _total_return_on():
+        """GATED OFF by default. When true, the signal reads dividend-adjusted adj_close instead of
+        price-only close — removing ex-div false reversals in the 5-day leg (an ex-dividend price drop
+        otherwise reads as a 'recent down move to fade' = a false BULLISH dip). Evidence:
+        /total-return-signal-impact. The backtest that validated the edge already uses adj_close, so this
+        also closes a live-vs-backtest mismatch."""
+        return (os.environ.get("GREYLINE_MOMENTUM_TOTAL_RETURN", "") or "").strip().lower() == "true"
+
+    def _symbol_series(self, sym, daily_path):
+        """Sorted [(date, price)] for `sym`. adj_close from the total-return series when total-return mode
+        is on; else price-only close. Price-only FALLBACK if the TR file is missing/unreadable, so a data
+        gap never silently drops a name from the universe."""
+        if self._total_return_on():
+            tr = os.path.join(self.TR_DIR, f"{str(sym).upper()}_total_return.csv")
+            if os.path.exists(tr):
+                rows = []
+                try:
+                    with open(tr) as f:
+                        for r in csv.DictReader(f):
+                            try:
+                                rows.append((r["date"][:10], float(r["adj_close"])))
+                            except (ValueError, KeyError, TypeError):
+                                pass
+                except Exception:
+                    rows = []
+                if rows:
+                    rows.sort(key=lambda x: x[0])
+                    return rows
+        rows = []
+        try:
+            with open(daily_path) as f:
+                for r in csv.DictReader(f):
+                    try:
+                        rows.append((r["date"][:10], float(r["close"])))
+                    except (ValueError, KeyError, TypeError):
+                        pass
+        except Exception:
+            return []
+        rows.sort(key=lambda x: x[0])
+        return rows
+
     def _csv_universe(self):
         series, asof = {}, None
         for p in sorted(glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv")):
             sym = os.path.basename(p).replace("_daily.csv", "")
-            closes, last = [], None
-            with open(p) as f:
-                for r in csv.DictReader(f):
-                    try:
-                        closes.append(float(r["close"]))
-                        last = r["date"][:10]
-                    except (ValueError, KeyError, TypeError):
-                        pass
+            rows = self._symbol_series(sym, p)
+            closes = [c for _, c in rows]
             if len(closes) >= self.signal.MIN_BARS:
                 series[sym] = closes
+                last = rows[-1][0] if rows else None
                 if last and (asof is None or last > asof):
                     asof = last
-        return series, asof, "HISTORICAL_CSV"
+        return series, asof, ("TOTAL_RETURN_ADJ" if self._total_return_on() else "HISTORICAL_CSV")
 
     def _fetch_daily_closes(self, symbol, base_url, token):
         """Current daily closes (oldest->newest) from TradeStation BarCharts, or []."""
@@ -235,19 +273,9 @@ class MomentumReversalStrategyEngine:
         hist = {}
         for p in glob.glob(f"{self.HISTORICAL_DIR}/*_daily.csv"):
             sym = os.path.basename(p).replace("_daily.csv", "").upper()
-            closes = []
-            try:
-                with open(p) as f:
-                    for r in csv.DictReader(f):
-                        try:
-                            closes.append((r["date"][:10], float(r["close"])))
-                        except (ValueError, KeyError, TypeError):
-                            pass
-            except Exception:
-                continue
-            if closes:
-                closes.sort(key=lambda x: x[0])
-                hist[sym] = closes
+            rows = self._symbol_series(sym, p)   # adj_close when total-return mode on, price-only otherwise
+            if rows:
+                hist[sym] = rows                 # already sorted oldest->newest
         return hist
 
     def _universe_key(self):

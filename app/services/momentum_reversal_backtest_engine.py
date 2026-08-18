@@ -54,8 +54,11 @@ class MomentumReversalBacktestEngine:
     # Realistic per-trade one-way EQUITY cost (spread + commission), swept to find breakeven.
     COST_GRID_BPS = [0, 2, 5, 10, 20, 35, 50, 75, 100]
 
-    def _load(self):
-        """{symbol: {date: adj_close}} from the total-return series (fallback raw)."""
+    def _load(self, price_field="adj_close"):
+        """{symbol: {date: price}} from the total-return series. `price_field` picks the column:
+        'adj_close' (dividend+split adjusted — the correct series, the default) or 'close' (price-only,
+        exactly what the LIVE signal reads today). Same files/dates either way, so the two can run through
+        identical machinery to isolate the effect of dividend adjustment on the signal."""
         series = {}
         try:
             from app.services.price_bar_tradability_engine import PriceBarTradabilityEngine
@@ -75,7 +78,7 @@ class MomentumReversalBacktestEngine:
                         if floor and d < floor:
                             continue
                         try:
-                            row[d] = float(r["adj_close"])
+                            row[d] = float(r[price_field])
                         except (ValueError, KeyError, TypeError):
                             continue
             except Exception:
@@ -130,11 +133,15 @@ class MomentumReversalBacktestEngine:
             return None, 0.0
         return mom_bias, abs(mom) + abs(rev5)               # magnitude proxy for conviction
 
-    def run(self, long_only=False, save=True, max_vol_pct=None):
+    def run(self, long_only=False, save=True, max_vol_pct=None, price_field="adj_close"):
         """max_vol_pct: optional POINT-IN-TIME volatility ceiling applied at each rebalance
         from trailing data only. This is a tradeable rule, NOT a universe screen — the
-        universe itself is never filtered on full-sample properties."""
-        series = self._load()
+        universe itself is never filtered on full-sample properties.
+        price_field: 'adj_close' (default) or 'close' (price-only) — for the total-return vs price-only
+        comparison. save is forced off for the non-default field so it can't overwrite the canonical result."""
+        series = self._load(price_field)
+        if price_field != "adj_close":
+            save = False
         if len(series) < 20:
             return {"status": "INSUFFICIENT_UNIVERSE", "symbols": len(series)}
 
@@ -224,7 +231,7 @@ class MomentumReversalBacktestEngine:
             "config": {"momentum": f"{self.MOM_START}/{self.MOM_END}", "reversal_days": self.REV_LOOKBACK,
                        "hold_days": self.HOLD_DAYS, "top_n_per_side": self.TOP_N,
                        "mode": "LONG_ONLY" if long_only else "LONG_SHORT",
-                       "input": "TOTAL_RETURN_ADJ_CLOSE"},
+                       "input": "TOTAL_RETURN_ADJ_CLOSE" if price_field == "adj_close" else "PRICE_ONLY_CLOSE"},
             "symbols": len(series), "date_range": [dates[self.MOM_START], dates[-1]],
             "rebalance_periods": len(period_rets),
             "avg_positions_per_period": round(sum(n_positions) / len(n_positions), 1),
