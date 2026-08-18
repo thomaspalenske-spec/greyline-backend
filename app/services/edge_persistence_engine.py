@@ -180,12 +180,20 @@ class EdgePersistenceEngine:
             # (you cross the spread to actually transact) while keeping its own provenance tag. Only
             # legacy rows marked at loose MID (basis 'mid'/absent) get the haircut under 'mid_estimate'.
             basis = str(r.get("realized_pnl_basis") or "mid").lower()
+            # A mid-marked close (uw_mid / legacy mid) must be cost-net for the spread you actually cross.
+            # Prefer the REAL close-spread cost recorded at close time from NBBO (close_spread_cost_usd) —
+            # it's data-driven, so it doesn't flatter wide single-name condors the way a flat 3%-of-max-loss
+            # haircut does (measured single-name close cost ~30% of max-loss, not 3%). Flat haircut only when
+            # the real spread wasn't captured (legacy rows / a close-time data gap).
+            real_cost = self._f(r.get("close_spread_cost_usd"))
+            have_real = r.get("close_spread_cost_usd") is not None and real_cost >= 0
+            haircut = real_cost if have_real else self.CONDOR_CLOSE_HAIRCUT_FRAC * risk
             if basis in ("fills", "close_order"):
-                net, tag = self._f(rp), basis
+                net, tag = self._f(rp), basis                          # real fills — spread already paid
             elif basis == "uw_mid":
-                net, tag = self._f(rp) - self.CONDOR_CLOSE_HAIRCUT_FRAC * risk, "uw_mid"
+                net, tag = self._f(rp) - haircut, ("uw_mid_realcost" if have_real else "uw_mid")
             else:
-                net, tag = self._f(rp) - self.CONDOR_CLOSE_HAIRCUT_FRAC * risk, "mid_estimate"
+                net, tag = self._f(rp) - haircut, ("mid_realcost" if have_real else "mid_estimate")
             # earnings-vol (event-driven IV crush) and VRP (unconditional variance premium) are DISTINCT
             # edges sharing this ledger — verdict them separately so one can't mask the other.
             strat = str(r.get("strategy") or "vrp").lower()

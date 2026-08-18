@@ -28,7 +28,7 @@ def _stub(monkeypatch):
 
 
 def test_close_court_worthy_when_uw_prices_the_close(monkeypatch, _stub):
-    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: 1.4)     # UW can value the close
+    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: (1.4, 0.4))     # UW can value the close
     r = V().dress_rehearsal()
     assert r["close_path_go"] is True and r["close_priceable_condors"] == 1
     assert r["rehearsed"][0]["close_court_worthy"] is True
@@ -38,7 +38,7 @@ def test_close_court_worthy_when_uw_prices_the_close(monkeypatch, _stub):
 
 
 def test_not_court_worthy_when_uw_cannot_price_close(monkeypatch, _stub):
-    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: None)    # UW can't value the close
+    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: (None, None))    # UW can't value the close
     r = V().dress_rehearsal()
     assert r["close_path_go"] is False
     assert r["rehearsed"][0]["close_realized_basis"] == "ts_fallback"
@@ -48,7 +48,7 @@ def test_not_court_worthy_when_uw_cannot_price_close(monkeypatch, _stub):
 
 def test_uw_close_pricing_off_is_gated(monkeypatch, _stub):
     monkeypatch.setenv("GREYLINE_VRP_UW_CLOSE_PRICING", "false")
-    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: 1.4)
+    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: (1.4, 0.4))
     r = V().dress_rehearsal()
     assert r["uw_close_pricing_on"] is False and r["close_path_go"] is False
     assert any("UW close pricing OFF" in g for g in r["gate_blocks"])

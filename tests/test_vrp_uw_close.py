@@ -19,20 +19,22 @@ def test_uw_close_value_is_shorts_minus_wings_mid(monkeypatch):
     quotes = {"SPY_SC": (1.0, 1.2), "SPY_SP": (0.9, 1.1), "SPY_WC": (0.3, 0.5), "SPY_WP": (0.2, 0.4)}
     monkeypatch.setattr(uqm.UWOptionQuoteEngine, "enabled", lambda self: True)
     monkeypatch.setattr(uqm.UWOptionQuoteEngine, "quote", lambda self, s: quotes[s])
-    cv = V()._uw_close_value(_row())
+    cv, spread = V()._uw_close_value(_row())                   # now returns (close_value, close_spread) per share
     # shorts mid 1.1 + 1.0 = 2.1 ; wings mid 0.4 + 0.3 = 0.7 ; cost-to-close = 1.4
     assert abs(cv - 1.4) < 1e-9
+    # each leg half-spread = 0.10 (all four are 0.20 wide) → round-trip close spread = 0.40/share
+    assert abs(spread - 0.4) < 1e-9
 
 
 def test_uw_close_value_none_when_uw_disabled(monkeypatch):
     monkeypatch.setattr(uqm.UWOptionQuoteEngine, "enabled", lambda self: False)
-    assert V()._uw_close_value(_row()) is None                 # → caller keeps the TS/fill path
+    assert V()._uw_close_value(_row()) == (None, None)         # → caller keeps the TS/fill path
 
 
 def test_uw_close_value_none_on_unquotable_leg(monkeypatch):
     monkeypatch.setattr(uqm.UWOptionQuoteEngine, "enabled", lambda self: True)
     monkeypatch.setattr(uqm.UWOptionQuoteEngine, "quote", lambda self, s: (0.0, 0.0))
-    assert V()._uw_close_value(_row()) is None                 # never a fake value off a bad quote
+    assert V()._uw_close_value(_row()) == (None, None)         # never a fake value off a bad quote
 
 
 def test_pricing_flag_default_on(monkeypatch):

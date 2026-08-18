@@ -795,28 +795,31 @@ class ConditionalVRPShortPremiumEngine:
         return (getenv("GREYLINE_VRP_UW_CLOSE_PRICING", "true") or "").strip().lower() != "false"
 
     def _uw_close_value(self, row):
-        """Cost to close the condor valued at UW MID (buy back shorts, sell wings) = Σ(mid) over shorts −
-        Σ(mid) over wings, per share. This is the honest close mark the SIM can't produce. None if UW is
-        disabled or ANY leg is unquotable — the caller then keeps the existing TS/fill realized path."""
+        """Cost to close the condor at UW MID (buy back shorts, sell wings) = Σ(mid) over shorts − Σ(mid)
+        over wings, per share — the honest close mark the SIM can't produce — AND the round-trip close-SPREAD
+        cost per share (half the NBBO spread on each of the 4 legs, since a mid mark ignores the spread you
+        actually cross to transact). Returns (close_value_per_share, close_spread_per_share). (None, None) if
+        UW is disabled or ANY leg is unquotable — the caller then keeps the existing TS/fill realized path."""
         try:
             from app.services.uw_option_quote_engine import UWOptionQuoteEngine
             q = UWOptionQuoteEngine()
             if not q.enabled():
-                return None
-            cost = 0.0
+                return None, None
+            cost, spread = 0.0, 0.0
             for leg in (row.get("legs") or []):
                 sym = leg.get("symbol")
                 if not sym:
-                    return None
+                    return None, None
                 b, a = q.quote(sym)
                 b, a = self._f(b), self._f(a)
                 if a <= 0 or b < 0:          # a zero BID is a valid worthless quote; only a missing ASK is unpriceable
-                    return None
+                    return None, None
                 mid = (b + a) / 2.0
                 cost += mid if leg.get("action") == "SELLTOOPEN" else -mid   # pay to buy shorts, receive to sell wings
-            return cost
+                spread += 0.5 * max(0.0, a - b)                              # half-spread crossed to close this leg
+            return cost, spread
         except Exception:
-            return None
+            return None, None
 
     def reconcile_closes(self, dry_run=False):
         """Close-side mirror of reconcile_fills. A condor is marked CLOSED the moment its close order is
@@ -867,13 +870,18 @@ class ConditionalVRPShortPremiumEngine:
                     # ExecutionPrice quirk. Do NOT bank it. Prefer the UW-priced close (the honest source the
                     # SIM lacks); else fall back to the BOUNDED close-mid estimate — so fantasy realized P&L
                     # can never enter the ledger / mission P&L / edge court.
-                    uw_cv = self._uw_close_value(r) if self._uw_close_pricing_on() else None
+                    uw_cv, uw_spread = self._uw_close_value(r) if self._uw_close_pricing_on() else (None, None)
                     uw_realized = (round((credit - uw_cv) * 100 * qty, 2) if uw_cv is not None else None)
                     if uw_realized is not None and self._realized_in_defined_risk_bounds(
                             uw_realized, r.get("credit_total"), r.get("max_loss_total")):
                         r["realized_pnl"] = uw_realized
                         r["realized_pnl_basis"] = "uw_mid"
                         r["close_uw_value"] = round(uw_cv, 4)
+                        # REAL round-trip close-spread cost (from the same NBBO fetch) so the edge court can
+                        # cost-net this mid-marked close at its ACTUAL spread, not a flat 3% haircut that
+                        # flatters wide single-name condors.
+                        if uw_spread is not None:
+                            r["close_spread_cost_usd"] = round(uw_spread * 100 * qty, 2)
                     else:
                         mid = self._f(r.get("close_mid"))
                         r["realized_pnl"] = (round((credit - mid) * 100 * qty, 2) if mid is not None
@@ -1404,7 +1412,7 @@ class ConditionalVRPShortPremiumEngine:
             # right now. If UW can price it, an armed close will bank a court-worthy 'uw_mid' realized P&L;
             # if not, realized falls back to TS (NOT court-worthy) — the key pre-arm check.
             legs_list = list((con.get("legs") or {}).values())
-            uw_cv = self._uw_close_value({"legs": legs_list}) if uw_close_on else None
+            uw_cv, _ = self._uw_close_value({"legs": legs_list}) if uw_close_on else (None, None)
             close_court_worthy = uw_cv is not None
             close_priceable += 1 if close_court_worthy else 0
             rehearsed.append({"ticker": con.get("symbol"), "expiration": con.get("expiration"),
@@ -1783,7 +1791,7 @@ class ConditionalVRPShortPremiumEngine:
                     # result is inside the defined-risk band, it IS the realized P&L basis — this is what makes
                     # an armed harvest's realized number court-worthy. Gated; TS/fill remains the fallback.
                     if self._uw_close_pricing_on():
-                        uw_cv = self._uw_close_value(r)
+                        uw_cv, uw_spread = self._uw_close_value(r)
                         if uw_cv is not None:
                             _uw_realized = round((credit - uw_cv) * 100 * r["quantity"], 2)
                             if self._realized_in_defined_risk_bounds(_uw_realized, r.get("credit_total"),
@@ -1791,6 +1799,8 @@ class ConditionalVRPShortPremiumEngine:
                                 _init_realized = _uw_realized
                                 basis = "uw_mid"
                                 r["close_uw_value"] = round(uw_cv, 4)
+                                if uw_spread is not None:   # real close-spread cost for the court (not flat 3%)
+                                    r["close_spread_cost_usd"] = round(uw_spread * 100 * r["quantity"], 2)
                     r["status"] = "CLOSED"; r["closed_at"] = datetime.utcnow().isoformat()
                     r["close_reason"] = reason
                     r["realized_pnl"] = _init_realized

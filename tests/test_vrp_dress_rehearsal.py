@@ -44,7 +44,9 @@ def _prep_rehearsal(monkeypatch, planned, armed=True, skipped=None, uw_close=1.0
     # deterministically (uw_close=None simulates UW being unable to price the close).
     monkeypatch.setattr("app.services.env_reload.reload_env", lambda *a, **k: None)
     monkeypatch.setenv("GREYLINE_VRP_UW_CLOSE_PRICING", "true")
-    monkeypatch.setattr(V, "_uw_close_value", lambda self, row: uw_close)
+    # _uw_close_value now returns (close_value, close_spread); (None, None) when UW can't price the close.
+    monkeypatch.setattr(V, "_uw_close_value",
+                        lambda self, row: (uw_close, 0.4) if uw_close is not None else (None, None))
 
 
 def test_dress_rehearsal_ready_when_armed(monkeypatch):
