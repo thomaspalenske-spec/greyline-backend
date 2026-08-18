@@ -1689,6 +1689,22 @@ class BackgroundSchedulerService:
                 survivorship = {"status": "SURVIVORSHIP_ARCHIVE_NOT_DUE", "ran": False}
         except Exception as exc:
             survivorship = {"status": "SURVIVORSHIP_ARCHIVE_DEGRADED", "error": repr(exc)}
+
+        # TOTAL-RETURN COVERAGE self-maintenance (2026-08-18): the armed GREYLINE_MOMENTUM_TOTAL_RETURN
+        # signal reads adj_close; a universe expansion that outpaces the total-return build would silently
+        # drop new names back to price-only (ex-div false reversals). Build a capped batch of any
+        # uncovered-eligible names once/day, market CLOSED (UW load off the trading path). Day-gated +
+        # stamp-after so a marker glitch just retries next day. Best-effort — never affects trading.
+        _tr_marker = "app/data/scheduler/.total_return_coverage_last_run"
+        try:
+            if not bool(market_hours.get("is_regular_session")) and cls._day_marker_due(_tr_marker):
+                from app.services.total_return_series_engine import TotalReturnSeriesEngine
+                total_return_coverage = TotalReturnSeriesEngine().build_missing(limit=60)
+                cls._day_marker_stamp(_tr_marker)
+            else:
+                total_return_coverage = {"status": "TR_COVERAGE_NOT_DUE", "ran": False}
+        except Exception as exc:
+            total_return_coverage = {"status": "TR_COVERAGE_DEGRADED", "error": repr(exc)}
         cls._ckpt("ps_integrity_scans")    # cross-source reconcile (daily) + tradability scan + survivorship (EVERY cycle — suspects)
         # Wrapped like every other step: this runs AFTER all trading, but an unguarded throw here
         # would abort before _record_result("COMPLETE"), falsely marking a successful cycle FAILED

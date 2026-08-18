@@ -16,3 +16,11 @@ def total_return_series(symbol: str = None, rebuild: bool = False):
         return eng.build_universe()
     return eng.last_report() or {"status": "NO_TOTAL_RETURN_BUILD_YET",
                                  "detail": "?rebuild=true to build, or ?symbol=MO for one"}
+
+
+@router.get("/total-return-coverage")
+def total_return_coverage():
+    """Total-return coverage of the tradeable (>=MIN_BARS) momentum universe — the metric the armed
+    GREYLINE_MOMENTUM_TOTAL_RETURN signal depends on. `healthy` false means the universe outran the build and
+    names are silently falling back to price-only; the scheduler self-heals a capped batch once/day."""
+    return TotalReturnSeriesEngine().coverage()

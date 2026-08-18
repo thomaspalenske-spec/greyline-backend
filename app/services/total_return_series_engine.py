@@ -262,6 +262,69 @@ class TotalReturnSeriesEngine:
                 pass
         return report
 
+    @staticmethod
+    def _min_bars():
+        try:
+            from app.services.directional_signal_engine import DirectionalSignalEngine
+            return DirectionalSignalEngine.MIN_BARS
+        except Exception:
+            return 253
+
+    @staticmethod
+    def _bars(path):
+        try:
+            with open(path) as f:
+                return sum(1 for _ in f) - 1
+        except Exception:
+            return 0
+
+    def _uncovered_eligible(self):
+        """Sorted MIN_BARS-eligible universe names that lack a total-return file. Junk (warrants/units/
+        micro-caps below MIN_BARS) is excluded — it never enters the momentum signal."""
+        mb = self._min_bars()
+        have = {p.name.replace("_total_return.csv", "").upper()
+                for p in self.OUT_DIR.glob("*_total_return.csv")}
+        elig, unc = 0, []
+        for p in self.HIST_DIR.glob("*_daily.csv"):
+            sym = p.name.replace("_daily.csv", "").upper()
+            if self._bars(p) >= mb:
+                elig += 1
+                if sym not in have:
+                    unc.append(sym)
+        return sorted(unc), elig
+
+    def coverage(self):
+        """Total-return coverage of the TRADEABLE (>=MIN_BARS) momentum universe — the metric the armed
+        GREYLINE_MOMENTUM_TOTAL_RETURN wiring depends on: an uncovered eligible name falls back to price-only
+        and keeps its ex-div false reversals."""
+        unc, elig = self._uncovered_eligible()
+        cov = elig - len(unc)
+        pct = round(cov / elig * 100, 1) if elig else None
+        return {"min_bars": self._min_bars(), "eligible": elig, "covered": cov, "uncovered": len(unc),
+                "coverage_pct": pct,
+                "healthy": (pct is not None and pct >= 90.0),   # guard: a big gap = universe outran the build
+                "uncovered_sample": unc[:25],
+                "note": ("Total-return coverage of the tradeable (>=MIN_BARS) universe. Uncovered names fall "
+                         "back to price-only under GREYLINE_MOMENTUM_TOTAL_RETURN and keep ex-div false "
+                         "reversals; the scheduler builds a capped batch of any uncovered names once/day."),
+                "status": "TOTAL_RETURN_COVERAGE"}
+
+    def build_missing(self, limit=40):
+        """Incrementally build total-return for up to `limit` uncovered-eligible names — the self-maintenance
+        that stops coverage silently regrowing as the universe expands. Rate-limited by the provider."""
+        todo = self._uncovered_eligible()[0][:max(0, int(limit))]
+        built = failed = 0
+        for s in todo:
+            try:
+                if self.build_symbol(s, save=True).get("status") == "TOTAL_RETURN_BUILT":
+                    built += 1
+                else:
+                    failed += 1
+            except Exception:
+                failed += 1
+        return {"attempted": len(todo), "built": built, "failed": failed,
+                "status": "TOTAL_RETURN_BUILD_MISSING"}
+
     def last_report(self):
         try:
             return json.loads(self.REPORT.read_text())
