@@ -17,6 +17,16 @@ def condor_shadow():
     return CondorShadowEngine().report()
 
 
+@router.get("/condor-shadow-proof")
+def condor_shadow_proof():
+    """FORWARD-SHADOW VRP proof: the zero-capital shadow's settled closes judged on the LIVE edge court's
+    RIGOROUS bar (day-clustered, cost-net, small-sample-t 95% CI, 20-day gate) — the fastest trustworthy
+    read on whether the confirmed variance-premium edge holds FORWARD, accruing far faster than the
+    capital-limited live book (~a year to 20 closes). Forward-test, not live-proven."""
+    from app.services.condor_shadow_proof_engine import CondorShadowProofEngine
+    return CondorShadowProofEngine().report()
+
+
 @router.get("/vanna-charm")
 def vanna_charm(signals: bool = False):
     """Vanna/charm SHADOW forward-test (the 'vanna rally into OPEX'): LONG the index in the OPEX window when
