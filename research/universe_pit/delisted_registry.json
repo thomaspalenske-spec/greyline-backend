@@ -10378,5 +10378,15 @@
     "last_bar_date": "2026-08-04",
     "detected_at": "2026-08-15T00:19:04.213540",
     "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AAAC": {
+    "last_bar_date": "2026-08-07",
+    "detected_at": "2026-08-18T00:24:34.925550",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AACPR": {
+    "last_bar_date": "2026-08-07",
+    "detected_at": "2026-08-18T00:24:34.929184",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
   }
 }
