@@ -51,6 +51,34 @@ def test_reaches_proven_bar_with_enough_positive_days(monkeypatch):
     assert v["verdict"].startswith("PROVEN")
 
 
+def _legs(sc, wc, sp, wp):
+    # each tuple is (bid, ask); spread = ask-bid
+    return {"short_call": {"bid": sc[0], "ask": sc[1]}, "wing_call": {"bid": wc[0], "ask": wc[1]},
+            "short_put": {"bid": sp[0], "ask": sp[1]}, "wing_put": {"bid": wp[0], "ask": wp[1]}}
+
+
+def test_real_spread_cost_used_when_legs_present(monkeypatch):
+    # spreads: 0.56 + 0.34 + 0.30 + 0.26 = 1.46 -> half = 0.73 -> cost = $73 (qty 1); NOT the flat 3% ($6.75)
+    e = _c("vrp", "2026-08-01", 100, 225, 1)
+    e["legs"] = _legs((1.39, 1.95), (1.14, 1.48), (3.15, 3.45), (2.55, 2.81))
+    monkeypatch.setattr(E, "_closed", lambda self: [e])
+    cost, had = E()._close_cost(e)
+    assert had is True and abs(cost - 73.0) < 1e-6
+    days, _ = E()._day_returns([e], ("vrp",))
+    # net = 100 - 73 = 27 ; risk 225 -> 0.12 (a flat-3% haircut would give (100-6.75)/225 = 0.414)
+    assert abs(days[0][1] - (27.0 / 225.0)) < 1e-9
+
+
+def test_cost_validation_flags_the_gap(monkeypatch):
+    e = _c("vrp", "2026-08-01", 100, 225, 1)
+    e["legs"] = _legs((1.39, 1.95), (1.14, 1.48), (3.15, 3.45), (2.55, 2.81))
+    monkeypatch.setattr(E, "_closed", lambda self: [e])
+    cv = E().cost_validation()
+    assert cv["court_flat_haircut_pct"] == 3.0
+    # 73 / 225 = 32.4% — an order of magnitude above the flat haircut
+    assert cv["measured_by_sleeve"]["vrp"]["median_pct"] > 25.0
+
+
 def test_report_structure(monkeypatch):
     monkeypatch.setattr(E, "_closed", lambda self: [_c("vrp", "2026-08-01", 100, 500)])
     r = E().report()

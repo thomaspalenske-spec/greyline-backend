@@ -41,11 +41,26 @@ class CondorShadowProofEngine:
             return []
         return [r for r in rows if r.get("status") == "CLOSED"]
 
+    def _close_cost(self, e):
+        """REALISTIC round-trip close cost in $ from the condor's own stored NBBO — the half-spread per leg
+        (mark is at MID; closing crosses to the touch) summed over the 4 legs x100 x qty. This is the honest
+        cost, not a flat 3%-of-max-loss haircut: single-name option spreads run 5-10x wider than index
+        options, so a flat haircut FLATTERS single-name condors. Returns (cost_usd, had_spreads)."""
+        legs = (e.get("legs") or {}).values()
+        qty = int(self._f(e.get("quantity")) or 0)
+        half, seen = 0.0, 0
+        for l in legs:
+            b, a = self._f(l.get("bid")), self._f(l.get("ask"))
+            if a > 0 and a >= b:
+                half += (a - b) / 2.0
+                seen += 1
+        return half * 100.0 * qty, seen >= 3
+
     def _day_returns(self, closed, sleeves):
-        """Day-clustered, cost-net return-on-risk observations for the given sleeves. INDEPENDENCE by day:
-        condors closed on the same date are ONE observation (sum net / sum risk) — the same anti-inflation
-        clustering the live court uses. Cost: the court's condor MID-close haircut (a round-trip spread
-        proxy), so the shadow is judged net of realistic close costs, not on a free mid."""
+        """Day-clustered, cost-net return-on-risk observations. INDEPENDENCE by day: condors closed on the
+        same date are ONE observation (sum net / sum risk) — the same anti-inflation clustering the live
+        court uses. Cost is the condor's OWN measured round-trip spread (falls back to the court's flat
+        haircut only when a condor stored no usable NBBO)."""
         from app.services.edge_persistence_engine import EdgePersistenceEngine as EP
         hc = EP.CONDOR_CLOSE_HAIRCUT_FRAC
         by_day, rows = {}, 0
@@ -56,7 +71,10 @@ class CondorShadowProofEngine:
             risk = self._f(e.get("max_loss_per")) * qty
             if risk <= 0:
                 continue
-            net = self._f(e.get("realized_pnl")) - hc * risk       # cost-net, same treatment as live court
+            cost, had = self._close_cost(e)
+            if not had:
+                cost = hc * risk                                   # fallback: flat haircut on a data gap
+            net = self._f(e.get("realized_pnl")) - cost            # cost-net at the REAL spread
             d = str(e.get("closed_date") or "")[:10]
             if not d:
                 continue
@@ -65,6 +83,30 @@ class CondorShadowProofEngine:
             rows += 1
         days = [(d, sn / sr) for d, (sn, sr) in sorted(by_day.items()) if sr > 0]
         return days, rows
+
+    def cost_validation(self):
+        """Measured condor round-trip close cost (as %-of-max-loss) vs the court's flat 3% haircut — the
+        honesty check on whether the shadow's mid-marked returns are realistically costed. A big gap means
+        the flat haircut flatters (single-name) condors."""
+        from app.services.edge_persistence_engine import EdgePersistenceEngine as EP
+        fracs = {}
+        for e in self._closed():
+            qty = int(self._f(e.get("quantity")) or 0)
+            risk = self._f(e.get("max_loss_per")) * qty
+            cost, had = self._close_cost(e)
+            if risk > 0 and had:
+                fracs.setdefault(e.get("sleeve"), []).append(cost / risk)
+        def _stat(xs):
+            xs = sorted(xs)
+            n = len(xs)
+            return None if not n else {"n": n, "median_pct": round(xs[n // 2] * 100, 1),
+                                       "mean_pct": round(sum(xs) / n * 100, 1),
+                                       "max_pct": round(xs[-1] * 100, 1)}
+        return {"court_flat_haircut_pct": round(EP.CONDOR_CLOSE_HAIRCUT_FRAC * 100, 1),
+                "measured_by_sleeve": {k: _stat(v) for k, v in fracs.items()},
+                "note": ("Real round-trip close cost = half the 4-leg NBBO spread / max-loss. Single-name "
+                         "condor spreads dwarf the flat 3% haircut; index (XSP) spreads are far tighter — "
+                         "which is why the CONFIRMED edge is index VRP, not single-name.")}
 
     def _track(self, sleeves, label):
         from app.services.edge_persistence_engine import EdgePersistenceEngine as EP
@@ -93,6 +135,7 @@ class CondorShadowProofEngine:
             "timestamp": datetime.utcnow().isoformat(),
             "vrp_family": self._track(self.VRP_SLEEVES, "VRP variance-premium (forward shadow)"),
             "by_sleeve": {s: self._track((s,), s) for s in self.VRP_SLEEVES},
+            "cost_validation": self.cost_validation(),
             "note": ("Forward-test verdict on the confirmed VRP edge from the zero-capital condor shadow, "
                      "judged on the LIVE court's bar (day-clustered, cost-net, 95% CI, 20-day gate). Accrues "
                      "faster than the capital-limited live book. FORWARD-TEST, not live-proven — it informs "
