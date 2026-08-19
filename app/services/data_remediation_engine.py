@@ -43,6 +43,25 @@ class DataRemediationEngine:
     EVENT_MIN_INTERVAL_MIN = 15       # hard floor between alert-driven runs — protects the TS API
     EVENT_UNIVERSE_LIMIT = 40         # small refresh slice on an alert-run (decision syms always + this)
     BACKUP_STALE_HOURS = 26           # off-machine git backup older than this = flagged (matches the guard)
+    MIN_TRADEABLE_BARS = 253          # < this = a junk stub (SPAC/warrant/newly-listed) that no signal reads;
+                                      # its bad bars must not page (matches DirectionalSignalEngine.MIN_BARS)
+
+    @classmethod
+    def _tradeable_criticals(cls, crit_issues):
+        """Critical issues restricted to names with enough history to actually trade — a 3-bar junk stub's
+        bad bar can't cry wolf. Bars counted once per critical symbol (cheap: only a handful post-repair)."""
+        out, bars = [], {}
+        for i in crit_issues:
+            sym = str(i.get("symbol") or "").upper()
+            if sym not in bars:
+                try:
+                    with open(BARS_DIR / f"{sym}_daily.csv") as f:
+                        bars[sym] = sum(1 for _ in f) - 1
+                except Exception:
+                    bars[sym] = 0
+            if bars[sym] >= cls.MIN_TRADEABLE_BARS:
+                out.append(i)
+        return out
 
     @staticmethod
     def enabled():
@@ -203,26 +222,39 @@ class DataRemediationEngine:
         if rejected:
             alerts.append(f"{len(rejected)} bar file(s) REJECTED on refresh (left untouched): {', '.join(rejected[:8])}")
 
-        # 2) integrity — read the LAST scan (append-only refresh can't create/fix criticals; the
-        # scheduler's scan_if_due re-scans daily and will reflect the refreshed STALE_FILE state).
-        crit_syms, integ, counts = set(), {}, {}
+        # 2) integrity — read the LAST scan, REPAIR any OHLC violations, then RE-SCAN so the alert reflects
+        # the POST-repair truth. Reporting the last scan's PRE-repair counts cried wolf on the very issues
+        # the same pass just fixed (2026-08-19: 421 OHLC_VIOLATION repaired but still reported 'present').
+        crit_syms, integ, counts, tradeable_crit = set(), {}, {}, []
         try:
             from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine
             eng = PriceBarIntegrityEngine()
             integ = eng.last_scan() or {}
             counts = integ.get("counts") or {}
-            crit_syms = {str(i.get("symbol")).upper() for i in (integ.get("issues") or [])
-                         if str(i.get("type")) in getattr(eng, "CRITICAL_TYPES", ())}
-            actions["integrity"] = {"counts": counts, "critical_count": integ.get("critical_count")}
             # 3) OHLC repair (safe clamp of low/high only, originals backed up) — only if any exist
             if counts.get("OHLC_VIOLATION"):
                 rep = eng.repair_ohlc(dry_run=not apply)
                 actions["ohlc_repair"] = {k: rep.get(k) for k in ("repaired", "files_changed", "status") if k in rep}
+                if apply and rep.get("files_changed"):
+                    integ = eng.scan(full=True, save=True) or integ      # fresh counts AFTER the repair
+                    counts = integ.get("counts") or {}
+            crit_issues = [i for i in (integ.get("issues") or [])
+                           if str(i.get("type")) in getattr(eng, "CRITICAL_TYPES", ())]
+            crit_syms = {str(i.get("symbol")).upper() for i in crit_issues}
+            # scope the ALERT to TRADEABLE names — a bad bar in a sub-MIN_BARS junk stub (SPAC/warrant)
+            # never enters a signal, so it must not page.
+            tradeable_crit = self._tradeable_criticals(crit_issues)
+            actions["integrity"] = {"counts": counts, "critical_count": integ.get("critical_count"),
+                                    "tradeable_critical_count": len(tradeable_crit),
+                                    "tradeable_critical_symbols": sorted({str(i.get("symbol")).upper()
+                                                                          for i in tradeable_crit})[:20]}
         except Exception as e:
             actions["integrity"] = {"error": str(e)[:120]}
-        if integ.get("critical_count"):
-            alerts.append(f"{integ.get('critical_count')} CRITICAL integrity issue(s) present "
-                          f"({counts}) — need review")
+        if tradeable_crit:      # alert ONLY on tradeable-universe criticals (post-repair) — junk-only never pages
+            from collections import Counter
+            by_type = dict(Counter(str(i.get("type")) for i in tradeable_crit))
+            alerts.append(f"{len(tradeable_crit)} CRITICAL integrity issue(s) in TRADEABLE names {by_type} "
+                          f"— need review")
 
         # 4) lineage — read the last verify report (scheduler runs verify_if_due daily), then re-accept
         # ONLY if provably safe. Append-only refresh doesn't touch settled rows, so the report is valid.
