@@ -121,11 +121,12 @@ class SleeveCapitalBudgetEngine:
             return {}
 
     @classmethod
-    def pct(cls, sleeve):
-        """Target percent-of-equity for a sleeve. Precedence: explicit env pin
+    def _raw_pct(cls, sleeve):
+        """The sleeve's UNNORMALIZED target %-of-equity. Precedence: explicit env pin
         (GREYLINE_<SLEEVE>_ALLOC_PCT) — but when risk-budget mode is on, a stepped DOWN-ONLY risk-trim may
         still de-risk a pinned concentration hog toward risk-parity (never raise a pin) > risk-budget re-mix
-        of non-pinned armed sleeves to floored risk-parity > auto-applied override file > static default."""
+        of non-pinned armed sleeves to floored risk-parity > auto-applied override file > static default.
+        pct() applies the group-sum normalization on top of this."""
         s = cls._canon(sleeve)
         if cls._env_pinned(s):                      # explicit operator env pin is the CEILING
             pin = cls._static_pct(s)
@@ -139,6 +140,27 @@ class SleeveCapitalBudgetEngine:
             if rp is not None:
                 return max(0.0, min(100.0, max(rp, cls._risk_floor(s))))
         return cls._static_pct(s)
+
+    @classmethod
+    def pct(cls, sleeve):
+        """Target %-of-equity. The risk-budget re-mix redistributes risk WITHIN the armed sleeves' combined
+        budget — it must NEVER add to it. But mid-glide the pinned sleeves (trend/vol_carry) sit ABOVE their
+        risk-parity target while the non-pinned (low_vol/xs) snap straight TO it, so the raw group sum
+        overshoots the combined budget and the book over-subscribes (the 111% pre-open break, 2026-08-18).
+        FIX: keep the re-mix group summing to its combined STATIC budget by scaling the group back when the
+        raw sum exceeds it. Because Σ static == Σ risk-parity for the group, f=0 and f=1 need no scaling and
+        every intermediate glide state is a clean proportional pull-back — the gradual de-concentration is
+        preserved, the invariant can't break. Sleeves outside the group (momentum/vrp) are untouched."""
+        s = cls._canon(sleeve)
+        raw = cls._raw_pct(s)
+        if cls._risk_budget_on():
+            group = set(cls._risk_parity_table().keys())     # the sleeves in the inverse-vol re-mix
+            if s in group:
+                target = sum(cls._static_pct(x) for x in group)     # combined budget (Σ static == Σ risk-parity)
+                total = sum(cls._raw_pct(x) for x in group)
+                if total > target and total > 0:
+                    raw *= target / total                    # proportional pull-back to the combined budget
+        return round(max(0.0, min(100.0, raw)), 2)
 
     # ---- RISK-BUDGETED sizing (inverse-vol across sleeves) --------------------------------------
     # A fixed %-of-equity gives each sleeve equal CAPITAL, not equal RISK: a short-vol sleeve (SVXY carry)

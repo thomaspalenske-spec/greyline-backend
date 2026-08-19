@@ -27,6 +27,7 @@ _EXEMPT_MODULES = {
     "test_risk_budget_sizing_backtest",# reads the real historical CSVs (2013+ crash-year coverage)
     "test_risk_budget_operationalize", # reads the real historical CSVs (advisory vols for the glide plan)
     "test_total_return_signal_impact", # reads the real total-return CSVs (close vs adj_close)
+    "test_risk_budget_glide_invariant",# reads the real historical CSVs (advisory vols for the re-mix group)
 }
 
 
