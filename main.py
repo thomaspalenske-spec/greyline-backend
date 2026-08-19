@@ -216,6 +216,10 @@ from app.routes import fx_trend_shadow
 
 app.include_router(fx_trend_shadow.router)
 
+from app.routes import overnight_shadow
+
+app.include_router(overnight_shadow.router)
+
 from app.routes import audit_ledger
 
 app.include_router(audit_ledger.router)

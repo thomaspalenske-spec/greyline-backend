@@ -1063,6 +1063,16 @@ class BackgroundSchedulerService:
             condor_shadow = {"error": repr(exc), "status": "CONDOR_SHADOW_DEGRADED"}
         cls._ckpt("condor_shadow")
 
+        # OVERNIGHT-return anomaly shadow — zero-capital forward test (close->open premium on the tightest
+        # index ETFs). Appends the latest not-yet-recorded overnight observation from the daily bars, once/day.
+        # NO orders; reads only. Gated by GREYLINE_OVERNIGHT_SHADOW (default on — measurement only).
+        try:
+            from app.services.overnight_anomaly_shadow_engine import OvernightAnomalyShadowEngine
+            overnight_shadow = OvernightAnomalyShadowEngine().run_if_due()
+        except Exception as exc:
+            overnight_shadow = {"error": repr(exc), "status": "OVERNIGHT_SHADOW_DEGRADED"}
+        cls._ckpt("overnight_shadow")
+
         # Record the daily gamma_flip-vs-spot gap for the condor proxies (UW serves flip live-only) so GATE 2's
         # regime can be TRENDED — CONVERGING (warming) vs DIVERGING. Reuses the same 900s-cached _gex_map the
         # shadow just read; one row/symbol/day; read-only, isolated so it can't disturb the cycle.
