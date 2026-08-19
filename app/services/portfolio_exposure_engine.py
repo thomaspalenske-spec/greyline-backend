@@ -246,15 +246,19 @@ class PortfolioExposureEngine:
                 under = (raw.split() or [""])[0].upper()      # OSI option symbols carry spaces
                 if not under or under == str(cash_sweep).upper():
                     continue                                  # cash-equivalent: not a sector-risk concentration
+                is_opt = (p.get("asset_type") == "OPTION") or (" " in raw)
+                # DEFINED-RISK OPTION legs are NOT equity concentration and must be EXCLUDED from this cap.
+                # Counting a condor's short/long legs at GROSS notional (qty x price x 100) massively
+                # overstates exposure — a SPY condor with ~$500 defined max loss read as $10,535 of
+                # "BROAD_MARKET", a 2.5x book-wide over-count that falsely tripped MAX_SECTOR and over-blocked
+                # new opens. The condor's real risk is bounded by the VRP sleeve's OWN portfolio risk cap
+                # (ConditionalVRPShortPremiumEngine.PORTFOLIO_RISK_CAP_USD), not this equity sector limit.
+                if is_opt:
+                    continue
                 qty = float(p.get("quantity") or 0)
                 price = float(p.get("current_price") or 0)
-                is_opt = (p.get("asset_type") == "OPTION") or (" " in raw)
-                notional = abs(qty * price * (100 if is_opt else 1))
-                e = agg.setdefault(under, {"symbol": under,
-                                           "asset_type": "OPTION" if is_opt else "EQUITY", "notional": 0.0})
-                e["notional"] += notional
-                if is_opt:
-                    e["asset_type"] = "OPTION"
+                e = agg.setdefault(under, {"symbol": under, "asset_type": "EQUITY", "notional": 0.0})
+                e["notional"] += abs(qty * price)
         except Exception:
             return [], True
         for e in agg.values():
