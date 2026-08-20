@@ -195,19 +195,79 @@ class DataRemediationEngine:
         out.sort(key=lambda r: r["date"])
         return out
 
+    UW_CONTINUITY_TOL = 0.05      # overlap-bar close tolerance for the cross-source (UW) fallback
+
+    @staticmethod
+    def _uw_fallback_enabled():
+        return (getenv("GREYLINE_REMEDIATION_UW_FALLBACK", "true") or "true").strip().lower() == "true"
+
+    @staticmethod
+    def _fetch_bars_uw(symbol):
+        """Daily bars from Unusual Whales REGULAR-session OHLC — the cross-source FALLBACK for when TradeStation
+        can't serve a symbol (its sandbox drops some active names and all delisted stubs). Same row shape as
+        `_fetch_bars`; only the 'r' (regular) session row per date is the canonical daily bar. Volume uses the
+        day's total. Best-effort: returns [] on missing key / HTTP error / bad payload so the caller degrades
+        cleanly to FETCH_FAILED."""
+        key = getenv("UNUSUAL_WHALES_API_KEY")
+        if not key:
+            return []
+        base = getenv("UNUSUAL_WHALES_BASE_URL") or "https://api.unusualwhales.com"
+        import requests
+        try:
+            resp = requests.get(base.rstrip("/") + f"/api/stock/{symbol}/ohlc/1d",
+                                headers={"Authorization": f"Bearer {key}", "Accept": "application/json"}, timeout=20)
+            resp.raise_for_status()
+            data = (resp.json() or {}).get("data") or []
+        except Exception:
+            return []
+        best = {}
+        for d in data:
+            if d.get("market_time") != "r":       # regular session only = the canonical daily bar
+                continue
+            try:
+                dt = str(d.get("date"))[:10]
+                o, h, l, c = float(d["open"]), float(d["high"]), float(d["low"]), float(d["close"])
+                v = int(float(d.get("total_volume") or d.get("volume") or 0))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if dt and o > 0 and c > 0 and l <= min(o, c) and h >= max(o, c):   # OHLC-sane only
+                best[dt] = {"date": dt, "open": round(o, 6), "high": round(h, 6),
+                            "low": round(l, 6), "close": round(c, 6), "volume": v}
+        return [best[k] for k in sorted(best)]
+
+    @staticmethod
+    def _last_close(rows):
+        try:
+            return float(max(rows, key=lambda r: r["date"]).get("close"))
+        except (ValueError, TypeError, KeyError):
+            return None
+
     def _refresh_one(self, symbol, base_url, token, today_iso, apply):
         path = BARS_DIR / f"{symbol}_daily.csv"
         rows = self._existing_rows(path)
         if not rows:
             return {"symbol": symbol, "status": "SKIP_EMPTY", "added": 0}
         last_date = max(r["date"] for r in rows)
+        source = "tradestation"
         try:
             bars = self._fetch_bars(symbol, base_url, token)
         except Exception as e:
-            return {"symbol": symbol, "status": "FETCH_FAILED", "added": 0, "error": str(e)[:80]}
+            # TradeStation can't serve it (its sandbox drops some active names and all delisted stubs). Try the
+            # Unusual Whales cross-source fallback before giving up — GUARDED so a vendor split can't corrupt.
+            uw = self._fetch_bars_uw(symbol) if self._uw_fallback_enabled() else []
+            if not uw:
+                return {"symbol": symbol, "status": "FETCH_FAILED", "added": 0, "error": str(e)[:80]}
+            # CONTINUITY GUARD: the overlap bar's close must match the CSV within tolerance, or a vendor
+            # split/adjustment would stamp a false gap into the TS-sourced series (caught BNZI 0.59 vs 11.80).
+            last_close = self._last_close(rows)
+            ov = next((b for b in uw if b["date"] == last_date), None)
+            if not (ov and last_close and abs(ov["close"] / last_close - 1.0) <= self.UW_CONTINUITY_TOL):
+                return {"symbol": symbol, "status": "UW_DISCONTINUITY", "added": 0}
+            bars = uw
+            source = "unusual_whales"
         new = [b for b in bars if last_date < b["date"] < today_iso]   # exclude the partial live bar
         if not new:
-            return {"symbol": symbol, "status": "ALREADY_CURRENT", "added": 0}
+            return {"symbol": symbol, "status": "ALREADY_CURRENT", "added": 0, "source": source}
         dates = [b["date"] for b in new]
         if len(set(dates)) != len(dates) or dates != sorted(dates) or min(dates) <= last_date:
             return {"symbol": symbol, "status": "REJECTED_VALIDATION", "added": 0}
@@ -219,7 +279,7 @@ class DataRemediationEngine:
             if len(after) != len(rows) + len(new) or ad != sorted(ad):
                 return {"symbol": symbol, "status": "REJECTED_POST_WRITE", "added": 0}
         return {"symbol": symbol, "status": ("APPENDED" if apply else "WOULD_APPEND"),
-                "added": len(new), "through": dates[-1]}
+                "added": len(new), "through": dates[-1], "source": source}
 
     def _token(self):
         try:
