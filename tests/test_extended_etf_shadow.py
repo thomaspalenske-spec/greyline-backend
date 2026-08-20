@@ -77,3 +77,53 @@ def test_report_accumulating_on_court_bar(tmp_path, monkeypatch):
     rep = X().report()
     assert rep["cohorts_closed"] == 3 and "accumulating" in rep["verdict"].lower()
     assert rep["rigorous_verdict"]["verdict"].startswith("ACCUMULATING")   # court's min-N gate, same bar
+
+
+def _isolate_all(monkeypatch, tmp_path):
+    monkeypatch.setattr(X, "STATE", tmp_path)
+    monkeypatch.setattr(X, "OPEN", tmp_path / "o.json")
+    monkeypatch.setattr(X, "CLOSED", tmp_path / "c.jsonl")
+    monkeypatch.setattr(X, "OPEN_LS", tmp_path / "ols.json")
+    monkeypatch.setattr(X, "CLOSED_LS", tmp_path / "cls.jsonl")
+
+
+def test_ls_opens_and_settles_as_market_neutral_spread(tmp_path, monkeypatch):
+    """The long/short twin opens top-K long / bottom-K short and settles as a SPREAD (mean long − mean short),
+    with cost charged on BOTH sleeves. Longs +10%, shorts −5% → gross spread 0.15, net 0.15 − 2*cost."""
+    monkeypatch.setenv("GREYLINE_COST_BPS_ROUND_TRIP", "10")   # 0.001 round-trip
+    _isolate_all(monkeypatch, tmp_path)
+    uni = ["L%d" % i for i in range(6)] + ["S%d" % i for i in range(6)]
+    tr = {**{"L%d" % i: 0.20 - i * 0.005 for i in range(6)},   # the 6 highest = long sleeve
+          **{"S%d" % i: 0.06 - i * 0.005 for i in range(6)}}   # the 6 lowest = short sleeve
+    monkeypatch.setattr(X, "_universe", lambda self: uni)
+    monkeypatch.setattr(X, "_trailing_return", lambda self, s: tr[s])
+    monkeypatch.setattr(X, "_live_prices", lambda self, syms: {str(s).upper(): 100.0 for s in syms})
+
+    ls1 = X().mark()["long_short"]
+    assert ls1["cohort_opened"] and ls1["open_cohorts"] == 1
+    o = json.loads((tmp_path / "ols.json").read_text())
+    sides = [l["side"] for l in o[0]["legs"]]
+    assert sides.count("BUY") == 6 and sides.count("SELL") == 6
+
+    o[0]["opened"] = "2020-01-01"                              # age past the weekly hold
+    (tmp_path / "ols.json").write_text(json.dumps(o))
+    monkeypatch.setattr(X, "_live_prices",
+                        lambda self, syms: {str(s).upper(): (110.0 if str(s).upper().startswith("L") else 95.0)
+                                            for s in syms})
+    ls3 = X().mark()["long_short"]
+    assert ls3["cohorts_closed"] == 1
+    rec = json.loads((tmp_path / "cls.jsonl").read_text().splitlines()[0])
+    assert abs(rec["gross_spread"] - 0.15) < 1e-6              # +0.10 long − (−0.05) short
+    assert abs(rec["net_return"] - (0.15 - 2 * 0.001)) < 1e-6  # cost charged on BOTH sleeves
+    assert rec["n_long"] == 6 and rec["n_short"] == 6
+
+
+def test_ls_skipped_when_universe_too_small(tmp_path, monkeypatch):
+    """Fewer than 2*TOP_K names can't form two disjoint sleeves — the L/S track opens nothing (long-only still runs)."""
+    _isolate_all(monkeypatch, tmp_path)
+    monkeypatch.setattr(X, "_universe", lambda self: ["A", "B", "C", "D"])
+    monkeypatch.setattr(X, "_trailing_return", lambda self, s: {"A": .4, "B": .3, "C": .2, "D": .1}[s])
+    monkeypatch.setattr(X, "_live_prices", lambda self, syms: {str(s).upper(): 100.0 for s in syms})
+    out = X().mark()
+    assert out["cohort_opened"]                                # long-only still opens
+    assert out["long_short"]["open_cohorts"] == 0             # but no L/S cohort (too few names)
