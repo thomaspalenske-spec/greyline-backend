@@ -49,13 +49,20 @@ def _fx_quote_to_usd(symbol, live_last):
     return 1.0
 
 
-def enrich_open_rows(rows, contracts=None, fx=False):
+def enrich_open_rows(rows, contracts=None, fx=False, dollars=True):
     """Add contracts + per-share + total-dollar P/L to each per-position shadow row IN PLACE, from its
     entry_close / live_last / side. Used by the cohort shadows (momentum, ETF, vol-ETP, futures, FX) whose
     rows share that shape, so every card sizes P/L the same way. Rows missing a live mark keep None.
 
     fx=True marks the rows as spot-FX pairs: the per-unit move is in the pair's QUOTE currency, so the dollar
-    P/L is converted to USD (see _fx_quote_to_usd). Equity/ETF rows (fx=False) are already USD-denominated."""
+    P/L is converted to USD (see _fx_quote_to_usd). Equity/ETF rows (fx=False) are already USD-denominated.
+
+    dollars=False marks rows whose per-unit move does NOT convert to a fixed USD figure without external
+    plumbing — the futures shadow: each contract has its own point value (ES $50/pt, ZB $1000/pt, grains
+    quoted in cents) and the continuous @ROOT series can carry roll gaps, so a share-style (move x 100) dollar
+    is meaningless. Those rows get the contract count + raw per-unit move for context but NO fabricated
+    pnl_dollars (a `pnl_dollars_na` reason is attached instead); the % return is the measurement, matching the
+    engine's point-value plumbing that is deferred until arm."""
     c = default_contracts() if contracts is None else max(1, int(contracts))
     for r in rows or []:
         if not isinstance(r, dict):
@@ -70,6 +77,9 @@ def enrich_open_rows(rows, contracts=None, fx=False):
             continue
         pps = (ll - ec) if side in ("BUY", "LONG") else (ec - ll)   # signed by side, like unrealized_pct
         r["pnl_per_share"] = round(pps, 4)
+        if not dollars:
+            r["pnl_dollars_na"] = "per-contract point value deferred until arm; % return is the measure"
+            continue
         usd = _fx_quote_to_usd(r.get("symbol"), ll) if fx else 1.0
         r["pnl_dollars"] = pnl_dollars(pps * usd, c)
     return rows

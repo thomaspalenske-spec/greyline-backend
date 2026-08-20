@@ -57,3 +57,16 @@ def test_fx_quote_is_usd_pair_unchanged(monkeypatch):
     S.enrich_open_rows([a], fx=True)
     S.enrich_open_rows([b])
     assert a["pnl_dollars"] == b["pnl_dollars"] == 0.2
+
+
+def test_futures_rows_carry_no_fabricated_dollars(monkeypatch):
+    """Futures have per-contract point values (ES $50/pt, ZB $1000/pt, grains in cents) and roll gaps on the
+    continuous series, so a share-style (move x 100) dollar is meaningless. dollars=False keeps the contract
+    count + raw move but attaches NO pnl_dollars — the % return is the measurement (point value deferred to arm)."""
+    monkeypatch.delenv("GREYLINE_SHADOW_CONTRACTS", raising=False)
+    row = {"symbol": "ES", "side": "BUY", "entry_close": 5000.0, "live_last": 5010.0}
+    S.enrich_open_rows([row], dollars=False)
+    assert row["contracts"] == 1                    # 1 contract is meaningful for a future
+    assert row["pnl_per_share"] == 10.0             # raw point move kept for context
+    assert "pnl_dollars" not in row                 # NO fabricated dollar (would have been a bogus $1000)
+    assert "pnl_dollars_na" in row                  # reason attached instead
