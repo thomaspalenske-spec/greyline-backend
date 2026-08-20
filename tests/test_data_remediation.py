@@ -45,6 +45,7 @@ def _no_refresh(monkeypatch):
     # no TS, no bar writes — isolate the lineage/decision logic
     monkeypatch.setattr(D, "_token", lambda self: ("tok", "http://x"))
     monkeypatch.setattr(D, "_decision_symbols", classmethod(lambda cls: []))
+    monkeypatch.setattr(D, "_shadow_symbols", classmethod(lambda cls: []))
     monkeypatch.setattr(D, "_stale_symbols", classmethod(lambda cls, limit: []))
     yield
 
@@ -61,6 +62,18 @@ def test_decision_symbols_include_spy_and_baskets(monkeypatch):
     monkeypatch.setattr("app.services.data_remediation_engine.BARS_DIR", _REAL_HIST)  # conftest sandboxes cwd
     syms = D._decision_symbols()
     assert "SPY" in syms and "QQQM" in syms and "SVXY" in syms
+
+
+def test_shadow_symbols_include_overnight_etfs(monkeypatch):
+    """The bar-dependent forward shadows must be in the ALWAYS-refresh set so they never accrue on stale bars.
+    Regression guard for the 2026-08-20 stall where the overnight shadow's QQQ/IWM/DIA lagged ~3 days because
+    only a rotating stalest slice was refreshed."""
+    monkeypatch.setattr("app.services.data_remediation_engine.BARS_DIR", _REAL_HIST)  # conftest sandboxes cwd
+    sh = D._shadow_symbols()
+    # overnight-anomaly universe (the exact names that silently stalled) must be present
+    assert {"SPY", "QQQ", "IWM", "DIA"} <= set(sh)
+    # and the extended-ETF basket the extended-etf shadow marks on
+    assert "MTUM" in sh or "QQQM" in sh
 
 
 def test_lineage_auto_accepts_clean_restatement(monkeypatch, _no_refresh):

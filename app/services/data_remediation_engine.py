@@ -99,6 +99,48 @@ class DataRemediationEngine:
         return out
 
     @classmethod
+    def _shadow_symbols(cls):
+        """The bar-dependent FORWARD-SHADOW universes that read app/data/historical daily bars and accrue their
+        proof-gate observations off them — they must be refreshed EVERY run or a shadow silently marks/accrues on
+        stale bars. (2026-08-20: the overnight-anomaly shadow stalled for days because QQQ/IWM/DIA lagged ~3 days
+        while only a 250-name stalest slice of a 2,263-name universe rotated per run.) These are small, bounded
+        baskets, so always-refreshing them is cheap; the rotating stale slice still handles the archival tail.
+        The momentum-reversal / XS-momentum LIVE-price shadows settle on live quotes, not these CSVs, so they are
+        deliberately NOT included."""
+        def _uni(dotted, attr):
+            mod_name, cls_name = dotted.rsplit(".", 1)
+            try:
+                mod = __import__(mod_name, fromlist=[cls_name])
+                E = getattr(mod, cls_name)
+                fn = getattr(E, attr, None)
+                if fn is None:
+                    return []
+                if callable(fn):
+                    try:
+                        return list(fn())                 # classmethod / staticmethod
+                    except TypeError:
+                        return list(fn(E()))               # bound instance method
+                return list(fn)
+            except Exception:
+                return []
+        out = []
+        out += _uni("app.services.overnight_anomaly_shadow_engine.OvernightAnomalyShadowEngine", "_universe")
+        out += _uni("app.services.extended_etf_shadow_engine.ExtendedEtfShadowEngine", "_universe")
+        out += _uni("app.services.cross_sectional_momentum_shadow_engine.CrossSectionalMomentumShadowEngine", "UNIVERSE")
+        try:
+            from app.services.vol_etp_shadow_engine import VolEtpShadowEngine
+            out.append(getattr(VolEtpShadowEngine, "INSTRUMENT", "VXX"))
+        except Exception:
+            pass
+        seen, res = set(), []
+        for s in out:
+            u = str(s).upper()
+            if u and u not in seen and (BARS_DIR / f"{u}_daily.csv").exists():
+                seen.add(u)
+                res.append(u)
+        return res
+
+    @classmethod
     def _stale_symbols(cls, limit):
         """The broad-universe symbols the integrity scan flagged STALE_FILE (stalest first if aged)."""
         try:
@@ -200,10 +242,11 @@ class DataRemediationEngine:
         if not token:
             return {"status": "REMEDIATE_NO_TOKEN", "acted": False}
 
-        # 1) refresh — decision symbols always, then a stalest slice of the broad universe
+        # 1) refresh — decision + bar-dependent shadow universes ALWAYS (they accrue proof-gate obs off these
+        #    bars daily), then a stalest slice of the broad universe for the archival tail.
         today_iso = datetime.utcnow().strftime("%Y-%m-%d")
         targets, seen = [], set()
-        for s in self._decision_symbols() + self._stale_symbols(limit):
+        for s in self._decision_symbols() + self._shadow_symbols() + self._stale_symbols(limit):
             if s not in seen:
                 seen.add(s)
                 targets.append(s)
