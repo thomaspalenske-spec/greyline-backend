@@ -32,3 +32,28 @@ def test_enrich_open_rows_is_side_aware(monkeypatch):
     assert out[0]["contracts"] == 1 and out[0]["pnl_per_share"] == 1.5 and out[0]["pnl_dollars"] == 150.0
     assert out[1]["pnl_per_share"] == 2.0 and out[1]["pnl_dollars"] == 200.0   # short profits as price falls
     assert out[2]["contracts"] == 1 and "pnl_dollars" not in out[2]           # unpriced -> no fabricated P/L
+
+
+def test_fx_usd_base_pair_converts_move_to_usd(monkeypatch):
+    """USD-base pairs (USDJPY/USDCAD/USDCHF) quote the price in the FOREIGN currency, so the per-unit move is
+    NOT dollars. Without conversion, USDJPY long 158.543->159.082 mislabels a 0.539-yen move as $53.90; the
+    true USD value of the hypothetical 100-unit lot is ~$0.34 (the move divided by the live JPY rate)."""
+    monkeypatch.delenv("GREYLINE_SHADOW_CONTRACTS", raising=False)
+    row = {"symbol": "USDJPY", "side": "BUY", "entry_close": 158.543, "live_last": 159.082}
+    S.enrich_open_rows([row], fx=True)
+    assert row["pnl_dollars"] == 0.34                    # ¥53.9 / 159.082, NOT $53.90
+    # fx=False (the equity/ETF path) leaves the same numbers as a raw price move -> the old (wrong-for-FX) $53.90
+    eq = {"symbol": "USDJPY", "side": "BUY", "entry_close": 158.543, "live_last": 159.082}
+    S.enrich_open_rows([eq])
+    assert eq["pnl_dollars"] == 53.9
+
+
+def test_fx_quote_is_usd_pair_unchanged(monkeypatch):
+    """'...USD' pairs (EURUSD/GBPUSD/AUDUSD) are already quoted in USD, so the move IS dollars — no conversion.
+    Long EURUSD 1.16758->1.16958 = +0.002 * 100 = $0.20, whether or not fx-marked."""
+    monkeypatch.delenv("GREYLINE_SHADOW_CONTRACTS", raising=False)
+    a = {"symbol": "EURUSD", "side": "BUY", "entry_close": 1.16758, "live_last": 1.16958}
+    b = {"symbol": "EURUSD", "side": "BUY", "entry_close": 1.16758, "live_last": 1.16958}
+    S.enrich_open_rows([a], fx=True)
+    S.enrich_open_rows([b])
+    assert a["pnl_dollars"] == b["pnl_dollars"] == 0.2

@@ -11,6 +11,8 @@ def _paths(monkeypatch, tmp_path):
     monkeypatch.setattr(E, "DIR", tmp_path)
     monkeypatch.setattr(E, "LEDGER", tmp_path / "realized.jsonl")
     monkeypatch.setattr(E, "STATE", tmp_path / "state.json")
+    # Booking is confined to the session window; force it open so these delta-booking tests are clock-independent.
+    monkeypatch.setattr(E, "_booking_window_open", staticmethod(lambda et_now: True))
 
 
 def test_empty_is_zero(monkeypatch, tmp_path):

@@ -85,6 +85,15 @@ class MissionRealizedPnlEngine:
         except Exception:
             return None
 
+    @staticmethod
+    def _booking_window_open(et_now):
+        """True only during the regular session + a short post-close grace (09:30-16:15 ET, weekdays). Realized
+        moves only on session fills, so booking is confined to when a fill COULD have happened; the grace window
+        captures the settle of a last-minute fill without re-opening the deep-overnight drift that pollutes
+        cumulative realized. Pure function of an ET-aware datetime so it is deterministic + unit-testable."""
+        et_min = et_now.hour * 60 + et_now.minute
+        return et_now.weekday() < 5 and (9 * 60 + 30) <= et_min <= (16 * 60 + 15)
+
     def record_from_broker(self):
         """Book the change in the broker's DAILY realized since the last read today. Delta-per-day so
         the intraday-accumulating, midnight-resetting broker figure is booked exactly once."""
@@ -100,9 +109,19 @@ class MissionRealizedPnlEngine:
         # harmless (the next cycle catches up); a UTC fallback re-creates the fantasy.
         try:
             from zoneinfo import ZoneInfo
-            today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+            et_now = datetime.now(ZoneInfo("America/New_York"))
+            today = et_now.date().isoformat()
         except Exception:
             return {"status": "NO_ET_DATE", "booked": 0.0}
+        # REALIZED ONLY MOVES ON A SESSION FILL. The SIM's daily RealizedProfitLoss ALSO drifts overnight on
+        # open-position mark adjustments (no fills) — booking that drift moved the cumulative mission realized
+        # while the market was CLOSED and tripped the reality guard's REALIZED_CONTINUITY invariant (the fantasy
+        # class it exists to catch). So book ONLY inside the regular session, plus a short post-close grace so the
+        # settle of a last-minute fill is still captured; skip deep-overnight / pre-market / weekend reads. Same
+        # fail-closed discipline as the ET-date guard above: on any clock failure, do NOT book (never overnight).
+        if not self._booking_window_open(et_now):
+            return {"status": "MARKET_CLOSED_NO_BOOK", "booked": 0.0,
+                    "cumulative_realized": self.cumulative_realized()}
         try:
             state = json.loads(self.STATE.read_text())
         except Exception:

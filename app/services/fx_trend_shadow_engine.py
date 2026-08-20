@@ -245,7 +245,7 @@ class FxTrendShadowEngine:
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]
         n = len(rets)
         from app.services.shadow_contract_sizing import enrich_open_rows
-        positions = enrich_open_rows(self.open_positions())   # + contracts + total-$ P/L (hypothetical lots)
+        positions = enrich_open_rows(self.open_positions(), fx=True)  # + contracts + USD-converted $ P/L (hypo lots)
         base = {"timestamp": datetime.utcnow().isoformat(), "shadow_enabled": self.enabled(),
                 "engine": "FxTrendShadowEngine", "universe_size": len(self._instruments()),
                 "cohorts_closed": n, "min_cohorts": self.MIN_COHORTS,
