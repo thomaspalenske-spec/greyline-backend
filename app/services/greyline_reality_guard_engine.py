@@ -382,6 +382,34 @@ class GreyLineRealityGuardEngine:
                 "detail": (f"{crit} corrupt bar(s) across {scan.get('symbols_checked')} symbols "
                            f"— {scan.get('counts')}{age}")}
 
+    @staticmethod
+    def _scope_source_mismatches(mismatches, active, run_ts, bars_dir, min_bars=253):
+        """Split cross-source VALUE mismatches into (live_bad, restated, thin, inert). Only `live_bad` — in the
+        active universe (or active None = everything), TRADEABLE (>= min_bars bars), and NOT restated since the
+        scan — actually poisons a live signal and should page. See _check_price_bars_match_source."""
+        live_bad, restated, thin, inert = [], [], [], []
+        for m in (mismatches or []):
+            s = str(m.get("symbol") or "").upper()
+            if not s:
+                continue
+            if active is not None and s not in active:
+                inert.append(s); continue                       # no armed sleeve trades it / we don't hold it
+            p = bars_dir / f"{s}_daily.csv"
+            try:
+                nbars = sum(1 for _ in open(p))
+            except Exception:
+                nbars = 0
+            if nbars < min_bars:
+                thin.append(s); continue                        # sub-min-bars stub — no real signal reads it
+            try:
+                mtime = datetime.utcfromtimestamp(p.stat().st_mtime)
+            except Exception:
+                mtime = None
+            if run_ts and mtime and mtime > run_ts:
+                restated.append(s); continue                    # rewritten after the scan -> likely already healed
+            live_bad.append(s)
+        return live_bad, restated, thin, inert
+
     def _check_price_bars_match_source(self):
         """The bars must match an INDEPENDENT source, not merely be self-consistent.
 
@@ -415,22 +443,39 @@ class GreyLineRealityGuardEngine:
             return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
                     "detail": (f"{run.get('matched')}/{run.get('checked')} symbols match "
                                f"TradeStation barcharts{age}")}
-        mism = [m.get("symbol") for m in (run.get("mismatches") or [])]
-        # SCOPE: a mismatch in a symbol no armed sleeve trades and we don't hold poisons no live signal.
+        # SCOPE the "wrong prices" page precisely — only where a VALUE mismatch actually poisons a LIVE signal.
+        # The cross-source engine already flags only real value disagreements (UNADJUSTED_SPLIT / SYSTEMATIC over
+        # OVERLAPPING dates — never mere staleness). On top of that, page only when the symbol is:
+        #   (1) in the active signal universe (or momentum-armed = everything is signal-relevant),
+        #   (2) TRADEABLE — >= MIN_BARS bars, so a thin/penny sub-253-bar stub the screener never trades doesn't
+        #       cry wolf (a $1, 114-bar name is inert), and
+        #   (3) NOT restated since the scan — a bar file rewritten after the run has almost certainly self-healed
+        #       via cross-source restatement/refresh, so it's pending re-verify, not a hard fail.
+        from pathlib import Path as _P
+        MIN_BARS = 253
         active = self._active_universe()
-        if active is not None:
-            live_bad = sorted({str(s).upper() for s in mism if s} & active)
-            if not live_bad:
-                return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
-                        "detail": (f"{bad} symbol(s) disagree with TradeStation ({', '.join([s for s in mism if s][:5])}), "
-                                   f"but NONE in the active universe (untraded — inert){age}")}
+        run_ts = None
+        try:
+            run_ts = datetime.fromisoformat(run["timestamp"])
+        except Exception:
+            pass
+        live_bad, restated, thin, inert = self._scope_source_mismatches(
+            run.get("mismatches") or [], active, run_ts, _P("app/data/historical"), MIN_BARS)
+        if live_bad:
             return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": False,
-                    "detail": (f"{len(live_bad)} ACTIVELY-TRADED symbol(s) DISAGREE with TradeStation barcharts"
-                               f"{age}: {', '.join(live_bad[:5])} — signals computed from wrong prices")}
-        names = ", ".join(s for s in mism[:5] if s)
-        return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": False,
-                "detail": (f"{bad} symbol(s) DISAGREE with TradeStation barcharts{age}: "
-                           f"{names} — signals on these are computed from wrong prices")}
+                    "detail": (f"{len(live_bad)} TRADEABLE, in-universe symbol(s) DISAGREE with TradeStation "
+                               f"barcharts{age}: {', '.join(sorted(live_bad)[:5])} — signals computed from wrong prices")}
+        parts = []
+        if restated:
+            parts.append(f"{len(restated)} restated since scan (re-verify pending)")
+        if thin:
+            parts.append(f"{len(thin)} thin sub-{MIN_BARS}-bar stub(s)")
+        if inert:
+            parts.append(f"{len(inert)} untraded (inert)")
+        why = "; ".join(parts) or "none material"
+        return {"id": "PRICE_BARS_MATCH_SOURCE", "severity": "warning", "ok": True,
+                "detail": (f"{bad} symbol(s) disagree with TradeStation{age}, but none TRADEABLE + in-universe + "
+                           f"unresolved ({why})")}
 
     def _check_signal_bars_tradable(self):
         """Signals must be computed from bars that were actually TRADED.
