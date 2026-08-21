@@ -1073,6 +1073,16 @@ class BackgroundSchedulerService:
             overnight_shadow = {"error": repr(exc), "status": "OVERNIGHT_SHADOW_DEGRADED"}
         cls._ckpt("overnight_shadow")
 
+        # FOMC-CYCLE equity-timing shadow — zero-capital forward test (CMVJ 2019: the equity premium concentrates
+        # in EVEN FOMC-cycle weeks). Appends the latest not-yet-recorded SPY daily return + its cycle-week, once/day.
+        # NO orders; reads only. Gated by GREYLINE_FOMC_CYCLE_SHADOW (default on — measurement only).
+        try:
+            from app.services.fomc_cycle_shadow_engine import FomcCycleShadowEngine
+            fomc_cycle_shadow = FomcCycleShadowEngine().run_if_due()
+        except Exception as exc:
+            fomc_cycle_shadow = {"error": repr(exc), "status": "FOMC_CYCLE_SHADOW_DEGRADED"}
+        cls._ckpt("fomc_cycle_shadow")
+
         # Record the daily gamma_flip-vs-spot gap for the condor proxies (UW serves flip live-only) so GATE 2's
         # regime can be TRENDED — CONVERGING (warming) vs DIVERGING. Reuses the same 900s-cached _gex_map the
         # shadow just read; one row/symbol/day; read-only, isolated so it can't disturb the cycle.
