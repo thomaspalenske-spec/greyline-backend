@@ -28,6 +28,13 @@ def edge_proof_maturity():
     return EdgePersistenceEngine().proof_maturity()
 
 
+@router.get("/edge-persistence/proof-milestones")
+def edge_proof_milestones():
+    """Win-side proof milestones: each sleeve's high-water mark toward its verdict (first close / gate reached /
+    PROVEN). Read-only preview of the alert the scheduler pages on — dispatch is suppressed here."""
+    return EdgePersistenceEngine().proof_milestone_alert(dispatch=False, record=False)
+
+
 @router.get("/sleeve-execution-cost")
 def sleeve_execution_cost():
     """Per-sleeve round-trip spread cost (live) — pair with /edge-persistence: cost > edge = retire.

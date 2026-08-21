@@ -28,6 +28,8 @@ class EdgePersistenceEngine:
 
     DIR = Path("app/data/edge_persistence")
     LEDGER = DIR / "daily_marks.jsonl"
+    # WIN-SIDE proof-milestone high-water marks (per sleeve) so each milestone pages exactly once.
+    MILESTONE_STATE = DIR / "proof_milestone_state.json"
     # SLEEVE-ATTRIBUTED book marks for the PERIODIC-return track (low-turnover sleeves). Distinct from
     # daily_marks.jsonl, which attributes by symbol (contaminated when trend ∩ xs_momentum share an ETF).
     BOOK_MARKS = DIR / "sleeve_book_marks.jsonl"
@@ -720,6 +722,95 @@ class EdgePersistenceEngine:
             except Exception:
                 pass
         return {"status": "EDGE_DECAY_FLAGGED", "decayed": decayed, "detail": detail}
+
+    # milestone ladder — a sleeve's forward progress toward proving an edge (high-water, forward-only)
+    _MILESTONE_RANK = {"none": 0, "first_close": 1, "gate_reached": 2, "proven": 3}
+
+    def proof_milestone_alert(self, dispatch=True, record=True):
+        """The WIN-SIDE companion to decay_alert. As a sleeve climbs toward its verdict, page ONCE at each
+        milestone: FIRST_CLOSE (it began accruing real closes — the proof clock started), GATE_REACHED (enough
+        independent days that a verdict is now renderable), and PROVEN (the win that moves the Edge grade). This
+        is the alert the confirmed-but-unproven VRP harvest most needs — nothing else fires when it crosses.
+
+        Reads proof_maturity() (the single source of truth — never re-derives the court); persists a per-sleeve
+        HIGH-WATER milestone so each fires exactly once and a later regress can't re-page it (the retire side is
+        decay_alert's job). Read-only + best-effort — never trades, never raises."""
+        import json as _json
+        try:
+            rows = (self.proof_maturity() or {}).get("sleeves") or []
+        except Exception as e:
+            return {"status": "PROOF_MILESTONE_DEGRADED", "error": repr(e)[:100]}
+        first_run = not self.MILESTONE_STATE.exists()
+        try:
+            seen = _json.loads(self.MILESTONE_STATE.read_text())
+            if not isinstance(seen, dict):
+                seen = {}
+        except Exception:
+            seen = {}
+
+        def _milestone(r):
+            cur, gate, state = int(r.get("current") or 0), int(r.get("gate") or 0), r.get("state")
+            if state == "PROVEN":
+                return "proven"
+            if gate and cur >= gate:
+                return "gate_reached"
+            if cur >= 1:
+                return "first_close"
+            return "none"
+
+        # FIRST-EVER run: baseline to current reality WITHOUT paging (forward-only discipline — don't burst-page
+        # for milestones already reached before this monitor existed). Only FUTURE crossings alert.
+        if first_run:
+            baseline = {r["sleeve"]: _milestone(r) for r in rows if r.get("sleeve")}
+            if record:
+                try:
+                    self.MILESTONE_STATE.parent.mkdir(parents=True, exist_ok=True)
+                    self.MILESTONE_STATE.write_text(_json.dumps(baseline))
+                except Exception:
+                    pass
+            return {"status": "PROOF_MILESTONE_BASELINED", "fired": [], "milestones": baseline}
+
+        fired = []
+        for r in rows:
+            s = r.get("sleeve")
+            if not s:
+                continue
+            ms = _milestone(r)
+            prev = seen.get(s, "none")
+            if self._MILESTONE_RANK.get(ms, 0) > self._MILESTONE_RANK.get(prev, 0):   # forward-only (high-water)
+                fired.append({"sleeve": s, "milestone": ms, "from": prev, "current": r.get("current"),
+                              "gate": r.get("gate"), "verdict": r.get("verdict"),
+                              "eta_days_to_gate": r.get("eta_days_to_gate"),
+                              "mean_return_on_risk_pct": r.get("mean_return_on_risk_pct")})
+                seen[s] = ms
+
+        if fired and record:
+            try:
+                self.MILESTONE_STATE.parent.mkdir(parents=True, exist_ok=True)
+                self.MILESTONE_STATE.write_text(_json.dumps(seen))
+            except Exception:
+                pass
+            if dispatch:
+                _COPY = {
+                    "first_close": ("INFO", "sleeve booked its FIRST real close — the live proof clock has started"),
+                    "gate_reached": ("WARNING", "sleeve REACHED its verdict gate — a live edge verdict is now renderable"),
+                    "proven": ("CRITICAL", "sleeve is PROVEN — a confirmed, live, cost-net edge (this moves the Edge grade)"),
+                }
+                try:
+                    from app.services.external_alert_engine import ExternalAlertEngine
+                    eng = ExternalAlertEngine()
+                    if eng.has_external_channel():
+                        for f in fired:
+                            sev, line = _COPY.get(f["milestone"], ("INFO", "sleeve advanced a proof milestone"))
+                            eng.dispatch(
+                                title=f"GreyLine edge proof — {f['sleeve']} {f['milestone'].replace('_', ' ')}",
+                                message=(f"{f['sleeve']}: {line}. Standing {f['current']}/{f['gate']} independent "
+                                         f"days; {f.get('verdict')}. See the Edge Court card / /edge-proof-maturity."),
+                                severity=sev, fingerprint=f"PROOF_MILESTONE:{f['sleeve']}:{f['milestone']}")
+                except Exception:
+                    pass
+        return {"status": "PROOF_MILESTONE_FLAGGED" if fired else "PROOF_MILESTONE_NONE",
+                "fired": fired, "milestones": seen}
 
     # ---------------------------------------------------------------- open-position drift (CONTEXT)
 

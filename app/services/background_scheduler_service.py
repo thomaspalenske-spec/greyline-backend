@@ -1415,6 +1415,9 @@ class BackgroundSchedulerService:
             edge_persistence["fill_confirm"] = sleeve_fill_confirm
             # RETIRE half of the discipline: page (deduped) if the court judged any sleeve DECAYED.
             edge_persistence["decay_alert"] = _epe.decay_alert()
+            # WIN half: page ONCE as a sleeve crosses each proof milestone (first close / gate reached / PROVEN)
+            # — the alert the confirmed-but-unproven VRP harvest most needs as its condors start closing.
+            edge_persistence["proof_milestone_alert"] = _epe.proof_milestone_alert()
             # REALLOCATE half: page (deduped) when a measured verdict drifts the evidence-based
             # allocation materially from the live budget — i.e. it's time to approve a re-alloc.
             from app.services.capital_allocator_engine import CapitalAllocatorEngine
