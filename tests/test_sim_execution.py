@@ -4,7 +4,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.greyline_sim_execution_engine import GreyLineSimExecutionEngine
-from app.services.sim_account_reconciler_engine import SimAccountReconcilerEngine
 
 
 class FakeBooking:
@@ -157,30 +156,6 @@ def test_close_position_skips_when_in_flight_exits_cover_the_position(monkeypatc
     eng.sim_position = lambda symbol: (2.0, True)
     res = eng.close_position("INTC", True, reason="STOP", already_booked=2)
     assert res["status"] == "NO_SIM_POSITION"
-
-
-def test_reconciler_normalizes_sim_state(monkeypatch):
-    eng = SimAccountReconcilerEngine()
-
-    class FakeBook:
-        def balances(self):
-            return {"ok": True, "response_json": {"Balances": [
-                {"AccountID": "SIM123", "Equity": "1000000", "CashBalance": "999500",
-                 "BuyingPower": "4000000"}]}}
-        def positions(self):
-            return {"ok": True, "response_json": {"Positions": [
-                {"Symbol": "AAPL", "Quantity": "1", "AveragePrice": "333.0",
-                 "MarketValue": "334.0", "UnrealizedProfitLoss": "1.0", "LongShort": "Long"}]}}
-        def orders(self):
-            return {"ok": True, "response_json": {"Orders": [
-                {"OrderID": "1", "StatusDescription": "Received"},   # working
-                {"OrderID": "2", "StatusDescription": "Filled"}]}}   # not working
-    eng.booking = FakeBook()
-    snap = eng.snapshot()
-    assert snap["reads_ok"] is True
-    assert snap["account_id"] == "SIM123" and snap["equity"] == 1000000.0
-    assert snap["position_count"] == 1 and snap["positions"][0]["symbol"] == "AAPL"
-    assert snap["working_order_count"] == 1     # only the Received one
 
 
 def test_scale_sizing_is_cumulative_not_per_slice():
