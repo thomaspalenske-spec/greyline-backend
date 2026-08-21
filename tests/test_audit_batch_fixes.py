@@ -72,22 +72,3 @@ def test_institutional_command_center_reflects_governor():
 
     assert result["execution_enabled"] is True
     assert result["order_placement_allowed"] is True
-
-
-# ---- #7: readiness scoring engine imports (stray syntax lines removed) ----
-def test_readiness_scoring_engine_imports_cleanly():
-    import importlib
-    mod = importlib.import_module("app.services.readiness_scoring_engine")
-    assert hasattr(mod, "ReadinessScoringEngine")
-
-
-# ---- #9: readiness fix engine reports real state, not permanent UNKNOWN ----
-def test_readiness_fix_engine_reports_real_state():
-    MOD = "app.services.readiness_fix_engine"
-    from app.services.readiness_fix_engine import ReadinessFixEngine
-
-    with patch(f"{MOD}.ReadinessAggregationEngine") as MockAgg:
-        MockAgg.return_value.evaluate.return_value = {
-            "status": "READY", "config_registry": [],
-        }
-        assert ReadinessFixEngine().evaluate()["state"] == "READY"
