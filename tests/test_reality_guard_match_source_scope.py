@@ -48,3 +48,19 @@ def test_out_of_universe_is_inert(tmp_path):
     live_bad, restated, thin, inert = RG._scope_source_mismatches(
         [{"symbol": "ABC"}], active={"SPY", "QQQ"}, run_ts=None, bars_dir=tmp_path)
     assert live_bad == [] and inert == ["ABC"]                  # not in the active universe -> inert
+
+
+def test_scope_tradeable_symbols_partitions_clean_and_source(tmp_path):
+    """The shared tradeable-scope (used by BOTH PRICE_BARS_CLEAN and MATCH_SOURCE): only tradeable, in-universe
+    names are in_scope; thin sub-253-bar stubs (the AAAC/ABI corrupt-bar case) and missing files are inert-thin."""
+    _csv(tmp_path / "BIG_daily.csv", 300)                        # tradeable
+    _csv(tmp_path / "THIN_daily.csv", 100)                       # sub-253 stub
+    in_scope, thin, inert = RG._scope_tradeable_symbols(["BIG", "THIN", "GONE"], active=None, bars_dir=tmp_path)
+    assert in_scope == ["BIG"]                                   # only the tradeable name alarms
+    assert set(thin) == {"THIN", "GONE"}                         # stub + missing-file both filtered
+
+
+def test_scope_tradeable_respects_active_universe(tmp_path):
+    _csv(tmp_path / "BIG_daily.csv", 300)                        # tradeable but out of the active universe
+    in_scope, thin, inert = RG._scope_tradeable_symbols(["BIG"], active={"SPY"}, bars_dir=tmp_path)
+    assert in_scope == [] and inert == ["BIG"]

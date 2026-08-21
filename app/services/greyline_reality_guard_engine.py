@@ -361,53 +361,67 @@ class GreyLineRealityGuardEngine:
         if crit == 0:
             return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
                     "detail": f"{scan.get('symbols_checked')} symbols clean ({scan.get('mode')}{age})"}
-        # SCOPE to the active universe: a corrupt bar in a symbol no armed sleeve trades and we don't hold
-        # is real but INERT (it can't poison a live signal). Alarm only on corruption that's actually live.
-        from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as _P
+        # SCOPE to signal-relevant bars: corruption in a symbol no armed sleeve trades / we don't hold, OR in a
+        # thin sub-253-bar stub the screener never reads (e.g. AAAC/ABI), is real but INERT — it can't poison a
+        # live signal/ATR/stop. Alarm only on corruption in a TRADEABLE, in-universe name.
+        from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as _PBI
+        from pathlib import Path as _P
         active = self._active_universe()
-        if active is not None:
-            corrupt_syms = set()
-            for i in (scan.get("issues") or []):
-                if i.get("type") in _P.CRITICAL_TYPES:
-                    corrupt_syms |= self._scope_symbols(i.get("symbol"))
-            live_bad = sorted(corrupt_syms & active)
-            if not live_bad:
-                return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
-                        "detail": (f"{crit} corrupt bar(s) in {scan.get('symbols_checked')} symbols, but NONE "
-                                   f"in the active universe (untraded names — inert){age}")}
+        corrupt_syms = set()
+        for i in (scan.get("issues") or []):
+            if i.get("type") in _PBI.CRITICAL_TYPES:
+                corrupt_syms |= self._scope_symbols(i.get("symbol"))
+        live_bad, thin, inert = self._scope_tradeable_symbols(
+            sorted(corrupt_syms), active, _P("app/data/historical"))
+        if live_bad:
             return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": False,
-                    "detail": (f"{len(live_bad)} corrupt bar(s) in ACTIVELY-TRADED symbols: "
-                               f"{', '.join(live_bad[:8])} — signals/ATR/stops at risk{age}")}
-        return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": False,
-                "detail": (f"{crit} corrupt bar(s) across {scan.get('symbols_checked')} symbols "
-                           f"— {scan.get('counts')}{age}")}
+                    "detail": (f"{len(live_bad)} TRADEABLE, in-universe symbol(s) have corrupt bars: "
+                               f"{', '.join(sorted(live_bad)[:8])} — signals/ATR/stops at risk{age}")}
+        parts = []
+        if thin:
+            parts.append(f"{len(thin)} thin sub-253-bar stub(s)")
+        if inert:
+            parts.append(f"{len(inert)} untraded (inert)")
+        why = "; ".join(parts) or "none material"
+        return {"id": "PRICE_BARS_CLEAN", "severity": "warning", "ok": True,
+                "detail": (f"{crit} corrupt bar(s) across {scan.get('symbols_checked')} symbols, but none in a "
+                           f"TRADEABLE, in-universe name ({why}){age}")}
 
     @staticmethod
-    def _scope_source_mismatches(mismatches, active, run_ts, bars_dir, min_bars=253):
-        """Split cross-source VALUE mismatches into (live_bad, restated, thin, inert). Only `live_bad` — in the
-        active universe (or active None = everything), TRADEABLE (>= min_bars bars), and NOT restated since the
-        scan — actually poisons a live signal and should page. See _check_price_bars_match_source."""
-        live_bad, restated, thin, inert = [], [], [], []
-        for m in (mismatches or []):
-            s = str(m.get("symbol") or "").upper()
+    def _scope_tradeable_symbols(symbols, active, bars_dir, min_bars=253):
+        """Partition symbols into (in_scope, thin, inert): in_scope = in the active universe (or active None =
+        everything) AND TRADEABLE (>= min_bars bars). A thin sub-min-bars stub or an out-of-universe name can't
+        poison a live signal/ATR/stop, so it must never raise the banner. Shared by the CLEAN + MATCH_SOURCE checks."""
+        in_scope, thin, inert = [], [], []
+        for raw in symbols:
+            s = str(raw or "").upper()
             if not s:
                 continue
             if active is not None and s not in active:
                 inert.append(s); continue                       # no armed sleeve trades it / we don't hold it
-            p = bars_dir / f"{s}_daily.csv"
             try:
-                nbars = sum(1 for _ in open(p))
+                nbars = sum(1 for _ in open(bars_dir / f"{s}_daily.csv"))
             except Exception:
                 nbars = 0
             if nbars < min_bars:
                 thin.append(s); continue                        # sub-min-bars stub — no real signal reads it
+            in_scope.append(s)
+        return in_scope, thin, inert
+
+    @classmethod
+    def _scope_source_mismatches(cls, mismatches, active, run_ts, bars_dir, min_bars=253):
+        """Split cross-source VALUE mismatches into (live_bad, restated, thin, inert). Only `live_bad` — in the
+        active universe, TRADEABLE, and NOT restated since the scan — poisons a live signal and should page. A
+        file rewritten after the run has almost certainly self-healed via restatement -> re-verify, not a fail."""
+        in_scope, thin, inert = cls._scope_tradeable_symbols(
+            [m.get("symbol") for m in (mismatches or [])], active, bars_dir, min_bars)
+        live_bad, restated = [], []
+        for s in in_scope:
             try:
-                mtime = datetime.utcfromtimestamp(p.stat().st_mtime)
+                mtime = datetime.utcfromtimestamp((bars_dir / f"{s}_daily.csv").stat().st_mtime)
             except Exception:
                 mtime = None
-            if run_ts and mtime and mtime > run_ts:
-                restated.append(s); continue                    # rewritten after the scan -> likely already healed
-            live_bad.append(s)
+            (restated if (run_ts and mtime and mtime > run_ts) else live_bad).append(s)
         return live_bad, restated, thin, inert
 
     def _check_price_bars_match_source(self):
