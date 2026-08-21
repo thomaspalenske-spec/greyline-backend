@@ -1083,6 +1083,19 @@ class BackgroundSchedulerService:
             fomc_cycle_shadow = {"error": repr(exc), "status": "FOMC_CYCLE_SHADOW_DEGRADED"}
         cls._ckpt("fomc_cycle_shadow")
 
+        # OPTION-IMPLIED SKEW shadow — zero-capital market-neutral forward test (25d risk reversal predicts the
+        # stock; Xing-Zhang-Zhao / Cremers-Weinbaum). Weekly top-K-long / bottom-K-short cohort, settled at live
+        # equity quotes. NO orders/budget. Gated by GREYLINE_IV_SKEW_SHADOW (default on — measurement only).
+        if _heavy_blocked:
+            iv_skew_shadow = {"status": "IV_SKEW_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
+        else:
+            try:
+                from app.services.iv_skew_shadow_engine import IvSkewShadowEngine
+                iv_skew_shadow = IvSkewShadowEngine().mark()
+            except Exception as exc:
+                iv_skew_shadow = {"error": repr(exc), "status": "IV_SKEW_SHADOW_DEGRADED"}
+        cls._ckpt("iv_skew_shadow")
+
         # Record the daily gamma_flip-vs-spot gap for the condor proxies (UW serves flip live-only) so GATE 2's
         # regime can be TRENDED — CONVERGING (warming) vs DIVERGING. Reuses the same 900s-cached _gex_map the
         # shadow just read; one row/symbol/day; read-only, isolated so it can't disturb the cycle.
