@@ -87,3 +87,49 @@ def test_report_splits_verdict_by_sleeve(monkeypatch):
     assert bs["vrp"]["win_rate_pct"] == pytest.approx(50.0)
     assert bs["earnings"]["closed_condors"] == 1 and bs["earnings"]["open_condors"] == 1
     assert bs["earnings"]["win_rate_pct"] == pytest.approx(100.0)
+
+
+_EXP_LEGS = {"short_call": {"strike": 110}, "wing_call": {"strike": 115},
+             "short_put": {"strike": 90}, "wing_put": {"strike": 85}}
+
+
+def test_intrinsic_close_value_at_expiry():
+    assert C._intrinsic_close_value(_EXP_LEGS, 100.0) == 0.0    # between shorts -> worthless, full credit kept
+    assert C._intrinsic_close_value(_EXP_LEGS, 112.0) == 2.0    # call ITM by 2
+    assert C._intrinsic_close_value(_EXP_LEGS, 120.0) == 5.0    # capped at the 5-wide wing (max loss)
+    assert C._intrinsic_close_value(_EXP_LEGS, 88.0) == 2.0     # put ITM by 2
+
+
+def test_mark_settles_expiring_unquotable_condor(monkeypatch, tmp_path):
+    """A 0-DTE condor UW can't quote must SETTLE at intrinsic — not hang OPEN forever (the CLX/OKE/LDOS case)."""
+    e = {"id": "X", "symbol": "XYZ", "expiration": "2020-01-01", "sleeve": "earnings",
+         "entry_credit_mid": 1.00, "quantity": 1, "status": "OPEN", "legs": _EXP_LEGS}
+    (tmp_path / "l.jsonl").write_text(json.dumps(e) + "\n")
+    monkeypatch.setattr(C, "_current_value", lambda self, legs: None)     # UW no offer on the expiring legs
+    monkeypatch.setattr(C, "_underlying_spot", lambda self, sym: 100.0)   # settles between the shorts -> worthless
+    assert C().mark() == ["X"]
+    r = [json.loads(l) for l in (tmp_path / "l.jsonl").read_text().splitlines() if l.strip()][0]
+    assert r["status"] == "CLOSED" and r["close_reason"] == "expiry_settle"
+    assert r["close_value_per"] == 0.0 and r["realized_pnl"] == 100.0     # (1.00 - 0) * 100 * 1 = full credit
+
+
+def test_mark_settles_breached_condor_at_max_loss(monkeypatch, tmp_path):
+    e = {"id": "Z", "symbol": "XYZ", "expiration": "2020-01-01", "sleeve": "earnings",
+         "entry_credit_mid": 1.00, "quantity": 1, "status": "OPEN", "legs": _EXP_LEGS}
+    (tmp_path / "l.jsonl").write_text(json.dumps(e) + "\n")
+    monkeypatch.setattr(C, "_current_value", lambda self, legs: None)
+    monkeypatch.setattr(C, "_underlying_spot", lambda self, sym: 130.0)   # blew through the call wing -> max loss
+    C().mark()
+    r = [json.loads(l) for l in (tmp_path / "l.jsonl").read_text().splitlines() if l.strip()][0]
+    assert r["close_value_per"] == 5.0 and r["realized_pnl"] == -400.0    # (1.00 - 5.0) * 100 = -400
+
+
+def test_mark_leaves_nonexpiring_unquotable_condor_open(monkeypatch, tmp_path):
+    """A transiently-unquotable but NOT expiring condor is left OPEN to retry — only expiry forces a settle."""
+    e = {"id": "Y", "symbol": "XYZ", "expiration": "2099-09-18", "sleeve": "vrp",
+         "entry_credit_mid": 1.00, "quantity": 1, "status": "OPEN", "legs": _EXP_LEGS}
+    (tmp_path / "l.jsonl").write_text(json.dumps(e) + "\n")
+    monkeypatch.setattr(C, "_current_value", lambda self, legs: None)
+    assert C().mark() == []
+    r = [json.loads(l) for l in (tmp_path / "l.jsonl").read_text().splitlines() if l.strip()][0]
+    assert r["status"] == "OPEN"

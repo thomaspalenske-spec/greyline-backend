@@ -201,6 +201,54 @@ class CondorShadowEngine:
             now[n] = {"bid": b, "ask": a}
         return self._condor_value(now)
 
+    @staticmethod
+    def _intrinsic_close_value(legs, spot):
+        """Per-share liability to close an iron condor AT EXPIRY given the underlying settle price `spot`: the
+        in-the-money short spread's value, capped at its wing width; 0 between the shorts (full credit kept).
+        This is how a 0-DTE condor settles once UW no longer quotes the expiring options."""
+        def _s(n):
+            try:
+                return float((legs.get(n) or {}).get("strike"))
+            except (TypeError, ValueError):
+                return None
+        sc, wc, sp, wp = _s("short_call"), _s("wing_call"), _s("short_put"), _s("wing_put")
+        val = 0.0
+        if sc is not None and wc is not None and spot > sc:
+            val += min(spot - sc, abs(wc - sc))     # call spread intrinsic, capped at the wing width
+        if sp is not None and wp is not None and spot < sp:
+            val += min(sp - spot, abs(sp - wp))     # put spread intrinsic, capped at the wing width
+        return round(max(0.0, val), 3)
+
+    def _underlying_spot(self, symbol):
+        """Best-available underlying price for expiry settlement: a live quote, else the latest daily bar close."""
+        try:
+            from app.services.tradestation_quote_live_engine import TradeStationQuoteLiveEngine
+            q = TradeStationQuoteLiveEngine().get_quotes([symbol]) or {}
+            row = (((q.get(symbol) or {}).get("response_json") or {}).get("Quotes") or [{}])[0]
+            px = self._f(row.get("Last")) or self._f(row.get("Close"))
+            if px and px > 0:
+                return px
+        except Exception:
+            pass
+        try:
+            import csv
+            rows = list(csv.DictReader(open(f"app/data/historical/{symbol}_daily.csv")))
+            c = self._f(rows[-1].get("close"))
+            return c if c and c > 0 else None
+        except Exception:
+            return None
+
+    def _expiry_close_value(self, e, dte):
+        """A condor AT/PAST expiry (dte<=0) that UW no longer quotes settles at INTRINSIC vs the underlying —
+        otherwise it hangs OPEN forever, never realizing P&L. Returns (close_value_per_share, spot) or
+        (None, None) if not applicable / no price available yet."""
+        if dte is None or dte > 0:
+            return None, None
+        spot = self._underlying_spot(e.get("symbol"))
+        if spot is None:
+            return None, None
+        return self._intrinsic_close_value(e.get("legs") or {}, spot), spot
+
     def mark(self):
         """Mark open shadow condors to MID off UW; close on profit target or near expiry."""
         entries = self._entries()
@@ -210,23 +258,30 @@ class CondorShadowEngine:
         for e in entries:
             if e.get("status") != "OPEN":
                 continue
-            cv = self._current_value(e.get("legs") or {})
-            if cv is None:
-                continue
-            credit = self._f(e.get("entry_credit_mid"))
             dte = None
             try:
                 dte = (date.fromisoformat(e["expiration"]) - date.fromisoformat(today)).days
             except Exception:
                 pass
+            cv = self._current_value(e.get("legs") or {})
+            expiry_settle = False
+            if cv is None:
+                # UW won't quote a 0-DTE option, so an expiring condor would otherwise hang OPEN forever (never
+                # realizing P&L, never advancing the closed count). SETTLE it at intrinsic. A transiently-
+                # unquotable NON-expiring condor is left to try again next cycle.
+                ev, _spot = self._expiry_close_value(e, dte)
+                if ev is None:
+                    continue
+                cv, expiry_settle = ev, True
+            credit = self._f(e.get("entry_credit_mid"))
             hit_profit = credit > 0 and cv <= (1 - self.PROFIT_TAKE_FRAC) * credit   # captured >= 50%
             near_expiry = dte is not None and dte <= self.MANAGE_DTE
-            if hit_profit or near_expiry:
+            if hit_profit or near_expiry or expiry_settle:
                 e["status"] = "CLOSED"
                 e["closed_date"] = today
                 e["close_value_per"] = round(cv, 3)
                 e["realized_pnl"] = round((credit - cv) * 100 * e["quantity"], 2)
-                e["close_reason"] = "profit_take" if hit_profit else "manage_dte"
+                e["close_reason"] = "expiry_settle" if expiry_settle else ("profit_take" if hit_profit else "manage_dte")
                 closed.append(e["id"])
                 changed = True
         if changed:
@@ -309,6 +364,12 @@ class CondorShadowEngine:
             row = {"symbol": e.get("symbol"), "sleeve": e.get("sleeve"), "expiration": e.get("expiration"),
                    "contracts": qty, "entry_credit": round(credit, 3) if credit else None,
                    "iv_rank": e.get("iv_rank"), "dte": dte}
+            if cv is None and dte is not None and dte <= 0:
+                # expiring today and UW no longer quotes it — show the intrinsic SETTLEMENT value, flagged, rather
+                # than a bare blank that reads as missing data. It settles into realized P/L on the next mark cycle.
+                ev, _spot = self._expiry_close_value(e, dte)
+                cv = ev if ev is not None else cv
+                row["mark_state"] = "settling"
             if cv is not None and credit:
                 row["current_value"] = round(cv, 3)
                 row["pnl_dollars"] = round((credit - cv) * 100 * qty, 2)     # short premium, real multiplier×qty
