@@ -10388,5 +10388,10 @@
     "last_bar_date": "2026-08-07",
     "detected_at": "2026-08-18T00:24:34.929184",
     "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "AACOU": {
+    "last_bar_date": "2026-08-11",
+    "detected_at": "2026-08-22T00:10:30.951399",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
   }
 }
