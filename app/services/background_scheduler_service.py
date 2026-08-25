@@ -1192,6 +1192,22 @@ class BackgroundSchedulerService:
             vanna_charm_shadow = {"error": repr(exc), "status": "VANNA_SHADOW_DEGRADED"}
         cls._ckpt("vanna_charm_shadow")
 
+        # SHADOW MARK HEARTBEAT — persist a cadence-independent 'last actually ran' per shadow so a silent
+        # multi-day stall (the 08-16 process peg / 08-17 freeze class) becomes a LOUD reality-guard banner line
+        # instead of being caught by chance. `last_ran` advances only for shadows that truly executed this cycle
+        # (deferred/disabled/errored ones don't refresh it). Bulletproof — a monitoring write can't break the cycle.
+        try:
+            from app.services.shadow_mark_heartbeat import record as _record_shadow_heartbeats
+            _record_shadow_heartbeats({
+                "condor": condor_shadow, "overnight": overnight_shadow, "fomc_cycle": fomc_cycle_shadow,
+                "iv_skew": iv_skew_shadow, "dispersion": dispersion_shadow, "extended_etf": extended_etf_shadow,
+                "vol_etp": vol_etp_shadow, "futures_tsmom": futures_tsmom_shadow, "fx_trend": fx_trend_shadow,
+                "gex_strategy": gex_strategy_shadow, "vanna_charm": vanna_charm_shadow,
+            })
+        except Exception:
+            pass
+        cls._ckpt("shadow_heartbeats")
+
         # OPTIONABLE UNIVERSE: derive the VRP/condor candidate universe from live option open interest
         # (UW /screener/stocks) instead of a hand-typed list. Re-screens ONCE PER TRADING DAY at the
         # 16:00 ET close (settled data) so it never goes stale; bootstraps immediately if unset. Fail-safe

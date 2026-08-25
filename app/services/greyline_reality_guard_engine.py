@@ -941,6 +941,82 @@ class GreyLineRealityGuardEngine:
                            f"stalled and signals/displays may present stale bars as live: "
                            + ", ".join(stale[:6]))}
 
+    # (shadow_id, module, class) — the source of truth for 'is this shadow enabled' is the engine's own
+    # enabled(), never a re-derived flag default (WORK RULE: engines decide). Kept in lock-step with the
+    # scheduler's shadow-heartbeat record() call.
+    _SHADOW_REGISTRY = [
+        ("condor", "app.services.condor_shadow_engine", "CondorShadowEngine"),
+        ("overnight", "app.services.overnight_anomaly_shadow_engine", "OvernightAnomalyShadowEngine"),
+        ("fomc_cycle", "app.services.fomc_cycle_shadow_engine", "FomcCycleShadowEngine"),
+        ("iv_skew", "app.services.iv_skew_shadow_engine", "IvSkewShadowEngine"),
+        ("dispersion", "app.services.dispersion_shadow_engine", "DispersionShadowEngine"),
+        ("extended_etf", "app.services.extended_etf_shadow_engine", "ExtendedEtfShadowEngine"),
+        ("vol_etp", "app.services.vol_etp_shadow_engine", "VolEtpShadowEngine"),
+        ("futures_tsmom", "app.services.futures_tsmom_shadow_engine", "FuturesTsmomShadowEngine"),
+        ("fx_trend", "app.services.fx_trend_shadow_engine", "FxTrendShadowEngine"),
+        ("gex_strategy", "app.services.gex_mean_reversion_shadow_engine", "GexMeanReversionShadowEngine"),
+        ("vanna_charm", "app.services.vanna_charm_shadow_engine", "VannaCharmShadowEngine"),
+    ]
+    SHADOW_STALE_DAYS = 4   # a shadow marks ~nightly when not deferred; > this (covers Fri->Mon + tolerance) = silent stall
+
+    def _check_shadow_freshness(self):
+        """FANTASY DETECTOR for silently-stalled forward-test shadows (the 2026-08-17 freeze class): when the
+        process pegs/freezes/mis-clocks for days, the heavy-gated shadows quietly stop accruing while their
+        cards keep showing the last (stale) state as if live — the condor & gex stall was caught only by chance.
+
+        Reads the scheduler's per-shadow heartbeat (`shadow_mark_heartbeat`, `last_ran` = last time the shadow
+        actually executed its mark logic, cadence-independent) and flags any ENABLED shadow whose last real run
+        is older than SHADOW_STALE_DAYS. CRY-WOLF DISCIPLINE mirrors _check_data_freshness: (1) gate on the
+        engine's own enabled() — a disabled shadow never runs, so it must not be flagged; (2) only when the
+        scheduler is LIVE — if the scheduler itself is down that alarm owns it, so we stay quiet here; (3) a
+        shadow with no heartbeat yet BASELINES silently (populates on the next non-deferred cycle). Warning
+        severity — a stalled forward-test costs measurement, not capital."""
+        base = {"id": "SHADOW_FRESHNESS", "severity": "warning"}
+        try:
+            from app.services.background_scheduler_service import BackgroundSchedulerService
+            if not BackgroundSchedulerService.scheduler_live():
+                return {**base, "ok": True,
+                        "detail": "scheduler not live — shadow-staleness deferred to the scheduler-liveness alarm"}
+        except Exception:
+            return {**base, "ok": True, "detail": "scheduler liveness unresolved — shadow-staleness check skipped"}
+
+        try:
+            from app.services.shadow_mark_heartbeat import read as _read_hb
+            hb = _read_hb()
+        except Exception as exc:
+            return {**base, "ok": True, "detail": f"heartbeat unreadable (skipped): {repr(exc)[:80]}"}
+
+        import importlib
+        now = _clock.time()
+        stale = []
+        verified = 0
+        baselining = 0
+        for sid, module, cls_name in self._SHADOW_REGISTRY:
+            try:
+                eng = getattr(importlib.import_module(module), cls_name)
+                enabled = eng.enabled() if hasattr(eng, "enabled") else True
+                if not enabled:
+                    continue
+                last_ran = (hb.get(sid) or {}).get("last_ran")
+                if not last_ran:               # never recorded yet -> baseline silently (populates next non-deferred cycle)
+                    baselining += 1
+                    continue
+                days = (now - float(last_ran)) / 86400.0
+                if days > self.SHADOW_STALE_DAYS:
+                    stale.append(f"{sid}:{days:.1f}d")
+                else:
+                    verified += 1
+            except Exception:
+                continue                        # a broken shadow import must never break the guard
+
+        ok = not stale
+        return {**base, "ok": ok,
+                "detail": ((f"{verified} enabled forward-test shadow(s) accruing on schedule"
+                            + (f", {baselining} baselining" if baselining else "")) if ok else
+                           f"{len(stale)} enabled shadow(s) have SILENTLY STOPPED accruing (last real mark > "
+                           f"{self.SHADOW_STALE_DAYS}d ago) — the cycle isn't reaching their mark step; cards may "
+                           f"show stale state as live: " + ", ".join(sorted(stale)))}
+
     def _recently_closed_symbols(self, days):
         """Symbols on ledger trades marked CLOSED (with realized P&L booked) in the last `days`.
 
@@ -1421,6 +1497,7 @@ class GreyLineRealityGuardEngine:
             self._check_exec_booking_coherent(),
             self._check_realized_continuity(),
             self._check_data_freshness(),
+            self._check_shadow_freshness(),
             self._check_decision_caches_fresh(),
             self._check_readout_integrity(),
             self._check_candidate_surfaces_healthy(),
