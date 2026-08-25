@@ -133,3 +133,29 @@ def test_mark_leaves_nonexpiring_unquotable_condor_open(monkeypatch, tmp_path):
     assert C().mark() == []
     r = [json.loads(l) for l in (tmp_path / "l.jsonl").read_text().splitlines() if l.strip()][0]
     assert r["status"] == "OPEN"
+
+
+def test_spot_on_returns_close_on_or_before_date(tmp_path, monkeypatch):
+    import app.services.condor_shadow_engine as csm
+    monkeypatch.setattr(csm, "BARS", tmp_path)
+    (tmp_path / "ZZ_daily.csv").write_text(
+        "date,open,high,low,close,volume\n2026-08-19,1,1,1,50,1\n2026-08-20,1,1,1,55,1\n2026-08-21,1,1,1,60,1\n")
+    assert C()._spot_on("ZZ", "2026-08-20") == 55.0     # the close ON the date
+    assert C()._spot_on("ZZ", "2026-08-25") == 60.0     # nearest bar on/before -> the last one
+    assert C()._spot_on("ZZ", "2026-08-18") is None     # no bar on/before
+
+
+def test_settle_expired_runs_even_when_market_closed(tmp_path, monkeypatch):
+    """RESILIENCE: an expired condor settles even when the market is CLOSED and the daily marker is set — so a
+    missed cycle (weekend, power loss) can't leave it dangling (the 2026-08-25 stuck-4-days-past-expiry bug)."""
+    monkeypatch.setattr("app.services.shadow_tradeability_gate.equity_session_open", lambda: False)
+    e = {"id": "X", "symbol": "XYZ", "expiration": "2020-01-01", "sleeve": "earnings",
+         "entry_credit_mid": 1.00, "quantity": 1, "status": "OPEN", "legs": _EXP_LEGS}
+    (tmp_path / "l.jsonl").write_text(json.dumps(e) + "\n")           # autouse _tmp fixture points LEDGER here
+    (tmp_path / "last_run.txt").write_text("2020-01-01")             # marker set -> normal path would NOT run
+    monkeypatch.setattr(C, "_current_value", lambda self, legs: None)
+    monkeypatch.setattr(C, "_spot_on", lambda self, sym, on: 100.0)  # between the shorts -> worthless
+    r = C().run_if_due()
+    assert r["status"] == "CONDOR_SHADOW_MARKET_CLOSED" and r["expired_settled"] == 1
+    rec = [json.loads(l) for l in (tmp_path / "l.jsonl").read_text().splitlines() if l.strip()][0]
+    assert rec["status"] == "CLOSED" and rec["close_reason"] == "expiry_settle" and rec["realized_pnl"] == 100.0

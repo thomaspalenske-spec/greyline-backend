@@ -18,6 +18,7 @@ from app.services.ttl_cache import ttl_cached
 
 STATE = Path("app/data/condor_shadow")
 LEDGER = STATE / "shadow_ledger.jsonl"
+BARS = Path("app/data/historical")           # underlying daily bars (expiry-date settle price)
 
 
 class CondorShadowEngine:
@@ -238,13 +239,34 @@ class CondorShadowEngine:
         except Exception:
             return None
 
+    def _spot_on(self, symbol, on_date):
+        """Underlying close ON `on_date` (or the nearest bar on/before it) from daily bars — the FIXED expiry
+        settle price. Using this (not the drifting current spot) makes a late settle correct even days after
+        expiry. None if no bar at/before the date."""
+        best = None
+        try:
+            import csv
+            with open(BARS / f"{symbol}_daily.csv") as f:
+                for r in csv.DictReader(f):
+                    d = str(r.get("date"))[:10]
+                    if d <= on_date:
+                        c = self._f(r.get("close"))
+                        if c and c > 0:
+                            best = c              # keep advancing -> the last bar on/before on_date
+                    else:
+                        break
+        except Exception:
+            return None
+        return best
+
     def _expiry_close_value(self, e, dte):
         """A condor AT/PAST expiry (dte<=0) that UW no longer quotes settles at INTRINSIC vs the underlying —
-        otherwise it hangs OPEN forever, never realizing P&L. Returns (close_value_per_share, spot) or
+        otherwise it hangs OPEN forever, never realizing P&L. Settles at the EXPIRY-DATE close (fixed, correct
+        even when settled late) and falls back to the current spot. Returns (close_value_per_share, spot) or
         (None, None) if not applicable / no price available yet."""
         if dte is None or dte > 0:
             return None, None
-        spot = self._underlying_spot(e.get("symbol"))
+        spot = self._spot_on(e.get("symbol"), e.get("expiration")) or self._underlying_spot(e.get("symbol"))
         if spot is None:
             return None, None
         return self._intrinsic_close_value(e.get("legs") or {}, spot), spot
@@ -288,20 +310,55 @@ class CondorShadowEngine:
             self._rewrite(entries)
         return closed
 
+    def _settle_expired(self):
+        """Settle EVERY open position already AT/PAST expiry (dte<=0) at its EXPIRY-DATE intrinsic. RESILIENCE:
+        this runs on EVERY call, BEFORE the once-daily marker and the RTH gate — an expired position must never
+        hang for days because a daily cycle was missed (weekend, power loss, cycle failure). Idempotent + cheap
+        (no-op when nothing is expired)."""
+        entries = self._entries()
+        today = self._et_date()
+        closed, changed = [], False
+        for e in entries:
+            if e.get("status") != "OPEN":
+                continue
+            try:
+                dte = (date.fromisoformat(e["expiration"]) - date.fromisoformat(today)).days
+            except Exception:
+                continue
+            if dte > 0:
+                continue
+            cv, _spot = self._expiry_close_value(e, dte)
+            if cv is None:
+                continue
+            credit = self._f(e.get("entry_credit_mid"))
+            e["status"] = "CLOSED"
+            e["closed_date"] = today
+            e["close_value_per"] = round(cv, 3)
+            e["realized_pnl"] = round((credit - cv) * 100 * e["quantity"], 2)
+            e["close_reason"] = "expiry_settle"
+            closed.append(e["id"])
+            changed = True
+        if changed:
+            self._rewrite(entries)
+        return closed
+
     def run_if_due(self):
-        """Scheduler entry: open new shadow condors, then mark existing. Self-gated once/day."""
+        """Scheduler entry: settle expired positions (always), then open new + mark. Self-gated once/day."""
         if not self.enabled():
             return {"status": "CONDOR_SHADOW_DISABLED", "ran": False}
-        # THE RULE: only open/settle a shadow condor when it could actually have executed on TradeStation
-        # (the regular equity/index-option session). Fail-closed defers to the next session's run.
+        # RESILIENCE: settle any already-expired position FIRST, un-gated by the once-daily marker or RTH — so a
+        # missed daily cycle can't leave an expired condor dangling (the 2026-08-25 stuck-4-days-past-expiry bug).
+        expired = self._settle_expired()
+        # THE RULE: only OPEN a shadow condor when it could actually have executed on TradeStation (the regular
+        # equity/index-option session). Fail-closed defers to the next session's run.
         from app.services.shadow_tradeability_gate import equity_session_open
         if not equity_session_open():
-            return {"status": "CONDOR_SHADOW_MARKET_CLOSED", "ran": False}
+            return {"status": "CONDOR_SHADOW_MARKET_CLOSED", "ran": False, "expired_settled": len(expired)}
         marker = STATE / "last_run.txt"
         today = self._et_date()
         try:
             if today and marker.read_text().strip() == today:
-                return {"status": "CONDOR_SHADOW_NOT_DUE", "ran": False}
+                return {"status": "CONDOR_SHADOW_NOT_DUE", "ran": False, "expired_settled": len(expired)}
         except Exception:
             pass
         opened, closed = self.open_new(), self.mark()
@@ -310,7 +367,8 @@ class CondorShadowEngine:
             marker.write_text(today or "")
         except Exception:
             pass
-        return {"status": "CONDOR_SHADOW_RAN", "ran": True, "opened": len(opened), "closed": len(closed)}
+        return {"status": "CONDOR_SHADOW_RAN", "ran": True, "opened": len(opened),
+                "closed": len(closed), "expired_settled": len(expired)}
 
     # ---- report --------------------------------------------------------------------------------
     def _slice_metrics(self, entries):
