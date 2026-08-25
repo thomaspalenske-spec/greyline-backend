@@ -420,7 +420,63 @@ class ConditionalVRPShortPremiumEngine:
         except Exception:
             pass
 
-    def _chain(self, symbol):
+    # ---- INDEPENDENT-OBSERVATION STAGGER (accelerate the live edge proof) ------------------------
+    # The edge court counts DAY-CLUSTERED closes: condors that close the same day are correlated, not
+    # independent evidence. Same monthly expiry -> same MANAGE_DTE close day -> ~1 independent obs no matter how
+    # many condors. So to reach the 20-independent-day gate ~4x faster on the SAME capital and SAME defined
+    # risk, (1) space entries and (2) ladder expiries so closes land on DISTINCT days. Gated + tunable.
+    STAGGER_MIN_GAP_DAYS = 2
+
+    @staticmethod
+    def _stagger_on():
+        return (getenv("GREYLINE_VRP_STAGGER_ENABLED", "true") or "true").strip().lower() == "true"
+
+    @classmethod
+    def _stagger_gap(cls):
+        if not cls._stagger_on():
+            return 0
+        try:
+            return max(0, int(getenv("GREYLINE_VRP_MIN_OPEN_GAP_DAYS", "") or cls.STAGGER_MIN_GAP_DAYS))
+        except (TypeError, ValueError):
+            return cls.STAGGER_MIN_GAP_DAYS
+
+    @staticmethod
+    def _trading_days_since(iso):
+        from datetime import date as _d, timedelta as _t
+        try:
+            d0 = _d.fromisoformat(str(iso)[:10])
+        except (ValueError, TypeError):
+            return None
+        today = datetime.utcnow().date()
+        if today <= d0:
+            return 0
+        n, d = 0, d0
+        while d < today:
+            d = d + _t(days=1)
+            if d.weekday() < 5:
+                n += 1
+        return n
+
+    def _ladder_target(self):
+        """A target DTE whose monthly expiry is NOT already used by an open condor — so a new condor closes on
+        a DISTINCT day from the ones already on. Ladders near-monthly -> next-monthly across the adaptive band;
+        falls back to the static target if all candidate expiries are taken (or staggering is off)."""
+        base = int(getenv("GREYLINE_DTE_TARGET", "") or 42)
+        if not self._stagger_on():
+            return base
+        try:
+            from app.services.uw_option_chain_engine import UWOptionChainEngine
+            uw = UWOptionChainEngine()
+            open_exps = {r.get("expiration") for r in self._open_rows() if r.get("expiration")}
+            for t in (35, 56, 49, 28, base):        # near monthly, next monthly, then wider — first UNUSED wins
+                exp = uw.monthly_expiry(target_dte=t)
+                if exp and exp not in open_exps:
+                    return t
+        except Exception:
+            pass
+        return base
+
+    def _chain(self, symbol, target=None):
         # PRIMARY (and, when configured, ONLY): Unusual Whales. The TradeStation SIM sandbox streams only a
         # narrow, garbage-quoted strike band (a $1-fair wing quoted at $4), so a defined-risk condor could
         # never form on it — AND its adaptive-DTE scan streams N tenors x a slow SIM chain PER NAME, which
@@ -431,7 +487,7 @@ class ConditionalVRPShortPremiumEngine:
         from app.services.uw_option_chain_engine import UWOptionChainEngine
         uw = UWOptionChainEngine()
         if uw.enabled():
-            target = int(getenv("GREYLINE_DTE_TARGET", "") or 42)
+            target = target if target is not None else self._ladder_target()   # ladder expiries -> distinct close days
             for _try in range(2):
                 try:
                     exp = uw.monthly_expiry(target_dte=target)
@@ -1300,6 +1356,24 @@ class ConditionalVRPShortPremiumEngine:
             pl["note"] = ("DRY RUN — nothing placed. Set GREYLINE_VRP_SHORT_PREMIUM_ENABLED=true "
                           "and call with dry_run=false to book. Every position is defined-risk.")
             return pl
+
+        # ENTRY STAGGER: once the sleeve holds any condor, space new entries >= gap trading days apart and book
+        # at most ONE per cycle — so closes land on DISTINCT days (independent observations for the edge court)
+        # instead of batching onto one expiry. Bootstraps freely (no open condors) and is gated/tunable.
+        gap = self._stagger_gap()
+        if gap and pl.get("planned"):
+            rows = self._open_rows()
+            if rows:
+                last = max((r.get("opened_at") for r in rows if r.get("opened_at")), default=None)
+                since = self._trading_days_since(last) if last else None
+                if since is not None and since < gap:
+                    pl["planned"] = []
+                    pl["stagger_hold"] = {"last_open_trading_days_ago": since, "min_gap_days": gap,
+                                          "reason": "spacing entries to maximize INDEPENDENT close-days for the edge proof"}
+                    pl["note"] = ("STAGGERED — nothing booked this cycle; declustering condor closes so each is an "
+                                  "independent observation for the edge court.")
+                    return pl
+                pl["planned"] = pl["planned"][:1]          # one staggered entry per cycle
 
         b = self._booking()
         opened, errors = [], []
