@@ -185,6 +185,20 @@ class BackgroundSchedulerService:
         except Exception as exc:
             return (False, "guard error (fail-open): %s" % repr(exc)[:80])
 
+    @classmethod
+    def _intraday_shadow_deferred(cls, heavy_blocked):
+        """The gex-walls-fade and vanna shadows need LIVE intraday quotes to open, so unlike the 164-min chain
+        scans they must NOT inherit the full _heavy_blocked RTH defer (which would leave them able to run only
+        overnight, when equity_session_open() fail-closes them → they'd never act; that's why gex showed 0
+        positions). They are safe intraday: each self-gates to hourly (MARK_INTERVAL_MIN=60) and fail-closes
+        off-session, so near the open they add at most a few batched TS quotes + a cached UW gamma read once an
+        hour — they can't straddle the open or starve the broker read. Allowed through RTH by default; the escape
+        hatch GREYLINE_INTRADAY_SHADOWS_RTH=false restores the old heavy-defer if TS/UW throttling is observed.
+        Returns True only when the heavy gate is active AND the exemption is disabled."""
+        if not heavy_blocked:
+            return False
+        return (getenv("GREYLINE_INTRADAY_SHADOWS_RTH", "true") or "true").strip().lower() != "true"
+
     INSTITUTIONAL_LAST_RUN = Path("app/data/institutional/.institutional_pipeline_last_run")
 
     @classmethod
@@ -1050,6 +1064,16 @@ class BackgroundSchedulerService:
         # and post-close, which is their natural cadence. Computed once here; each step honours it.
         _heavy_blocked, _heavy_reason = cls._heavy_recompute_blocked(market_hours)
 
+        # INTRADAY-SHADOW EXEMPTION (2026-08-25): the gex walls-fade and vanna shadows must act on LIVE intraday
+        # quotes — but the _heavy_blocked defer above (built for the 164-min chain scans) spans exactly the RTH
+        # hours they'd act, while overnight they run-but-MARKET_CLOSED. So under normal scheduling they could
+        # never open (why gex showed 0 positions). Unlike the chain scans they are SAFE intraday: each self-gates
+        # to hourly (MARK_INTERVAL_MIN=60) and fail-closes off-session (equity_session_open()), so the worst they
+        # add near the open is a handful of batched TS quotes + a cached UW gamma read once an hour — it cannot
+        # straddle the open or starve the broker read. Allow them through RTH by default; the escape hatch
+        # GREYLINE_INTRADAY_SHADOWS_RTH=false restores the old heavy-defer if TS/UW throttling is ever observed.
+        _intraday_shadow_blocked = cls._intraday_shadow_deferred(_heavy_blocked)
+
         # CONDOR SHADOW forward-test: record the VRP/earnings condors the sleeves would open (built off
         # UW's clean greeks+NBBO) and mark them to market off UW — the options-premium forward-test the
         # SIM sandbox can't run. NO orders. Self-gated once/day. Gated by GREYLINE_CONDOR_SHADOW.
@@ -1171,7 +1195,7 @@ class BackgroundSchedulerService:
         # GEX MEAN-REVERSION shadow — a NEW strategy (fade the walls toward the gamma-magnet in long-gamma
         # pinning regimes), forward-tested on the underlying with NO orders. Same heavy-window gate.
         try:
-            if _heavy_blocked:
+            if _intraday_shadow_blocked:
                 gex_strategy_shadow = {"status": "GEX_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
             else:
                 from app.services.gex_mean_reversion_shadow_engine import GexMeanReversionShadowEngine
@@ -1183,7 +1207,7 @@ class BackgroundSchedulerService:
         # VANNA/CHARM shadow — the 'vanna rally into OPEX' (2nd-order dealer flow), forward-tested LONG the
         # index in the OPEX window on a negative-vanna setup. NO orders. Same heavy-window gate.
         try:
-            if _heavy_blocked:
+            if _intraday_shadow_blocked:
                 vanna_charm_shadow = {"status": "VANNA_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
             else:
                 from app.services.vanna_charm_shadow_engine import VannaCharmShadowEngine
