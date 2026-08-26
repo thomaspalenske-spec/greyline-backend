@@ -35,6 +35,12 @@ class PriceBarCrossSourceEngine:
     SAMPLE_SIZE = 40          # symbols per run (~20s at TradeStation's ~2 req/s)
     COMPARE_DAYS = 120        # recent overlap to compare — the window signals actually use
     TOLERANCE_PCT = 0.10      # above float-rounding noise (observed max 0.03%), below real error
+    ABS_TICK_FLOOR = 0.01     # our CSVs store PENNY-ROUNDED closes and two vendors' daily closes legitimately
+                              # differ by ~a tick, so an absolute gap this small is rounding/capture noise, not a
+                              # data error. Without this floor a sub-$1 stock cries wolf: a $0.59 close stored as
+                              # 0.59 vs a 0.5946 feed is a half-cent = ~0.9%, tripping TOLERANCE_PCT every day
+                              # (CGTX: 18/120 "bad", yet median_ratio 1.0012 — the series are identical). A REAL
+                              # split/mismap/shift is many cents AND moves the median ratio far off 1.0.
     MAX_BAD_DAYS = 2          # isolated stale prints happen; a systematic break does not
     SCAN_INTERVAL_HOURS = 24
 
@@ -122,6 +128,8 @@ class PriceBarCrossSourceEngine:
                 a, b = ours[d], live[d]
                 if not b:
                     continue
+                if abs(a - b) <= self.ABS_TICK_FLOOR:
+                    continue                       # within a tick — penny-rounding / inter-feed noise, not a deviation
                 dev = abs(a - b) / b * 100
                 worst = max(worst, dev)
                 if dev > self.TOLERANCE_PCT:
