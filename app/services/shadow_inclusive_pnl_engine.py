@@ -12,6 +12,7 @@ beta-laden shadows (their P/L is mostly equity beta, not the edge under test) ar
 you can see the market-neutral-only combination."""
 
 from datetime import datetime
+from os import getenv
 
 
 class ShadowInclusivePnlEngine:
@@ -93,6 +94,29 @@ class ShadowInclusivePnlEngine:
                          "hypothetical_notional_usd": 0.0, "basis": "real contract multiplier"})
         except Exception as e:
             rows.append({"shadow": "Condor (VRP+Earn)", "style": "market_neutral", "error": repr(e)[:60]})
+        # Futures TSMOM (long/short) — MATCHED-NOTIONAL (operator decision 2026-08-25). A raw sum of its per-
+        # contract $ would swamp the aggregate: 1 futures contract carries $100k-$800k notional, so the book's
+        # 1-contract unrealized $ runs ±$19k on a $10k mental base. Instead each leg is sized to a fixed, small
+        # allocation (default $1,000, GREYLINE_SHADOW_MATCHED_NOTIONAL) and its $ is notional × signed %-return,
+        # so it lands on the same scale as the equity 100-share-lot shadows and is honestly summable.
+        try:
+            from app.services.futures_tsmom_shadow_engine import FuturesTsmomShadowEngine as FT
+            notl = float(getenv("GREYLINE_SHADOW_MATCHED_NOTIONAL", "1000") or 1000)
+            tot, n = 0.0, 0
+            for r in (FT().report().get("open_positions") or []):
+                ec, ll = self._f(r.get("entry_close")), self._f(r.get("live_last"))
+                if ec <= 0 or ll <= 0:
+                    continue
+                raw = ll / ec - 1.0
+                signed = raw if str(r.get("side") or "").upper() in ("BUY", "LONG") else -raw
+                tot += notl * signed
+                n += 1
+            rows.append({"shadow": "Futures TSMOM", "style": "market_neutral",
+                         "unrealized_usd": round(tot, 2), "open_positions": n,
+                         "hypothetical_notional_usd": round(notl * n, 2),
+                         "basis": f"matched notional ${notl:,.0f}/leg"})
+        except Exception as e:
+            rows.append({"shadow": "Futures TSMOM", "style": "market_neutral", "error": repr(e)[:60]})
         return rows
 
     def snapshot(self):

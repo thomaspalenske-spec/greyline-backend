@@ -261,7 +261,7 @@ class FuturesTsmomShadowEngine:
         rets = [c["net_return"] for c in closed if c.get("net_return") is not None]
         n = len(rets)
         from app.services.shadow_contract_sizing import enrich_open_rows
-        positions = enrich_open_rows(self.open_positions(), dollars=False)  # % is the measure; per-contract $ deferred until arm
+        positions = enrich_open_rows(self.open_positions(), futures=True)  # UNREALIZED $ via verified per-contract point values
         base = {"timestamp": datetime.utcnow().isoformat(), "shadow_enabled": self.enabled(),
                 "engine": "FuturesTsmomShadowEngine", "universe_size": len(self._instruments()),
                 "cohorts_closed": n, "min_cohorts": self.MIN_COHORTS,

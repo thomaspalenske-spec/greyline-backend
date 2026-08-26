@@ -661,7 +661,7 @@ th {
       <div class="card"><div class="label">Cash On Hand</div><div class="value" id="cash">$--</div><div class="sub" id="cash_sub"></div></div>
       <div class="card"><div class="label">Buying Power</div><div class="value" id="buying_power">$--</div></div>
       <div class="card"><div class="label">Deployed Capital</div><div class="value" id="deployed">$--</div><div class="sub" id="deployed_pct">--</div></div>
-      <div class="card"><div class="label">Unrealized P/L</div><div class="value" id="unrealized">$--</div></div>
+      <div class="card"><div class="label">Unrealized P/L</div><div class="value" id="unrealized">$--</div><div class="sub" id="unrealized_incl_shadows" title="Zero-capital forward-test shadows folded in at matched notional — a thought experiment, NOT real account P&amp;L. Detail at /shadow-inclusive-pnl."></div></div>
       <div class="card"><div class="label">Total Return</div><div class="value" id="total_return">--</div></div>
       <div class="card"><div class="label">24 Hour Return</div><div class="value" id="return_24h">--</div><div class="sub" id="return_24h_sub"></div></div>
     </section>
@@ -796,7 +796,7 @@ th {
         <div class="section-title">Extended-ETF Shadow — cross-sectional momentum <span id="eets_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">The 52 scanned ETFs, ZERO-capital: rank by 3-month trailing return, hold the top-6 a week, settle at live quotes, judged on the court's bar. <a href="/extended-etf-shadow" style="color:inherit;">detail</a>.</div>
         <div style="overflow-x:auto;"><table>
-          <thead><tr><th>Symbol</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <thead><tr><th>Symbol</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>Unrealized P/L $</th><th>Unrealized P/L %</th><th>Days→Settle</th></tr></thead>
           <tbody id="ext_etf_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
         </table></div>
       </div>
@@ -805,7 +805,7 @@ th {
         <div class="section-title">Futures TSMOM Shadow — the REAL managed-futures test <span id="futs_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Time-series momentum on the 19 continuous futures (vs today's ETF proxies): long positive 12-month trend, short negative, monthly, ZERO-capital. Long/short diversifier, judged on the court's bar. <a href="/futures-tsmom-shadow" style="color:inherit;">detail</a>.</div>
         <div style="overflow-x:auto;"><table>
-          <thead><tr><th>Future</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <thead><tr><th>Future</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>Unrealized P/L $</th><th>Unrealized P/L %</th><th>Days→Settle</th></tr></thead>
           <tbody id="fut_tsmom_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
         </table></div>
       </div>
@@ -814,7 +814,7 @@ th {
         <div class="section-title">Long-Vol Leg Shadow — regime-conditioned <span id="vets_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">The long-vol leg that complements the SVXY carry sleeve: long VXX <strong>only in backwardation</strong> (VIX≥VIX3M), flat in contango (so it never bleeds). ZERO-capital, judged on the court's bar. <a href="/vol-etp-shadow" style="color:inherit;">detail</a>.</div>
         <div style="overflow-x:auto;"><table>
-          <thead><tr><th>Symbol</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <thead><tr><th>Symbol</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>Unrealized P/L $</th><th>Unrealized P/L %</th><th>Days→Settle</th></tr></thead>
           <tbody id="vol_etp_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
         </table></div>
       </div>
@@ -823,7 +823,7 @@ th {
         <div class="section-title">FX Trend Shadow — long/short spot FX <span id="fxts_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">3-month trend on the 6 spot-FX pairs: long positive trend, short negative, weekly, ZERO-capital. Watch USD concentration (vs-USD vs USD-vs pairs). <a href="/fx-trend-shadow" style="color:inherit;">detail</a>.</div>
         <div style="overflow-x:auto;"><table>
-          <thead><tr><th>Pair</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>P/L $</th><th>P/L %</th><th>Days→Settle</th></tr></thead>
+          <thead><tr><th>Pair</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>Unrealized P/L $</th><th>Unrealized P/L %</th><th>Days→Settle</th></tr></thead>
           <tbody id="fx_trend_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
         </table></div>
       </div>
@@ -1300,6 +1300,25 @@ async function refreshAltShadow(route, bodyId, sumId) {
     }).join("");
   } catch (e) {
     body.innerHTML = `<tr><td colspan="8"><span class="red">unavailable — ${String(e).slice(0, 60)}</span></td></tr>`;
+  }
+}
+
+// Master P/L WITH the zero-capital shadows folded in — a clearly-labeled HYPOTHETICAL sub-line under the real
+// Unrealized P/L, never mixed into the real value. Futures use matched notional so their huge per-contract $
+// don't swamp it. Detail (real vs with-shadows, per-shadow) at /shadow-inclusive-pnl.
+async function refreshShadowInclusive() {
+  const el = document.getElementById("unrealized_incl_shadows");
+  if (!el) return;
+  try {
+    const d = await getJSON("/shadow-inclusive-pnl");
+    const all = d.combined_all_shadows, mn = d.combined_market_neutral_only;
+    if (!all) { el.textContent = ""; return; }
+    const sg = (v) => (v > 0 ? "+" : "") + fmtMoney(v);
+    el.innerHTML = `incl. shadows <span class="sub" style="opacity:.8;">(hypothetical)</span>: `
+      + `<span class="${all.unrealized_usd >= 0 ? "green" : "red"}">${sg(all.unrealized_usd)}</span>`
+      + (mn ? ` · MN-only <span class="${mn.unrealized_usd >= 0 ? "green" : "red"}">${sg(mn.unrealized_usd)}</span>` : "");
+  } catch (e) {
+    el.textContent = "";
   }
 }
 
@@ -1790,6 +1809,7 @@ async function refreshAll() {
   refreshAltShadow("/futures-tsmom-shadow", "fut_tsmom_shadow_body", "futs_summary");  // 19 futures, TSMOM long/short
   refreshAltShadow("/vol-etp-shadow", "vol_etp_shadow_body", "vets_summary");          // regime-conditioned long-vol
   refreshAltShadow("/fx-trend-shadow", "fx_trend_shadow_body", "fxts_summary");        // 6 FX pairs, trend
+  refreshShadowInclusive();                                                            // hypothetical with-shadows master P/L sub-line
   refreshEdgeCourt();       // realized-trade edge verdict + measured slippage — off the ledger, never stalls
   refreshCapitalAllocation();// evidence -> capital: live vs recommended %, basis, overrides — never stalls
 
