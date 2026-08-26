@@ -828,6 +828,15 @@ th {
         </table></div>
       </div>
 
+      <div class="card" id="shadow_master_pnl_card" style="min-width:0;">
+        <div class="section-title">Master P/L — Real vs With-Shadows <span id="smp_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
+        <div class="sub" style="margin-bottom:10px;">The real broker book plus the ZERO-CAPITAL shadows folded in — a thought experiment, <strong>NOT real account P&amp;L</strong> (the real number up top is untouched). Futures use matched notional so their huge per-contract $ can't swamp the total. <strong>Combined</strong> = real + all shadows; <strong>market-neutral only</strong> nets out the long-only beta baskets. % is return on the (real + hypothetical) capital that WOULD be at work. <a href="/shadow-inclusive-pnl" style="color:inherit;">detail</a>.</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>Book</th><th>Unrealized P/L $</th><th>% of capital-at-work</th><th>Basis</th></tr></thead>
+          <tbody id="shadow_master_pnl_body"><tr><td colspan="4"><span class="sub">Loading…</span></td></tr></tbody>
+        </table></div>
+      </div>
+
       <div class="card" id="open_equity_positions_card" style="min-width:0;">
         <div class="section-title">Open Equity Positions <span id="oeq_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
         <div class="sub" style="margin-bottom:10px;">Every whole-share equity &amp; ETF holding across the sleeves — momentum-reversal names plus the trend / vol-carry / managed-futures / T-bill ETFs. Cost = what we paid (shares × entry); Market Value = shares × current price; P/L is live unrealized (P/L % = return on cost). Stop is the sleeve's dynamic exit; Take Profit is the momentum names' ATR ladder (TP1–3 bank tranches ✓ when reached, TP4 runner trails). Trend / vol-carry / T-bill ETFs exit on signal or rebalance, not a fixed stop/TP.</div>
@@ -1308,17 +1317,49 @@ async function refreshAltShadow(route, bodyId, sumId) {
 // don't swamp it. Detail (real vs with-shadows, per-shadow) at /shadow-inclusive-pnl.
 async function refreshShadowInclusive() {
   const el = document.getElementById("unrealized_incl_shadows");
-  if (!el) return;
+  const body = document.getElementById("shadow_master_pnl_body");
+  const summary = document.getElementById("smp_summary");
+  const sg = (v) => v == null ? "—" : (v > 0 ? "+" : "") + fmtMoney(v);
+  const cls = (v) => v == null ? "" : (v > 0 ? "green" : (v < 0 ? "red" : ""));
+  const pct = (v) => v == null ? "—" : (v > 0 ? "+" : "") + Number(v).toFixed(2) + "%";
   try {
     const d = await getJSON("/shadow-inclusive-pnl");
-    const all = d.combined_all_shadows, mn = d.combined_market_neutral_only;
-    if (!all) { el.textContent = ""; return; }
-    const sg = (v) => (v > 0 ? "+" : "") + fmtMoney(v);
-    el.innerHTML = `incl. shadows <span class="sub" style="opacity:.8;">(hypothetical)</span>: `
-      + `<span class="${all.unrealized_usd >= 0 ? "green" : "red"}">${sg(all.unrealized_usd)}</span>`
-      + (mn ? ` · MN-only <span class="${mn.unrealized_usd >= 0 ? "green" : "red"}">${sg(mn.unrealized_usd)}</span>` : "");
+    const real = d.real_book || {}, all = d.combined_all_shadows, mn = d.combined_market_neutral_only;
+    // compact sub-line under the real Unrealized P/L card
+    if (el) {
+      el.innerHTML = all ? (`incl. shadows <span class="sub" style="opacity:.8;">(hypothetical)</span>: `
+        + `<span class="${cls(all.unrealized_usd)}">${sg(all.unrealized_usd)}</span>`
+        + (mn ? ` · MN-only <span class="${cls(mn.unrealized_usd)}">${sg(mn.unrealized_usd)}</span>` : "")) : "";
+    }
+    // the full Real-vs-With-Shadows card
+    if (body) {
+      const rows = [];
+      rows.push(`<tr><td><strong>Real (broker)</strong></td>`
+        + `<td class="${cls(real.unrealized_usd)}">${sg(real.unrealized_usd)}</td>`
+        + `<td class="${cls(real.unrealized_pct)}">${pct(real.unrealized_pct)}</td>`
+        + `<td><span class="sub">real deployed capital</span></td></tr>`);
+      if (all) rows.push(`<tr><td><strong>Combined (all shadows)</strong> <span class="sub">hypothetical</span></td>`
+        + `<td class="${cls(all.unrealized_usd)}">${sg(all.unrealized_usd)}</td>`
+        + `<td class="${cls(all.pct_of_capital_at_work)}">${pct(all.pct_of_capital_at_work)}</td>`
+        + `<td><span class="sub">real + every shadow</span></td></tr>`);
+      if (mn) rows.push(`<tr><td><strong>Market-neutral only</strong> <span class="sub">hypothetical</span></td>`
+        + `<td class="${cls(mn.unrealized_usd)}">${sg(mn.unrealized_usd)}</td>`
+        + `<td class="${cls(mn.pct_of_capital_at_work)}">${pct(mn.pct_of_capital_at_work)}</td>`
+        + `<td><span class="sub">nets out long-only beta baskets</span></td></tr>`);
+      // per-shadow breakdown (the "segregated" detail)
+      for (const s of (d.shadows || [])) {
+        const v = s.unrealized_usd;
+        rows.push(`<tr><td style="padding-left:18px;"><span class="sub">↳ ${s.shadow}</span></td>`
+          + `<td class="${cls(v)}">${"error" in s ? "<span class='sub'>err</span>" : sg(v)}</td>`
+          + `<td><span class="sub">${s.open_positions != null ? s.open_positions + " open" : ""}</span></td>`
+          + `<td><span class="sub">${s.basis || s.style || ""}</span></td></tr>`);
+      }
+      body.innerHTML = rows.join("");
+    }
+    if (summary && all) summary.textContent = `real ${sg(real.unrealized_usd)} · +shadows ${sg(all.unrealized_usd)}`;
   } catch (e) {
-    el.textContent = "";
+    if (el) el.textContent = "";
+    if (body) body.innerHTML = `<tr><td colspan="4"><span class="red">unavailable — ${String(e).slice(0, 60)}</span></td></tr>`;
   }
 }
 
