@@ -254,10 +254,20 @@ class MissionRiskGovernorEngine:
             self.DIR.mkdir(parents=True, exist_ok=True)
             self.HALT_MARKER.write_text(json.dumps({"date": datetime.utcnow().date().isoformat(),
                                                     "daily_pnl": s["daily_pnl"]}))
+            # The message must not send the operator to the strategy flags. New opens are ALREADY
+            # auto-blocked by the marker written just above (the booking choke point reads it), and
+            # flipping GREYLINE_*_ENABLED=false ALSO stops each sleeve's run_cycle — which is what
+            # manages and EXITS open positions. On a halt day that would freeze the book into its
+            # losers instead of letting it de-risk. Say what already happened, not a stale manual step.
             if self._alert("BOOK_DAILY_LOSS_HALT", "Mission book past HALT loss limit",
                            f"Book down {s['daily_pnl']} today ({s['daily_pnl_pct']}%), past the "
-                           f"{-self._halt_pct()}% halt limit. Recommend flipping the strategy kill "
-                           f"flags to false NOW to stop new opens.", "CRITICAL"):
+                           f"{-self._halt_pct()}% halt limit. New opens are AUTO-BLOCKED across every "
+                           f"sleeve at the order choke point; exits/covers/stops still pass so the book "
+                           f"can de-risk. Clears at the next start-of-day. Do NOT flip the strategy "
+                           f"flags to false — that also stops the sleeves EXITING open positions. To "
+                           f"stop everything, use the master switch "
+                           f"(GREYLINE_PAPER_EXECUTION_ENABLED=false), which also keeps exits open.",
+                           "CRITICAL"):
                 alerts.append("HALT")
         elif s["daily_pnl"] <= -self._warn_pct() / 100.0 * base:
             if self._alert("BOOK_DAILY_LOSS_WARN", "Mission book daily loss warning",
