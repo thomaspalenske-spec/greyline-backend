@@ -1347,6 +1347,38 @@ class ConditionalVRPShortPremiumEngine:
     def _tick_round(price, is_option=True):
         return round(round(price / 0.05) * 0.05, 2) if is_option else round(price, 2)
 
+    @staticmethod
+    def _is_wellformed_condor(rec):
+        """CONSTRUCTION-TIME GUARD: a row is a real short-premium iron condor iff its symbol is a bare
+        UNDERLYING (not an option leg), it carries all 4 legs (2 short + 2 wing, each with a symbol), and it
+        collected a POSITIVE net credit against positive defined risk. Anything else — a single-leg artifact
+        (e.g. the 'NRG 260918C50' the negative-credit guard caught after the fact), a <=0-credit 'condor', a
+        missing leg — is a construction bug and must NEVER be persisted as a normal OPEN condor. Returns
+        (ok, reason). Refusing at the persist point makes the ledger structurally incapable of holding a
+        poison row, regardless of how it arose (legacy, partial-fill residual, or a future builder bug)."""
+        import re as _re
+        sym = str(rec.get("symbol") or "")
+        if not _re.fullmatch(r"[A-Z][A-Z.\-]{0,9}", sym):          # a leg symbol has a space + strike -> rejected
+            return (False, f"symbol {sym!r} is not a bare underlying (looks like an option leg)")
+        legs = rec.get("legs")
+        if isinstance(legs, dict):
+            names = ("short_call", "wing_call", "short_put", "wing_put")
+            if any(not (legs.get(n) or {}).get("symbol") for n in names):
+                return (False, "incomplete 4-leg iron condor (dict form)")
+        elif isinstance(legs, list):
+            if len(legs) != 4 or any(not (l or {}).get("symbol") for l in legs):
+                return (False, f"not a complete 4-leg condor ({len(legs) if legs else 0} legs)")
+        else:
+            return (False, "legs missing / wrong type")
+        try:
+            if float(rec.get("credit_total") or 0) <= 0:
+                return (False, f"net credit {rec.get('credit_total')} <= 0 — paying to take on defined risk")
+            if float(rec.get("max_loss_total") or 0) <= 0:
+                return (False, f"max loss {rec.get('max_loss_total')} <= 0 — not a defined-risk structure")
+        except (TypeError, ValueError):
+            return (False, "credit_total / max_loss_total not numeric")
+        return (True, "")
+
     def open_positions(self, names=None, dry_run=True, limit=None):
         """Place the planned defined-risk condors. GATED: does nothing unless enabled AND
         dry_run is False. Books 4 legs per condor (shorts SELLTOOPEN, wings BUYTOOPEN) and records
@@ -1402,6 +1434,22 @@ class ConditionalVRPShortPremiumEngine:
                 "entry_skew": con.get("skew"),
                 "return_on_risk": con.get("return_on_risk"),
             }
+            # CONSTRUCTION-TIME GUARD: never persist a malformed / negative-credit row as a normal OPEN condor.
+            ok, why = self._is_wellformed_condor(rec)
+            if not ok:
+                errors.append({"symbol": con.get("symbol"), "reject": f"REFUSED to book malformed condor: {why}"})
+                try:
+                    from app.services.external_alert_engine import ExternalAlertEngine
+                    ea = ExternalAlertEngine()
+                    if ea.has_external_channel():
+                        ea.dispatch(title="GreyLine condor construction REFUSED",
+                                    message=(f"refused to persist a malformed condor ({con.get('symbol')}): {why}. "
+                                             f"No ledger row written — a construction bug, not a live position."),
+                                    severity="CRITICAL",
+                                    fingerprint=f"VRP_CONSTRUCTION_REJECT:{con.get('symbol')}:{why[:40]}")
+                except Exception:
+                    pass
+                continue
             self.LEDGER.parent.mkdir(parents=True, exist_ok=True)
             with open(self.LEDGER, "a") as f:
                 f.write(json.dumps(rec) + "\n")
