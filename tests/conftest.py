@@ -106,20 +106,62 @@ def _flush_engine_caches():
             pass
 
 
+# Modules that legitimately audit the REAL operator configuration (they drive the live routes / the
+# trade-firing chain and assert against the operator's armed state), so the arming/alloc strip below is
+# NOT applied to them — only the original 4-flag strip common to every test. Everything else (unit tests,
+# and the sizing/backtest modules whose expected numbers are computed for CLEAN defaults) gets the full
+# strip so a leaked .env arming flag can never flip their math.
+_LIVE_ENV_MODULES = {
+    "test_route_audit", "test_schema_audit",
+    "test_end_to_end_trade_readiness", "test_credential_security_audit",
+}
+
+# The operator's full sleeve arming / allocation / sizing-mode switch set (enumerated from .env). ANY of
+# these, once a reload_env() (fired by an earlier VRP/token/route test) has pulled the operator's live .env
+# into os.environ, is snapshot-preserved into later tests and silently changes every sizing/gating engine
+# that reads os.environ directly (SleeveCapitalBudgetEngine, the risk-budget glide/operationalize/backtest
+# engines, momentum, exposure, total-return). Those engines DON'T call reload_env, so stripping the flags
+# at test setup holds through the body — restoring the snapshot after brings them back for the next test.
+_OPERATOR_ARMING_FLAGS = (
+    "GREYLINE_MOMENTUM_ENABLED", "GREYLINE_MOMENTUM_ALLOC_PCT", "GREYLINE_MOMENTUM_BUDGET_SIZING",
+    "GREYLINE_MOMENTUM_SCAN_WARM", "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_VRP_ALLOC_PCT",
+    "GREYLINE_BROKER_PROTECTIVE_STOPS", "GREYLINE_SLEEVE_RISK_BUDGET", "GREYLINE_PER_SLEEVE_SIZING",
+    "GREYLINE_VOL_CARRY_ENABLED", "GREYLINE_VOL_CARRY_ALLOC_PCT", "GREYLINE_VOL_CARRY_ALLOC_USD",
+    "GREYLINE_TREND_ENABLED", "GREYLINE_TREND_ALLOC_PCT", "GREYLINE_TREND_ALLOC_USD",
+    "GREYLINE_MANAGED_FUTURES_ENABLED", "GREYLINE_MANAGED_FUTURES_ALLOC_PCT",
+    "GREYLINE_XSMOM_ENABLED", "GREYLINE_XSMOM_ALLOC_USD",
+    "GREYLINE_LOW_VOL_ENABLED", "GREYLINE_LOW_VOL_ALLOC_USD",
+    "GREYLINE_EARNINGS_VOL_ENABLED", "GREYLINE_EARNINGS_ALLOC_PCT",
+    "GREYLINE_ADAPTIVE_DTE_ENABLED", "GREYLINE_REGIME_GATE_ENABLED",
+    "GREYLINE_TBILL_SWEEP_ENABLED", "GREYLINE_INSTITUTIONAL_SWEEP_ENABLED",
+    "GREYLINE_MAX_SECTOR_EXPOSURE_PCT", "GREYLINE_CONDOR_MAX_LOSS_PCT",
+    "GREYLINE_SIM_BOOKING_ENABLED", "GREYLINE_PAPER_EXECUTION_ENABLED",
+    "GREYLINE_LIVE_EXECUTION_ENABLED", "GREYLINE_LIVE_TRADING_ENABLED",
+    "GREYLINE_FLATTEN_ALL_ENABLED", "GREYLINE_LEGACY_LIQUIDATION_ENABLED",
+)
+
+
 @pytest.fixture(autouse=True)
-def _isolate_os_environ():
+def _isolate_os_environ(request):
     """Snapshot and restore os.environ around each test. reload_env() writes directly into os.environ (the
     documented .env-precedence trap), NOT through monkeypatch — so without this a test that triggers a
     reload re-populates the operator's .env values (armed sleeve flags, alloc pins) and they persist into
     later tests, flipping their expectations. Restoring the snapshot contains those direct mutations."""
     saved = dict(os.environ)
-    # Strip operator arming flags DIRECTLY from os.environ (not via monkeypatch, which fixture ordering can
-    # undo): they live in the operator's .env — momentum was re-armed 2026-08-17 — so they're present at
-    # session start and a mid-run reload_env re-adds them. Removing them here guarantees every test body
-    # sees them OFF unless the test sets them itself; the snapshot restore below brings them back after.
-    for _k in ("GREYLINE_MOMENTUM_ENABLED", "GREYLINE_MOMENTUM_ALLOC_PCT",
-               "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_BROKER_PROTECTIVE_STOPS"):
-        os.environ.pop(_k, None)
+    # Strip operator arming/alloc/sizing flags DIRECTLY from os.environ (not via monkeypatch, which fixture
+    # ordering can undo): they live in the operator's .env, so an earlier reload_env() pulls them in and they
+    # persist. Removing them at setup guarantees every test body sees CLEAN DEFAULTS unless the test sets a
+    # flag itself; the snapshot restore below brings them back after. The live-env audit modules are exempt
+    # from the full strip — they assert against the operator's real armed config — so they keep only the
+    # long-standing momentum/vrp/protective-stops strip that has always applied suite-wide.
+    module = request.node.module.__name__.rsplit(".", 1)[-1]
+    if module in _LIVE_ENV_MODULES:
+        for _k in ("GREYLINE_MOMENTUM_ENABLED", "GREYLINE_MOMENTUM_ALLOC_PCT",
+                   "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_BROKER_PROTECTIVE_STOPS"):
+            os.environ.pop(_k, None)
+    else:
+        for _k in _OPERATOR_ARMING_FLAGS:
+            os.environ.pop(_k, None)
     yield
     os.environ.clear()
     os.environ.update(saved)
