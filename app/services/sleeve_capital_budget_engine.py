@@ -155,11 +155,16 @@ class SleeveCapitalBudgetEngine:
         raw = cls._raw_pct(s)
         if cls._risk_budget_on():
             group = set(cls._risk_parity_table().keys())     # the sleeves in the inverse-vol re-mix
-            if s in group:
-                target = sum(cls._static_pct(x) for x in group)     # combined budget (Σ static == Σ risk-parity)
-                total = sum(cls._raw_pct(x) for x in group)
+            # An explicit env pin is the CEILING (env > override > default) — it must NEVER be re-scaled down by
+            # the group normalization (the 2026-08-18 glide fix scaled ALL group members, silently overriding a
+            # pin). Pinned sleeves keep their pins; only the NON-pinned sleeves absorb the pull-back to the budget
+            # that remains after the pins — so the pin wins AND the combined-budget invariant still holds.
+            if s in group and not cls._env_pinned(s):
+                pinned_sum = sum(cls._raw_pct(x) for x in group if cls._env_pinned(x))
+                target = max(0.0, sum(cls._static_pct(x) for x in group) - pinned_sum)
+                total = sum(cls._raw_pct(x) for x in group if not cls._env_pinned(x))
                 if total > target and total > 0:
-                    raw *= target / total                    # proportional pull-back to the combined budget
+                    raw *= target / total                    # proportional pull-back of the NON-pinned sleeves only
         return round(max(0.0, min(100.0, raw)), 2)
 
     # ---- RISK-BUDGETED sizing (inverse-vol across sleeves) --------------------------------------

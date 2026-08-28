@@ -4,10 +4,25 @@ Read-only invariants — they never place orders or mutate state.
 """
 
 import json
+import os
 import time
 from pathlib import Path
 
 from app.services.greyline_reality_guard_engine import GreyLineRealityGuardEngine as G
+
+
+def _write_bars(symbol, n=300, mtime=None):
+    """Give a symbol a TRADEABLE bar file (>= 253 lines) in the sandbox so the reality guard's tradeable-scope
+    (which reads app/data/historical/<sym>_daily.csv) treats it as signal-relevant. The sandbox's app/data is
+    fresh/empty, so tests asserting an alarm on a real symbol must provide its bars. Optional mtime (epoch) to
+    control the 'restated since scan' check."""
+    p = Path("app/data/historical") / f"{symbol}_daily.csv"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("date,open,high,low,close,volume\n"
+                 + "\n".join(f"2020-01-{i % 27 + 1:02d},1,1,1,1,1" for i in range(n)))
+    if mtime is not None:
+        os.utime(p, (mtime, mtime))
+    return p
 
 
 # ---- EXITS_FILLED_NOT_INTENDED (Root A guard) -----------------------------------------------------
@@ -106,9 +121,12 @@ def _write_candidates(obj):
     p.write_text(json.dumps(obj))
 
 
-def test_stale_candidates_flag_when_momentum_armed(tmp_path, monkeypatch):
+def test_stale_candidates_flag_when_scanwarm_on(tmp_path, monkeypatch):
+    # WRONG-FLAG FIX (2026-08-17): staleness is gated on the PRODUCER (GREYLINE_MOMENTUM_SCAN_WARM), not on
+    # momentum being armed — the scan-warm engine is what refreshes this snapshot. With the producer ON, a
+    # >5-day-old snapshot is a real fault.
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("GREYLINE_MOMENTUM_ENABLED", "true")        # armed -> it WOULD trade on this data
+    monkeypatch.setenv("GREYLINE_MOMENTUM_SCAN_WARM", "true")      # producer on -> staleness is a real fault
     _write_candidates({"data_source": "TRADESTATION_LIVE_CACHED", "as_of": "2026-07-01"})   # very stale
     r = G()._check_data_source()
     assert r["ok"] is False and "suspect" in r["detail"]
@@ -178,20 +196,22 @@ def test_price_bars_inert_corruption_does_not_alarm(monkeypatch):
 
 def test_price_bars_active_corruption_alarms(monkeypatch):
     from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as P
+    _write_bars("QQQM")                              # tradeable in the sandbox -> corruption is signal-relevant
     monkeypatch.setattr(P, "last_scan", lambda self: _scan(
         [{"symbol": "QQQM", "type": "NONPOSITIVE", "date": "d"}]))
     monkeypatch.setattr(G, "_active_universe", lambda self: {"QQQM", "IWM", "DBC"})
     r = G()._check_price_bars()
-    assert r["ok"] is False and "QQQM" in r["detail"] and "ACTIVELY-TRADED" in r["detail"]
+    assert r["ok"] is False and "QQQM" in r["detail"] and "TRADEABLE" in r["detail"]
 
 
 def test_price_bars_momentum_armed_checks_everything(monkeypatch):
     from app.services.price_bar_integrity_engine import PriceBarIntegrityEngine as P
+    _write_bars("QQQM")                              # a TRADEABLE corrupt name still alarms with no universe scope
     monkeypatch.setattr(P, "last_scan", lambda self: _scan(
-        [{"symbol": "AAAC", "type": "NONPOSITIVE", "date": "d"}]))
+        [{"symbol": "QQQM", "type": "NONPOSITIVE", "date": "d"}]))
     monkeypatch.setattr(G, "_active_universe", lambda self: None)   # momentum armed -> no scope
     r = G()._check_price_bars()
-    assert r["ok"] is False                          # any critical corruption still alarms
+    assert r["ok"] is False                          # any critical corruption in a tradeable name still alarms
 
 
 def test_match_source_inert_mismatch_does_not_alarm(monkeypatch):
@@ -206,6 +226,8 @@ def test_match_source_inert_mismatch_does_not_alarm(monkeypatch):
 
 def test_match_source_active_mismatch_alarms(monkeypatch):
     from app.services.price_bar_cross_source_engine import PriceBarCrossSourceEngine as X
+    # tradeable + NOT restated since the scan: bar mtime (2026-08-01) is BEFORE the run timestamp (2026-08-09)
+    _write_bars("QQQM", mtime=time.mktime(time.strptime("2026-08-01", "%Y-%m-%d")))
     monkeypatch.setattr(X, "last_run", lambda self: {
         "mismatched": 1, "mismatches": [{"symbol": "QQQM"}], "matched": 39, "checked": 40,
         "ok": False, "timestamp": "2026-08-09T00:00:00"})
