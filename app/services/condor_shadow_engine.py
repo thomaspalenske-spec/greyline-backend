@@ -468,6 +468,83 @@ class CondorShadowEngine:
                                  -abs(r.get("pnl_dollars") or 0)))            # soonest expiry, then most material
         return rows
 
+    MARK_HEALTH = STATE / "mark_health.json"
+
+    def mark_health(self, *, persist: bool = True) -> dict:
+        """Make silent mark failures LOUD so a position can never again hide as '—' (the RBLX class).
+        Two checks over the OPEN condors, keyed on the SYMPTOM not any one cause:
+          (#2) PERSISTENT-UNPRICED — a condor with no current mark (and not legitimately settling/intrinsic_gap)
+               on >=2 DISTINCT recent days. A single-cycle UW hiccup is normal and stays quiet; a multi-day gap
+               is a real hidden mark. Date-based, so repeated same-day calls don't inflate it.
+          (#3) CONTRADICTION — a condor whose underlying is BEYOND a wing (that side is at max loss, so the
+               condor MUST be a loss) yet whose mark shows a GAIN — a marking bug even when a number IS produced.
+        Idempotent; persists the per-condor unpriced-date streaks. Read by the reality guard."""
+        today = self._et_date()
+        rows = {(r.get("symbol"), r.get("expiration")): r for r in self.open_positions()}
+        try:
+            st = json.loads(self.MARK_HEALTH.read_text()) if self.MARK_HEALTH.exists() else {}
+        except Exception:
+            st = {}
+
+        open_ids, unpriced_today, contradictions = set(), [], []
+        for e in self._entries():
+            if e.get("status") != "OPEN":
+                continue
+            cid = e.get("id") or f"{e.get('symbol')}-{e.get('expiration')}"
+            open_ids.add(cid)
+            row = rows.get((e.get("symbol"), e.get("expiration"))) or {}
+            rec = st.setdefault(cid, {"symbol": e.get("symbol"), "unpriced_dates": []})
+            rec["symbol"] = e.get("symbol")
+            if row.get("current_value") is not None:                 # priced (incl. intrinsic_gap / settling)
+                rec["unpriced_dates"] = []                           # reset the streak
+                legs = e.get("legs") or {}
+                spot = self._underlying_spot(e.get("symbol"))
+                try:
+                    wc = float((legs.get("wing_call") or {}).get("strike"))
+                    wp = float((legs.get("wing_put") or {}).get("strike"))
+                except (TypeError, ValueError):
+                    wc = wp = None
+                pnl = row.get("pnl_dollars")
+                if spot is not None and wc is not None and wp is not None and pnl is not None:
+                    if (spot > wc or spot < wp) and pnl > 0:         # past a wing but marked a GAIN = impossible
+                        contradictions.append({"symbol": e.get("symbol"), "spot": round(spot, 2),
+                                               "wing_call": wc, "wing_put": wp, "pnl_dollars": pnl})
+            else:                                                    # unpriced this cycle
+                # Only COUNT a pricing failure during the equity session — unpriced overnight/weekends is
+                # expected (no live quotes) and must not accrue a false streak. The contradiction check (#3)
+                # stays ungated (a produced mark is inconsistent regardless of the clock).
+                try:
+                    from app.services.shadow_tradeability_gate import equity_session_open
+                    rth = equity_session_open()
+                except Exception:
+                    rth = False
+                if today and rth and today not in rec["unpriced_dates"]:
+                    rec["unpriced_dates"].append(today)
+                unpriced_today.append(e.get("symbol"))
+
+        for cid in [c for c in st if c not in open_ids]:             # prune closed condors
+            del st[cid]
+
+        def _recent(dates):
+            try:
+                from datetime import date, timedelta
+                cut = (date.fromisoformat(today) - timedelta(days=6)) if today else None
+                return sorted(d for d in dates if not cut or date.fromisoformat(d) >= cut)
+            except Exception:
+                return dates
+        persistent = [{"condor": cid, "symbol": rec.get("symbol"), "days_unpriced": len(_recent(rec.get("unpriced_dates", [])))}
+                      for cid, rec in st.items() if len(_recent(rec.get("unpriced_dates", []))) >= 2]
+
+        if persist:
+            try:
+                self.MARK_HEALTH.write_text(json.dumps(st, indent=1))
+            except Exception:
+                pass
+        return {"status": "CONDOR_MARK_HEALTH", "open_condors": len(open_ids),
+                "unpriced_today": unpriced_today, "persistent_unpriced": persistent,
+                "contradictions": contradictions,
+                "ok": not persistent and not contradictions}
+
     @ttl_cached(30, env_key="GREYLINE_SHADOW_CACHE_TTL")
     def report(self):
         entries = self._entries()

@@ -1480,6 +1480,37 @@ class GreyLineRealityGuardEngine:
                 pass
         return {"status": "REALITY_GUARD_FANTASY_FLAGGED", "fantasy": fantasy, "detail": detail}
 
+    def _check_condor_marks_healthy(self):
+        """A losing condor can never again hide as '—' (the RBLX class). Surfaces the SYMPTOM, not one cause:
+        (#2) an OPEN condor UNPRICED on >=2 distinct market-days, or (#3) one marked a GAIN while the underlying
+        is past a wing (impossible). Cry-wolf discipline: gated on the shadow being enabled + scheduler live; a
+        single-cycle / after-hours quote gap never accrues (mark_health only counts RTH failures)."""
+        base = {"id": "CONDOR_MARKS_HEALTHY", "severity": "warning"}
+        try:
+            from app.services.condor_shadow_engine import CondorShadowEngine
+            if not CondorShadowEngine.enabled():
+                return {**base, "ok": True, "detail": "condor shadow disabled — mark-health not checked"}
+            from app.services.background_scheduler_service import BackgroundSchedulerService
+            if not BackgroundSchedulerService.scheduler_live():
+                return {**base, "ok": True, "detail": "scheduler not live — mark-health owned by the scheduler alarm"}
+            h = CondorShadowEngine().mark_health()
+        except Exception as e:
+            return {**base, "ok": True, "detail": f"mark-health check skipped: {repr(e)[:80]}"}
+
+        persistent = h.get("persistent_unpriced") or []
+        contra = h.get("contradictions") or []
+        if not persistent and not contra:
+            return {**base, "ok": True, "detail": f"all {h.get('open_condors', 0)} open condors priced + consistent"}
+        parts = []
+        if persistent:
+            parts.append(f"{len(persistent)} condor(s) UNPRICED for ≥ the last {max(p['days_unpriced'] for p in persistent)} "
+                         f"market-days ({', '.join(str(p['symbol']) for p in persistent[:4])}) — a mark is HIDDEN, "
+                         f"not shown as a loss")
+        if contra:
+            parts.append(f"{len(contra)} condor(s) marked a GAIN while the underlying is past a wing "
+                         f"({', '.join(str(c['symbol']) for c in contra[:4])}) — an impossible mark")
+        return {**base, "ok": False, "detail": "; ".join(parts)}
+
     def _compute_check(self):
         try:
             from app.services.broker_account_view_engine import BrokerAccountViewEngine
@@ -1498,6 +1529,7 @@ class GreyLineRealityGuardEngine:
             self._check_realized_continuity(),
             self._check_data_freshness(),
             self._check_shadow_freshness(),
+            self._check_condor_marks_healthy(),
             self._check_decision_caches_fresh(),
             self._check_readout_integrity(),
             self._check_candidate_surfaces_healthy(),
