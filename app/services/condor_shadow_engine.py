@@ -202,6 +202,30 @@ class CondorShadowEngine:
             now[n] = {"bid": b, "ask": a}
         return self._condor_value(now)
 
+    def _intrinsic_mark_if_blown_through(self, entry):
+        """Mid-life fallback for the exact case RBLX hit: the underlying has blown PAST a short strike, so an
+        ITM leg goes unquotable in UW and _current_value fails closed to None — a real loser that would then
+        hide as '—' until expiry (and understate any aggregate mark). When the current spot is outside the
+        short strikes, value the condor at INTRINSIC now (like the 0-DTE settle, but mid-life). A spot still
+        BETWEEN the shorts is a transient quote gap, not a blown-through position -> stay unpriced (None),
+        never fabricate. Returns the per-share cost-to-close, or None."""
+        legs = entry.get("legs") or {}
+        under = next((str((legs.get(n) or {}).get("symbol")).split()[0]
+                      for n in self._LEGS if (legs.get(n) or {}).get("symbol")), None)
+        if not under:
+            return None
+        spot = self._underlying_spot(under)
+        if spot is None:
+            return None
+        try:
+            sc = float((legs.get("short_call") or {}).get("strike"))
+            sp = float((legs.get("short_put") or {}).get("strike"))
+        except (TypeError, ValueError):
+            return None
+        if spot > sc or spot < sp:                 # blown through a short strike (deep ITM on one side)
+            return self._intrinsic_close_value(legs, spot)
+        return None
+
     @staticmethod
     def _intrinsic_close_value(legs, spot):
         """Per-share liability to close an iron condor AT EXPIRY given the underlying settle price `spot`: the
@@ -428,6 +452,13 @@ class CondorShadowEngine:
                 ev, _spot = self._expiry_close_value(e, dte)
                 cv = ev if ev is not None else cv
                 row["mark_state"] = "settling"
+            elif cv is None:
+                # mid-life NBBO gap: if the underlying has blown PAST a short strike, mark at intrinsic so a real
+                # loser (RBLX: spot below the whole put spread) doesn't hide as "—". In-band gaps stay unpriced.
+                iv = self._intrinsic_mark_if_blown_through(e)
+                if iv is not None:
+                    cv = iv
+                    row["mark_state"] = "intrinsic_gap"
             if cv is not None and credit:
                 row["current_value"] = round(cv, 3)
                 row["pnl_dollars"] = round((credit - cv) * 100 * qty, 2)     # short premium, real multiplier×qty
