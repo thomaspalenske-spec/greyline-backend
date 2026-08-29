@@ -134,7 +134,7 @@ _OPERATOR_ARMING_FLAGS = (
     "GREYLINE_EARNINGS_VOL_ENABLED", "GREYLINE_EARNINGS_ALLOC_PCT",
     "GREYLINE_ADAPTIVE_DTE_ENABLED", "GREYLINE_REGIME_GATE_ENABLED",
     "GREYLINE_TBILL_SWEEP_ENABLED", "GREYLINE_INSTITUTIONAL_SWEEP_ENABLED",
-    "GREYLINE_MAX_SECTOR_EXPOSURE_PCT", "GREYLINE_CONDOR_MAX_LOSS_PCT",
+    "GREYLINE_MAX_SECTOR_EXPOSURE_PCT", "GREYLINE_MAX_OPEN_POSITIONS", "GREYLINE_CONDOR_MAX_LOSS_PCT",
     "GREYLINE_SIM_BOOKING_ENABLED", "GREYLINE_PAPER_EXECUTION_ENABLED",
     "GREYLINE_LIVE_EXECUTION_ENABLED", "GREYLINE_LIVE_TRADING_ENABLED",
     "GREYLINE_FLATTEN_ALL_ENABLED", "GREYLINE_LEGACY_LIQUIDATION_ENABLED",
@@ -155,6 +155,7 @@ def _isolate_os_environ(request):
     # from the full strip — they assert against the operator's real armed config — so they keep only the
     # long-standing momentum/vrp/protective-stops strip that has always applied suite-wide.
     module = request.node.module.__name__.rsplit(".", 1)[-1]
+    _saved_exported = None
     if module in _LIVE_ENV_MODULES:
         for _k in ("GREYLINE_MOMENTUM_ENABLED", "GREYLINE_MOMENTUM_ALLOC_PCT",
                    "GREYLINE_VRP_SHORT_PREMIUM_ENABLED", "GREYLINE_BROKER_PROTECTIVE_STOPS"):
@@ -162,7 +163,24 @@ def _isolate_os_environ(request):
     else:
         for _k in _OPERATOR_ARMING_FLAGS:
             os.environ.pop(_k, None)
+        # Popping the flags above is not enough on its own: reload_env() (fired by many engines on
+        # construction to pick up a rotated token) writes .env values STRAIGHT into os.environ for any key
+        # not in env_reload._EXPORTED, so it RESURRECTS every armed flag mid-test and defeats the strip (the
+        # .env-precedence trap). Add the stripped keys to _EXPORTED for the duration of the test — reload_env
+        # skips _EXPORTED keys — so a mid-test reload can no longer bring an armed flag back. Restored after.
+        try:
+            from app.services import env_reload
+            _saved_exported = env_reload._EXPORTED
+            env_reload._EXPORTED = frozenset(_saved_exported) | set(_OPERATOR_ARMING_FLAGS)
+        except Exception:
+            _saved_exported = None
     yield
+    if _saved_exported is not None:
+        try:
+            from app.services import env_reload
+            env_reload._EXPORTED = _saved_exported
+        except Exception:
+            pass
     os.environ.clear()
     os.environ.update(saved)
 
