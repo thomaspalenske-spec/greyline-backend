@@ -274,7 +274,20 @@ def _neutralize_external_alerts(monkeypatch):
 def _isolate_app_data(request, _data_sandbox):
     module = request.node.module.__name__.rsplit(".", 1)[-1]
     if module in _EXEMPT_MODULES:
-        yield
+        # Exempt modules read the REAL app/data at the repo root (historical CSVs, git, .env). GUARANTEE that
+        # cwd rather than inheriting whatever a prior test left: engines resolve reference data through
+        # cwd-relative paths (e.g. SleeveCapitalBudgetEngine._HIST = Path("app/data/historical")), and an
+        # earlier test's monkeypatch.chdir (test_account_return_horizon chdirs into a tmp dir) leaves cwd
+        # outside the repo. An exempt test then reads an EMPTY app/data and silently collapses — the
+        # risk-parity advisory falls to INSUFFICIENT_VOL_DATA, so the sizing/glide/total-return assertions
+        # fail order-dependently (pass alone, fail after the chdir'ing test). Pin cwd to the real root.
+        real_root = Path(__file__).resolve().parents[1]
+        original_cwd = Path.cwd()
+        os.chdir(real_root)
+        try:
+            yield
+        finally:
+            os.chdir(original_cwd)
         return
 
     # RESET app/data to empty before each test. The sandbox is session-scoped for speed, so without this the
