@@ -1,7 +1,7 @@
 {
-  "at": "2026-08-29T21:33:23.681246",
-  "epoch": 1788039203,
+  "at": "2026-08-29T21:40:51.708830",
+  "epoch": 1788039651,
   "host": "greyline-service",
   "note": "GreyLine is alive. If this file goes stale, the Mac/service is DOWN \u2014 the off-box GitHub Action fails and emails the operator. Positions are then held by broker stops.",
-  "scheduler_cycles": 8560
+  "scheduler_cycles": 8561
 }
