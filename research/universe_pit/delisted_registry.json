@@ -10743,5 +10743,10 @@
     "last_bar_date": "2026-08-19",
     "detected_at": "2026-08-30T00:05:45.773211",
     "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
+  },
+  "ABLVW": {
+    "last_bar_date": "2026-08-21",
+    "detected_at": "2026-09-01T00:10:25.823668",
+    "note": "feed stopped updating \u2014 delisted, renamed, or acquired. CSV RETAINED so this name stays in future point-in-time studies."
   }
 }
