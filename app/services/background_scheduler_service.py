@@ -1078,7 +1078,7 @@ class BackgroundSchedulerService:
         # UW's clean greeks+NBBO) and mark them to market off UW — the options-premium forward-test the
         # SIM sandbox can't run. NO orders. Self-gated once/day. Gated by GREYLINE_CONDOR_SHADOW.
         try:
-            if _heavy_blocked:
+            if _intraday_shadow_blocked:   # RTH-EXEMPT: settles at live quotes (equity_session_open) + UW read is run_if_due-throttled — was deadlocked under _heavy_blocked (0 settles)
                 condor_shadow = {"status": "CONDOR_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
             else:
                 from app.services.condor_shadow_engine import CondorShadowEngine
@@ -1110,7 +1110,7 @@ class BackgroundSchedulerService:
         # OPTION-IMPLIED SKEW shadow — zero-capital market-neutral forward test (25d risk reversal predicts the
         # stock; Xing-Zhang-Zhao / Cremers-Weinbaum). Weekly top-K-long / bottom-K-short cohort, settled at live
         # equity quotes. NO orders/budget. Gated by GREYLINE_IV_SKEW_SHADOW (default on — measurement only).
-        if _heavy_blocked:
+        if _intraday_shadow_blocked:   # RTH-EXEMPT: settles at live quotes (equity_session_open); UW read is @ttl_cached(30) — was deadlocked under _heavy_blocked (0 settles)
             iv_skew_shadow = {"status": "IV_SKEW_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
         else:
             try:
@@ -1123,7 +1123,7 @@ class BackgroundSchedulerService:
         # DISPERSION / correlation-risk-premium shadow — zero-capital forward test (short index vol / long single-
         # name vol; harvest implied-minus-realized correlation). Monthly cohort off UW IVs + realized bars. NO
         # orders/budget. Gated by GREYLINE_DISPERSION_SHADOW (default on — measurement only).
-        if _heavy_blocked:
+        if _intraday_shadow_blocked:   # RTH-EXEMPT: settles at live quotes (equity_session_open); UW read is @ttl_cached(30) — was deadlocked under _heavy_blocked (0 settles)
             dispersion_shadow = {"status": "DISPERSION_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
         else:
             try:
@@ -1145,8 +1145,14 @@ class BackgroundSchedulerService:
 
         # Extended-ETF SHADOW — zero-capital cross-sectional-momentum forward-test on the 52-ETF universe
         # (the measurement layer that lets a scanned ETF earn its way toward a verdict). NO orders/budget.
+        # RTH-EXEMPT (2026-09-04): it settles/opens at LIVE quotes so it can ONLY act during the regular
+        # session (equity_session_open) — but the full _heavy_blocked defer spans exactly that window, so it
+        # could only ever run overnight, when the tradeability gate fail-closes it. That deadlock froze the
+        # 08-12 cohort unsettled for 3wk with 0/8 cohorts (identical to the gex "0 positions" bug). mark() is
+        # light (rank 52 ETFs off disk + a few batched quotes only when it actually settles/opens), so gate it
+        # on the intraday exemption like gex/vanna, NOT the heavy-chain defer.
         try:
-            if _heavy_blocked:
+            if _intraday_shadow_blocked:
                 extended_etf_shadow = {"status": "ETF_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
             else:
                 from app.services.extended_etf_shadow_engine import ExtendedEtfShadowEngine
@@ -1158,7 +1164,7 @@ class BackgroundSchedulerService:
         # Long-vol ETP SHADOW — the regime-conditioned long-vol leg (long VXX only in backwardation),
         # complements the SVXY short-vol carry sleeve. Zero capital, NO orders.
         try:
-            if _heavy_blocked:
+            if _intraday_shadow_blocked:   # RTH-EXEMPT: settles at live quotes (equity_session_open); light (VXX quotes only) — was deadlocked under _heavy_blocked (0 settles)
                 vol_etp_shadow = {"status": "VOL_ETP_SHADOW_DEFERRED_OPEN_WINDOW", "acted": False, "reason": _heavy_reason}
             else:
                 from app.services.vol_etp_shadow_engine import VolEtpShadowEngine
@@ -1319,7 +1325,7 @@ class BackgroundSchedulerService:
         # paper (NO orders, NO budget) while the sleeve is parked, so we learn if it survives live before
         # committing capital. Weekly non-overlapping cohorts on settled bars. /momentum-equity-shadow.
         try:
-            if _heavy_blocked:
+            if _intraday_shadow_blocked:   # RTH-EXEMPT: settles at live quotes (equity_session_open); light (equity quotes on settle/open only) — was deadlocked under _heavy_blocked (0 settles)
                 momentum_equity_shadow = {"status": "MOM_SHADOW_DEFERRED_OPEN_WINDOW", "ran": False, "reason": _heavy_reason}
             else:
                 from app.services.momentum_reversal_shadow_engine import MomentumReversalShadowEngine
