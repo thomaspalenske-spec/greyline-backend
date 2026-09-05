@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.greyline.shadow-open-check</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/thomaspalenske/GreyLine/greyline-backend/.venv/bin/python</string>
+        <string>/Users/thomaspalenske/GreyLine/greyline-backend/scripts/check_shadow_opens.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/thomaspalenske/GreyLine/greyline-backend</string>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Month</key>
+        <integer>9</integer>
+        <key>Day</key>
+        <integer>8</integer>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>50</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/tmp/greyline-shadow-open-check.out</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/greyline-shadow-open-check.err</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
