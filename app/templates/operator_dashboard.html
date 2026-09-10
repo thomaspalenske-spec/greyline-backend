@@ -771,7 +771,7 @@ th {
       <!-- ===== Universe Expansion — zero-capital forward-tests of the 2026-08-12 UW/TS scan adds ===== -->
       <div class="card" id="alt_universe_card" style="min-width:0;">
         <div class="section-title">Universe Expansion — Infra <span id="altuni_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">The scan added new instruments as <strong>tracked candidates</strong> (52 ETFs · 5 vol ETPs · 19 futures · 6 FX · 80 large-cap single names) — each measured ZERO-capital on the edge court's bar before any capital. <strong>Nothing here is armed.</strong> Infra status below; the four forward-tests follow.</div>
+        <div class="sub" style="margin-bottom:10px;">The scan added new instruments as <strong>tracked candidates</strong> — extended ETFs, vol ETPs, futures and FX (live counts in the card below) — each measured ZERO-capital on the edge court's bar before any capital. The scan's 80 large-cap single names went into the armed momentum universe, not here. <strong>Nothing here is armed.</strong> Infra status below; the four forward-tests follow.</div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
           <div style="flex:1;min-width:170px;border:1px solid var(--line,#2a313d);border-radius:8px;padding:10px 12px;">
             <div class="sub" style="letter-spacing:.08em;">TRACKED CANDIDATES</div>
@@ -794,7 +794,7 @@ th {
 
       <div class="card" id="ext_etf_shadow_card" style="min-width:0;">
         <div class="section-title">Extended-ETF Shadow — cross-sectional momentum <span id="eets_summary" class="sub" style="font-weight:600;margin-left:8px;letter-spacing:normal;text-transform:none;"></span></div>
-        <div class="sub" style="margin-bottom:10px;">The 52 scanned ETFs, ZERO-capital: rank by 3-month trailing return, hold the top-6 a week, settle at live quotes, judged on the court's bar. <a href="/extended-etf-shadow" style="color:inherit;">detail</a>.</div>
+        <div class="sub" style="margin-bottom:10px;">The scanned ETFs, ZERO-capital: rank by 3-month trailing return, hold the top-6 a week, settle at live quotes, judged on the court's bar. <a href="/extended-etf-shadow" style="color:inherit;">detail</a>.</div>
         <div style="overflow-x:auto;"><table>
           <thead><tr><th>Symbol</th><th>Contracts</th><th>Side</th><th>Entry</th><th>Current</th><th>Unrealized P/L $</th><th>Unrealized P/L %</th><th>Days→Settle</th></tr></thead>
           <tbody id="ext_etf_shadow_body"><tr><td colspan="8"><span class="sub">Loading…</span></td></tr></tbody>
@@ -1846,7 +1846,7 @@ async function refreshAll() {
   refreshLowVolShadow();    // zero-capital low-vol (BAB) basket shadow — drawdown vs SPY thesis check
   refreshVrpEdge();          // 24yr index-VRP confirmation + defined-risk structure + book risk concentration
   refreshAltUniverseInfra();// universe-expansion infra: tracked-candidate counts + quote-stream + gamma-flip
-  refreshAltShadow("/extended-etf-shadow", "ext_etf_shadow_body", "eets_summary");     // 52 ETFs, xs-momentum
+  refreshAltShadow("/extended-etf-shadow", "ext_etf_shadow_body", "eets_summary");     // extended ETFs, xs-momentum
   refreshAltShadow("/futures-tsmom-shadow", "fut_tsmom_shadow_body", "futs_summary");  // 19 futures, TSMOM long/short
   refreshAltShadow("/vol-etp-shadow", "vol_etp_shadow_body", "vets_summary");          // regime-conditioned long-vol
   refreshAltShadow("/fx-trend-shadow", "fx_trend_shadow_body", "fxts_summary");        // 6 FX pairs, trend

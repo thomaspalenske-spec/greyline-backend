@@ -96,6 +96,26 @@ class TbillCashSweepEngine:
             total += self._f(x.get("MarketValue"))
         return round(total, 2)
 
+    def _canonical_at_risk_value(self):
+        """The non-SGOV at-risk market value AS THE DASHBOARD COMPUTES IT — the canonical
+        BrokerAccountViewEngine snapshot, Σ(current_price×quantity), same figure /account-summary uses to
+        derive cash. The sweep's own _non_sgov_position_value sums raw broker MarketValue from a DIFFERENT
+        read, and for a short-option book that NETS shorts negative and UNDERCOUNTS committed capital —
+        which let the sweep over-park (2026-09-10: it parked $1,809 in SGOV while liquid cash was −$1,748).
+        Returns None on a degraded/failed read so the caller falls back safely."""
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            view = BrokerAccountViewEngine().snapshot()
+            if not view.get("reads_ok", True):
+                return None
+            sym = self.symbol()
+            rows = view.get("positions", []) or []
+            return round(sum((r.get("current_price") or 0) * (r.get("quantity") or 0)
+                             for r in rows
+                             if (str(r.get("symbol") or "").split() or [""])[0].upper() != sym), 2)
+        except Exception:
+            return None
+
     def _reserve(self, positions, equity=None):
         """DEMAND-DRIVEN reserve (replaces the old static GREYLINE_TBILL_RESERVE_USD). Keep liquid
         only (a) what the sleeves have ALREADY committed in non-SGOV positions — that's positions,
@@ -104,8 +124,16 @@ class TbillCashSweepEngine:
         it back (bidirectional, ~T+1) when a sleeve draws cash next cycle. The old static $8,500
         reserve over-held zero-yield cash — it kept ~$8,500 liquid while the sleeves used ~$2,100.
         A FAILED positions read aborts the whole sweep upstream (plan() bails on _live_positions()
-        None) — so this never runs on a zeroed read; floored at the min-cash line as a backstop."""
+        None) — so this never runs on a zeroed read; floored at the min-cash line as a backstop.
+
+        COMMITTED uses the MORE CONSERVATIVE of the raw-MarketValue sum and the canonical dashboard
+        at-risk value (2026-09-10 over-park fix): raw net MarketValue undercounts a short-option book, so
+        taking the max can only RAISE the reserve → reduce parking → it can never over-park cash the book
+        doesn't have free. max() is fail-safe; a degraded canonical read (None) leaves the old behavior."""
         committed = self._non_sgov_position_value(positions)
+        canonical = self._canonical_at_risk_value()
+        if canonical is not None:
+            committed = max(committed, canonical)
         buffer = self._operating_buffer(equity)
         return round(max(committed + buffer, self.DEFAULT_MIN_CASH_USD), 2)
 
