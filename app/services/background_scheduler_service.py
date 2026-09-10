@@ -1461,9 +1461,33 @@ class BackgroundSchedulerService:
                 import time as _t2
                 _gage = _t2.monotonic() - _GUARD_CACHE["at"]
                 _rg = GreyLineRealityGuardEngine()
-                if _GUARD_CACHE["result"] is None or _gage >= _guard_ttl():
-                    _rg.check(allow_cache=False)
+                # SELF-HEAL provably-safe faults BEFORE computing/paging the verdict, so a stale view-cache
+                # mismatch (e.g. SGOV 29 vs 16 right after a fill) fixes itself and never false-pages. This is
+                # broker read-only (drops caches + re-reads) — no orders, no ledger writes. Env-killable.
+                from os import getenv as _getenv
+                _heal = None
+                if _getenv("GREYLINE_GUARD_AUTOHEAL", "1").strip().lower() not in ("0", "false", "no"):
+                    try:
+                        _heal = _rg.remediate_open_positions_match_broker()
+                    except Exception:
+                        _heal = None
+                _healed = bool(_heal and _heal.get("status") in ("SELF_HEALED_STALE_VIEW_CACHE", "REMEDIATE_ESCALATED_HUMAN"))
+                if _GUARD_CACHE["result"] is None or _gage >= _guard_ttl() or _healed:
+                    _rg.check(allow_cache=False)   # recompute the verdict on the healed state before paging
                 reality_guard_alert = _rg.fantasy_alert()
+                # QUARANTINE THE SCIENCE (2026-09-10): when the churn detector flags wash-trading, record a
+                # contamination window per affected sleeve so the Edge Court auto-excludes those bug-manufactured
+                # closes from its live-edge verdicts (same principle as excluding forced flattens). record()
+                # merge-dedups, so firing every cycle just extends one window. Best-effort, never breaks the cycle.
+                try:
+                    from app.services.contamination_window_engine import ContaminationWindowEngine as _CW
+                    for _c in (_rg.check().get("checks") or []):
+                        if _c.get("id") == "NO_SLEEVE_CHURN" and not _c.get("ok"):
+                            for _w in (_c.get("churn_windows") or []):
+                                _CW.record(_w["sleeve"], _w["from"], _w["to"],
+                                           "wash-churn auto-detected by NO_SLEEVE_CHURN reality guard")
+                except Exception:
+                    pass
             except Exception as exc:
                 reality_guard_alert = {"error": repr(exc), "status": "REALITY_GUARD_ALERT_DEGRADED"}
 

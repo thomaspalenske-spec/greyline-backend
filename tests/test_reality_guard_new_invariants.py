@@ -234,3 +234,103 @@ def test_match_source_active_mismatch_alarms(monkeypatch):
     monkeypatch.setattr(G, "_active_universe", lambda self: {"QQQM", "IWM"})
     r = G()._check_price_bars_match_source()
     assert r["ok"] is False and "QQQM" in r["detail"]
+
+
+# ---- Sleeve churn guard (2026-09-10) -----------------------------------------------------------------
+# The low_vol cash-clamp bug wash-traded the same names all day (sell-all on a cash dip, then rebuy),
+# bleeding the spread ~$50/day paper for 3 days before it was caught by hand. This detector flags the
+# root-agnostic SIGNATURE: >=CHURN_MIN_ROUNDTRIPS BUYs *and* SELLs of one sleeve+symbol within the window.
+
+def _write_intents(rows, monkeypatch):
+    """Write order-intent lines to a sandbox log and point the guard at it (auto-restored by monkeypatch)."""
+    p = Path("app/data/execution") / "order_intent_test.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("\n".join(json.dumps(r) for r in rows))
+    monkeypatch.setattr(G, "ORDER_INTENT_PATH", str(p))
+    return p
+
+
+def _now_iso(minutes_ago=0):
+    from datetime import datetime, timedelta
+    return (datetime.utcnow() - timedelta(minutes=minutes_ago)).isoformat()
+
+
+def test_churn_guard_flags_wash_trading(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rows = []
+    # a name bought AND sold 4x each within the window == wash churn
+    for i in range(4):
+        rows.append({"ts": _now_iso(30 + i), "strategy": "low_vol", "symbol": "XMLV", "action": "SELL", "qty": 5})
+        rows.append({"ts": _now_iso(20 + i), "strategy": "low_vol", "symbol": "XMLV", "action": "BUY", "qty": 5})
+    _write_intents(rows, monkeypatch)
+    r = G()._check_sleeve_churn()
+    assert r["id"] == "NO_SLEEVE_CHURN"
+    assert r["severity"] == "warning"
+    assert r["ok"] is False, r["detail"]
+    assert "XMLV" in r["detail"]
+
+
+def test_churn_guard_passes_one_directional_rebalance(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # a normal rebalance moves a name ONE direction (all buys) — not churn, however many
+    rows = [{"ts": _now_iso(10 + i), "strategy": "low_vol", "symbol": "USMV", "action": "BUY", "qty": 2}
+            for i in range(6)]
+    # plus a single opposite trade on another name — below the round-trip threshold
+    rows.append({"ts": _now_iso(5), "strategy": "trend", "symbol": "DBC", "action": "SELL", "qty": 3})
+    _write_intents(rows, monkeypatch)
+    r = G()._check_sleeve_churn()
+    assert r["ok"] is True, r["detail"]
+
+
+def test_churn_guard_ignores_stale_out_of_window(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    old = 60 * (G.CHURN_WINDOW_H + 2)   # older than the window
+    rows = []
+    for i in range(5):
+        rows.append({"ts": _now_iso(old + i), "strategy": "low_vol", "symbol": "EFAV", "action": "SELL", "qty": 4})
+        rows.append({"ts": _now_iso(old + i), "strategy": "low_vol", "symbol": "EFAV", "action": "BUY", "qty": 4})
+    _write_intents(rows, monkeypatch)
+    r = G()._check_sleeve_churn()
+    assert r["ok"] is True, r["detail"]   # churn was yesterday, outside the window → clean now
+
+
+# ---- Free-cash / sweep over-park guard (2026-09-10) -------------------------------------------------
+# The T-bill sweep over-parked $1,809 in SGOV while the book's liquid (ex-SGOV) cash was ~-$1,750:
+# it parked cash the book didn't have free. Detector flags negative liquid cash while SGOV is held.
+
+def _pos(symbol, qty, price, upnl=0.0):
+    return {"symbol": symbol, "quantity": qty, "current_price": price, "unrealized_pnl": upnl}
+
+
+def test_free_cash_guard_flags_overpark(monkeypatch):
+    g = G()
+    # equity ~10k (base) + 0 realized + 0 unrealized; non-SGOV positions = 11,000 (over-deployed) + SGOV 1809
+    monkeypatch.setattr("app.services.mission_realized_pnl_engine.MissionRealizedPnlEngine.cumulative_realized",
+                        lambda self: 0.0)
+    view = {"reads_ok": True, "positions": [
+        _pos("AAA", 110, 100.0),      # $11,000 non-SGOV -> at-risk > equity
+        _pos("SGOV", 18, 100.5),      # $1,809 parked
+    ]}
+    r = g._check_free_cash_not_negative(view)
+    assert r["id"] == "FREE_CASH_NOT_NEGATIVE"
+    assert r["severity"] == "warning"
+    assert r["ok"] is False, r["detail"]
+    assert "NEGATIVE" in r["detail"]
+
+
+def test_free_cash_guard_passes_when_liquid_positive(monkeypatch):
+    g = G()
+    monkeypatch.setattr("app.services.mission_realized_pnl_engine.MissionRealizedPnlEngine.cumulative_realized",
+                        lambda self: 0.0)
+    # non-SGOV 6,000 + SGOV 1,809 -> liquid ex-sgov = (10000-6000) - 1809 = +2191
+    view = {"reads_ok": True, "positions": [
+        _pos("AAA", 60, 100.0),
+        _pos("SGOV", 18, 100.5),
+    ]}
+    r = g._check_free_cash_not_negative(view)
+    assert r["ok"] is True, r["detail"]
+
+
+def test_free_cash_guard_skips_on_degraded_read():
+    r = G()._check_free_cash_not_negative({"reads_ok": False, "positions": []})
+    assert r["ok"] is True and r.get("degraded_class") is True

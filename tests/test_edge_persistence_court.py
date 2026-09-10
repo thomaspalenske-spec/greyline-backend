@@ -288,3 +288,26 @@ def test_open_trade_stores_entry_atr_and_stop(tmp_path, monkeypatch):
                    trade_intent="MOMENTUM_REVERSAL", entry_atr=4.0, entry_stop=90.0)
     row = json.loads((tmp_path / "led.jsonl").read_text().splitlines()[0])
     assert row["entry_atr"] == 4.0 and row["entry_stop"] == 90.0
+
+
+def test_equity_close_dates_fall_back_to_exit_timestamp(tmp_path, monkeypatch):
+    """Equity/option closes stamp exit_timestamp, not closed_at. The court must read it — else closes read
+    UNDATED, collapse into one day-cluster (understating independent days) and can't be placed for
+    contamination exclusion (2026-09-10 momentum fix: 6 undated closes -> real Sep-1 + Sep-8 dates)."""
+    import json
+    from app.services.edge_persistence_engine import EdgePersistenceEngine as E
+    led = tmp_path / "paper_trade_ledger.jsonl"
+    rows = [
+        {"status": "CLOSED", "symbol": "AAA", "asset_type": "STOCK", "entry_price": 10.0,
+         "original_quantity": 5, "realized_pnl": 3.0, "exit_timestamp": "2026-09-08T13:44:10", "entry_stop": 8.0},
+        {"status": "CLOSED", "symbol": "BBB", "asset_type": "STOCK", "entry_price": 20.0,
+         "original_quantity": 5, "realized_pnl": -2.0, "closed_at": "2026-09-01T15:00:00", "entry_stop": 18.0},
+    ]
+    led.write_text("\n".join(json.dumps(r) for r in rows))
+    monkeypatch.setattr(E, "EQ_LEDGER", led)
+    monkeypatch.setattr(E, "VRP_LEDGER", tmp_path / "none_vrp.jsonl")
+    monkeypatch.setattr(E, "OPT_LEDGER", tmp_path / "none_opt.jsonl")
+    monkeypatch.setattr(E, "SLEEVE_LEDGER", tmp_path / "none_sleeve.jsonl")
+    trades, _ = E()._closed_trades()
+    dates = sorted(str(t.get("closed_at"))[:10] for t in trades)
+    assert dates == ["2026-09-01", "2026-09-08"], dates   # exit_timestamp used when closed_at absent

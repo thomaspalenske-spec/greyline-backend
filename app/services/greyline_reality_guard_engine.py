@@ -60,6 +60,14 @@ def _flag(name):
 
 class GreyLineRealityGuardEngine:
 
+    # SLEEVE CHURN GUARD (2026-09-10): a rebalancing sleeve should move a name ONE direction per session.
+    # Repeated same-day BUY *and* SELL of the SAME sleeve+symbol = wash churn paying the spread each
+    # round-trip. Roots vary (the low_vol cash-clamp oscillation: target collapsed to 0 on a cash dip ->
+    # sell-all -> rebuy when cash recovered, ~$50/day paper); the SIGNATURE is root-agnostic, so detect that.
+    CHURN_WINDOW_H = 8                # look back this many hours of order-intents
+    CHURN_MIN_ROUNDTRIPS = 3         # >=this many BUYs AND >=this many SELLs of one name in the window = churn
+    ORDER_INTENT_PATH = "app/data/execution/order_intent.jsonl"   # overridable for tests
+
     def _check_account_source(self):
         try:
             from app.services.tradestation_account_source_engine import TradeStationAccountSourceEngine
@@ -1162,6 +1170,60 @@ class GreyLineRealityGuardEngine:
             "tradestation_count": len(ts), "dashboard_count": len(dash),
         }
 
+    def remediate_open_positions_match_broker(self, dry_run=False):
+        """SELF-HEAL for OPEN_POSITIONS_MATCH_BROKER — runs every cycle, silent on success.
+
+        The dashboard view is BROKER-ONLY (no ledger), so a mismatch is almost always a STALE view-snapshot
+        cache: a fill dropped the positions cache, but BrokerAccountViewEngine's snapshot cache had no
+        invalidator and kept serving the pre-fill view (e.g. SGOV 29) while the broker already shows 16.
+
+        This fix is provably safe and reversible: it places NO orders and writes NO trading state — it only
+        DROPS both caches and RE-READS TradeStation. So it auto-applies with no approval and no page:
+          - already ok / degraded broker read  -> no-op (fail-closed on degraded, same rule as the check).
+          - real mismatch -> invalidate both caches, re-verify on fresh reads.
+              * clears -> SELF_HEALED_STALE_VIEW_CACHE (silent; nothing needed from the operator).
+              * SURVIVES fresh reads -> a genuine broker/state anomaly we must NOT silently paper over
+                (two truthful reads disagree). Do nothing destructive; page CRITICAL for human eyes.
+        Idempotent, broker read-only, best-effort, never raises.
+        """
+        try:
+            from app.services.broker_account_view_engine import BrokerAccountViewEngine
+            from app.services.tradestation_positions_live_engine import TradeStationPositionsLiveEngine
+            before = self._check_open_positions_match_broker(BrokerAccountViewEngine().snapshot())
+        except Exception as e:
+            return {"status": "REMEDIATE_DEGRADED", "error": repr(e)[:120]}
+        if before.get("ok") or before.get("degraded_class"):
+            return {"status": "REMEDIATE_NOOP", "detail": before.get("detail")}
+        if dry_run:
+            return {"status": "REMEDIATE_WOULD_ACT", "before": before.get("detail")}
+        # drop BOTH caches so the re-verify is against genuinely fresh broker reads
+        try:
+            BrokerAccountViewEngine.invalidate()
+            TradeStationPositionsLiveEngine.invalidate()
+        except Exception:
+            pass
+        try:
+            after = self._check_open_positions_match_broker(BrokerAccountViewEngine().snapshot(allow_cache=False))
+        except Exception as e:
+            return {"status": "REMEDIATE_DEGRADED", "error": repr(e)[:120]}
+        if after.get("ok") or after.get("degraded_class"):
+            return {"status": "SELF_HEALED_STALE_VIEW_CACHE", "was": before.get("detail"), "now": after.get("detail")}
+        # Durable divergence on FRESH reads — not a cache lag, and NOT ours to silently rewrite. Page only.
+        try:
+            from app.services.external_alert_engine import ExternalAlertEngine
+            eng = ExternalAlertEngine()
+            if eng.has_external_channel():
+                eng.dispatch(
+                    title="GreyLine — open-positions mismatch SURVIVED a fresh broker re-read",
+                    message=(f"OPEN_POSITIONS_MATCH_BROKER still diverges after invalidating caches and "
+                             f"re-reading TradeStation: {after.get('detail')}. This is a genuine anomaly, not "
+                             "cache lag — auto-heal deliberately did NOT rewrite any record. Human review "
+                             "needed. See /reality-guard."),
+                    severity="CRITICAL", fingerprint="OPEN_POS_MISMATCH_DURABLE")
+        except Exception:
+            pass
+        return {"status": "REMEDIATE_ESCALATED_HUMAN", "detail": after.get("detail")}
+
     def _check_exits_filled_not_intended(self, view):
         """A ledger trade marked CLOSED (realized P&L banked) whose symbol the broker STILL holds and
         that no OPEN ledger explains = the close was committed on INTENT, not a confirmed fill. The
@@ -1374,6 +1436,121 @@ class GreyLineRealityGuardEngine:
                 "detail": f"DECAYED sleeve(s), cost-net edge < 0 at 95% (court): {', '.join(decayed)} — "
                           "candidate to retire / cut capital (see /edge-persistence)"}
 
+    def _check_free_cash_not_negative(self, view):
+        """The T-bill sweep must park only GENUINELY-idle cash. If it holds SGOV while the book's liquid
+        (ex-SGOV) cash is negative, it has parked cash the book doesn't have free — the account is
+        effectively on margin to hold a cash-equivalent (negative carry) and the book is over-deployed.
+        Computed exactly like /account-summary: liquid_ex_sgov = (mission_equity - non-SGOV MV) - SGOV MV.
+        WARNING severity — a real capital-state fault to correct (the 2026-09-10 sweep over-park, liquid
+        ~-$1,750 while $1,809 sat in SGOV), not a fabrication. Degraded/failed read = skip (honest unknown)."""
+        from os import getenv as _getenv
+        id_ = "FREE_CASH_NOT_NEGATIVE"
+        if not view.get("reads_ok", True):
+            return {"id": id_, "severity": "warning", "ok": True, "degraded_class": True,
+                    "detail": "broker read degraded — free-cash unknown this cycle"}
+        try:
+            from app.services.tbill_cash_sweep_engine import TbillCashSweepEngine
+            sgov_sym = TbillCashSweepEngine.symbol()
+        except Exception:
+            sgov_sym = "SGOV"
+        rows = view.get("positions", []) or []
+
+        def _sym0(r):
+            return (str(r.get("symbol") or "").split() or [""])[0].upper()
+
+        try:
+            at_risk_mv = round(sum((r.get("current_price") or 0) * (r.get("quantity") or 0)
+                                   for r in rows if _sym0(r) != sgov_sym), 2)
+            sgov_mv = round(sum((r.get("current_price") or 0) * (r.get("quantity") or 0)
+                                for r in rows if _sym0(r) == sgov_sym), 2)
+            unrealized = round(sum(r.get("unrealized_pnl") or 0 for r in rows), 2)
+            try:
+                base = float(_getenv("GREYLINE_ACCOUNT_CAPITAL_BASE", "10000") or 10000)
+            except (TypeError, ValueError):
+                base = 10000.0
+            from app.services.mission_realized_pnl_engine import MissionRealizedPnlEngine
+            realized = MissionRealizedPnlEngine().cumulative_realized() or 0.0
+            mission_equity = round(base + realized + unrealized, 2)
+            cash_on_hand = round(mission_equity - at_risk_mv, 2)         # includes SGOV (cash-equivalent)
+            liquid_ex_sgov = round(cash_on_hand - sgov_mv, 2)            # genuinely-free, non-parked cash
+        except Exception as e:
+            return {"id": id_, "severity": "warning", "ok": True, "detail": f"free-cash check skipped: {str(e)[:80]}"}
+
+        # tolerance: a few dollars negative is rounding/marks, not an over-park
+        if sgov_mv > 1.0 and liquid_ex_sgov < -5.0:
+            return {"id": id_, "severity": "warning", "ok": False,
+                    "detail": f"liquid cash ${liquid_ex_sgov:,.2f} NEGATIVE while ${sgov_mv:,.2f} parked in "
+                              f"{sgov_sym} — sweep over-parked / book over-deployed "
+                              f"(equity ${mission_equity:,.2f}, at-risk ${at_risk_mv:,.2f})"}
+        return {"id": id_, "severity": "warning", "ok": True,
+                "detail": f"liquid cash ${liquid_ex_sgov:,.2f} (>=0), ${sgov_mv:,.2f} parked in {sgov_sym}"}
+
+    def _check_sleeve_churn(self):
+        """No sleeve should wash-trade a name: repeated same-day BUY *and* SELL of the SAME sleeve+symbol
+        bleeds the spread every round-trip. This is the signature of the 2026-09-10 low_vol cash-clamp
+        oscillation (target->0 sell-all, then rebuy) and of any future churn root. WARNING severity — a real
+        cost bleed, not fabrication; the value is EARLY detection (that bug ran ~3 days unnoticed at ~$50/day
+        paper before it was caught by hand). Env override: GREYLINE_GUARD_CHURN_ROUNDTRIPS."""
+        from os import getenv as _getenv
+        from datetime import datetime, timedelta
+        import json as _json, os as _os
+        id_ = "NO_SLEEVE_CHURN"
+        path = self.ORDER_INTENT_PATH
+        try:
+            min_rt = int(_getenv("GREYLINE_GUARD_CHURN_ROUNDTRIPS", "") or self.CHURN_MIN_ROUNDTRIPS)
+        except (TypeError, ValueError):
+            min_rt = self.CHURN_MIN_ROUNDTRIPS
+        if not _os.path.exists(path):
+            return {"id": id_, "severity": "warning", "ok": True, "detail": "no order-intent log yet"}
+        try:
+            cutoff = (datetime.utcnow() - timedelta(hours=self.CHURN_WINDOW_H)).isoformat()
+            agg = {}   # (sleeve, symbol) -> counts
+            for ln in open(path):
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    r = _json.loads(ln)
+                except Exception:
+                    continue
+                if str(r.get("ts") or "") < cutoff:
+                    continue
+                sl = str(r.get("strategy") or r.get("sleeve") or "")
+                sym = str(r.get("symbol") or "").upper()
+                act = r.get("action")
+                if not sl or not sym or act not in ("BUY", "SELL"):
+                    continue
+                try:
+                    q = abs(int(r.get("qty")))
+                except (TypeError, ValueError):
+                    q = 0
+                a = agg.setdefault((sl, sym), {"BUY": 0, "SELL": 0, "buy_sh": 0, "sell_sh": 0})
+                a[act] += 1
+                a["buy_sh" if act == "BUY" else "sell_sh"] += q
+            churned = []
+            for (sl, sym), a in agg.items():
+                if a["BUY"] >= min_rt and a["SELL"] >= min_rt:   # bought AND sold the same name repeatedly
+                    churned.append((sl, sym, a["BUY"], a["SELL"], min(a["buy_sh"], a["sell_sh"])))
+            if not churned:
+                return {"id": id_, "severity": "warning", "ok": True,
+                        "detail": f"no wash churn in {self.CHURN_WINDOW_H}h "
+                                  f"({len(agg)} sleeve-symbol stream(s), >={min_rt} both-ways = churn)"}
+            churned.sort(key=lambda x: -x[4])
+            wash = sum(c[4] for c in churned)
+            top = ", ".join(f"{sl}:{sym} {b}B/{s}S" for sl, sym, b, s, _rt in churned[:5])
+            now_iso = datetime.utcnow().isoformat()
+            # STRUCTURED window per churning SLEEVE (read-only data on the result) — the scheduler records
+            # these into the contamination registry so the Edge Court auto-excludes the wash trades. A
+            # sleeve's whole churn window [cutoff, now] is contaminated, not just the flagged symbols.
+            churn_windows = [{"sleeve": sl, "from": cutoff, "to": now_iso}
+                             for sl in sorted({c[0] for c in churned})]
+            return {"id": id_, "severity": "warning", "ok": False,
+                    "detail": f"{len(churned)} sleeve-symbol stream(s) wash-trading in {self.CHURN_WINDOW_H}h "
+                              f"(~{wash} round-tripped shares bleeding the spread): {top}",
+                    "churn_windows": churn_windows}
+        except Exception as e:
+            return {"id": id_, "severity": "warning", "ok": True, "detail": f"churn check skipped: {str(e)[:80]}"}
+
     def _check_alloc_override_coherent(self):
         """The gated budget auto-apply writes REVERSIBLE sleeve %-overrides. Assert they can't drift into
         an incoherent state that silently moves capital: every override pct in [0,100], the resulting book
@@ -1551,6 +1728,8 @@ class GreyLineRealityGuardEngine:
             self._check_sleeve_edge_not_decayed(),
             self._check_momentum_stops_consistent(),
             self._check_alloc_override_coherent(),
+            self._check_sleeve_churn(),
+            self._check_free_cash_not_negative(view),
         ]
         critical_failures = [c for c in checks if c["severity"] == "critical" and not c["ok"]]
         warnings = [c for c in checks if c["severity"] == "warning" and not c["ok"]]

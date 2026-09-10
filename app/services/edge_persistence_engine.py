@@ -240,9 +240,13 @@ class EdgePersistenceEngine:
             # fills) or 'quote_estimate' (booked at the decision quote, not yet fill-confirmed). Options
             # book real SIM fills and carry no tag → 'fill_net'. Never hardcode fill-truth we don't have.
             tag = str(r.get("realized_pnl_basis") or "fill_net")
+            # closed_at fallback -> exit_timestamp (the real close time this ledger stamps). Without it,
+            # equity/option closes read as UNDATED: they collapse into one day-cluster (understating
+            # independent days) AND can't be placed for date-based contamination exclusion. NOT `timestamp`
+            # — that's the row's write/open time, which would misdate a close to its entry.
             trades.append({"sleeve": sleeve, "gross": self._f(rp), "net": self._f(rp),
-                           "risk": risk, "closed_at": r.get("closed_at"), "basis": tag,
-                           "risk_kind": risk_kind})
+                           "risk": risk, "closed_at": r.get("closed_at") or r.get("exit_timestamp"),
+                           "basis": tag, "risk_kind": risk_kind})
 
         # Direct-to-broker ETF sleeves (trend/carry/MF/low-vol): FIFO closes recorded by
         # SleeveTradeLedgerEngine, tagged with an EXPLICIT `sleeve` (no _sleeve_of guess). Quantity is
@@ -273,6 +277,28 @@ class EdgePersistenceEngine:
                            "risk": risk, "closed_at": r.get("closed_at"),
                            "basis": _b,
                            "risk_kind": f"stop_proxy_{int(self.EQUITY_STOP_PCT * 100)}pct"})
+
+        # CONTAMINATION EXCLUSION (2026-09-10): drop closes that fall in a registered bug window — trades a
+        # programming fault manufactured (e.g. the low_vol cash-clamp churn), not strategy outcomes. Same
+        # principle as the forced-close exclusion above; keeps a bug from minting a false live-edge verdict.
+        try:
+            from app.services.contamination_window_engine import ContaminationWindowEngine
+            wins = ContaminationWindowEngine.windows()
+            if wins:
+                kept, contaminated = [], 0
+                for t in trades:
+                    if ContaminationWindowEngine.is_contaminated(t["sleeve"], t.get("closed_at"), _windows=wins):
+                        contaminated += 1
+                    else:
+                        kept.append(t)
+                trades = kept
+            else:
+                contaminated = 0
+        except Exception:
+            contaminated = 0
+        # Expose the contaminated count without changing this method's 2-tuple signature (many callers,
+        # incl. tests, unpack (trades, excluded)). `trades` is already contamination-filtered above.
+        self._last_contaminated_closes = contaminated
         return trades, excluded
 
     # court sleeve -> ExecutionLog strategy key (the direct-to-broker equity sleeves are instrumented, each
@@ -479,6 +505,7 @@ class EdgePersistenceEngine:
 
     def realized_edge(self):
         trades, excluded = self._closed_trades()
+        contaminated = getattr(self, "_last_contaminated_closes", 0)
         by = {}
         for t in trades:
             by.setdefault(t["sleeve"], []).append(t)
@@ -577,6 +604,7 @@ class EdgePersistenceEngine:
                                     "each edge — NOT re-subtracted (realized_pnl is already fill-net). A "
                                     "sleeve whose measured cost exceeds its edge is a retire candidate."),
             "excluded_forced_closes": excluded,
+            "excluded_contaminated_closes": contaminated,   # dropped as bug-window artifacts (not strategy)
             "min_trades_gate": self.MIN_TRADES,
             "min_trades_gate_unit": "independent trading days (day-clustered, not raw close-rows)",
             "periodic_gate": self.PERIODIC_MIN_PERIODS,

@@ -51,7 +51,13 @@ class LowVolatilityEngine:
     def _alloc(self):
         try:
             from app.services.sleeve_capital_budget_engine import SleeveCapitalBudgetEngine
-            b = SleeveCapitalBudgetEngine.budget_usd("low_vol")
+            # TARGET sizing uses the STABLE intended budget (pct-of-equity), NOT the cash-clamped one.
+            # deployable_cash is volatile book-wide (every option mark moves it); clamping the TARGET to it
+            # made low_vol's target collapse to 0 on a cash dip -> liquidate the whole basket -> rebuy when
+            # cash recovered -> a spread-crossing limit cycle (52 round-trips/day, 2026-09-10). Affordability
+            # is already enforced separately on the BUY side by deployment_headroom_usd (buy_headroom), so
+            # the target must be strategy-intent, not moment-to-moment cash. See run_cycle's buy_headroom.
+            b = SleeveCapitalBudgetEngine.budget_usd("low_vol", clamp_to_cash=False)
             if b and b > 0:
                 return b
         except Exception:
